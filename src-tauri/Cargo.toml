@@ -20,7 +20,7 @@ tauri-plugin-notification = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-shell = "2"
-tokio-cron-scheduler = "0.13"
+tokio-cron-scheduler = "0.15"
 cron = "0.15"
 chrono-tz = "0.10"
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite", "migrate", "macros", "derive"] }
