@@ -17,6 +17,7 @@ Each phase is a self-contained, shippable increment. Implement in order; every s
 | 1 | [Database & Configuration](./01-database-config.md) | Repo scaffold, SQLite schema + migrations, Rust DB layer, Tauri commands, OS-derived defaults | — |
 | 2 | [Background Services](./02-background-services.md) | Tray-first app lifecycle, CRON scheduler, `scrape-worker` sidecar (ATS APIs + company pages) | 1 |
 | 3 | [Frontend & Brutalist UI](./03-frontend-ui.md) | Design system (Tailwind v4 tokens), shell, 4 views, keyboard nav | 1 (2 for live events) |
+| 3.5 | [Job Enrichment & Custom Filters](./03b-enrichment-filters.md) | Salary, country/state/remote, sponsorship & clearance classification, dual-layer filtering, RangeSlider, logo removal | 3 |
 | 4 | [Metrics Dashboard](./04-metrics-dashboard.md) | Visx charts, metric cards, Rust metrics aggregation | 1, 3 |
 | 5 | [CI/CD](./05-ci-cd.md) | PR checks + tag-triggered cross-platform release builds | 1–2 (sidecar build script) |
 | — | [Error Log & Solutions](./errors/solutions.md) | Living troubleshooting runbook; recorded errors, causes, and solutions | Ongoing |
@@ -49,8 +50,11 @@ Each phase is a self-contained, shippable increment. Implement in order; every s
 4. **Extended `status` enum:** `scraped, viewed, applied, interviewing, offer, rejected, ignored`. The Tracked Kanban needs pipeline stages beyond `applied`.
 5. **Added `role_type = unknown`.** Greenhouse and most HTML pages don't expose employment type; defaulting to "Full-time" would corrupt the Job Types chart. A keyword heuristic runs first; `unknown` is the fallback.
 6. **Added `job_status_events` table.** "Applications over time" and "Current streak" need *when* a job became `applied`, which a single `status` column can't provide.
-7. **Salary data extraction and storage:** Added structured salary fields (`salary_min`, `salary_max`, `salary_currency`, `salary_raw`) to `jobs`. Extracted across ATS adapters (Lever `salaryRange`, Ashby `compensationTier`, JSON-LD `baseSalary`, and regex pay-transparency fallback for Greenhouse and HTML selectors).
-8. **UI filter via dropdown & zero flavor text:** SubNav role and compensation filters use compact dropdown selectors (`<Select>`), replacing horizontal pill buttons. Completely stripped all vanity copy (e.g., "KEYBOARD-FIRST TRIAGE ACTIVE", "COMPUTED IN REAL-TIME FROM SQLITE TRANSITIONS", "SYSTEM ONLINE"); chrome is strictly functional and informative.
+7. **Salary data extraction and storage:** Structured annualization (`salary_min`, `salary_max`, `salary_currency`, `salary_interval`, `salary_raw`, `salary_source`). Extracted from structured ATS endpoints (Lever `salaryRange`, Ashby `summaryComponents`, JSON-LD `baseSalary`, Greenhouse `pay_input_ranges`) and contextual regex fallback.
+8. **Structured Location (Country / State / Remote):** Normalization of multi-location listings into a `job_locations` child table (`city`, `region_code` ISO 3166-2, `country_code` ISO 3166-1 alpha-2, `is_remote`) via an embedded gazetteer.
+9. **Sponsorship & Clearance classification:** Per-sentence text classifier in `scrape-core::enrich::eligibility` classifying descriptions into `YES` / `NO` / `N/A`, preserving the exact evidence quote and clearance level.
+10. **Dual-Layer Custom Filtering & RangeSlider:** Separation between **scraper ingestion filters** (Settings → SCRAPER → ADVANCED) and **UI view filters** (Discovered & Tracked). Customizable by country, state/region, salary range slider with synced number inputs (0 – $500K+), and sponsorship/clearance tri-states (`YES` / `NO` / `N/A`).
+11. **Removal of "SCRAPE" Logo & Zero Flavor Text:** Stripped the `SCRAPE // SYS.02` logo from TopNav (tabs begin flush left). Strictly removed all vanity copy across the app.
 
 ---
 

@@ -17,31 +17,24 @@
 - [x] Create `crates/scrape-core` (lib) with shared enums so host and worker agree on vocabulary.
 - [x] Add `rust-toolchain.toml` pinning `stable` + components `rustfmt`, `clippy`.
 
-## 1.1 Schema (`src-tauri/migrations/`)
+## 1.1 Schema (`src-tauri/migrations/0001_init.sql`)
 
-- [x] Write initial migration `0001_init.sql`; embed with `sqlx::migrate!("./migrations")` and run on startup.
-- [ ] Add migration `0002_salary.sql`:
-  - `ALTER TABLE jobs ADD COLUMN salary_min INTEGER;`
-  - `ALTER TABLE jobs ADD COLUMN salary_max INTEGER;`
-  - `ALTER TABLE jobs ADD COLUMN salary_currency TEXT DEFAULT 'USD';`
-  - `ALTER TABLE jobs ADD COLUMN salary_raw TEXT;`
-  - `CREATE INDEX IF NOT EXISTS idx_jobs_salary_min ON jobs(salary_min);`
+- [x] Write migration; embed with `sqlx::migrate!("./migrations")` and run on startup.
 - [x] Connection options: `create_if_missing(true)`, `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=5s`, pool size 4.
 - [x] DB path: `app.path().app_data_dir()/scrape_data.db` (macOS: `~/Library/Application Support/dev.scrape.app/`).
 
 ## 1.2 Shared domain types (`crates/scrape-core`)
 
 - [x] `RoleType::infer(title, hint)` heuristic (`intern|co-op` → Internship, `contract|contractor|freelance|temporary` → Contract, `part-time|part time` → PartTime; explicit hint from ATS wins). Unit-tested.
-- [ ] `ScrapedJob` domain model with salary extraction: `salary_min: Option<i64>`, `salary_max: Option<i64>`, `salary_currency: Option<String>`, `salary_raw: Option<String>`.
 - [x] `sqlx` derive gated behind a `sqlx` feature so the worker doesn't pull sqlx.
 
 ## 1.3 Rust data layer (`src-tauri/src/db/`)
 
-- [x] `jobs.rs`: `list`, `get`, `update_status` (tx: update row + insert event), `bulk_update_status`, `update_notes`, `upsert_scraped` (preserves status and notes, updates salary metadata).
+- [x] `jobs.rs`: `list`, `get`, `update_status` (tx: update row + insert event), `bulk_update_status`, `update_notes`, `upsert_scraped` (preserves status).
 - [x] `settings.rs`: `get_all() -> Settings`, `get_value<T>`, `set_value`, `ensure_defaults` (`INSERT OR IGNORE`).
 - [x] `sources.rs`: `list`, `get`, `create`, `update`, `delete`, `set_last_result`.
 - [x] `runs.rs`: `start`, `finish`, `recent`.
-- [x] `JobFilter` with dynamic SQL search, role filter, salary filter (`min_salary`), pagination, and sorting.
+- [x] `JobFilter` with dynamic SQL search, pagination, and sorting.
 - [x] `AppError` (`thiserror`) implementing `Serialize`.
 - [x] Integration tests against `sqlite in-memory` with migrations applied.
 

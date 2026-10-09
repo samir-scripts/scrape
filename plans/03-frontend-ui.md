@@ -132,6 +132,7 @@ What we take from each:
 - [x] Zero `border-radius`, `box-shadow`, or third-party UI components in the bundle (grep check in CI).
 - [x] Theme switch persists across restarts via `app_settings`.
 - [x] Adding a source end-to-end from Settings results in jobs appearing in Discovered after `RUN NOW`.
-- [ ] SubNav filters implemented via dropdowns (`<Select>`), not horizontal button pills.
-- [ ] Salary data pulled, stored, and displayed on jobs; filterable by minimum salary threshold.
-- [ ] Zero unhelpful vanity flavor text across the entire UI.
+- [x] SubNav filters implemented via dropdowns (`<Select>`), not horizontal button pills.
+- [x] Zero unhelpful vanity flavor text across the entire UI.
+- [x] "SCRAPE" logo removed from TopNav; tabs align flush left.
+- [ ] Extended in [Phase 3.5](./03b-enrichment-filters.md): custom filter panel (state, country, salary range slider + numbers, sponsorship & clearance tri-state `YES`/`NO`/`N/A`), table columns, and scraper advanced settings.

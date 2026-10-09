@@ -17,13 +17,9 @@ export function TopNav({
   return (
     <header className="flex flex-col w-full bg-[var(--color-paper)] shrink-0 select-none">
       <div className="flex items-stretch justify-between h-10 px-3 border-b border-[var(--color-ink)]">
-        {/* Left: System Title & Tabs */}
+        {/* Left: Tabs */}
         <div className="flex items-stretch gap-1">
-          <div className="flex items-center font-mono font-black text-xs tracking-tight pr-4 border-r border-[var(--color-ink)] my-1.5 text-[var(--color-ink)]">
-            SCRAPE<span className="text-[var(--color-ink-mute)] font-normal ml-1">// SYS.02</span>
-          </div>
-
-          <nav className="flex items-stretch gap-1 ml-2">
+          <nav className="flex items-stretch gap-1">
             {NAV_TABS.map((tab) => {
               const isActive = view === tab.id;
               let label: string = tab.label;
