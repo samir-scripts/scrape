@@ -49,6 +49,8 @@ Each phase is a self-contained, shippable increment. Implement in order; every s
 4. **Extended `status` enum:** `scraped, viewed, applied, interviewing, offer, rejected, ignored`. The Tracked Kanban needs pipeline stages beyond `applied`.
 5. **Added `role_type = unknown`.** Greenhouse and most HTML pages don't expose employment type; defaulting to "Full-time" would corrupt the Job Types chart. A keyword heuristic runs first; `unknown` is the fallback.
 6. **Added `job_status_events` table.** "Applications over time" and "Current streak" need *when* a job became `applied`, which a single `status` column can't provide.
+7. **Salary data extraction and storage:** Added structured salary fields (`salary_min`, `salary_max`, `salary_currency`, `salary_raw`) to `jobs`. Extracted across ATS adapters (Lever `salaryRange`, Ashby `compensationTier`, JSON-LD `baseSalary`, and regex pay-transparency fallback for Greenhouse and HTML selectors).
+8. **UI filter via dropdown & zero flavor text:** SubNav role and compensation filters use compact dropdown selectors (`<Select>`), replacing horizontal pill buttons. Completely stripped all vanity copy (e.g., "KEYBOARD-FIRST TRIAGE ACTIVE", "COMPUTED IN REAL-TIME FROM SQLITE TRANSITIONS", "SYSTEM ONLINE"); chrome is strictly functional and informative.
 
 ---
 

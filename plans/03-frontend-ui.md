@@ -69,41 +69,46 @@ What we take from each:
 ┌──────────────────────────────────────────────────────────────────────────┐
 │ DISCOVERED (42)  [■ TRACKED ■]   METRICS   SETTINGS        ● NEXT 18:00 │  TopNav
 ├──────────────────────────────────────────────────────────────────────────┤
-│ All   Full-time   Contract   **Internship**   Part-time                  │  SubNav (large, muted)
+│ ROLE: [ ALL ROLES ▾ ]   MIN SALARY: [ ANY ▾ ]        SEARCH: [ /       ]│  SubNav (Dropdown filters)
 ├───────────────────────┬───────────────────────────────┬──────────────────┤
 │ Software Eng, Data  ▸ │ SOFTWARE ENGINEER, DATA       │ STATUS           │
-│ ▓▓ Platform Eng ▓▓▓▓▓ │ ─────────────────────────────  │ Source  Greenh.  │
-│ Backend Intern        │ STRIPE · REMOTE · FULL-TIME   │ Posted  10/01    │
-│ …                     │  [halftone company glyph]      │ Added   10/08    │
-│                       │ ─────────────────────────────  │ Status  SCRAPED  │
+│ STRIPE · $160K-$210K  │ ─────────────────────────────  │ Source  Greenh.  │
+│ ▓▓ Platform Eng ▓▓▓▓▓ │ STRIPE · REMOTE · FULL-TIME   │ Posted  10/01    │
+│ Backend Intern        │ COMPENSATION: $160K - $210K   │ Added   10/08    │
+│ …                     │ ─────────────────────────────  │ Status  SCRAPED  │
 │                       │ Notes ▏                        │ ──────────────── │
 ├───────────────────────┴───────────────────────────────┴──────────────────┤
-│ [↵] OPEN  [A] APPLY  [X] IGNORE  [Q/E] TAB  [/] SEARCH        Select job.│  Footer
+│ [↵] OPEN  [A] APPLY  [X] IGNORE  [Q/E] TAB  [/] SEARCH                 42│  Footer
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-- [x] `components/layout/`: `Shell`, `TopNav`, `SubNav`, `Footer` (context-aware key hints + status message), `ThreeColumn`.
+- [x] `components/layout/`: `Shell`, `TopNav`, `SubNav`, `Footer` (context-aware key hints + purely functional status/count), `ThreeColumn`.
 - [x] View switching: Zustand `ui.view` (`discovered | tracked | metrics | settings`) — no router needed for 4 views; persist last view in `localStorage`.
 - [x] `components/ui/`: `Panel`, `Rule`, `ListRow` (inverted when selected), `Button` (outlined → inverted on hover/active), `Tag`, `KeyHint`, `Field`/`Input`/`Select`/`Toggle` (square checkbox, `■`/`□`), `Table` (boxed 1px grid like palette card), `Modal` (full-bleed paper overlay with dither backdrop), `Dither` (decorative halftone blob, SVG dots), `EmptyState`.
 - [x] Global keyboard map (`useHotkeys` hook, custom ~40 LOC): `Q/E` or `[`/`]` prev/next tab; `↑/↓` or `J/K` move; `↵` open URL; `A` applied; `X` ignored; `V` viewed; `U` undo last status change; `/` search; `Esc` back/clear.
+- [ ] **No flavor text rule:** Strictly remove vanity/decorative text copy (e.g. "KEYBOARD-FIRST TRIAGE ACTIVE", "COMPUTED IN REAL-TIME FROM SQLITE TRANSITIONS", "SYSTEM ONLINE"). Chrome and status labels must be purely functional and informative.
 
 ## 3.4 Views
 
 ### Discovered (Inbox)
-- [x] Query `list_jobs({ statuses: ['scraped','viewed'] })`, sorted newest; SubNav filters role type; search box.
+- [x] Query `list_jobs({ statuses: ['scraped','viewed'] })`, sorted newest; search box.
+- [ ] Filter via compact dropdowns (`<Select>` components):
+  - **Role Filter Dropdown:** `ALL ROLES`, `FULL-TIME`, `CONTRACT`, `INTERNSHIP`, `PART-TIME`, `OTHER`.
+  - **Salary Filter Dropdown:** `ANY SALARY`, `$100K+`, `$120K+`, `$150K+`, `$180K+`, `$200K+`, `$250K+`.
+- [ ] Job row & detail display parsed salary (e.g., `$160K–$210K/YR` or raw string) alongside company and location.
 - [x] Selecting a row for >1s auto-marks `viewed` (configurable).
 - [x] Bulk: `Shift+↑/↓` multi-select → `A`/`X`.
-- [x] Right panel: job metadata table + source health; header counter `DISCOVERED (n)`.
+- [x] Right panel: job metadata table (including salary row) + source health; header counter `DISCOVERED (n)`.
 - [x] Live: listens to `jobs://changed` / `scrape://*` → invalidate queries; shows `SCANNING… ▓▓▓░░ 3/6 SOURCES` in TopNav during runs.
 
 ### Tracked (Kanban / List)
 - [x] Columns: `APPLIED · INTERVIEWING · OFFER · REJECTED`; column header = inverted block with count.
 - [x] Native HTML5 drag-and-drop (no library) + keyboard `Shift+←/→` to move card between columns.
-- [x] Toggle `[KANBAN] [LIST]`; list mode = boxed table with sortable columns (applied date, company, stage).
+- [x] Toggle `[KANBAN] [LIST]`; list mode = boxed table with sortable columns (applied date, company, salary, stage).
 - [x] Card detail drawer: notes (autosave debounce 500ms), status history timeline from `job_status_events`.
 
 ### Metrics
-- Placeholder grid in Phase 3; implemented in [Phase 4](./04-metrics-dashboard.md).
+- Placeholder grid in Phase 3; implemented in [Phase 4](./04-metrics-dashboard.md). Zero vanity/preview subtitle text.
 
 ### Settings (NieR "SYSTEM" style: left category list, right detail)
 - [x] **SCHEDULE:** enable toggle; presets (hourly / every 6h / daily 09:00 / weekdays 09:00) + custom 6-field cron with live `validate_cron` preview of next 3 runs; `RUN NOW`; recent runs table.
@@ -127,3 +132,6 @@ What we take from each:
 - [x] Zero `border-radius`, `box-shadow`, or third-party UI components in the bundle (grep check in CI).
 - [x] Theme switch persists across restarts via `app_settings`.
 - [x] Adding a source end-to-end from Settings results in jobs appearing in Discovered after `RUN NOW`.
+- [ ] SubNav filters implemented via dropdowns (`<Select>`), not horizontal button pills.
+- [ ] Salary data pulled, stored, and displayed on jobs; filterable by minimum salary threshold.
+- [ ] Zero unhelpful vanity flavor text across the entire UI.

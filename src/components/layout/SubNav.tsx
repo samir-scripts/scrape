@@ -1,6 +1,7 @@
 import { useUIStore } from "../../lib/store";
 import { ROLE_TYPES, ROLE_TYPE_LABELS } from "../../lib/constants";
 import { KeyHint } from "../ui/KeyHint";
+import { Select } from "../ui/Select";
 
 export function SubNav() {
   const {
@@ -18,25 +19,21 @@ export function SubNav() {
       {/* Left: View-specific sub-categories */}
       <div className="flex items-center gap-4 text-xs font-mono">
         {view === "discovered" && (
-          <div className="flex items-center gap-1">
-            {ROLE_TYPES.map((rt) => {
-              const isSelected =
-                rt === "all" ? roleTypeFilter === null : roleTypeFilter === rt;
-
-              return (
-                <button
-                  key={rt}
-                  onClick={() => setRoleTypeFilter(rt === "all" ? null : rt)}
-                  className={`px-2 py-0.5 uppercase tracking-wider text-xs cursor-pointer border ${
-                    isSelected
-                      ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold border-[var(--color-ink)]"
-                      : "text-[var(--color-ink-mute)] border-transparent hover:text-[var(--color-ink)] hover:border-[var(--color-ink-mute)]"
-                  }`}
-                >
-                  {ROLE_TYPE_LABELS[rt] || rt}
-                </button>
-              );
-            })}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-[var(--color-ink-mute)] font-bold uppercase tracking-wider">
+              FILTER:
+            </span>
+            <Select
+              value={roleTypeFilter || "all"}
+              onChange={(e) =>
+                setRoleTypeFilter(e.target.value === "all" ? null : e.target.value)
+              }
+              options={ROLE_TYPES.map((rt) => ({
+                value: rt,
+                label: ROLE_TYPE_LABELS[rt] || rt.toUpperCase(),
+              }))}
+              className="py-0.5 text-xs bg-[var(--color-paper)] h-7"
+            />
           </div>
         )}
 

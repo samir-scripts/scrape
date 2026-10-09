@@ -46,12 +46,7 @@ export function Footer({ statusMessage }: FooterProps) {
 
       {/* Right: Contextual Helper / Status */}
       <div className="text-[11px] text-[var(--color-ink-mute)] uppercase tracking-wider shrink-0 pl-2">
-        {statusMessage ||
-          (view === "discovered"
-            ? "KEYBOARD-FIRST TRIAGE ACTIVE"
-            : view === "tracked"
-            ? "STAGE PIPELINE"
-            : "SYSTEM ONLINE")}
+        {statusMessage || ""}
       </div>
     </footer>
   );

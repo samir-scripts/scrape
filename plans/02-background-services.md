@@ -40,9 +40,14 @@
 
 ### Upsert semantics
 ```sql
-INSERT INTO jobs (...) VALUES (...)
+INSERT INTO jobs (id, dedupe_key, source_id, external_id, title, company, role_type, location, url, salary_min, salary_max, salary_currency, salary_raw, date_posted, date_added, last_seen_at, status, status_changed_at)
+VALUES (...)
 ON CONFLICT(dedupe_key) DO UPDATE SET
   title = excluded.title, location = excluded.location, url = excluded.url,
+  salary_min = COALESCE(excluded.salary_min, jobs.salary_min),
+  salary_max = COALESCE(excluded.salary_max, jobs.salary_max),
+  salary_currency = COALESCE(excluded.salary_currency, jobs.salary_currency),
+  salary_raw = COALESCE(excluded.salary_raw, jobs.salary_raw),
   role_type = CASE WHEN jobs.role_type = 'unknown' THEN excluded.role_type ELSE jobs.role_type END,
   last_seen_at = excluded.last_seen_at;
 -- status, notes, date_added are never touched by scrapes
@@ -66,7 +71,7 @@ New-vs-existing counted via `RETURNING (date_added = last_seen_at)` or pre-selec
 
 **worker → stdout (NDJSON, one object per line)**
 ```json
-{"type":"job","source_id":"0192…","external_id":"5012345","title":"Software Engineer, Data","company":"Stripe","role_type":"full_time","location":"Remote","url":"https://…","date_posted":"2026-10-01T00:00:00Z"}
+{"type":"job","source_id":"0192…","external_id":"5012345","title":"Software Engineer, Data","company":"Stripe","role_type":"full_time","location":"Remote","url":"https://…","salary_min":160000,"salary_max":210000,"salary_currency":"USD","salary_raw":"$160,000 - $210,000 / year","date_posted":"2026-10-01T00:00:00Z"}
 {"type":"progress","source_id":"0192…","fetched":120,"matched":14}
 {"type":"error","source_id":"0193…","message":"HTTP 403 from acme.com","retryable":false}
 {"type":"done","stats":{"sources_ok":5,"sources_failed":1,"jobs_emitted":63,"duration_ms":8123}}
@@ -77,13 +82,13 @@ New-vs-existing counted via `RETURNING (date_added = last_seen_at)` or pre-selec
 
 Deps: `reqwest` (`rustls-tls`, `json`, `gzip`), `scraper`, `tokio`, `futures`, `clap`, `url`, `texting_robots`.
 
-| Kind | Endpoint / method | Field mapping notes |
-|---|---|---|
-| `greenhouse` | `GET https://boards-api.greenhouse.io/v1/boards/{token}/jobs` | `id`, `title`, `absolute_url`, `location.name`, `first_published`/`updated_at`; role type via heuristic. |
-| `lever` | `GET https://api.lever.co/v0/postings/{slug}?mode=json` | `id`, `text`, `hostedUrl`, `categories.location`, `categories.commitment` → role hint, `createdAt` (ms). |
-| `ashby` | `GET https://api.ashbyhq.com/posting-api/job-board/{name}` | `id`, `title`, `jobUrl`, `location`, `employmentType` (`FullTime/PartTime/Intern/Contract/Temporary`), `publishedAt`. |
-| `jsonld` | Fetch page(s), parse `<script type="application/ld+json">`, walk objects/arrays/`@graph` for `@type: JobPosting` | `title`, `hiringOrganization.name`, `employmentType`, `jobLocation`, `datePosted`, `url`/`identifier`. Optional `follow_links` selector (depth 1, `max_pages`). |
-| `selector` | Fetch page, apply user CSS selectors | `config: { item, title, link, location? }`; external_id = absolute link URL. |
+| Kind | Endpoint / method | Field mapping notes | Salary extraction details |
+|---|---|---|---|
+| `greenhouse` | `GET https://boards-api.greenhouse.io/v1/boards/{token}/jobs` | `id`, `title`, `absolute_url`, `location.name`, `first_published`/`updated_at`; role type via heuristic. | Parse `metadata` / `questions` or apply regex pay-range scanner (`\$[\d,]+k?\s*[-–—to]+\s*\$?[\d,]+k?`) on description if included. |
+| `lever` | `GET https://api.lever.co/v0/postings/{slug}?mode=json` | `id`, `text`, `hostedUrl`, `categories.location`, `categories.commitment` → role hint, `createdAt` (ms). | Extract from `categories.salaryRange` (`min`, `max`, `currency`, `interval`) or fallback description regex. |
+| `ashby` | `GET https://api.ashbyhq.com/posting-api/job-board/{name}` | `id`, `title`, `jobUrl`, `location`, `employmentType` (`FullTime/PartTime/Intern/Contract/Temporary`), `publishedAt`. | Extract `compensation.compensationTier` (`min`, `max`, `currency`, `interval`). |
+| `jsonld` | Fetch page(s), parse `<script type="application/ld+json">`, walk objects/arrays/`@graph` for `@type: JobPosting` | `title`, `hiringOrganization.name`, `employmentType`, `jobLocation`, `datePosted`, `url`/`identifier`. Optional `follow_links` selector (depth 1, `max_pages`). | Extract `baseSalary` object (`minValue`, `maxValue`, `currency`, `unitText`). |
+| `selector` | Fetch page, apply user CSS selectors | `config: { item, title, link, location?, salary? }`; external_id = absolute link URL. | CSS selector for `salary` or regex scanner on posting container text. |
 
 - [x] **Auto-detect** (`scrape-worker --detect <url>`): fetch a careers page and look for `boards.greenhouse.io/{t}`, `job-boards.greenhouse.io/{t}`, `jobs.lever.co/{s}`, `jobs.ashbyhq.com/{n}` → suggest an API source; else check for JSON-LD → `jsonld`; else suggest `selector`. Exposed to UI via `detect_source(url)` command.
 - [x] **Dry run** (`scrape-worker --stdin --dry-run`) used by `test_source(id)` command to preview first 10 results in Settings.

@@ -28,30 +28,40 @@ Command `get_metrics({ granularity: 'week' | 'month', periods: number }) -> Metr
 
 ```ts
 type Metrics = {
-  totals: { scraped: number; applied: number; interviewing: number; offers: number; response_rate: number };
+  totals: {
+    scraped: number;
+    applied: number;
+    interviewing: number;
+    offers: number;
+    response_rate: number;
+    median_salary: number | null;
+    avg_salary: number | null;
+  };
   series: { bucket_start: string; label: string; count: number }[];     // zero-filled, oldest → newest
   by_role_type: { role_type: RoleType; count: number }[];               // jobs ever applied, by type
+  salary_distribution: { range_label: string; count: number }[];        // e.g. "<$100k", "$100k-$150k", "$150k-$200k", ">$200k"
   streak: { current: number; longest: number; last_applied_on: string | null };
 };
 ```
 
-Definitions (documented in UI via `[?]` hint):
+Definitions:
 - **Applied date** = first `job_status_events.changed_at` where `to_status = 'applied'` (one per job).
 - **Total applied** = jobs that have ever reached `applied` (includes later stages).
 - **Series** buckets computed in Rust with `chrono-tz` using `system.timezone`; weeks start on `system.week_start`.
 - **Current streak** = consecutive local calendar days with ≥1 application, ending today — or yesterday (so the streak isn't "broken" before you've applied today).
 - **Response rate** = jobs reaching `interviewing|offer` ÷ total applied.
+- **Salary analytics** = computed over jobs with valid `salary_min` or `salary_max`.
 
 - [ ] Unit tests: zero-fill, week-start Sunday vs Monday, DST transition week, streak edge cases (today/yesterday/gap), multiple status flips counted once.
 
 ## 4.3 Dashboard layout (Metrics view)
 
 ```
-┌ TOTAL SCRAPED ┐┌ TOTAL APPLIED ┐┌ CURRENT STREAK ┐┌ RESPONSE RATE ┐
-│        1,284  ││          86   ││      5 DAYS    ││       12%     │
-│ ░░ +63 / 7D   ││ ▓ +7 / 7D     ││ LONGEST 11     ││ 10 / 86       │
-└───────────────┘└───────────────┘└────────────────┘└───────────────┘
-┌ APPLICATIONS OVER TIME     [WEEK] MONTH ─────────┐┌ JOB TYPES APPLIED ─┐
+┌ TOTAL SCRAPED ┐┌ TOTAL APPLIED ┐┌ RESPONSE RATE ┐┌ MEDIAN SALARY ┐
+│        1,284  ││          86   ││       12%     ││     $165,000  │
+│ ░░ +63 / 7D   ││ ▓ +7 / 7D     ││ 10 / 86       ││ $120K - $220K │
+└───────────────┘└───────────────┘└───────────────┘└───────────────┘
+┌ APPLICATIONS OVER TIME     RANGE: [ 12 WEEKS ▾ ] ┐┌ JOB TYPES APPLIED ─┐
 │  ▇                                               ││     ◯ donut        │
 │  ▇ ▇     ▇                                       ││  ■ FULL-TIME  62%  │
 │  ▇ ▇ ▇ ▇ ▇ ▇ ...                                 ││  ▒ CONTRACT   20%  │
@@ -60,7 +70,9 @@ Definitions (documented in UI via `[?]` hint):
 └──────────────────────────────────────────────────┘└────────────────────┘
 ```
 
+- [ ] Header chrome is direct and utilitarian; zero vanity copy (no "COMPUTED IN REAL TIME", "PHASE 4 ENGINE PREVIEW").
 - [ ] CSS grid: 4 metric cards row; chart row `2fr 1fr`; collapses to single column under 1100px.
+- [ ] Granularity and time-range filter via dropdown (`RANGE: [ 12 WEEKS ▾ ]`).
 - [ ] **MetricCard:** label (uppercase, ink-mute), big tabular-nums value, sub-line delta; halftone corner decoration.
 - [ ] **ApplicationsChart** (`@visx/shape` `Bar` + `scaleBand`/`scaleLinear`): last 12 weeks or 12 months; selected bar = solid ink, others = `PatternCircles` halftone; `WEEK/MONTH` toggle as inverted-block segmented control; keyboard `←/→` to move selection.
 - [ ] **RoleTypeDonut** (`@visx/shape` `Pie`, `padAngle=0`, 1px ink stroke between slices): each slice a distinct pattern (solid · hatch · dots · checker · paper); legend table with counts + %, hover/arrow selection syncs with readout.

@@ -9,11 +9,8 @@ export function MetricsView() {
       <div className="flex items-center justify-between border-b border-[var(--color-ink)] pb-3">
         <div>
           <h1 className="text-xl font-black uppercase tracking-tight text-[var(--color-ink)]">
-            SYSTEM METRICS // CONVERSION ANALYTICS
+            METRICS & PIPELINE ANALYTICS
           </h1>
-          <p className="font-mono text-xs text-[var(--color-ink-mute)]">
-            PHASE 4 ENGINE PREVIEW · COMPUTED IN REAL-TIME FROM SQLITE TRANSITIONS
-          </p>
         </div>
         <Dither type="checker" width="96px" height="24px" />
       </div>
