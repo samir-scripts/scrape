@@ -17,7 +17,7 @@ uuid = { version = "1", features = ["v7", "serde"] }
 tokio = { version = "1", features = ["full"] }
 thiserror = "2"
 tracing = "0.1"
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros", "derive"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros", "derive"] }
 ts-rs = { version = "10", features = ["serde-json-impl", "no-serde-warnings"] }
 
 [profile.release]
