@@ -113,7 +113,8 @@ What we take from each:
 ### Settings (NieR "SYSTEM" style: left category list, right detail)
 - [x] **SCHEDULE:** enable toggle; presets (hourly / every 6h / daily 09:00 / weekdays 09:00) + custom 6-field cron with live `validate_cron` preview of next 3 runs; `RUN NOW`; recent runs table.
 - [x] **SOURCES:** boxed table (name, kind, enabled, last status/error); `ADD SOURCE` → paste URL → `DETECT` → confirm kind/identifier → `TEST` (dry run shows first 10) → save. Selector config form for `selector` kind.
-- [x] **FILTERS:** include/exclude keyword chips, locations, role types.
+- [x] **FILTERS / SCRAPER:** include/exclude keyword chips, locations, role types (extended with advanced scraper pre-filters in Phase 3.5).
+- [ ] **LOGS:** Chronological scraper execution history, sorted by date and time (newest first). Any run with issues needing addressing (e.g. source HTTP 403/429 errors, timeouts, parsing/adapter failures) is marked with a prominent brutalist red square (`■` / red block). Master-detail view: left run list with status/timestamp/trigger/duration, right inspector with per-source events and diagnostic logs.
 - [x] **APPEARANCE:** theme `PAPER / OBSIDIAN`, dither intensity, reduce motion.
 - [x] **SYSTEM:** locale/timezone (detected, overridable), launch at login, start hidden, notifications, `OPEN DATA FOLDER`, `EXPORT CSV / JSON`.
 

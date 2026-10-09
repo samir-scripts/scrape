@@ -23,7 +23,7 @@ export function AppearanceSettings({
     onUpdateSetting("ui.reduce_motion", reduced);
     document.documentElement.setAttribute(
       "data-reduce-motion",
-      reduced ? "true" : "false"
+      reduced ? "true" : "false",
     );
   };
 
@@ -31,11 +31,8 @@ export function AppearanceSettings({
     <div className="flex flex-col gap-6 w-full max-w-3xl select-none">
       <div>
         <h2 className="text-base font-black uppercase tracking-tight text-[var(--color-ink)]">
-          APPEARANCE & BRUTALIST THEME
+          APPEARANCE
         </h2>
-        <p className="text-xs font-mono text-[var(--color-ink-mute)]">
-          HIGH-CONTRAST MONOCHROME PALETTES INSPIRED BY NIER:AUTOMATA & HALFTONE PRINT
-        </p>
       </div>
 
       <Rule />
@@ -64,7 +61,8 @@ export function AppearanceSettings({
               )}
             </div>
             <p className="text-[11px] opacity-80">
-              NieR-style aged paper background with high-contrast ink rules and halftone dot-matrix.
+              NieR-style aged paper background with high-contrast ink rules and
+              halftone dot-matrix.
             </p>
             <div className="flex gap-1.5 pt-2 border-t border-[#1A1A1A]">
               <span className="w-5 h-5 bg-[#F5F5DC] border border-[#1A1A1A]" />
@@ -94,7 +92,8 @@ export function AppearanceSettings({
               )}
             </div>
             <p className="text-[11px] opacity-80">
-              Deep matte obsidian chassis with cream typography and CRT phosphor accents.
+              Deep matte obsidian chassis with cream typography and CRT phosphor
+              accents.
             </p>
             <div className="flex gap-1.5 pt-2 border-t border-[#FFF6EE]">
               <span className="w-5 h-5 bg-[#262628] border border-[#FFF6EE]" />
@@ -129,7 +128,9 @@ export function AppearanceSettings({
         </label>
         <div className="grid grid-cols-3 gap-3">
           <div className="border border-[var(--color-ink)] p-3 flex flex-col gap-2">
-            <span className="text-[11px] font-bold">RADIAL DOT MATRIX (4PX)</span>
+            <span className="text-[11px] font-bold">
+              RADIAL DOT MATRIX (4PX)
+            </span>
             <Dither type="dots" height="40px" className="opacity-80" />
           </div>
           <div className="border border-[var(--color-ink)] p-3 flex flex-col gap-2">

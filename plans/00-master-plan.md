@@ -17,7 +17,7 @@ Each phase is a self-contained, shippable increment. Implement in order; every s
 | 1 | [Database & Configuration](./01-database-config.md) | Repo scaffold, SQLite schema + migrations, Rust DB layer, Tauri commands, OS-derived defaults | — |
 | 2 | [Background Services](./02-background-services.md) | Tray-first app lifecycle, CRON scheduler, `scrape-worker` sidecar (ATS APIs + company pages) | 1 |
 | 3 | [Frontend & Brutalist UI](./03-frontend-ui.md) | Design system (Tailwind v4 tokens), shell, 4 views, keyboard nav | 1 (2 for live events) |
-| 3.5 | [Job Enrichment & Custom Filters](./03b-enrichment-filters.md) | Salary, country/state/remote, sponsorship & clearance classification, dual-layer filtering, RangeSlider, logo removal | 3 |
+| 3.5 | [Job Enrichment, Custom Filters & Scraper Logs](./03b-enrichment-filters.md) | Salary, country/state/remote, sponsorship & clearance classification, dual-layer filtering, RangeSlider, logo removal, Settings Logs with red square error markers | 3 |
 | 4 | [Metrics Dashboard](./04-metrics-dashboard.md) | Visx charts, metric cards, Rust metrics aggregation | 1, 3 |
 | 5 | [CI/CD](./05-ci-cd.md) | PR checks + tag-triggered cross-platform release builds | 1–2 (sidecar build script) |
 | — | [Error Log & Solutions](./errors/solutions.md) | Living troubleshooting runbook; recorded errors, causes, and solutions | Ongoing |
@@ -55,6 +55,7 @@ Each phase is a self-contained, shippable increment. Implement in order; every s
 9. **Sponsorship & Clearance classification:** Per-sentence text classifier in `scrape-core::enrich::eligibility` classifying descriptions into `YES` / `NO` / `N/A`, preserving the exact evidence quote and clearance level.
 10. **Dual-Layer Custom Filtering & RangeSlider:** Separation between **scraper ingestion filters** (Settings → SCRAPER → ADVANCED) and **UI view filters** (Discovered & Tracked). Customizable by country, state/region, salary range slider with synced number inputs (0 – $500K+), and sponsorship/clearance tri-states (`YES` / `NO` / `N/A`).
 11. **Removal of "SCRAPE" Logo & Zero Flavor Text:** Stripped the `SCRAPE // SYS.02` logo from TopNav (tabs begin flush left). Strictly removed all vanity copy across the app.
+12. **Scraper Execution Logs in Settings (Red Square Indicator):** Dedicated "LOGS" tab in Settings (`SettingsCategory = 'logs'`). Scraper run logs are sorted chronologically by date and time (newest first). Any run or event encountering issues needing user attention (e.g. sidecar errors, network timeouts, HTTP 403/429 rate limits, adapter parsing errors) is marked with a prominent brutalist red square (`■`). Selecting a run provides full diagnostic log inspection.
 
 ---
 
