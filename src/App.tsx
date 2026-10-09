@@ -29,12 +29,22 @@ export default function App() {
   }, [queryClient]);
 
   // 2. Query application data
-  const { data: jobsPage } = useQuery<Page<Job>>({
+  const {
+    data: jobsPage,
+    isLoading: jobsLoading,
+    error: jobsError,
+    refetch: refetchJobs,
+  } = useQuery<Page<Job>>({
     queryKey: ["jobs"],
     queryFn: () => api.listJobs({ limit: 2000 }),
   });
 
-  const { data: settings } = useQuery({
+  const {
+    data: settings,
+    isLoading: settingsLoading,
+    error: settingsError,
+    refetch: refetchSettings,
+  } = useQuery({
     queryKey: ["settings"],
     queryFn: api.getSettings,
   });
@@ -180,6 +190,96 @@ export default function App() {
     }
   }, [schedulerStatus]);
 
+  // 10. Subsystem readiness gate
+  const isInitializing = settingsLoading || jobsLoading;
+  const initError = settingsError || jobsError;
+
+  if (isInitializing) {
+    return (
+      <div className="w-screen h-screen flex flex-col items-center justify-center bg-[var(--color-paper)] text-[var(--color-ink)] select-none p-6">
+        <div className="border border-[var(--color-ink)] p-8 max-w-md w-full bg-[var(--color-paper-2)]/30 space-y-6">
+          <div className="flex items-center justify-between border-b border-[var(--color-ink)] pb-3">
+            <span className="font-mono text-xs font-black tracking-widest text-[var(--color-ink)] uppercase">
+              SCRAPE // CORE SYSTEM
+            </span>
+            <span className="font-mono text-[10px] tracking-wider text-[var(--color-ink-mute)] uppercase">
+              BOOT-SEQ 01
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            <div className="font-mono font-bold text-sm uppercase tracking-wider flex items-center gap-2">
+              <span className="inline-block w-2 h-2 bg-[var(--color-ink)] animate-pulse" />
+              INITIALIZING SUBSYSTEMS…
+            </div>
+            <p className="font-mono text-xs text-[var(--color-ink-mute)] leading-relaxed">
+              Establishing IPC link with Scrape engine, loading database schema, and reading configuration registry.
+            </p>
+          </div>
+
+          <div className="font-mono text-xs uppercase border-t border-[var(--color-ink)]/20 pt-3 space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-[var(--color-ink-mute)]">SETTINGS REGISTRY:</span>
+              <span className={settings ? "text-[var(--color-ink)] font-bold" : "animate-pulse font-bold text-[var(--color-ink-mute)]"}>
+                {settings ? "[READY]" : "[SYNCING]"}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[var(--color-ink-mute)]">JOB REPOSITORY:</span>
+              <span className={jobsPage ? "text-[var(--color-ink)] font-bold" : "animate-pulse font-bold text-[var(--color-ink-mute)]"}>
+                {jobsPage ? "[READY]" : "[SYNCING]"}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (initError || !settings) {
+    const errorMessage =
+      initError instanceof Error
+        ? initError.message
+        : typeof initError === "string"
+        ? initError
+        : "Failed to load system settings configuration.";
+
+    return (
+      <div className="w-screen h-screen flex flex-col items-center justify-center bg-[var(--color-paper)] text-[var(--color-ink)] select-none p-6">
+        <div className="border-2 border-[var(--color-ink)] p-8 max-w-lg w-full bg-[var(--color-paper)] space-y-6">
+          <div className="border-b border-[var(--color-ink)] pb-3">
+            <div className="font-mono text-[10px] font-black tracking-widest text-[var(--color-ink-mute)] uppercase">
+              BOOT HALT // CRITICAL FAILURE
+            </div>
+            <div className="font-mono font-black text-sm uppercase tracking-wider mt-1 text-[var(--color-ink)]">
+              SYSTEM INITIALIZATION FAILED
+            </div>
+          </div>
+
+          <p className="font-mono text-xs text-[var(--color-ink-mute)] leading-relaxed">
+            The application cannot start because the backend database or configuration service failed to initialize. User interaction is disabled to prevent data corruption.
+          </p>
+
+          <div className="bg-[var(--color-paper-2)] border border-[var(--color-ink)]/30 p-3 font-mono text-xs text-[var(--color-ink)] break-all">
+            {errorMessage}
+          </div>
+
+          <div>
+            <button
+              onClick={() => {
+                refetchSettings();
+                refetchJobs();
+              }}
+              className="w-full py-2.5 px-4 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] font-mono text-xs font-bold uppercase hover:opacity-90 active:translate-y-[1px] cursor-pointer"
+            >
+              [↵] RETRY INITIALIZATION
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Shell
       discoveredCount={discoveredJobs.length}
@@ -218,7 +318,7 @@ export default function App() {
 
       {view === "settings" && (
         <SettingsView
-          settings={settings || null}
+          settings={settings}
           onUpdateSetting={(key, value) =>
             updateSettingMutation.mutate({ key, value })
           }

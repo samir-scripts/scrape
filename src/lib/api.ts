@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { Job } from "../bindings/Job";
 import type { JobStatus } from "../bindings/JobStatus";
 import type { JobStatusEvent } from "../bindings/JobStatusEvent";
@@ -29,10 +29,47 @@ export interface ApiJobFilter {
   offset?: number | bigint | null;
 }
 
+export const DEFAULT_SETTINGS: Settings = {
+  system_locale: "en-US",
+  system_timezone: "America/New_York",
+  system_week_start: "sunday",
+  ui_theme: "paper",
+  ui_reduce_motion: false,
+  scraper_enabled: true,
+  scraper_cron: "0 0 */6 * * *",
+  scraper_run_on_startup: false,
+  filters_include_keywords: [],
+  filters_exclude_keywords: [],
+  filters_locations: [],
+  filters_role_types: [],
+  notifications_enabled: true,
+  app_start_hidden: false,
+  app_launch_at_login: false,
+};
+
+let devSettings: Settings = (() => {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const saved = localStorage.getItem("scrape:dev_settings");
+      if (saved) return JSON.parse(saved);
+    }
+  } catch {}
+  return { ...DEFAULT_SETTINGS };
+})();
+
 export const api = {
   // Jobs
-  listJobs: (filter?: ApiJobFilter) =>
-    invoke<Page<Job>>("list_jobs", { filter: filter || null }),
+  listJobs: (filter?: ApiJobFilter): Promise<Page<Job>> => {
+    if (!isTauri()) {
+      return Promise.resolve({
+        items: [],
+        total: BigInt(0),
+        limit: BigInt(2000),
+        offset: BigInt(0),
+      });
+    }
+    return invoke<Page<Job>>("list_jobs", { filter: filter || null });
+  },
 
   getJob: (id: string) =>
     invoke<Job>("get_job", { id }),
@@ -46,19 +83,35 @@ export const api = {
   updateJobNotes: (id: string, notes?: string) =>
     invoke<Job>("update_job_notes", { id, notes: notes || null }),
 
-  getJobStatusEvents: (jobId: string) =>
-    invoke<JobStatusEvent[]>("get_job_status_events", { jobId }),
+  getJobStatusEvents: (jobId: string) => {
+    if (!isTauri()) return Promise.resolve([]);
+    return invoke<JobStatusEvent[]>("get_job_status_events", { jobId });
+  },
 
   // Settings
-  getSettings: () =>
-    invoke<Settings>("get_settings"),
+  getSettings: (): Promise<Settings> => {
+    if (!isTauri()) return Promise.resolve({ ...devSettings });
+    return invoke<Settings>("get_settings");
+  },
 
-  updateSetting: (key: string, value: unknown) =>
-    invoke<Settings>("update_setting", { key, value }),
+  updateSetting: (key: string, value: unknown): Promise<Settings> => {
+    if (!isTauri()) {
+      (devSettings as unknown as Record<string, unknown>)[key] = value;
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("scrape:dev_settings", JSON.stringify(devSettings));
+        }
+      } catch {}
+      return Promise.resolve({ ...devSettings });
+    }
+    return invoke<Settings>("update_setting", { key, value });
+  },
 
   // Sources
-  listSources: () =>
-    invoke<Source[]>("list_sources"),
+  listSources: (): Promise<Source[]> => {
+    if (!isTauri()) return Promise.resolve([]);
+    return invoke<Source[]>("list_sources");
+  },
 
   getSource: (id: string) =>
     invoke<Source>("get_source", { id }),
@@ -102,14 +155,26 @@ export const api = {
   runScrapeNow: () =>
     invoke<ScrapeRun>("run_scrape_now"),
 
-  listScrapeRuns: (limit?: number) =>
-    invoke<ScrapeRun[]>("list_scrape_runs", { limit }),
+  listScrapeRuns: (limit?: number) => {
+    if (!isTauri()) return Promise.resolve([]);
+    return invoke<ScrapeRun[]>("list_scrape_runs", { limit });
+  },
 
-  validateCron: (expr: string) =>
-    invoke<CronValidationResult>("validate_cron", { expr }),
+  validateCron: (expr: string): Promise<CronValidationResult> => {
+    if (!isTauri()) return Promise.resolve({ ok: true, next_runs: ["2026-10-10T00:00:00Z"], error: null });
+    return invoke<CronValidationResult>("validate_cron", { expr });
+  },
 
-  getSchedulerStatus: () =>
-    invoke<SchedulerStatus>("get_scheduler_status"),
+  getSchedulerStatus: (): Promise<SchedulerStatus> => {
+    if (!isTauri()) {
+      return Promise.resolve({
+        enabled: devSettings.scraper_enabled,
+        next_run_at: null,
+        running: false,
+      });
+    }
+    return invoke<SchedulerStatus>("get_scheduler_status");
+  },
 
   setSchedulerPaused: (paused: boolean) =>
     invoke<void>("set_scheduler_paused", { paused }),

@@ -7,7 +7,7 @@ import { AppearanceSettings } from "./AppearanceSettings";
 import { SystemSettings } from "./SystemSettings";
 
 interface SettingsViewProps {
-  settings: Settings | null;
+  settings: Settings;
   onUpdateSetting: (key: string, value: unknown) => void;
 }
 
@@ -24,14 +24,6 @@ export function SettingsView({
   onUpdateSetting,
 }: SettingsViewProps) {
   const { settingsCategory, setSettingsCategory } = useUIStore();
-
-  if (!settings) {
-    return (
-      <div className="flex-1 flex items-center justify-center font-mono text-xs uppercase text-[var(--color-ink-mute)]">
-        LOADING CONFIGURATION…
-      </div>
-    );
-  }
 
   return (
     <div className="flex-1 w-full h-full flex overflow-hidden bg-[var(--color-paper)]">

@@ -1,3 +1,4 @@
+import { isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { QueryClient } from "@tanstack/react-query";
 import { useUIStore } from "./store";
@@ -12,6 +13,9 @@ interface ScrapeProgressPayload {
 export async function setupAppEventListeners(
   queryClient: QueryClient
 ): Promise<() => void> {
+  if (!isTauri()) {
+    return () => {};
+  }
   const unlisteners: UnlistenFn[] = [];
 
   const unlistenJobs = await listen("jobs://changed", () => {
