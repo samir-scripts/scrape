@@ -16,6 +16,13 @@ tauri-build = { version = "2", features = [] }
 scrape-core = { path = "../crates/scrape-core", features = ["sqlx"] }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-shell = "2"
+tokio-cron-scheduler = "0.13"
+cron = "0.15"
+chrono-tz = "0.10"
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite", "migrate", "macros", "derive"] }
 serde.workspace = true
 serde_json.workspace = true

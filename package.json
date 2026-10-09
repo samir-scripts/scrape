@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "tauri": "tauri",
+    "build:sidecar": "node scripts/build-sidecar.mjs",
     "gen:types": "cargo test --workspace export_bindings"
   },
   "dependencies": {

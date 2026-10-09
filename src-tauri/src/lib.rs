@@ -9,6 +9,15 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            services::tray::show_main_window(app);
+        }))
+        .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             let app_dir = app
                 .path()
@@ -30,7 +39,42 @@ pub fn run() {
                     .expect("Failed to initialize system defaults")
             });
 
-            app.manage(state::AppState { db: pool });
+            let runner = services::runner::ScrapeRunner::new(pool.clone());
+            let scheduler = tauri::async_runtime::block_on(async {
+                services::scheduler::SchedulerService::init(
+                    pool.clone(),
+                    runner.clone(),
+                    app.handle().clone(),
+                )
+                .await
+                .expect("Failed to initialize scheduler service")
+            });
+
+            app.manage(state::AppState {
+                db: pool,
+                runner,
+                scheduler,
+            });
+
+            // Prevent app quit on main window close; hide window instead
+            if let Some(window) = app.get_webview_window("main") {
+                let w_clone = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = w_clone.hide();
+                        #[cfg(target_os = "macos")]
+                        let _ = w_clone
+                            .app_handle()
+                            .set_activation_policy(tauri::ActivationPolicy::Accessory);
+                    }
+                });
+            }
+
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            services::tray::setup_tray(app.handle()).expect("Failed to initialize system tray");
 
             Ok(())
         })
@@ -48,6 +92,13 @@ pub fn run() {
             commands::sources::create_source,
             commands::sources::update_source,
             commands::sources::delete_source,
+            commands::scrape::run_scrape_now,
+            commands::scrape::list_scrape_runs,
+            commands::scrape::validate_cron,
+            commands::scrape::get_scheduler_status,
+            commands::scrape::set_scheduler_paused,
+            commands::scrape::detect_source,
+            commands::scrape::test_source,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -63,6 +114,12 @@ mod bindings_test {
         scrape_core::RoleType::export().unwrap();
         scrape_core::JobStatus::export().unwrap();
         scrape_core::SourceKind::export().unwrap();
+        scrape_core::WorkerConfig::export().unwrap();
+        scrape_core::WorkerSource::export().unwrap();
+        scrape_core::WorkerFilters::export().unwrap();
+        scrape_core::WorkerLimits::export().unwrap();
+        scrape_core::WorkerEvent::export().unwrap();
+        scrape_core::WorkerStats::export().unwrap();
         db::jobs::Job::export().unwrap();
         db::jobs::JobFilter::export().unwrap();
         db::jobs::JobSort::export().unwrap();
@@ -77,5 +134,7 @@ mod bindings_test {
         db::runs::ScrapeRun::export().unwrap();
         db::runs::TriggerType::export().unwrap();
         db::runs::RunStatus::export().unwrap();
+        services::scheduler::CronValidationResult::export().unwrap();
+        services::scheduler::SchedulerStatus::export().unwrap();
     }
 }

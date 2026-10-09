@@ -11,6 +11,9 @@
 3. [Rust: Result Type Alias Shadowing Serde Trait Signature](#3-rust-result-type-alias-shadowing-serde-trait-signature)
 4. [Clippy: Needless Borrows on Copy Enums](#4-clippy-needless-borrows-on-copy-enums)
 5. [Clippy: Field Reassignment After Default Initializer](#5-clippy-field-reassignment-after-default-initializer)
+6. [Texting Robots: Non-Clone Type in Mutex Cache](#6-texting-robots-non-clone-type-in-mutex-cache)
+7. [Sqlx Settings: Nested Option in Result Unwrapping](#7-sqlx-settings-nested-option-in-result-unwrapping)
+8. [Tauri Plugin Autostart: Missing Platform Launcher Argument](#8-tauri-plugin-autostart-missing-platform-launcher-argument)
 
 ---
 
@@ -96,3 +99,48 @@
       ..Default::default()
   };
   ```
+
+---
+
+### 6. Texting Robots: Non-Clone Type in Mutex Cache
+
+- **Phase:** Phase 2 (Sidecar HTTP Client)
+- **Error Signature:**
+  ```text
+  error[E0599]: the method `clone` exists for enum `std::option::Option<Robot>`, but its trait bounds were not satisfied
+  = note: `Robot: Clone` is not satisfied
+  ```
+- **Root Cause:**
+  `texting_robots::Robot` parses and holds `robots.txt` AST without implementing `Clone`. Attempting to cache `Option<Robot>` in a `Mutex<HashMap<String, Option<Robot>>>` and cloning on lookup fails.
+- **Solution & Rule:**
+  Wrap non-`Clone` cached objects in `Arc`: `Mutex<HashMap<String, Option<Arc<Robot>>>>`.
+
+---
+
+### 7. Sqlx Settings: Nested Option in Result Unwrapping
+
+- **Phase:** Phase 2 (Scheduler & Runner Settings Queries)
+- **Error Signature:**
+  ```text
+  error[E0308]: mismatched types: expected `Option<_>`, found `bool`
+  ```
+- **Root Cause:**
+  `SettingsRepo::get_value::<T>` returns `Result<Option<T>>` because individual setting keys may be absent from the DB table. Calling `.await.unwrap_or(default)` tries to provide a default of type `Option<T>` rather than unwrapping both levels.
+- **Solution & Rule:**
+  Chain `.await.ok().flatten().unwrap_or(default)` to safely flatten the nested `Result` and `Option`.
+
+---
+
+### 8. Tauri Plugin Autostart: Missing Platform Launcher Argument
+
+- **Phase:** Phase 2 (Tauri Host Setup)
+- **Error Signature:**
+  ```text
+  error[E0061]: this function takes 2 arguments but 0 arguments were supplied
+  --> tauri_plugin_autostart::init()
+  ```
+- **Root Cause:**
+  `tauri-plugin-autostart` v2 requires platform-specific launcher configuration: `MacosLauncher` on macOS (`MacosLauncher::LaunchAgent`) and an optional arguments vector `Option<Vec<&'static str>>`.
+- **Solution & Rule:**
+  Initialize with `tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None)`.
+

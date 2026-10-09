@@ -8,6 +8,16 @@ import type { Settings } from "../bindings/Settings";
 import type { Source } from "../bindings/Source";
 import type { CreateSourceInput } from "../bindings/CreateSourceInput";
 import type { UpdateSourceInput } from "../bindings/UpdateSourceInput";
+import type { ScrapeRun } from "../bindings/ScrapeRun";
+import type { CronValidationResult } from "../bindings/CronValidationResult";
+import type { SchedulerStatus } from "../bindings/SchedulerStatus";
+import type { WorkerEvent } from "../bindings/WorkerEvent";
+
+export interface DetectResult {
+  kind: string;
+  identifier: string;
+  name: string;
+}
 
 export const api = {
   // Jobs
@@ -51,4 +61,26 @@ export const api = {
 
   deleteSource: (id: string) =>
     invoke<void>("delete_source", { id }),
+
+  // Scraping & Scheduler
+  runScrapeNow: () =>
+    invoke<ScrapeRun>("run_scrape_now"),
+
+  listScrapeRuns: (limit?: number) =>
+    invoke<ScrapeRun[]>("list_scrape_runs", { limit }),
+
+  validateCron: (expr: string) =>
+    invoke<CronValidationResult>("validate_cron", { expr }),
+
+  getSchedulerStatus: () =>
+    invoke<SchedulerStatus>("get_scheduler_status"),
+
+  setSchedulerPaused: (paused: boolean) =>
+    invoke<void>("set_scheduler_paused", { paused }),
+
+  detectSource: (url: string) =>
+    invoke<DetectResult>("detect_source", { url }),
+
+  testSource: (id: string) =>
+    invoke<WorkerEvent[]>("test_source", { id }),
 };

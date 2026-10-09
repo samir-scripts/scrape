@@ -3,6 +3,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AppError {
+    #[error("Scrape run already in progress")]
+    AlreadyRunning,
+
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
 
@@ -30,6 +33,7 @@ impl Serialize for AppError {
         use serde::ser::SerializeStruct;
         let mut state = serializer.serialize_struct("AppError", 2)?;
         let kind = match self {
+            AppError::AlreadyRunning => "already_running",
             AppError::Database(_) => "database",
             AppError::Migration(_) => "migration",
             AppError::Json(_) => "json",

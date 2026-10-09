@@ -1,0 +1,194 @@
+use crate::{RoleType, SourceKind};
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
+
+pub const PROTOCOL_VERSION: u32 = 1;
+
+fn default_protocol_version() -> u32 {
+    PROTOCOL_VERSION
+}
+
+fn default_concurrency() -> usize {
+    4
+}
+
+fn default_per_host_delay_ms() -> u64 {
+    750
+}
+
+fn default_request_timeout_s() -> u64 {
+    20
+}
+
+/// Configuration payload passed from Tauri host to scrape-worker via stdin JSON.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export)]
+pub struct WorkerConfig {
+    #[serde(default = "default_protocol_version")]
+    pub version: u32,
+    pub sources: Vec<WorkerSource>,
+    #[serde(default)]
+    pub filters: WorkerFilters,
+    #[serde(default)]
+    pub limits: WorkerLimits,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export)]
+pub struct WorkerSource {
+    pub id: String,
+    pub kind: SourceKind,
+    pub name: String,
+    pub identifier: String,
+    #[serde(default)]
+    pub config: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export)]
+pub struct WorkerFilters {
+    #[serde(default)]
+    pub include_keywords: Vec<String>,
+    #[serde(default)]
+    pub exclude_keywords: Vec<String>,
+    #[serde(default)]
+    pub locations: Vec<String>,
+    #[serde(default)]
+    pub role_types: Vec<RoleType>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export)]
+pub struct WorkerLimits {
+    #[serde(default = "default_concurrency")]
+    pub concurrency: usize,
+    #[serde(default = "default_per_host_delay_ms")]
+    pub per_host_delay_ms: u64,
+    #[serde(default = "default_request_timeout_s")]
+    pub request_timeout_s: u64,
+}
+
+impl Default for WorkerLimits {
+    fn default() -> Self {
+        Self {
+            concurrency: default_concurrency(),
+            per_host_delay_ms: default_per_host_delay_ms(),
+            request_timeout_s: default_request_timeout_s(),
+        }
+    }
+}
+
+/// NDJSON events streamed by scrape-worker over stdout.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export)]
+pub enum WorkerEvent {
+    Job {
+        source_id: String,
+        external_id: String,
+        title: String,
+        company: String,
+        role_type: RoleType,
+        #[serde(default)]
+        location: String,
+        url: String,
+        #[serde(default)]
+        date_posted: Option<String>,
+    },
+    Progress {
+        source_id: String,
+        fetched: u64,
+        matched: u64,
+    },
+    Error {
+        source_id: String,
+        message: String,
+        retryable: bool,
+    },
+    Done {
+        stats: WorkerStats,
+    },
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export)]
+pub struct WorkerStats {
+    pub sources_ok: u64,
+    pub sources_failed: u64,
+    pub jobs_emitted: u64,
+    pub duration_ms: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_worker_config_deserialization() {
+        let json = r#"{
+            "version": 1,
+            "sources": [
+                {
+                    "id": "src-1",
+                    "kind": "greenhouse",
+                    "name": "Stripe",
+                    "identifier": "stripe",
+                    "config": {}
+                }
+            ],
+            "filters": {
+                "include_keywords": ["engineer"],
+                "exclude_keywords": ["manager"],
+                "locations": ["remote"],
+                "role_types": ["full_time"]
+            },
+            "limits": {
+                "concurrency": 2,
+                "per_host_delay_ms": 500,
+                "request_timeout_s": 15
+            }
+        }"#;
+
+        let config: WorkerConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.version, 1);
+        assert_eq!(config.sources.len(), 1);
+        assert_eq!(config.sources[0].name, "Stripe");
+        assert_eq!(config.filters.include_keywords, vec!["engineer"]);
+        assert_eq!(config.filters.role_types, vec![RoleType::FullTime]);
+        assert_eq!(config.limits.concurrency, 2);
+    }
+
+    #[test]
+    fn test_worker_events_ndjson_roundtrip() {
+        let job = WorkerEvent::Job {
+            source_id: "src-1".to_string(),
+            external_id: "5012345".to_string(),
+            title: "Software Engineer, Data".to_string(),
+            company: "Stripe".to_string(),
+            role_type: RoleType::FullTime,
+            location: "Remote".to_string(),
+            url: "https://stripe.com/jobs/5012345".to_string(),
+            date_posted: Some("2026-10-01T00:00:00Z".to_string()),
+        };
+
+        let serialized = serde_json::to_string(&job).unwrap();
+        assert!(serialized.contains(r#""type":"job""#));
+        assert!(serialized.contains(r#""role_type":"full_time""#));
+
+        let deserialized: WorkerEvent = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, job);
+
+        let done = WorkerEvent::Done {
+            stats: WorkerStats {
+                sources_ok: 5,
+                sources_failed: 1,
+                jobs_emitted: 63,
+                duration_ms: 8123,
+            },
+        };
+        let done_str = serde_json::to_string(&done).unwrap();
+        assert!(done_str.contains(r#""type":"done""#));
+        let done_deserialized: WorkerEvent = serde_json::from_str(&done_str).unwrap();
+        assert_eq!(done_deserialized, done);
+    }
+}

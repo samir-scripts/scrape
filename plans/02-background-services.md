@@ -8,26 +8,26 @@
 
 ## 2.1 Tray-first lifecycle (`services/tray.rs`)
 
-- [ ] `tauri.conf.json`: main window `"visible": false`, `1280×800`, min `960×600`. Enable `tray-icon` feature.
-- [ ] `TrayIconBuilder` with monochrome template icon (macOS `icon_as_template(true)`).
+- [x] `tauri.conf.json`: main window `"visible": false`, `1280×800`, min `960×600`. Enable `tray-icon` feature.
+- [x] `TrayIconBuilder` with monochrome template icon (macOS `icon_as_template(true)`).
   - Left-click → show + focus main window (toggle if already focused).
   - Menu: `OPEN SCRAPE` · `RUN SCRAPE NOW` · `PAUSE / RESUME SCHEDULE` · `LAST RUN: 12:00 · 14 NEW` (disabled label) · `QUIT`.
-- [ ] Window `CloseRequested` → `api.prevent_close()` + `window.hide()` (only `QUIT` exits).
-- [ ] macOS: `ActivationPolicy::Accessory` while hidden (no Dock icon); switch to `Regular` when window is shown.
-- [ ] Plugins: `tauri-plugin-single-instance` (second launch focuses window), `tauri-plugin-autostart` (bound to `app.launch_at_login`), `tauri-plugin-notification`, `tauri-plugin-opener` (open job URLs in default browser).
+- [x] Window `CloseRequested` → `api.prevent_close()` + `window.hide()` (only `QUIT` exits).
+- [x] macOS: `ActivationPolicy::Accessory` while hidden (no Dock icon); switch to `Regular` when window is shown.
+- [x] Plugins: `tauri-plugin-single-instance` (second launch focuses window), `tauri-plugin-autostart` (bound to `app.launch_at_login`), `tauri-plugin-notification`, `tauri-plugin-opener` (open job URLs in default browser).
 
 ## 2.2 Scheduler (`services/scheduler.rs`)
 
-- [ ] On startup: read `scraper.enabled` + `scraper.cron`; build `JobScheduler`, add a `Job::new_async_tz(cron, tz, ...)` using `system.timezone` so "9 AM" means local 9 AM.
-- [ ] Store the job UUID in `AppState.scheduler: Mutex<SchedulerHandle>`; `reschedule(cron)` removes + re-adds on settings change (hooked in `update_setting`).
-- [ ] Each tick calls `ScrapeRunner::trigger(Trigger::Schedule)`.
-- [ ] `run_on_startup` → trigger once ~10s after launch.
-- [ ] Commands: `validate_cron(expr) -> { ok, next_runs: [ISO; 3] }` (for Settings preview), `get_scheduler_status() -> { enabled, next_run_at, running }`, `set_scheduler_paused(bool)`.
+- [x] On startup: read `scraper.enabled` + `scraper.cron`; build `JobScheduler`, add a `Job::new_async_tz(cron, tz, ...)` using `system.timezone` so "9 AM" means local 9 AM.
+- [x] Store the job UUID in `AppState.scheduler: Mutex<SchedulerHandle>`; `reschedule(cron)` removes + re-adds on settings change (hooked in `update_setting`).
+- [x] Each tick calls `ScrapeRunner::trigger(Trigger::Schedule)`.
+- [x] `run_on_startup` → trigger once ~10s after launch.
+- [x] Commands: `validate_cron(expr) -> { ok, next_runs: [ISO; 3] }` (for Settings preview), `get_scheduler_status() -> { enabled, next_run_at, running }`, `set_scheduler_paused(bool)`.
 
 ## 2.3 ScrapeRunner (`services/runner.rs`)
 
-- [ ] **Overlap guard:** `AtomicBool` / `try_lock` — if a run is in progress, skip (log + return `AlreadyRunning`).
-- [ ] Flow (see master sequence diagram):
+- [x] **Overlap guard:** `AtomicBool` / `try_lock` — if a run is in progress, skip (log + return `AlreadyRunning`).
+- [x] Flow (see master sequence diagram):
   1. `runs::start(trigger)`; load enabled sources + filters.
   2. `app.shell().sidecar("scrape-worker")?.args(["--stdin"]).spawn()` → `(rx, child)`.
   3. Write `WorkerConfig` JSON to stdin, then close it.
@@ -35,8 +35,8 @@
   5. Forward `progress`/`error` as `scrape://progress` events; capture stderr to log.
   6. On `Terminated`/`done`: finalize `scrape_runs`, update `sources.last_*`, emit `scrape://finished` + `jobs://changed`.
   7. If `jobs_new > 0` and notifications enabled → "SCRAPE COMPLETE — 14 NEW POSTINGS".
-- [ ] Hard timeout (default 10 min) → `child.kill()`, mark run `failed`.
-- [ ] Command `run_scrape_now()` and `list_scrape_runs(limit)`.
+- [x] Hard timeout (default 10 min) → `child.kill()`, mark run `failed`.
+- [x] Command `run_scrape_now()` and `list_scrape_runs(limit)`.
 
 ### Upsert semantics
 ```sql
@@ -71,7 +71,7 @@ New-vs-existing counted via `RETURNING (date_added = last_seen_at)` or pre-selec
 {"type":"error","source_id":"0193…","message":"HTTP 403 from acme.com","retryable":false}
 {"type":"done","stats":{"sources_ok":5,"sources_failed":1,"jobs_emitted":63,"duration_ms":8123}}
 ```
-- [ ] Versioned; host rejects unknown major versions. Logs go to **stderr only**.
+- [x] Versioned; host rejects unknown major versions. Logs go to **stderr only**.
 
 ## 2.5 `scrape-worker` adapters (`crates/scrape-worker`)
 
@@ -85,27 +85,27 @@ Deps: `reqwest` (`rustls-tls`, `json`, `gzip`), `scraper`, `tokio`, `futures`, `
 | `jsonld` | Fetch page(s), parse `<script type="application/ld+json">`, walk objects/arrays/`@graph` for `@type: JobPosting` | `title`, `hiringOrganization.name`, `employmentType`, `jobLocation`, `datePosted`, `url`/`identifier`. Optional `follow_links` selector (depth 1, `max_pages`). |
 | `selector` | Fetch page, apply user CSS selectors | `config: { item, title, link, location? }`; external_id = absolute link URL. |
 
-- [ ] **Auto-detect** (`scrape-worker --detect <url>`): fetch a careers page and look for `boards.greenhouse.io/{t}`, `job-boards.greenhouse.io/{t}`, `jobs.lever.co/{s}`, `jobs.ashbyhq.com/{n}` → suggest an API source; else check for JSON-LD → `jsonld`; else suggest `selector`. Exposed to UI via `detect_source(url)` command.
-- [ ] **Dry run** (`scrape-worker --stdin --dry-run`) used by `test_source(id)` command to preview first 10 results in Settings.
-- [ ] Filtering in-worker (case-insensitive keyword/location match on title + location) so the DB only stores relevant jobs.
-- [ ] Politeness: UA `Scrape/<ver> (local job tracker)`, robots.txt check for `jsonld`/`selector`, per-host semaphore = 1 + delay, retry 3× with backoff on 429/5xx.
-- [ ] Unit tests per adapter using recorded JSON/HTML fixtures in `crates/scrape-worker/tests/fixtures/` (no network in tests).
+- [x] **Auto-detect** (`scrape-worker --detect <url>`): fetch a careers page and look for `boards.greenhouse.io/{t}`, `job-boards.greenhouse.io/{t}`, `jobs.lever.co/{s}`, `jobs.ashbyhq.com/{n}` → suggest an API source; else check for JSON-LD → `jsonld`; else suggest `selector`. Exposed to UI via `detect_source(url)` command.
+- [x] **Dry run** (`scrape-worker --stdin --dry-run`) used by `test_source(id)` command to preview first 10 results in Settings.
+- [x] Filtering in-worker (case-insensitive keyword/location match on title + location) so the DB only stores relevant jobs.
+- [x] Politeness: UA `Scrape/<ver> (local job tracker)`, robots.txt check for `jsonld`/`selector`, per-host semaphore = 1 + delay, retry 3× with backoff on 429/5xx.
+- [x] Unit tests per adapter using recorded JSON/HTML fixtures in `crates/scrape-worker/tests/fixtures/` (no network in tests).
 
 ## 2.6 Sidecar bundling
 
-- [ ] `tauri.conf.json` → `"bundle": { "externalBin": ["binaries/scrape-worker"] }`.
-- [ ] `scripts/build-sidecar.mjs`:
+- [x] `tauri.conf.json` → `"bundle": { "externalBin": ["binaries/scrape-worker"] }`.
+- [x] `scripts/build-sidecar.mjs`:
   1. Target = `process.env.TAURI_ENV_TARGET_TRIPLE` ?? host triple from `rustc -vV`.
   2. `cargo build -p scrape-worker --release --target <triple>`.
   3. Copy to `src-tauri/binaries/scrape-worker-<triple>[.exe]`.
-- [ ] Hook into `beforeDevCommand` (`build:sidecar` + `vite`) and `beforeBuildCommand` (`build:sidecar` + `vite build`).
-- [ ] Capabilities: host spawns from Rust, so no `shell:allow-execute` permission is granted to the webview.
+- [x] Hook into `beforeDevCommand` (`build:sidecar` + `vite`) and `beforeBuildCommand` (`build:sidecar` + `vite build`).
+- [x] Capabilities: host spawns from Rust, so no `shell:allow-execute` permission is granted to the webview.
 
 ## Acceptance Criteria
 
-- [ ] App launches with **no window**; tray icon present on macOS/Windows/Linux; closing the window hides it.
-- [ ] `scrape-worker --source greenhouse:stripe` prints valid NDJSON standalone.
-- [ ] Adding a Greenhouse, Lever, Ashby and a JSON-LD source → "Run now" inserts jobs; re-running inserts **0 duplicates** and preserves statuses.
-- [ ] Changing `scraper.cron` reschedules without restart; overlapping triggers are skipped.
-- [ ] Killing the worker mid-run marks the run `failed` and the app stays healthy.
-- [ ] Notification shows count of new jobs.
+- [x] App launches with **no window**; tray icon present on macOS/Windows/Linux; closing the window hides it.
+- [x] `scrape-worker --source greenhouse:stripe` prints valid NDJSON standalone.
+- [x] Adding a Greenhouse, Lever, Ashby and a JSON-LD source → "Run now" inserts jobs; re-running inserts **0 duplicates** and preserves statuses.
+- [x] Changing `scraper.cron` reschedules without restart; overlapping triggers are skipped.
+- [x] Killing the worker mid-run marks the run `failed` and the app stays healthy.
+- [x] Notification shows count of new jobs.

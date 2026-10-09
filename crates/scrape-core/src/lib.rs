@@ -4,9 +4,14 @@
 //! that enum values written to SQLite, sent over the NDJSON protocol, and
 //! exported to TypeScript always agree.
 
+pub mod protocol;
 mod role;
 mod types;
 
+pub use protocol::{
+    WorkerConfig, WorkerEvent, WorkerFilters, WorkerLimits, WorkerSource, WorkerStats,
+    PROTOCOL_VERSION,
+};
 pub use types::{JobStatus, RoleType, SourceKind};
 
 use chrono::{SecondsFormat, Utc};
