@@ -1,0 +1,29 @@
+[package]
+name = "scrape"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Desktop job application scraper and tracking utility."
+
+[lib]
+name = "scrape_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+scrape-core = { path = "../crates/scrape-core", features = ["sqlx"] }
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+sqlx = { workspace = true, features = ["runtime-tokio", "sqlite", "migrate", "macros", "derive"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+ts-rs.workspace = true
+sys-locale = "0.3"
+iana-time-zone = "0.1"

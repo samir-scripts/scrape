@@ -1,0 +1,19 @@
+[package]
+name = "scrape-core"
+description = "Shared domain types for Scrape (host app + scrape-worker sidecar)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+# Enables sqlx::Type derives so enums can be bound/decoded directly (host only).
+sqlx = ["dep:sqlx"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+ts-rs.workspace = true
+sqlx = { workspace = true, optional = true }
+

@@ -1,0 +1,65 @@
+name: ci
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: ci
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Format check (Rust)
+        run: cargo fmt --all --check
+
+      - name: Clippy check (Rust)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test (Rust)
+        run: cargo test --workspace
+
+      - name: TypeScript typecheck
+        run: npx tsc --noEmit
+
+      - name: Frontend tests
+        run: npx vitest run
+
+      - name: Brutalist style guard
+        run: |
+          if grep -rnE "rounded-|shadow-|border-radius:\s*[1-9]" src/ 2>/dev/null; then
+            echo "Error: Brutalist styling rule violated! Found rounded corners or shadows in src/."
+            exit 1
+          fi
+
+      - name: Check bindings drift
+        run: |
+          cargo test --workspace export_bindings
+          git diff --exit-code src/bindings || (echo "TypeScript bindings are out of sync with Rust models. Run 'npm run gen:types' and commit the changes." && exit 1)
