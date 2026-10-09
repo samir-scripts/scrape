@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+target/
+src-tauri/gen/schemas/
+
+# Sidecar binaries (built per target by scripts/build-sidecar.mjs)
+src-tauri/binaries/*
+!src-tauri/binaries/.gitkeep
+
+# Local data
+*.db
+*.db-shm
+*.db-wal
+
+# Env / editor / OS
+.env
+.env.*
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log
