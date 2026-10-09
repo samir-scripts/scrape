@@ -1,15 +1,12 @@
-mod adapters;
-mod client;
-mod detect;
-mod filter;
-
 use clap::Parser;
-use client::HttpClient;
-use filter::FilterMatcher;
 use scrape_core::{
     SourceKind, WorkerConfig, WorkerEvent, WorkerFilters, WorkerLimits, WorkerSource, WorkerStats,
     PROTOCOL_VERSION,
 };
+use scrape_worker::client::{self, HttpClient};
+use scrape_worker::filter::FilterMatcher;
+use scrape_worker::{adapters, detect};
+
 use std::io::{self, Read};
 use std::time::Instant;
 

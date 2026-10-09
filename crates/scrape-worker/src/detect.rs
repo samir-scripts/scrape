@@ -86,18 +86,21 @@ pub async fn detect_source(client: &HttpClient, target_url: &str) -> DetectResul
         }
     };
 
-    let company_name = extract_page_title_or_host(&html, &parsed);
+    detect_from_html(&html, &parsed)
+}
+
+pub fn detect_from_html(html: &str, parsed: &Url) -> DetectResult {
+    let company_name = extract_page_title_or_host(html, parsed);
 
     // Look for Greenhouse embed / links
-    if let Some(token) = find_regex_match(&html, r#"boards\.greenhouse\.io/([a-zA-Z0-9_\-]+)"#) {
+    if let Some(token) = find_regex_match(html, r#"boards\.greenhouse\.io/([a-zA-Z0-9_\-]+)"#) {
         return DetectResult {
             kind: SourceKind::Greenhouse,
             identifier: token,
             name: company_name,
         };
     }
-    if let Some(token) = find_regex_match(&html, r#"job-boards\.greenhouse\.io/([a-zA-Z0-9_\-]+)"#)
-    {
+    if let Some(token) = find_regex_match(html, r#"job-boards\.greenhouse\.io/([a-zA-Z0-9_\-]+)"#) {
         return DetectResult {
             kind: SourceKind::Greenhouse,
             identifier: token,
@@ -106,7 +109,7 @@ pub async fn detect_source(client: &HttpClient, target_url: &str) -> DetectResul
     }
 
     // Look for Lever embed / links
-    if let Some(slug) = find_regex_match(&html, r#"jobs\.lever\.co/([a-zA-Z0-9_\-]+)"#) {
+    if let Some(slug) = find_regex_match(html, r#"jobs\.lever\.co/([a-zA-Z0-9_\-]+)"#) {
         return DetectResult {
             kind: SourceKind::Lever,
             identifier: slug,
@@ -115,7 +118,7 @@ pub async fn detect_source(client: &HttpClient, target_url: &str) -> DetectResul
     }
 
     // Look for Ashby embed / links
-    if let Some(name) = find_regex_match(&html, r#"jobs\.ashbyhq\.com/([a-zA-Z0-9_\-]+)"#) {
+    if let Some(name) = find_regex_match(html, r#"jobs\.ashbyhq\.com/([a-zA-Z0-9_\-]+)"#) {
         return DetectResult {
             kind: SourceKind::Ashby,
             identifier: name,
@@ -127,7 +130,7 @@ pub async fn detect_source(client: &HttpClient, target_url: &str) -> DetectResul
     if html.contains("application/ld+json") && html.contains("JobPosting") {
         return DetectResult {
             kind: SourceKind::Jsonld,
-            identifier: target_url.to_string(),
+            identifier: parsed.as_str().to_string(),
             name: company_name,
         };
     }
@@ -135,7 +138,7 @@ pub async fn detect_source(client: &HttpClient, target_url: &str) -> DetectResul
     // Fallback: Selector
     DetectResult {
         kind: SourceKind::Selector,
-        identifier: target_url.to_string(),
+        identifier: parsed.as_str().to_string(),
         name: company_name,
     }
 }
@@ -167,8 +170,6 @@ fn extract_page_title_or_host(html: &str, url: &Url) -> String {
 }
 
 fn find_regex_match(text: &str, pattern_str: &str) -> Option<String> {
-    // Quick token search without pulling heavy regex crate if simple
-    // Pattern forms: boards.greenhouse.io/{token}, jobs.lever.co/{slug}, jobs.ashbyhq.com/{name}
     let marker = if pattern_str.contains("greenhouse") {
         "greenhouse.io/"
     } else if pattern_str.contains("lever") {
@@ -181,6 +182,16 @@ fn find_regex_match(text: &str, pattern_str: &str) -> Option<String> {
 
     if let Some(idx) = text.find(marker) {
         let remainder = &text[idx + marker.len()..];
+        if let Some(query) = remainder.strip_prefix("embed/job_board?for=") {
+            let token: String = query
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+                .collect();
+            if !token.is_empty() {
+                return Some(token);
+            }
+        }
+
         let token: String = remainder
             .chars()
             .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')

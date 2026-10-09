@@ -1,0 +1,22 @@
+[
+  {
+    "id": "lever-job-01",
+    "text": "Senior Distributed Systems Engineer",
+    "hostedUrl": "https://jobs.lever.co/figma/lever-job-01",
+    "createdAt": 1727740800000,
+    "categories": {
+      "location": "New York, NY",
+      "commitment": "Full-time"
+    }
+  },
+  {
+    "id": "lever-job-02",
+    "text": "Data Engineering Co-op",
+    "hostedUrl": "https://jobs.lever.co/figma/lever-job-02",
+    "createdAt": 1727827200000,
+    "categories": {
+      "location": "Remote",
+      "commitment": "Internship"
+    }
+  }
+]

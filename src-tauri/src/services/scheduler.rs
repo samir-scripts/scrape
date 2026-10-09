@@ -243,4 +243,28 @@ mod tests {
         assert!(res.next_runs.is_empty());
         assert!(res.error.is_some());
     }
+
+    #[test]
+    fn test_calculate_next_run() {
+        let next_utc = calculate_next_run("0 0 12 * * *", "UTC");
+        assert!(next_utc.is_some());
+
+        let next_ny = calculate_next_run("0 0 12 * * *", "America/New_York");
+        assert!(next_ny.is_some());
+
+        let invalid = calculate_next_run("invalid-cron", "UTC");
+        assert!(invalid.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_scheduler_lifecycle() {
+        let sched = JobScheduler::new().await.unwrap();
+        sched.start().await.unwrap();
+
+        let tz = chrono_tz::UTC;
+        let job = Job::new_async_tz("0 0 12 * * *", tz, |_uuid, _lock| Box::pin(async {})).unwrap();
+
+        let id = sched.add(job).await.unwrap();
+        assert!(sched.remove(&id).await.is_ok());
+    }
 }

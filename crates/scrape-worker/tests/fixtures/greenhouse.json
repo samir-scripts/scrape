@@ -1,0 +1,31 @@
+{
+  "jobs": [
+    {
+      "id": 101,
+      "title": "Software Engineer, Core Infrastructure",
+      "absolute_url": "https://boards.greenhouse.io/stripe/jobs/101",
+      "location": {
+        "name": "San Francisco, CA"
+      },
+      "updated_at": "2026-10-01T15:30:00Z"
+    },
+    {
+      "id": 102,
+      "title": "Frontend Engineering Intern (Summer 2027)",
+      "absolute_url": "https://boards.greenhouse.io/stripe/jobs/102",
+      "location": {
+        "name": "Remote, US"
+      },
+      "updated_at": "2026-10-02T09:00:00Z"
+    },
+    {
+      "id": 103,
+      "title": "Technical Writer (Contract)",
+      "absolute_url": "https://boards.greenhouse.io/stripe/jobs/103",
+      "location": {
+        "name": "Seattle, WA"
+      },
+      "updated_at": "2026-10-03T12:00:00Z"
+    }
+  ]
+}

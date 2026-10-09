@@ -18,7 +18,7 @@ use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 use tokio::time::{timeout, Instant};
 
-struct RunLockGuard {
+pub struct RunLockGuard {
     flag: Arc<AtomicBool>,
 }
 
@@ -46,8 +46,7 @@ impl ScrapeRunner {
         self.is_running.load(Ordering::SeqCst)
     }
 
-    pub async fn trigger(&self, app: &AppHandle, trigger: TriggerType) -> Result<ScrapeRun> {
-        // 1. Overlap guard
+    pub fn try_acquire_lock(&self) -> Result<RunLockGuard> {
         if self
             .is_running
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -56,10 +55,14 @@ impl ScrapeRunner {
             tracing::warn!("Scrape run skipped: another run is already in progress");
             return Err(AppError::AlreadyRunning);
         }
-
-        let _guard = RunLockGuard {
+        Ok(RunLockGuard {
             flag: self.is_running.clone(),
-        };
+        })
+    }
+
+    pub async fn trigger(&self, app: &AppHandle, trigger: TriggerType) -> Result<ScrapeRun> {
+        // 1. Overlap guard
+        let _guard = self.try_acquire_lock()?;
 
         // 2. Start scrape run in DB
         let run = RunsRepo::start(&self.pool, trigger).await?;
@@ -91,27 +94,38 @@ impl ScrapeRunner {
             )
             .await?;
             let _ = app.emit("scrape://finished", &finished);
+
+            let tz_name: String = SettingsRepo::get_value(&self.pool, "system.timezone")
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "UTC".to_string());
+            let tz: chrono_tz::Tz = tz_name.parse().unwrap_or(chrono_tz::UTC);
+            let now_tz = chrono::Utc::now().with_timezone(&tz);
+            let time_str = now_tz.format("%H:%M").to_string();
+            crate::services::tray::update_last_run(app, &time_str, 0);
+
             return Ok(finished);
         }
 
         let include_keywords: Vec<String> =
-            SettingsRepo::get_value(&self.pool, "filter.include_keywords")
+            SettingsRepo::get_value(&self.pool, "filters.include_keywords")
                 .await
                 .ok()
                 .flatten()
                 .unwrap_or_default();
         let exclude_keywords: Vec<String> =
-            SettingsRepo::get_value(&self.pool, "filter.exclude_keywords")
+            SettingsRepo::get_value(&self.pool, "filters.exclude_keywords")
                 .await
                 .ok()
                 .flatten()
                 .unwrap_or_default();
-        let locations: Vec<String> = SettingsRepo::get_value(&self.pool, "filter.locations")
+        let locations: Vec<String> = SettingsRepo::get_value(&self.pool, "filters.locations")
             .await
             .ok()
             .flatten()
             .unwrap_or_default();
-        let role_types: Vec<RoleType> = SettingsRepo::get_value(&self.pool, "filter.role_types")
+        let role_types: Vec<RoleType> = SettingsRepo::get_value(&self.pool, "filters.role_types")
             .await
             .ok()
             .flatten()
@@ -179,6 +193,17 @@ impl ScrapeRunner {
                         .body(format!("{} NEW POSTINGS", total_new))
                         .show();
                 }
+
+                // Update system tray label
+                let tz_name: String = SettingsRepo::get_value(&self.pool, "system.timezone")
+                    .await
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "UTC".to_string());
+                let tz: chrono_tz::Tz = tz_name.parse().unwrap_or(chrono_tz::UTC);
+                let now_tz = chrono::Utc::now().with_timezone(&tz);
+                let time_str = now_tz.format("%H:%M").to_string();
+                crate::services::tray::update_last_run(app, &time_str, total_new);
 
                 Ok(finished)
             }
@@ -348,5 +373,34 @@ impl ScrapeRunner {
         }
 
         Ok((total_found, total_new, source_statuses))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_overlap_guard() {
+        let pool = crate::db::init_memory_db().await.unwrap();
+        let runner = ScrapeRunner::new(pool);
+        assert!(!runner.is_running());
+
+        let guard = runner.try_acquire_lock().unwrap();
+        assert!(runner.is_running());
+
+        // Concurrently acquiring lock fails with AlreadyRunning
+        let second = runner.try_acquire_lock();
+        match second {
+            Err(AppError::AlreadyRunning) => {}
+            _ => panic!("Expected AlreadyRunning error"),
+        }
+
+        // Drop guard and verify lock is released
+        drop(guard);
+        assert!(!runner.is_running());
+
+        let third = runner.try_acquire_lock();
+        assert!(third.is_ok());
     }
 }

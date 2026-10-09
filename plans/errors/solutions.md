@@ -14,6 +14,7 @@
 6. [Texting Robots: Non-Clone Type in Mutex Cache](#6-texting-robots-non-clone-type-in-mutex-cache)
 7. [Sqlx Settings: Nested Option in Result Unwrapping](#7-sqlx-settings-nested-option-in-result-unwrapping)
 8. [Tauri Plugin Autostart: Missing Platform Launcher Argument](#8-tauri-plugin-autostart-missing-platform-launcher-argument)
+9. [Tauri CLI: Cargo Metadata OS Error 2 (Cargo Not on PATH)](#9-tauri-cli-cargo-metadata-os-error-2-cargo-not-on-path)
 
 ---
 
@@ -143,4 +144,54 @@
   `tauri-plugin-autostart` v2 requires platform-specific launcher configuration: `MacosLauncher` on macOS (`MacosLauncher::LaunchAgent`) and an optional arguments vector `Option<Vec<&'static str>>`.
 - **Solution & Rule:**
   Initialize with `tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None)`.
+
+---
+
+### 9. Tauri CLI: Cargo Metadata OS Error 2 (Cargo Not on PATH)
+
+- **Phase:** Phase 1 / Local Developer Environment
+- **Error Signature:**
+  ```text
+  failed to run 'cargo metadata' command to get workspace directory: failed to run command cargo metadata --no-deps --format-version 1: No such file or directory (os error 2)
+  ```
+- **Root Cause:**
+  The `@tauri-apps/cli` binary delegates workspace and build inspection to `cargo`. If `cargo` (installed in `$HOME/.cargo/bin`) is not exported in the shell's `PATH` variable, Node child processes cannot locate the `cargo` binary and fail with OS error 2 (`ENOENT` / file not found).
+- **Solution & Rule:**
+  Add Cargo to your user shell configuration (`~/.zshrc` on macOS):
+  ```bash
+  echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.zshrc
+  source ~/.zshrc
+  ```
+  Ensure all development terminal sessions inherit this PATH.
+
+---
+
+### 10. Tauri v2: MenuItem Runtime Generic Parameter
+
+- **Phase:** Phase 2 (Tray Service Dynamic Update)
+- **Error Signature:**
+  ```text
+  error[E0107]: missing generics for struct `tauri::menu::MenuItem`
+    --> src-tauri/src/services/tray.rs
+    = expected 1 generic argument: `MenuItem<R>`
+  ```
+- **Root Cause:**
+  In Tauri v2, `tauri::menu::MenuItem` is generic over `R: Runtime`. When used in struct definitions (e.g., `pub struct TrayState { pub last_run_item: MenuItem }`), the compiler cannot infer the default `Wry` runtime unless explicitly qualified.
+- **Solution & Rule:**
+  Specify `tauri::Wry` when storing menu items in application state structs:
+  ```rust
+  pub struct TrayState {
+      pub last_run_item: tauri::menu::MenuItem<tauri::Wry>,
+  }
+  ```
+
+---
+
+### 11. Tauri v2: Retaining Menu Items for Dynamic Tray Updates
+
+- **Phase:** Phase 2 (Dynamic Tray Labeling)
+- **Root Cause:**
+  `app.menu()` only returns the window-level menu bar, and `TrayIcon` does not provide a `.menu()` getter. Therefore, dynamic tray updates cannot inspect the menu tree after setup.
+- **Solution & Rule:**
+  Create and retain the `MenuItem<tauri::Wry>` reference directly in managed state (`app.manage(TrayState { last_run_item })`). Call `state.last_run_item.set_text(...)` directly from runner or event handlers without rebuilding the tray icon or menu.
 

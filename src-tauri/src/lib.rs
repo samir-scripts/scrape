@@ -51,7 +51,7 @@ pub fn run() {
             });
 
             app.manage(state::AppState {
-                db: pool,
+                db: pool.clone(),
                 runner,
                 scheduler,
             });
@@ -74,7 +74,24 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            services::tray::setup_tray(app.handle()).expect("Failed to initialize system tray");
+            services::tray::setup_tray(app.handle(), &pool)
+                .expect("Failed to initialize system tray");
+
+            // Sync autostart setting on app startup
+            tauri::async_runtime::block_on(async {
+                use tauri_plugin_autostart::ManagerExt;
+                if let Ok(Some(launch_at_login)) =
+                    db::settings::SettingsRepo::get_value::<bool>(&pool, "app.launch_at_login")
+                        .await
+                {
+                    let autolaunch = app.autolaunch();
+                    if launch_at_login {
+                        let _ = autolaunch.enable();
+                    } else {
+                        let _ = autolaunch.disable();
+                    }
+                }
+            });
 
             Ok(())
         })

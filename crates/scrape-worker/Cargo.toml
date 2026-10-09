@@ -5,6 +5,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+name = "scrape_worker"
+path = "src/lib.rs"
+
 [[bin]]
 name = "scrape-worker"
 path = "src/main.rs"

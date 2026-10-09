@@ -29,6 +29,20 @@ pub async fn update_setting(
             let mut sched = state.scheduler.lock().await;
             let _ = sched.set_paused(!enabled).await;
         }
+    } else if key == "app.launch_at_login" {
+        use tauri_plugin_autostart::ManagerExt;
+        if let Some(launch) = value.as_bool() {
+            let autolaunch = app.autolaunch();
+            if launch {
+                if let Err(e) = autolaunch.enable() {
+                    tracing::warn!("Failed to enable autostart: {}", e);
+                }
+            } else {
+                if let Err(e) = autolaunch.disable() {
+                    tracing::warn!("Failed to disable autostart: {}", e);
+                }
+            }
+        }
     }
 
     let _ = app.emit("settings://changed", &settings);

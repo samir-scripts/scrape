@@ -1,26 +1,62 @@
-use crate::db::runs::TriggerType;
+use crate::db::runs::{RunsRepo, TriggerType};
+use crate::db::settings::SettingsRepo;
 use crate::error::{AppError, Result};
 use crate::state::AppState;
-use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use sqlx::SqlitePool;
+use tauri::menu::{MenuBuilder, MenuItem, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
-pub fn setup_tray(app: &AppHandle) -> Result<()> {
+pub struct TrayState {
+    pub last_run_item: MenuItem<tauri::Wry>,
+}
+
+pub fn update_last_run(app: &AppHandle, time_str: &str, count: i64) {
+    if let Some(state) = app.try_state::<TrayState>() {
+        let text = format!("LAST RUN: {} · {} NEW", time_str, count);
+        let _ = state.last_run_item.set_text(text);
+    }
+}
+
+pub fn setup_tray(app: &AppHandle, pool: &SqlitePool) -> Result<()> {
+    let initial_label = match tauri::async_runtime::block_on(RunsRepo::recent(pool, 1)) {
+        Ok(recent) if !recent.is_empty() && recent[0].finished_at.is_some() => {
+            let last_run = &recent[0];
+            let tz_name: String = tauri::async_runtime::block_on(
+                SettingsRepo::get_value::<String>(pool, "system.timezone"),
+            )
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "UTC".to_string());
+            let tz: chrono_tz::Tz = tz_name.parse().unwrap_or(chrono_tz::UTC);
+            let time_str = match chrono::DateTime::parse_from_rfc3339(
+                last_run.finished_at.as_ref().unwrap(),
+            ) {
+                Ok(dt) => dt.with_timezone(&tz).format("%H:%M").to_string(),
+                Err(_) => "UNKNOWN".to_string(),
+            };
+            format!("LAST RUN: {} · {} NEW", time_str, last_run.jobs_new)
+        }
+        _ => "LAST RUN: NEVER".to_string(),
+    };
+
+    let last_run_item = MenuItemBuilder::with_id("last_run", initial_label)
+        .enabled(false)
+        .build(app)
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
     let menu = MenuBuilder::new(app)
         .text("open", "OPEN SCRAPE")
         .separator()
         .text("run_now", "RUN SCRAPE NOW")
         .text("toggle_schedule", "PAUSE / RESUME SCHEDULE")
-        .item(
-            &MenuItemBuilder::with_id("last_run", "LAST RUN: NEVER")
-                .enabled(false)
-                .build(app)
-                .map_err(|e| AppError::Internal(e.to_string()))?,
-        )
+        .item(&last_run_item)
         .separator()
         .text("quit", "QUIT")
         .build()
         .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    app.manage(TrayState { last_run_item });
 
     let icon = app
         .default_window_icon()
@@ -61,7 +97,17 @@ pub fn setup_tray(app: &AppHandle) -> Result<()> {
                             running: false,
                         },
                     );
-                    let _ = sched.set_paused(status.enabled).await;
+                    let new_enabled = !status.enabled;
+                    let _ = sched.set_paused(!new_enabled).await;
+                    if let Ok(settings) = SettingsRepo::update_setting(
+                        &state.db,
+                        "scraper.enabled",
+                        serde_json::json!(new_enabled),
+                    )
+                    .await
+                    {
+                        let _ = app_handle.emit("settings://changed", &settings);
+                    }
                 });
             }
             "quit" => {
