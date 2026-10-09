@@ -1,0 +1,180 @@
+import { useEffect, useMemo } from "react";
+import type { Job } from "../../../bindings/Job";
+import type { JobStatus } from "../../../bindings/JobStatus";
+import { useUIStore } from "../../../lib/store";
+import { ThreeColumn } from "../../layout/ThreeColumn";
+import { ListRow } from "../../ui/ListRow";
+import { Tag } from "../../ui/Tag";
+import { EmptyState } from "../../ui/EmptyState";
+import { JobDetail } from "./JobDetail";
+import { JobMetaPanel } from "./JobMetaPanel";
+import { useHotkeys } from "../../../hooks/useHotkeys";
+
+interface DiscoveredViewProps {
+  jobs: Job[];
+  onUpdateStatus: (jobId: string, status: JobStatus) => void;
+  onUpdateNotes: (jobId: string, notes: string) => void;
+  onOpenUrl: (url: string) => void;
+  onUndo: () => void;
+}
+
+export function DiscoveredView({
+  jobs,
+  onUpdateStatus,
+  onUpdateNotes,
+  onOpenUrl,
+  onUndo,
+}: DiscoveredViewProps) {
+  const {
+    roleTypeFilter,
+    searchQuery,
+    selectedJobId,
+    setSelectedJobId,
+  } = useUIStore();
+
+  // Filter jobs based on role type and search query
+  const filteredJobs = useMemo(() => {
+    return jobs.filter((j) => {
+      if (roleTypeFilter && j.role_type !== roleTypeFilter) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesTitle = j.title.toLowerCase().includes(q);
+        const matchesCompany = j.company.toLowerCase().includes(q);
+        const matchesLocation = j.location?.toLowerCase().includes(q) ?? false;
+        if (!matchesTitle && !matchesCompany && !matchesLocation) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [jobs, roleTypeFilter, searchQuery]);
+
+  // Keep selection valid or pick the first job
+  useEffect(() => {
+    if (filteredJobs.length > 0) {
+      const exists = filteredJobs.some((j) => j.id === selectedJobId);
+      if (!exists) {
+        setSelectedJobId(filteredJobs[0].id);
+      }
+    } else {
+      setSelectedJobId(null);
+    }
+  }, [filteredJobs, selectedJobId, setSelectedJobId]);
+
+  const selectedJob = useMemo(() => {
+    return filteredJobs.find((j) => j.id === selectedJobId) || null;
+  }, [filteredJobs, selectedJobId]);
+
+  // Auto-mark viewed after 1 second of selection
+  useEffect(() => {
+    if (!selectedJob || selectedJob.status !== "scraped") return;
+
+    const timer = setTimeout(() => {
+      onUpdateStatus(selectedJob.id, "viewed");
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [selectedJob?.id, selectedJob?.status, onUpdateStatus]);
+
+  // Keyboard navigation
+  const currentIndex = useMemo(() => {
+    return filteredJobs.findIndex((j) => j.id === selectedJobId);
+  }, [filteredJobs, selectedJobId]);
+
+  useHotkeys({
+    onNextItem: () => {
+      if (filteredJobs.length === 0) return;
+      const nextIdx = Math.min(currentIndex + 1, filteredJobs.length - 1);
+      setSelectedJobId(filteredJobs[nextIdx].id);
+    },
+    onPrevItem: () => {
+      if (filteredJobs.length === 0) return;
+      const prevIdx = Math.max(currentIndex - 1, 0);
+      setSelectedJobId(filteredJobs[prevIdx].id);
+    },
+    onOpenUrl: () => {
+      if (selectedJob) onOpenUrl(selectedJob.url);
+    },
+    onApply: () => {
+      if (selectedJob) onUpdateStatus(selectedJob.id, "applied");
+    },
+    onIgnore: () => {
+      if (selectedJob) onUpdateStatus(selectedJob.id, "ignored");
+    },
+    onViewed: () => {
+      if (selectedJob && selectedJob.status === "scraped") {
+        onUpdateStatus(selectedJob.id, "viewed");
+      }
+    },
+    onUndo,
+  });
+
+  return (
+    <ThreeColumn
+      left={
+        filteredJobs.length === 0 ? (
+          <div className="p-4">
+            <EmptyState
+              title="NO POSTINGS FOUND"
+              description={
+                searchQuery || roleTypeFilter
+                  ? "TRY CLEARING FILTERS OR SEARCH TERMS."
+                  : "ALL DISCOVERED JOBS HAVE BEEN TRIAGED."
+              }
+            />
+          </div>
+        ) : (
+          <div className="flex flex-col w-full divide-y-0">
+            {filteredJobs.map((job) => {
+              const isSelected = job.id === selectedJobId;
+
+              return (
+                <ListRow
+                  key={job.id}
+                  selected={isSelected}
+                  onClick={() => setSelectedJobId(job.id)}
+                >
+                  <div className="flex flex-col gap-0.5 pr-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-bold truncate max-w-[190px]">
+                        {job.title}
+                      </span>
+                      <Tag
+                        status={job.status}
+                        className={isSelected ? "border-[var(--color-paper)]" : ""}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] opacity-80 font-mono">
+                      <span className="truncate max-w-[140px]">
+                        {job.company}
+                      </span>
+                      <span className="truncate max-w-[100px] text-right">
+                        {job.location || "REMOTE"}
+                      </span>
+                    </div>
+                  </div>
+                </ListRow>
+              );
+            })}
+          </div>
+        )
+      }
+      center={
+        <JobDetail
+          job={selectedJob}
+          onUpdateNotes={onUpdateNotes}
+          onOpenUrl={onOpenUrl}
+        />
+      }
+      right={
+        <JobMetaPanel
+          job={selectedJob}
+          onUpdateStatus={onUpdateStatus}
+          onOpenUrl={onOpenUrl}
+        />
+      }
+    />
+  );
+}

@@ -15,6 +15,10 @@
 7. [Sqlx Settings: Nested Option in Result Unwrapping](#7-sqlx-settings-nested-option-in-result-unwrapping)
 8. [Tauri Plugin Autostart: Missing Platform Launcher Argument](#8-tauri-plugin-autostart-missing-platform-launcher-argument)
 9. [Tauri CLI: Cargo Metadata OS Error 2 (Cargo Not on PATH)](#9-tauri-cli-cargo-metadata-os-error-2-cargo-not-on-path)
+10. [Tauri v2: MenuItem Runtime Generic Parameter](#10-tauri-v2-menuitem-runtime-generic-parameter)
+11. [Tauri v2: Retaining Menu Items for Dynamic Tray Updates](#11-tauri-v2-retaining-menu-items-for-dynamic-tray-updates)
+12. [TypeScript: ts-rs BigInt IPC Serialization](#12-typescript-ts-rs-bigint-ipc-serialization)
+13. [Zustand & React 19: Vitest Headless LocalStorage & noUnusedLocals](#13-zustand--react-19-vitest-headless-localstorage--nounusedlocals)
 
 ---
 
@@ -194,4 +198,36 @@
   `app.menu()` only returns the window-level menu bar, and `TrayIcon` does not provide a `.menu()` getter. Therefore, dynamic tray updates cannot inspect the menu tree after setup.
 - **Solution & Rule:**
   Create and retain the `MenuItem<tauri::Wry>` reference directly in managed state (`app.manage(TrayState { last_run_item })`). Call `state.last_run_item.set_text(...)` directly from runner or event handlers without rebuilding the tray icon or menu.
+
+---
+
+### 12. TypeScript: ts-rs BigInt IPC Serialization
+
+- **Phase:** Phase 3 (Frontend Data Layer)
+- **Error Signature:**
+  ```text
+  TypeError: Do not know how to serialize a BigInt
+  ```
+- **Root Cause:**
+  `ts-rs` translates Rust's signed 64-bit integer (`i64`) into TypeScript `bigint`. However, Tauri's IPC invokes use `JSON.stringify` under the hood, which throws an exception when attempting to serialize native JavaScript `BigInt` values in command arguments.
+- **Solution & Rule:**
+  Define front-end API wrappers with flexible typing (`number | bigint | null`) and ensure all payload parameters passed to `invoke` are standard JavaScript `number`s rather than raw `BigInt` literals.
+
+---
+
+### 13. Zustand & React 19: Vitest Headless LocalStorage & noUnusedLocals
+
+- **Phase:** Phase 3 (UI State & Testing)
+- **Error Signature:**
+  ```text
+  TypeError: Cannot read properties of undefined (reading 'getItem')
+  error TS6133: 'React' is declared but its value is never read.
+  ```
+- **Root Cause:**
+  1. In React 19 with `"noUnusedLocals": true` and `"jsx": "react-jsx"`, default `import React from "react"` triggers TS6133 when only JSX or named types are referenced.
+  2. Direct top-level access to `localStorage` in Zustand stores throws an unhandled error in headless Node/Vitest test environments where `window` is undefined.
+- **Solution & Rule:**
+  1. Use named imports (`import { useState } from "react"`, `import type { ReactNode } from "react"`).
+  2. Wrap browser `localStorage` reads and writes in safe conditional guards (`typeof window !== "undefined" && window.localStorage`).
+
 

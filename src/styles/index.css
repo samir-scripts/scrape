@@ -16,9 +16,19 @@
   --font-mono: "SF Mono", Menlo, Monaco, Consolas, monospace;
 }
 
+[data-theme="obsidian"] {
+  --color-paper: #262628;
+  --color-paper-2: #36363a;
+  --color-ink: #FFF6EE;
+  --color-ink-mute: #99958F;
+  --color-cream: #1A1A1A;
+  --color-obsidian: #F5F5DC;
+}
+
 @layer base {
   *, *::before, *::after {
     border-radius: 0 !important;
+    box-shadow: none !important;
   }
   html, body {
     background: var(--color-paper);
@@ -28,6 +38,7 @@
     padding: 0;
     height: 100%;
     width: 100%;
+    overflow: hidden;
     user-select: none;
     -webkit-font-smoothing: none;
   }
@@ -46,4 +57,40 @@
     outline: 1px solid var(--color-ink);
     outline-offset: 2px;
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+[data-reduce-motion="true"] *,
+[data-reduce-motion="true"] *::before,
+[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+@utility dither-dots {
+  background-image: radial-gradient(currentColor 1px, transparent 1.2px);
+  background-size: 4px 4px;
+}
+
+@utility dither-checker {
+  background-image: conic-gradient(currentColor 25%, transparent 0 50%, currentColor 0 75%, transparent 0);
+  background-size: 2px 2px;
+}
+
+@utility dither-lines {
+  background-image: repeating-linear-gradient(45deg, currentColor 0 1px, transparent 1px 4px);
+}
+
+@utility rule-double {
+  border-left: 3px double var(--color-signal);
 }

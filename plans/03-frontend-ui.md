@@ -82,48 +82,48 @@ What we take from each:
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-- [ ] `components/layout/`: `Shell`, `TopNav`, `SubNav`, `Footer` (context-aware key hints + status message), `ThreeColumn`.
-- [ ] View switching: Zustand `ui.view` (`discovered | tracked | metrics | settings`) — no router needed for 4 views; persist last view in `localStorage`.
-- [ ] `components/ui/`: `Panel`, `Rule`, `ListRow` (inverted when selected), `Button` (outlined → inverted on hover/active), `Tag`, `KeyHint`, `Field`/`Input`/`Select`/`Toggle` (square checkbox, `■`/`□`), `Table` (boxed 1px grid like palette card), `Modal` (full-bleed paper overlay with dither backdrop), `Dither` (decorative halftone blob, SVG dots), `EmptyState`.
-- [ ] Global keyboard map (`useHotkeys` hook, custom ~40 LOC): `Q/E` or `[`/`]` prev/next tab; `↑/↓` or `J/K` move; `↵` open URL; `A` applied; `X` ignored; `V` viewed; `U` undo last status change; `/` search; `Esc` back/clear.
+- [x] `components/layout/`: `Shell`, `TopNav`, `SubNav`, `Footer` (context-aware key hints + status message), `ThreeColumn`.
+- [x] View switching: Zustand `ui.view` (`discovered | tracked | metrics | settings`) — no router needed for 4 views; persist last view in `localStorage`.
+- [x] `components/ui/`: `Panel`, `Rule`, `ListRow` (inverted when selected), `Button` (outlined → inverted on hover/active), `Tag`, `KeyHint`, `Field`/`Input`/`Select`/`Toggle` (square checkbox, `■`/`□`), `Table` (boxed 1px grid like palette card), `Modal` (full-bleed paper overlay with dither backdrop), `Dither` (decorative halftone blob, SVG dots), `EmptyState`.
+- [x] Global keyboard map (`useHotkeys` hook, custom ~40 LOC): `Q/E` or `[`/`]` prev/next tab; `↑/↓` or `J/K` move; `↵` open URL; `A` applied; `X` ignored; `V` viewed; `U` undo last status change; `/` search; `Esc` back/clear.
 
 ## 3.4 Views
 
 ### Discovered (Inbox)
-- [ ] Query `list_jobs({ statuses: ['scraped','viewed'] })`, sorted newest; SubNav filters role type; search box.
-- [ ] Selecting a row for >1s auto-marks `viewed` (configurable).
-- [ ] Bulk: `Shift+↑/↓` multi-select → `A`/`X`.
-- [ ] Right panel: job metadata table + source health; header counter `DISCOVERED (n)`.
-- [ ] Live: listens to `jobs://changed` / `scrape://*` → invalidate queries; shows `SCANNING… ▓▓▓░░ 3/6 SOURCES` in TopNav during runs.
+- [x] Query `list_jobs({ statuses: ['scraped','viewed'] })`, sorted newest; SubNav filters role type; search box.
+- [x] Selecting a row for >1s auto-marks `viewed` (configurable).
+- [x] Bulk: `Shift+↑/↓` multi-select → `A`/`X`.
+- [x] Right panel: job metadata table + source health; header counter `DISCOVERED (n)`.
+- [x] Live: listens to `jobs://changed` / `scrape://*` → invalidate queries; shows `SCANNING… ▓▓▓░░ 3/6 SOURCES` in TopNav during runs.
 
 ### Tracked (Kanban / List)
-- [ ] Columns: `APPLIED · INTERVIEWING · OFFER · REJECTED`; column header = inverted block with count.
-- [ ] Native HTML5 drag-and-drop (no library) + keyboard `Shift+←/→` to move card between columns.
-- [ ] Toggle `[KANBAN] [LIST]`; list mode = boxed table with sortable columns (applied date, company, stage).
-- [ ] Card detail drawer: notes (autosave debounce 500ms), status history timeline from `job_status_events`.
+- [x] Columns: `APPLIED · INTERVIEWING · OFFER · REJECTED`; column header = inverted block with count.
+- [x] Native HTML5 drag-and-drop (no library) + keyboard `Shift+←/→` to move card between columns.
+- [x] Toggle `[KANBAN] [LIST]`; list mode = boxed table with sortable columns (applied date, company, stage).
+- [x] Card detail drawer: notes (autosave debounce 500ms), status history timeline from `job_status_events`.
 
 ### Metrics
 - Placeholder grid in Phase 3; implemented in [Phase 4](./04-metrics-dashboard.md).
 
 ### Settings (NieR "SYSTEM" style: left category list, right detail)
-- [ ] **SCHEDULE:** enable toggle; presets (hourly / every 6h / daily 09:00 / weekdays 09:00) + custom 6-field cron with live `validate_cron` preview of next 3 runs; `RUN NOW`; recent runs table.
-- [ ] **SOURCES:** boxed table (name, kind, enabled, last status/error); `ADD SOURCE` → paste URL → `DETECT` → confirm kind/identifier → `TEST` (dry run shows first 10) → save. Selector config form for `selector` kind.
-- [ ] **FILTERS:** include/exclude keyword chips, locations, role types.
-- [ ] **APPEARANCE:** theme `PAPER / OBSIDIAN`, dither intensity, reduce motion.
-- [ ] **SYSTEM:** locale/timezone (detected, overridable), launch at login, start hidden, notifications, `OPEN DATA FOLDER`, `EXPORT CSV / JSON`.
+- [x] **SCHEDULE:** enable toggle; presets (hourly / every 6h / daily 09:00 / weekdays 09:00) + custom 6-field cron with live `validate_cron` preview of next 3 runs; `RUN NOW`; recent runs table.
+- [x] **SOURCES:** boxed table (name, kind, enabled, last status/error); `ADD SOURCE` → paste URL → `DETECT` → confirm kind/identifier → `TEST` (dry run shows first 10) → save. Selector config form for `selector` kind.
+- [x] **FILTERS:** include/exclude keyword chips, locations, role types.
+- [x] **APPEARANCE:** theme `PAPER / OBSIDIAN`, dither intensity, reduce motion.
+- [x] **SYSTEM:** locale/timezone (detected, overridable), launch at login, start hidden, notifications, `OPEN DATA FOLDER`, `EXPORT CSV / JSON`.
 
 ## 3.5 Data layer
-- [ ] `src/lib/api.ts` typed `invoke` wrappers using generated `src/bindings`.
-- [ ] TanStack Query keys: `['jobs', filter]`, `['settings']`, `['sources']`, `['runs']`, `['metrics', range]`; optimistic updates for status changes with rollback on error.
-- [ ] `src/lib/events.ts`: subscribe to Tauri events once in `App`, map to query invalidations.
+- [x] `src/lib/api.ts` typed `invoke` wrappers using generated `src/bindings`.
+- [x] TanStack Query keys: `['jobs', filter]`, `['settings']`, `['sources']`, `['runs']`, `['metrics', range]`; optimistic updates for status changes with rollback on error.
+- [x] `src/lib/events.ts`: subscribe to Tauri events once in `App`, map to query invalidations.
 
 ## 3.6 Tests
-- [ ] Vitest + Testing Library for: hotkey hook, status color map, Kanban move reducer, cron preset mapping.
-- [ ] Manual visual QA checklist against the NieR reference (spacing, rules, inverted states, no radii).
+- [x] Vitest + Testing Library for: hotkey hook, status color map, Kanban move reducer, cron preset mapping.
+- [x] Manual visual QA checklist against the NieR reference (spacing, rules, inverted states, no radii).
 
 ## Acceptance Criteria
-- [ ] All four views reachable by mouse and keyboard only.
-- [ ] Triage 20 jobs without touching the mouse.
-- [ ] Zero `border-radius`, `box-shadow`, or third-party UI components in the bundle (grep check in CI).
-- [ ] Theme switch persists across restarts via `app_settings`.
-- [ ] Adding a source end-to-end from Settings results in jobs appearing in Discovered after `RUN NOW`.
+- [x] All four views reachable by mouse and keyboard only.
+- [x] Triage 20 jobs without touching the mouse.
+- [x] Zero `border-radius`, `box-shadow`, or third-party UI components in the bundle (grep check in CI).
+- [x] Theme switch persists across restarts via `app_settings`.
+- [x] Adding a source end-to-end from Settings results in jobs appearing in Discovered after `RUN NOW`.
