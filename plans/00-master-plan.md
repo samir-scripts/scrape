@@ -19,6 +19,7 @@ Each phase is a self-contained, shippable increment. Implement in order; every s
 | 3 | [Frontend & Brutalist UI](./03-frontend-ui.md) | Design system (Tailwind v4 tokens), shell, 4 views, keyboard nav | 1 (2 for live events) |
 | 4 | [Metrics Dashboard](./04-metrics-dashboard.md) | Visx charts, metric cards, Rust metrics aggregation | 1, 3 |
 | 5 | [CI/CD](./05-ci-cd.md) | PR checks + tag-triggered cross-platform release builds | 1–2 (sidecar build script) |
+| — | [Error Log & Solutions](./errors/solutions.md) | Living troubleshooting runbook; recorded errors, causes, and solutions | Ongoing |
 
 ---
 
@@ -108,6 +109,8 @@ sequenceDiagram
 ```
 scrape/
 ├── plans/                         # ← you are here
+│   ├── errors/solutions.md        # living error log & resolution runbook
+│   └── assets/                    # visual references
 ├── .github/workflows/
 │   ├── ci.yml                     # PR checks (Phase 5)
 │   └── release.yml                # tag-triggered builds (Phase 5)
@@ -164,7 +167,9 @@ scrape/
 | **M4** (Phase 4) | Metrics tab with 2 charts + 3 cards driven by real data. |
 | **M5** (Phase 5) | Pushing `v0.1.0` produces draft GitHub Release with `.dmg/.app`, `.msi/.exe`, `.deb/.AppImage`. |
 
-**Global quality bar** (every phase): `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`, `tsc --noEmit`, `vitest run` all green.
+**Global quality bar** (every phase):
+- `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`, `tsc --noEmit`, `vitest run` all green.
+- **Error Knowledge Base:** Any unexpected compile, test, or runtime issue must be documented with its root cause and verified resolution in [`plans/errors/solutions.md`](./errors/solutions.md) to prevent regressions across phases.
 
 ---
 
