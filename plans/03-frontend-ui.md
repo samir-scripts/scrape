@@ -59,6 +59,15 @@ What we take from each:
 
 **Hard rules (lint-reviewed in PRs):** no `rounded-*`, no `shadow-*`, no gradients except dither utilities, no blur, 1px borders only, no UI component libraries. Job titles and data stay **mixed-case** for legibility; all chrome (nav, labels, headings, buttons) is **uppercase** *(confirm)*.
 
+### 3.2.1 Theme-Synchronized Brutalist Scrollbars
+Default OS scrollbars (with rounded pill corners, transparent overlays, or OS-native accents) are strictly prohibited. Custom scrollbars must align with the active theme tokens:
+- **Geometry:** 8px width / height, 0px border-radius (`border-radius: 0 !important`).
+- **Track:** `var(--color-paper-2)` with a 1px solid `var(--color-ink)` boundary.
+- **Thumb:** `var(--color-ink-mute)` with a 1px solid `var(--color-ink)` border, inverting to `var(--color-ink)` on `:hover` and `:active`.
+- **Corner:** `var(--color-paper-2)` flush intersection.
+- **CSS Standards:** Both standard `scrollbar-width: thin; scrollbar-color: var(--color-ink-mute) var(--color-paper-2);` and `::-webkit-scrollbar` pseudo-elements.
+- **Theme dynamic:** Updates immediately when toggling between Paper (`#F5F5DC`) and Obsidian (`#262628`).
+
 **Status → color map:** `scraped` lavender · `viewed` cream (outlined) · `applied` lime · `interviewing` signal · `offer` ink (inverted) · `rejected` cherry · `ignored` ink-mute + checker dither.
 
 **Motion:** 80–120ms linear only; selection bar slides between rows; `reduce_motion` setting + `prefers-reduced-motion` disable all.
@@ -124,7 +133,9 @@ What we take from each:
 - [x] `src/lib/events.ts`: subscribe to Tauri events once in `App`, map to query invalidations.
 
 ## 3.6 Tests
-- [x] Vitest + Testing Library for: hotkey hook, status color map, Kanban move reducer, cron preset mapping.
+- [x] Vitest + Testing Library for: hotkey hook, status color map, Kanban move reducer, cron preset mapping, application readiness gate.
+- [ ] Theme tests: verify custom brutalist scrollbar classes and CSS variables switch cleanly between Paper and Obsidian themes.
+- [ ] Mandatory feature test coverage: every new feature developed on its own `feature/*` branch must include automated unit/component tests covering all state variations before merging into `develop`.
 - [x] Manual visual QA checklist against the NieR reference (spacing, rules, inverted states, no radii).
 
 ## Acceptance Criteria
@@ -136,4 +147,6 @@ What we take from each:
 - [x] SubNav filters implemented via dropdowns (`<Select>`), not horizontal button pills.
 - [x] Zero unhelpful vanity flavor text across the entire UI.
 - [x] "SCRAPE" logo removed from TopNav; tabs align flush left.
-- [ ] Extended in [Phase 3.5](./03b-enrichment-filters.md): custom filter panel (state, country, salary range slider + numbers, sponsorship & clearance tri-state `YES`/`NO`/`N/A`), table columns, and scraper advanced settings.
+- [ ] OS default scrollbar replaced with theme-synchronized brutalist scrollbar (0px radius, 1px border, ink/paper colors).
+- [ ] All user-suggested features developed on dedicated feature branches with passing tests before merge.
+- [ ] Extended in [Phase 3.5](./03b-enrichment-filters.md): custom filter panel (state, country, salary range slider + numbers, sponsorship & clearance tri-state `YES`/`NO`/`N/A`), table columns, scraper advanced settings, and scraper logs.

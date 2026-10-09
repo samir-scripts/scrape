@@ -192,6 +192,14 @@ Dedicated audit log for background and manual scraper runs.
     - Error lines highlighted with red square marker, full error message, HTTP status code, and target URL.
     - Actionable "EDIT SOURCE" button linking directly to the problematic board in `SOURCES` tab.
 
+### Theme-Synchronized Brutalist Scrollbars
+- [ ] Implement brutalist scrollbar rules in `src/styles/index.css`:
+  - `scrollbar-width: thin; scrollbar-color: var(--color-ink-mute) var(--color-paper-2);`
+  - `::-webkit-scrollbar` (8px width/height, 0px radius).
+  - `::-webkit-scrollbar-track` (background `var(--color-paper-2)`, 1px border `var(--color-ink)`).
+  - `::-webkit-scrollbar-thumb` (background `var(--color-ink-mute)`, hover `var(--color-ink)`, 1px border `var(--color-ink)`).
+  - Automatically reacts to `[data-theme="paper"]` and `[data-theme="obsidian"]`.
+
 ### Copy cleanup (no flavor text)
 - [ ] Remove `SCRAPE // SYS.02` (TopNav).
 - [ ] `SCRAPER SCHEDULE & BACKGROUND ENGINE` → `SCHEDULE`.
@@ -206,15 +214,27 @@ Dedicated audit log for background and manual scraper runs.
 - [ ] `list_scrape_runs(limit: Option<i64>) -> Vec<ScrapeRun>` (chronological runs, newest first).
 - [ ] `get_scrape_run(run_id: String) -> ScrapeRun` and `get_scrape_logs(run_id: String) -> Vec<ScrapeLogEntry>`.
 
-## 3.5.7 Tests
+## 3.5.7 Mandatory Tests for All Features
 
-- [ ] **scrape-core:** table-driven tests. Salary parser: ≥ 25 cases including the false positives above. Location parser: ≥ 40 cases (`San Francisco, CA`, `Remote - US`, `Toronto, ON, Canada`, `London, UK`, `NYC`, `Remote (EMEA)`, `Atlanta, Georgia`, `Tbilisi, Georgia`). Sponsorship and clearance: ≥ 30 labeled sentences each, checking value **and** evidence.
-- [ ] **Adapter fixtures:** Lever with `salaryRange`, Ashby with `includeCompensation`, JSON-LD with `baseSalary` + `securityClearanceRequirement`, Greenhouse list (`content=true`) + job detail (`pay_input_ranges`).
-- [ ] **DB:** migration on a DB with existing data (defaults + location backfill), range-overlap query, `include_unknown` for every optional field, multi-location `EXISTS`, `COALESCE` upsert keeps existing salary.
-- [ ] **Frontend:** add `@testing-library/react` + `jsdom` (**not installed yet**). Test `RangeSlider` (thumbs can't cross, keyboard steps, "500K+" top), number-input parsing (`150k`), filter store → `JobFilter` mapping, chip removal.
-- [ ] **Logs tests:** Test `LogsSettings` rendering, verify runs sorted by `started_at DESC`, verify error runs render the red square marker, and verify `ERRORS ONLY` filter.
+Every feature implemented in this phase must have corresponding automated tests before merge:
+
+- [ ] **scrape-core enrichment tests:**
+  - Salary parser: ≥ 25 cases including edge cases and false positives (`$5M Series A`, `401(k)`).
+  - Location parser & gazetteer: ≥ 40 cases across countries, US states, Canadian provinces, remote tags.
+  - Sponsorship & clearance classifiers: ≥ 30 labeled sentences each, verifying classification value, clearance level, and exact evidence sentence capture. Verify "No" priority over "Yes" in mixed contexts.
+- [ ] **Adapter fixture tests:**
+  - Lever with `salaryRange`, Ashby with `includeCompensation`, JSON-LD with `baseSalary` + `securityClearanceRequirement`, Greenhouse with `content=true` and `pay_input_ranges`.
+- [ ] **Database & repository tests:**
+  - SQLite migration 0002, location backfill, salary range overlap query, multi-location `EXISTS` queries, and `COALESCE` upsert behavior.
+- [ ] **Frontend component & interaction tests (Vitest):**
+  - `RangeSlider`: dual-thumb collision prevention, keyboard step increments, 500K+ upper stop.
+  - Number inputs: bidirectionally synced with slider, handles shorthand notation (`150k`), min ≤ max validation.
+  - Location and tri-state filters: active state tracking, chip generation, and reset actions.
+  - Logs viewer (`LogsSettings`): verifies chronological descending sort by `started_at`, red square marker rendering on error runs, and `ERRORS ONLY` filter switching.
+  - Themed scrollbars: CSS styling verification and theme token inheritance.
 
 ## Acceptance Criteria
+- [ ] Strict development workflow: Feature developed on an isolated `feature/phase-3b-enrichment-filters` branch in the local dev environment, with all tests written and passing before merge into `develop`.
 - [ ] Jobs from Lever/Ashby/JSON-LD fixtures carry structured salary + location. Greenhouse jobs get salary when `pay_input_ranges` exists.
 - [ ] Sponsorship and clearance show `YES` / `NO` / `N/A` with an evidence sentence for every non-N/A value.
 - [ ] Discovered can be filtered by country, state, remote policy, salary range (slider **and** typed numbers), sponsorship, and clearance, entirely by keyboard.
@@ -223,5 +243,7 @@ Dedicated audit log for background and manual scraper runs.
 - [ ] Scraper runs with errors or issues needing addressing are marked with a distinct brutalist red square (`■`).
 - [ ] Selecting a run opens the inspector showing per-source execution logs, timestamped error events, and remediation actions.
 - [ ] Tracked list table shows SALARY, LOCATION, SPONSORSHIP, CLEARANCE columns.
+- [ ] Default OS scrollbar replaced with theme-synchronized brutalist scrollbar (0px radius, 1px border, ink/paper colors).
 - [ ] No `SCRAPE` logo and no flavor text anywhere in the UI.
 - [ ] Bumping `ENRICHMENT_VERSION` and restarting reclassifies stored jobs without a rescrape.
+- [ ] 100% test pass rate across `cargo test --workspace` and `npm test` with zero compiler errors.

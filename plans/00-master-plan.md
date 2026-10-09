@@ -56,8 +56,38 @@ Each phase is a self-contained, shippable increment. Implement in order; every s
 10. **Dual-Layer Custom Filtering & RangeSlider:** Separation between **scraper ingestion filters** (Settings → SCRAPER → ADVANCED) and **UI view filters** (Discovered & Tracked). Customizable by country, state/region, salary range slider with synced number inputs (0 – $500K+), and sponsorship/clearance tri-states (`YES` / `NO` / `N/A`).
 11. **Removal of "SCRAPE" Logo & Zero Flavor Text:** Stripped the `SCRAPE // SYS.02` logo from TopNav (tabs begin flush left). Strictly removed all vanity copy across the app.
 12. **Scraper Execution Logs in Settings (Red Square Indicator):** Dedicated "LOGS" tab in Settings (`SettingsCategory = 'logs'`). Scraper run logs are sorted chronologically by date and time (newest first). Any run or event encountering issues needing user attention (e.g. sidecar errors, network timeouts, HTTP 403/429 rate limits, adapter parsing errors) is marked with a prominent brutalist red square (`■`). Selecting a run provides full diagnostic log inspection.
+13. **Theme-Synchronized Brutalist Scrollbars:** Complete elimination of default OS scrollbars. Custom scrollbars use strict 0px border-radius, thin 8px geometry, `var(--color-paper-2)` track with 1px ink boundary, and `var(--color-ink-mute)` thumb inverting to `var(--color-ink)` on hover, reacting dynamically to active theme tokens (Paper & Obsidian).
+14. **Mandatory Automated Test Coverage for All Features:** Every suggested feature, parser, filter permutation, schema addition, and UI interaction must be accompanied by relevant unit and component tests before being marked complete.
+15. **Feature-Branch Development Discipline:** Strict workflow requirement: All development must occur on isolated feature branches (`feature/<name>`) created from `develop`. No unverified code is pushed directly to mainline branches.
 
----
+### 2.2 Development & Branching Discipline (Strict Requirement)
+
+To ensure codebase stability, prevent regressions, and enforce rigorous quality standards, the following workflow is mandatory for all ongoing and future work:
+
+1. **Feature Branch Isolation:**
+   - Every phase, feature, or enhancement MUST be developed on a dedicated feature branch created from `develop`:
+     ```bash
+     git checkout develop
+     git pull origin develop
+     git checkout -b feature/<phase-or-feature-name>
+     ```
+   - Never commit experimental or unverified changes directly to `develop` or `main`.
+2. **Mandatory Test-Driven / Test-Covered Implementation:**
+   - Every new feature, filter option, data model, or bugfix MUST include corresponding automated tests:
+     - Rust core/backend: `cargo test --workspace` (adapters, parsers, classifiers, repos).
+     - Frontend logic & state: `npm test` via Vitest (stores, API mocks, hotkeys, filters).
+     - UI components: Vitest + Testing Library tests for interactive components and visual state logic.
+3. **Local Dev Environment Verification Gate:**
+   - Before any branch is merged into `develop`, the following verification matrix MUST pass with zero errors and zero warnings:
+     ```bash
+     npx tsc --noEmit        # TypeScript type-check
+     npm test                # Frontend test suite
+     cargo test --workspace  # Rust workspace test suite
+     cargo clippy            # Rust linter
+     npm run build           # Production asset bundle build
+     ```
+4. **Clean Merge Protocol:**
+   - Once all tests pass and criteria are verified, the feature branch is merged into `develop` with a clear, conventional commit history.
 
 ## 3. Architecture
 
