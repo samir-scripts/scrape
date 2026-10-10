@@ -95,11 +95,8 @@ export function SystemSettings({
     <div className="flex flex-col gap-6 w-full max-w-3xl select-none">
       <div>
         <h2 className="text-base font-black uppercase tracking-tight text-[var(--color-ink)]">
-          SYSTEM CONFIGURATION & OS INTEGRATION
+          SYSTEM
         </h2>
-        <p className="text-xs font-mono text-[var(--color-ink-mute)]">
-          MANAGE LOCALE, OS AUTOSTART, NOTIFICATIONS, AND LOCAL EXPORTS
-        </p>
       </div>
 
       <Rule />
@@ -107,7 +104,7 @@ export function SystemSettings({
       {/* Locale & Timezone Info */}
       <div className="flex flex-col gap-2 p-4 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 font-mono text-xs">
         <span className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
-          ENVIRONMENT & TIMEZONE DETECTION
+          ENVIRONMENT
         </span>
         <div className="grid grid-cols-3 gap-4 pt-1">
           <div>
@@ -143,14 +140,12 @@ export function SystemSettings({
             onUpdateSetting("app.launch_at_login", checked)
           }
           label="LAUNCH AT SYSTEM LOGIN"
-          description="Registers Scrape with the operating system login items (macOS LaunchAgent / Windows Run)."
         />
 
         <Toggle
           checked={settings.app_start_hidden}
           onChange={(checked) => onUpdateSetting("app.start_hidden", checked)}
           label="START MINIMIZED TO TRAY"
-          description="Launches silently into the menu bar / system tray without opening the main window."
         />
 
         <Toggle
@@ -158,8 +153,7 @@ export function SystemSettings({
           onChange={(checked) =>
             onUpdateSetting("notifications.enabled", checked)
           }
-          label="OS DESKTOP NOTIFICATIONS"
-          description="Displays native desktop notifications when new matching job postings are discovered."
+          label="DESKTOP NOTIFICATIONS"
         />
       </div>
 

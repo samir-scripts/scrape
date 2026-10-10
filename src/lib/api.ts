@@ -14,6 +14,7 @@ import type { FilterImpactPreview } from "../bindings/FilterImpactPreview";
 import type { LocationOptions } from "../bindings/LocationOptions";
 import type { ParsedLocation } from "../bindings/ParsedLocation";
 import type { ScrapeLogEntry } from "../bindings/ScrapeLogEntry";
+import type { Metrics } from "../bindings/Metrics";
 
 export interface DetectResult {
   kind: string;
@@ -206,5 +207,26 @@ export const api = {
   getScrapeLogs: (runId: string): Promise<ScrapeLogEntry[]> => {
     if (!isTauri()) return Promise.resolve([]);
     return invoke<ScrapeLogEntry[]>("get_scrape_logs", { runId });
+  },
+
+  getMetrics: (granularity: "week" | "month" = "week", periods: number = 12): Promise<Metrics> => {
+    if (!isTauri()) {
+      return Promise.resolve({
+        totals: {
+          scraped: 0,
+          applied: 0,
+          interviewing: 0,
+          offers: 0,
+          response_rate: 0,
+          median_salary: null,
+          avg_salary: null,
+        },
+        series: [],
+        by_role_type: [],
+        salary_distribution: [],
+        streak: { current: 0, longest: 0, last_applied_on: null },
+      });
+    }
+    return invoke<Metrics>("get_metrics", { granularity, periods });
   },
 };

@@ -55,11 +55,8 @@ export function SourcesSettings() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-black uppercase tracking-tight text-[var(--color-ink)]">
-            CAREER SOURCES & TARGET JOB BOARDS
+            SOURCES
           </h2>
-          <p className="text-xs font-mono text-[var(--color-ink-mute)]">
-            MANAGE GREENHOUSE, LEVER, ASHBY, JSON-LD, AND CUSTOM SELECTOR ADAPTERS
-          </p>
         </div>
         <Button
           variant="inverted"

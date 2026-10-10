@@ -101,11 +101,8 @@ export function LogsSettings() {
       <div className="flex justify-between items-start pb-2 border-b border-[var(--color-ink)]">
         <div>
           <h2 className="text-base font-black uppercase tracking-tight text-[var(--color-ink)]">
-            SCRAPER RUN HISTORY & LOGS
+            LOGS
           </h2>
-          <p className="text-xs text-[var(--color-ink-mute)]">
-            CHRONOLOGICAL EXECUTION AUDIT TRAIL · NEWEST FIRST
-          </p>
         </div>
 
         <div className="flex items-center gap-2">

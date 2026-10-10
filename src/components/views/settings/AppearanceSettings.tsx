@@ -40,7 +40,7 @@ export function AppearanceSettings({
       {/* Theme Cards */}
       <div className="flex flex-col gap-3 font-mono text-xs">
         <label className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
-          COLOR PALETTE PRESET
+          THEME
         </label>
         <div className="grid grid-cols-2 gap-4">
           {/* Paper Theme Card */}
@@ -53,7 +53,7 @@ export function AppearanceSettings({
             }`}
           >
             <div className="flex justify-between items-center font-bold">
-              <span>PAPER (LIGHT BEIGE)</span>
+              <span>PAPER</span>
               {currentTheme === "paper" && (
                 <span className="bg-[#1A1A1A] text-[#F5F5DC] px-1.5 py-0.5 text-[10px]">
                   ACTIVE
@@ -61,8 +61,7 @@ export function AppearanceSettings({
               )}
             </div>
             <p className="text-[11px] opacity-80">
-              NieR-style aged paper background with high-contrast ink rules and
-              halftone dot-matrix.
+              Light background with contrast ink rules.
             </p>
             <div className="flex gap-1.5 pt-2 border-t border-[#1A1A1A]">
               <span className="w-5 h-5 bg-[#F5F5DC] border border-[#1A1A1A]" />
@@ -84,7 +83,7 @@ export function AppearanceSettings({
             }`}
           >
             <div className="flex justify-between items-center font-bold">
-              <span>OBSIDIAN (DARK MONO)</span>
+              <span>OBSIDIAN</span>
               {currentTheme === "obsidian" && (
                 <span className="bg-[#FFF6EE] text-[#262628] px-1.5 py-0.5 text-[10px]">
                   ACTIVE
@@ -92,8 +91,7 @@ export function AppearanceSettings({
               )}
             </div>
             <p className="text-[11px] opacity-80">
-              Deep matte obsidian chassis with cream typography and CRT phosphor
-              accents.
+              Dark background with high-contrast text.
             </p>
             <div className="flex gap-1.5 pt-2 border-t border-[#FFF6EE]">
               <span className="w-5 h-5 bg-[#262628] border border-[#FFF6EE]" />
@@ -114,8 +112,8 @@ export function AppearanceSettings({
         <Toggle
           checked={settings.ui_reduce_motion}
           onChange={handleToggleReduceMotion}
-          label="REDUCE MOTION & TRANSITIONS"
-          description="Disables all UI sliding bar transitions and selection animations (80-120ms) for instant rendering."
+          label="REDUCE MOTION"
+          description="Disables transitions and animations for instant rendering."
         />
       </div>
 
@@ -124,7 +122,7 @@ export function AppearanceSettings({
       {/* Dither & Texture Previews */}
       <div className="flex flex-col gap-2 font-mono text-xs">
         <label className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
-          DITHER & TEXTURE ENGINE PREVIEW
+          PATTERNS
         </label>
         <div className="grid grid-cols-3 gap-3">
           <div className="border border-[var(--color-ink)] p-3 flex flex-col gap-2">

@@ -5,6 +5,7 @@ use std::path::Path;
 use std::time::Duration;
 
 pub mod jobs;
+pub mod metrics;
 pub mod runs;
 pub mod settings;
 pub mod sources;

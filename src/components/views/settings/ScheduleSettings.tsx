@@ -64,11 +64,8 @@ export function ScheduleSettings({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-black uppercase tracking-tight text-[var(--color-ink)]">
-            SCRAPER SCHEDULE & BACKGROUND ENGINE
+            SCHEDULE
           </h2>
-          <p className="text-xs font-mono text-[var(--color-ink-mute)]">
-            CONFIGURE PERIODIC SILENT SCRAPING AND RUNTIME TIMERS
-          </p>
         </div>
         <Button
           variant="inverted"
@@ -87,23 +84,21 @@ export function ScheduleSettings({
         <Toggle
           checked={settings.scraper_enabled}
           onChange={(checked) => onUpdateSetting("scraper.enabled", checked)}
-          label="ENABLE AUTOMATIC SCHEDULED SCRAPING"
-          description="Tokio cron scheduler executes scraper in the background while living in the system tray."
+          label="SCHEDULED SCRAPING"
         />
         <Toggle
           checked={settings.scraper_run_on_startup}
           onChange={(checked) =>
             onUpdateSetting("scraper.run_on_startup", checked)
           }
-          label="RUN SCRAPER ON APP STARTUP"
-          description="Executes a background scrape cycle ~10 seconds after application launch."
+          label="RUN ON STARTUP"
         />
       </div>
 
       {/* Cron Presets & Expression */}
       <div className="flex flex-col gap-3">
         <label className="text-xs font-mono font-bold uppercase tracking-wider text-[var(--color-ink)]">
-          SCHEDULE INTERVAL PRESETS
+          PRESETS
         </label>
         <div className="grid grid-cols-4 gap-2">
           {CRON_PRESETS.map((preset) => {
@@ -126,7 +121,7 @@ export function ScheduleSettings({
 
         <div className="flex flex-col gap-1.5 mt-2">
           <label className="text-xs font-mono font-bold uppercase tracking-wider text-[var(--color-ink)]">
-            CUSTOM 6-FIELD CRON (SEC MIN HOUR DAY MONTH WEEKDAY)
+            CUSTOM CRON
           </label>
           <div className="flex gap-2">
             <Input
@@ -151,9 +146,9 @@ export function ScheduleSettings({
               {validation.ok ? (
                 <div className="flex flex-col gap-1 text-[11px] text-[var(--color-ink-mute)]">
                   <span className="text-[var(--color-lime)] font-bold">
-                    ✓ CRON EXPRESSION VALID
+                    ✓ VALID
                   </span>
-                  <span>NEXT 3 SCHEDULED RUNS:</span>
+                  <span>NEXT RUNS:</span>
                   <ul className="list-disc list-inside pl-1 text-[var(--color-ink)]">
                     {validation.next_runs.map((r, i) => (
                       <li key={i}>{r}</li>
@@ -176,7 +171,7 @@ export function ScheduleSettings({
       <div className="flex flex-col gap-2">
         <div className="flex justify-between items-center">
           <span className="text-xs font-mono font-bold uppercase tracking-wider text-[var(--color-ink)]">
-            RECENT SCRAPE EXECUTIONS
+            RECENT RUNS
           </span>
           <button
             onClick={fetchRecentRuns}

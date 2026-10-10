@@ -59,11 +59,8 @@ export function FiltersSettings({
     <div className="flex flex-col gap-6 w-full max-w-3xl select-none">
       <div>
         <h2 className="text-base font-black uppercase tracking-tight text-[var(--color-ink)]">
-          GLOBAL KEYWORD & ROLE FILTERS
+          SCRAPER FILTERS
         </h2>
-        <p className="text-xs font-mono text-[var(--color-ink-mute)]">
-          POSTINGS ARE FILTERED ON INGESTION BY THE SCRAPE WORKER SIDECAR
-        </p>
       </div>
 
       <Rule />
@@ -71,7 +68,7 @@ export function FiltersSettings({
       {/* Role Types Filter */}
       <div className="flex flex-col gap-3 font-mono text-xs">
         <label className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
-          TARGET EMPLOYMENT & ROLE TYPES
+          EMPLOYMENT TYPES
         </label>
         <div className="grid grid-cols-2 gap-3 p-4 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/30">
           {ROLE_TYPES.filter((r) => r !== "all").map((rt) => {
@@ -95,7 +92,7 @@ export function FiltersSettings({
       {/* Include Keywords */}
       <div className="flex flex-col gap-2 font-mono text-xs">
         <label className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
-          INCLUDE KEYWORDS (TITLE MUST CONTAIN AT LEAST ONE, IF SPECIFIED)
+          INCLUDE KEYWORDS
         </label>
         <div className="flex gap-2">
           <Input
@@ -111,7 +108,7 @@ export function FiltersSettings({
                 );
               }
             }}
-            placeholder="TYPE KEYWORD (E.G. RUST, REACT, DATA) AND PRESS ENTER"
+            placeholder="TYPE KEYWORD AND PRESS ENTER"
             className="flex-1"
           />
         </div>
@@ -150,7 +147,7 @@ export function FiltersSettings({
       {/* Exclude Keywords */}
       <div className="flex flex-col gap-2 font-mono text-xs">
         <label className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
-          EXCLUDE KEYWORDS (TITLE MATCHING ANY WILL BE SKIPPED)
+          EXCLUDE KEYWORDS
         </label>
         <div className="flex gap-2">
           <Input
@@ -166,7 +163,7 @@ export function FiltersSettings({
                 );
               }
             }}
-            placeholder="TYPE KEYWORD (E.G. SENIOR, STAFF, PRINCIPAL, CLEARANCE) AND PRESS ENTER"
+            placeholder="TYPE KEYWORD AND PRESS ENTER"
             className="flex-1"
           />
         </div>

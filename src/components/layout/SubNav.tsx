@@ -97,13 +97,13 @@ export function SubNav() {
 
           {view === "settings" && (
             <span className="text-[11px] font-mono uppercase text-[var(--color-ink-mute)] tracking-wider">
-              SYSTEM CONFIGURATION & SCHEDULE
+              SETTINGS
             </span>
           )}
 
           {view === "metrics" && (
             <span className="text-[11px] font-mono uppercase text-[var(--color-ink-mute)] tracking-wider">
-              APPLICATION & CONVERSION METRICS
+              METRICS
             </span>
           )}
         </div>

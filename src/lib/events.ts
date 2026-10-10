@@ -22,6 +22,7 @@ export async function setupAppEventListeners(
     queryClient.invalidateQueries({ queryKey: ["jobs"] });
     queryClient.invalidateQueries({ queryKey: ["job_counts"] });
     queryClient.invalidateQueries({ queryKey: ["job_status_events"] });
+    queryClient.invalidateQueries({ queryKey: ["metrics"] });
   });
   unlisteners.push(unlistenJobs);
 
@@ -64,6 +65,7 @@ export async function setupAppEventListeners(
     queryClient.invalidateQueries({ queryKey: ["sources"] });
     queryClient.invalidateQueries({ queryKey: ["jobs"] });
     queryClient.invalidateQueries({ queryKey: ["scheduler_status"] });
+    queryClient.invalidateQueries({ queryKey: ["metrics"] });
   });
   unlisteners.push(unlistenFinished);
 

@@ -12,13 +12,13 @@ interface SettingsViewProps {
   onUpdateSetting: (key: string, value: unknown) => void;
 }
 
-const CATEGORIES: { id: SettingsCategory; label: string; desc: string }[] = [
-  { id: "schedule", label: "SCHEDULE", desc: "TIMERS & CRON" },
-  { id: "sources", label: "SOURCES", desc: "TARGET BOARDS" },
-  { id: "filters", label: "SCRAPER", desc: "INGEST PRE-FILTERS" },
-  { id: "logs", label: "LOGS", desc: "EXECUTION AUDIT" },
-  { id: "appearance", label: "APPEARANCE", desc: "THEMES & DITHER" },
-  { id: "system", label: "SYSTEM", desc: "OS & EXPORTS" },
+const CATEGORIES: { id: SettingsCategory; label: string }[] = [
+  { id: "schedule", label: "SCHEDULE" },
+  { id: "sources", label: "SOURCES" },
+  { id: "filters", label: "SCRAPER" },
+  { id: "logs", label: "LOGS" },
+  { id: "appearance", label: "APPEARANCE" },
+  { id: "system", label: "SYSTEM" },
 ];
 
 export function SettingsView({
@@ -30,10 +30,10 @@ export function SettingsView({
   return (
     <div className="flex-1 w-full h-full flex overflow-hidden bg-[var(--color-paper)]">
       {/* Left Sidebar: Categories */}
-      <aside className="w-64 shrink-0 h-full border-r border-[var(--color-ink)] bg-[var(--color-paper-2)]/20 flex flex-col py-3 select-none">
+      <aside className="w-56 shrink-0 h-full border-r border-[var(--color-ink)] bg-[var(--color-paper-2)]/20 flex flex-col py-3 select-none">
         <div className="px-4 pb-2 mb-2 border-b border-[var(--color-ink)]">
           <span className="font-mono font-black text-xs uppercase tracking-wider text-[var(--color-ink)]">
-            SYSTEM SETUP
+            SETTINGS
           </span>
         </div>
 
@@ -52,15 +52,11 @@ export function SettingsView({
                 }`}
               >
                 <span>{cat.label}</span>
-                <span
-                  className={`text-[10px] ${
-                    isActive
-                      ? "text-[var(--color-paper)] opacity-80"
-                      : "text-[var(--color-ink-mute)]"
-                  }`}
-                >
-                  {isActive ? "▸" : cat.desc}
-                </span>
+                {isActive && (
+                  <span className="text-[10px] text-[var(--color-paper)]">
+                    ▸
+                  </span>
+                )}
               </button>
             );
           })}

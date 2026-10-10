@@ -122,6 +122,7 @@ pub fn run() {
             commands::scrape::set_scheduler_paused,
             commands::scrape::detect_source,
             commands::scrape::test_source,
+            commands::metrics::get_metrics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -171,6 +172,12 @@ mod bindings_test {
         db::runs::RunStatus::export().unwrap();
         db::runs::LogLevel::export().unwrap();
         db::runs::ScrapeLogEntry::export().unwrap();
+        db::metrics::Metrics::export().unwrap();
+        db::metrics::MetricsTotals::export().unwrap();
+        db::metrics::MetricsSeriesBucket::export().unwrap();
+        db::metrics::RoleTypeMetric::export().unwrap();
+        db::metrics::SalaryDistributionBucket::export().unwrap();
+        db::metrics::MetricsStreak::export().unwrap();
         services::scheduler::CronValidationResult::export().unwrap();
         services::scheduler::SchedulerStatus::export().unwrap();
     }
