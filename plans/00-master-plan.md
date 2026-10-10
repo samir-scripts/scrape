@@ -17,7 +17,7 @@ Each phase is a self-contained, shippable increment. Implement in order; every s
 | 1 | [Database & Configuration](./01-database-config.md) | Repo scaffold, SQLite schema + migrations, Rust DB layer, Tauri commands, OS-derived defaults | — |
 | 2 | [Background Services](./02-background-services.md) | Tray-first app lifecycle, CRON scheduler, `scrape-worker` sidecar (ATS APIs + company pages) | 1 |
 | 3 | [Frontend & Brutalist UI](./03-frontend-ui.md) | Design system (Tailwind v4 tokens), shell, 4 views, keyboard nav | 1 (2 for live events) |
-| 3.5 | [Job Enrichment, Custom Filters, YOE & Scraper Logs](./03b-enrichment-filters.md) | Salary, country/state/remote, sponsorship & clearance, YOE & New Grad classification, dual-layer filtering, RangeSlider, logo removal, Settings Logs with red square error markers | 3 |
+| 3.5 | [Job Enrichment, Custom Filters, YOE & Scraper Logs](./03b-enrichment-filters.md) | Salary, country/state/remote, sponsorship & clearance, YOE & New Grad classification, dual-layer filtering, RangeSlider, logo removal, dedicated Scraper tab with red square error markers, custom CSS+Regex scraper | 3 |
 | 4 | [Metrics Dashboard](./04-metrics-dashboard.md) | Visx charts, metric cards, Rust metrics aggregation | 1, 3 |
 | 5 | [CI/CD](./05-ci-cd.md) | PR checks + tag-triggered cross-platform release builds | 1–2 (sidecar build script) |
 | — | [Error Log & Solutions](./errors/solutions.md) | Living troubleshooting runbook; recorded errors, causes, and solutions | Ongoing |
@@ -53,9 +53,9 @@ Each phase is a self-contained, shippable increment. Implement in order; every s
 7. **Salary data extraction and storage:** Structured annualization (`salary_min`, `salary_max`, `salary_currency`, `salary_interval`, `salary_raw`, `salary_source`). Extracted from structured ATS endpoints (Lever `salaryRange`, Ashby `summaryComponents`, JSON-LD `baseSalary`, Greenhouse `pay_input_ranges`) and contextual regex fallback.
 8. **Structured Location (Country / State / Remote):** Normalization of multi-location listings into a `job_locations` child table (`city`, `region_code` ISO 3166-2, `country_code` ISO 3166-1 alpha-2, `is_remote`) via an embedded gazetteer.
 9. **Sponsorship & Clearance classification:** Per-sentence text classifier in `scrape-core::enrich::eligibility` classifying descriptions into `YES` / `NO` / `N/A`, preserving the exact evidence quote and clearance level.
-10. **Dual-Layer Custom Filtering & RangeSlider:** Separation between **scraper ingestion filters** (Settings → SCRAPER → ADVANCED) and **UI view filters** (Discovered & Tracked). Customizable by country, state/region, salary range slider with synced number inputs (0 – $500K+), and sponsorship/clearance tri-states (`YES` / `NO` / `N/A`).
+10. **Dual-Layer Custom Filtering & RangeSlider:** Separation between **scraper ingestion filters** (SCRAPER → FILTERS) and **UI view filters** (Discovered & Tracked). Customizable by country, state/region, salary range slider with synced number inputs (0 – $500K+), and sponsorship/clearance tri-states (`YES` / `NO` / `N/A`).
 11. **Removal of "SCRAPE" Logo & Zero Flavor Text:** Stripped the `SCRAPE // SYS.02` logo from TopNav (tabs begin flush left). Strictly removed all vanity copy across the app.
-12. **Scraper Execution Logs in Settings (Red Square Indicator):** Dedicated "LOGS" tab in Settings (`SettingsCategory = 'logs'`). Scraper run logs are sorted chronologically by date and time (newest first). Any run or event encountering issues needing user attention (e.g. sidecar errors, network timeouts, HTTP 403/429 rate limits, adapter parsing errors) is marked with a prominent brutalist red square (`■`). Selecting a run provides full diagnostic log inspection.
+12. **Scraper Execution Logs (Red Square Indicator):** Dedicated "LOGS" view in the top-level SCRAPER tab (`scraperCategory = 'logs'`). Scraper run logs are sorted chronologically by date and time (newest first). Any run or event encountering issues needing user attention (e.g. sidecar errors, network timeouts, HTTP 403/429 rate limits, adapter parsing errors) is marked with a prominent brutalist red square (`■`). Selecting a run provides full diagnostic log inspection.
 13. **Theme-Synchronized Brutalist Scrollbars:** Complete elimination of default OS scrollbars. Custom scrollbars use strict 0px border-radius, thin 8px geometry, `var(--color-paper-2)` track with 1px ink boundary, and `var(--color-ink-mute)` thumb inverting to `var(--color-ink)` on hover, reacting dynamically to active theme tokens (Paper & Obsidian).
 14. **Mandatory Automated Test Coverage for All Features:** Every suggested feature, parser, filter permutation, schema addition, and UI interaction must be accompanied by relevant unit and component tests before being marked complete.
 15. **Feature-Branch Development Discipline:** Strict workflow requirement: All development must occur on isolated feature branches (`feature/<name>`) created from `develop`. No unverified code is pushed directly to mainline branches.
@@ -63,6 +63,8 @@ Each phase is a self-contained, shippable increment. Implement in order; every s
 17. **Cascading Country & State/Province Dropdowns with Location Auto-Detection:** Replaced manual tag inputs in `LocationFilter` with cascading dropdown controls. Selecting a Country filters the available States & Provinces dropdown to that country's subdivisions. Added optional system/user location auto-detection (via browser geolocation API with permission, and system locale/timezone fallback) to pre-select local geography.
 18. **Dual-Thumb Salary RangeSlider Pointer-Events Fix:** Fixed the dual `<input type="range">` overlay bug where one thumb was captured by the higher z-index track. Styled inputs with `pointer-events-none` on the track and `pointer-events-auto` exclusively on slider thumbs with dynamic z-index switching, guaranteeing both minimum and maximum thumbs are always independently controllable.
 19. **Seasonal Employment Type Support:** Added `Seasonal` to `RoleType` (`RoleType::Seasonal` / `"seasonal"`), adding ATS hint and title heuristics, database schema CHECK constraint migration, backend metrics rollups, and unified filter controls.
+20. **Dedicated Top-Level Scraper Tab:** Migrated all scraping operations from `Settings` into a dedicated, top-level **`SCRAPER`** tab (`DISCOVERED`, `TRACKED`, `METRICS`, `SCRAPER`, `SETTINGS`). The Scraper tab serves as the unified operational hub for `SOURCES` (job board configurations), `SCHEDULE` (cron automation & Run Now), `FILTERS` (ingestion-level keyword, location, and role filters), and `LOGS` (chronological run history with red square error indicators). The `SETTINGS` tab is streamlined to exclusively house application preferences (`APPEARANCE` and `SYSTEM`).
+21. **Custom Regex & Selector Scraping Engine:** Empowered users to configure custom scrape jobs on arbitrary career pages using custom CSS selectors combined with regular expression capture rules (`item_selector`, `title_regex`, `link_regex`, `location_regex`, `salary_regex`, or direct text block regex). Includes live modal testing with previews before persisting the source.
 
 ### 2.2 Development & Branching Discipline (Strict Requirement)
 
@@ -176,7 +178,7 @@ scrape/
 ├── src/                           # React app
 │   ├── bindings/                  # ts-rs generated (committed)
 │   ├── components/{ui,layout}/
-│   ├── views/{Discovered,Tracked,Metrics,Settings}/
+│   ├── views/{Discovered,Tracked,Metrics,Scraper,Settings}/
 │   ├── lib/ (api.ts, events.ts, format.ts)
 │   ├── state/ (ui.ts)
 │   └── styles/index.css
@@ -204,7 +206,7 @@ scrape/
 |---|---|
 | **M1** (Phase 1) | `npm run tauri dev` opens a window; DB file is created in app-data dir with defaults; commands callable from devtools. |
 | **M2** (Phase 2) | App boots to tray only; a source added via command is scraped on schedule + "run now"; jobs land in DB; OS notification fires. |
-| **M3** (Phase 3) | Full UI: triage inbox with keyboard, Kanban tracking, settings for schedule/sources/filters/theme. |
+| **M3** (Phase 3) | Full UI: triage inbox with keyboard, Kanban tracking, unified Scraper operations hub (sources, schedule, filters, logs), and application settings (appearance, system). |
 | **M4** (Phase 4) | Metrics tab with 2 charts + 3 cards driven by real data. |
 | **M5** (Phase 5) | Pushing `v0.1.0` produces draft GitHub Release with `.dmg/.app`, `.msi/.exe`, `.deb/.AppImage`. |
 

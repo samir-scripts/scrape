@@ -31,13 +31,15 @@ describe("Navigation & Hotkey Helpers", () => {
   it("cycles forward through tabs with wrap-around", () => {
     expect(getNextTab("discovered")).toBe("tracked");
     expect(getNextTab("tracked")).toBe("metrics");
-    expect(getNextTab("metrics")).toBe("settings");
+    expect(getNextTab("metrics")).toBe("scraper");
+    expect(getNextTab("scraper")).toBe("settings");
     expect(getNextTab("settings")).toBe("discovered");
   });
 
   it("cycles backward through tabs with wrap-around", () => {
     expect(getPrevTab("discovered")).toBe("settings");
-    expect(getPrevTab("settings")).toBe("metrics");
+    expect(getPrevTab("settings")).toBe("scraper");
+    expect(getPrevTab("scraper")).toBe("metrics");
     expect(getPrevTab("metrics")).toBe("tracked");
     expect(getPrevTab("tracked")).toBe("discovered");
   });

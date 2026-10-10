@@ -4,11 +4,13 @@ import type { NavTabId } from "./constants";
 
 import type { JobFilter } from "../bindings/JobFilter";
 
-export type SettingsCategory =
-  | "schedule"
+export type ScraperCategory =
   | "sources"
+  | "schedule"
   | "filters"
-  | "logs"
+  | "logs";
+
+export type SettingsCategory =
   | "appearance"
   | "system";
 
@@ -64,6 +66,10 @@ interface UIState {
   setTrackedViewMode: (mode: "kanban" | "list") => void;
   drawerJobId: string | null;
   setDrawerJobId: (id: string | null) => void;
+
+  // Scraper View state
+  scraperCategory: ScraperCategory;
+  setScraperCategory: (cat: ScraperCategory) => void;
 
   // Settings View state
   settingsCategory: SettingsCategory;
@@ -154,8 +160,19 @@ export const useUIStore = create<UIState>((set, get) => ({
   drawerJobId: null,
   setDrawerJobId: (drawerJobId) => set({ drawerJobId }),
 
-  settingsCategory: "schedule",
-  setSettingsCategory: (settingsCategory) => set({ settingsCategory }),
+  scraperCategory:
+    (getStored("scrape:scraperCategory") as ScraperCategory) || "sources",
+  setScraperCategory: (scraperCategory) => {
+    setStored("scrape:scraperCategory", scraperCategory);
+    set({ scraperCategory });
+  },
+
+  settingsCategory:
+    (getStored("scrape:settingsCategory") as SettingsCategory) || "appearance",
+  setSettingsCategory: (settingsCategory) => {
+    setStored("scrape:settingsCategory", settingsCategory);
+    set({ settingsCategory });
+  },
 
   isScanning: false,
   scanStatusText: "",

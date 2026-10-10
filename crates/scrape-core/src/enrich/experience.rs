@@ -70,7 +70,7 @@ static FALSE_POSITIVE_ROADMAP_RE: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Split text into candidate sentences
 fn split_sentences(text: &str) -> Vec<&str> {
-    text.split(|c| c == '.' || c == '\n' || c == '•' || c == ';' || c == '\r')
+    text.split(['.', '\n', '•', ';', '\r'])
         .map(|s| s.trim())
         .filter(|s| s.len() >= 6)
         .collect()
@@ -130,13 +130,11 @@ pub fn extract_experience(title: &str, text: &str) -> ExperienceClassification {
             // Check Plus e.g. 5+ years of experience
             for caps in YOE_PLUS_RE.captures_iter(sentence) {
                 if let Ok(lo) = caps[1].parse::<i64>() {
-                    if lo <= 30 {
-                        if found_min.is_none() || lo < found_min.unwrap() {
-                            found_min = Some(lo);
-                            found_max = None;
-                            found_raw = Some(format!("{}+ years", lo));
-                            found_evidence = Some(sentence.to_string());
-                        }
+                    if lo <= 30 && (found_min.is_none() || lo < found_min.unwrap()) {
+                        found_min = Some(lo);
+                        found_max = None;
+                        found_raw = Some(format!("{}+ years", lo));
+                        found_evidence = Some(sentence.to_string());
                     }
                 }
             }
@@ -144,13 +142,11 @@ pub fn extract_experience(title: &str, text: &str) -> ExperienceClassification {
             // Check Minimum e.g. minimum 3 years of experience
             for caps in YOE_MIN_RE.captures_iter(sentence) {
                 if let Ok(lo) = caps[1].parse::<i64>() {
-                    if lo <= 30 {
-                        if found_min.is_none() || lo < found_min.unwrap() {
-                            found_min = Some(lo);
-                            found_max = None;
-                            found_raw = Some(format!("{}+ years", lo));
-                            found_evidence = Some(sentence.to_string());
-                        }
+                    if lo <= 30 && (found_min.is_none() || lo < found_min.unwrap()) {
+                        found_min = Some(lo);
+                        found_max = None;
+                        found_raw = Some(format!("{}+ years", lo));
+                        found_evidence = Some(sentence.to_string());
                     }
                 }
             }
@@ -158,13 +154,11 @@ pub fn extract_experience(title: &str, text: &str) -> ExperienceClassification {
             // Check Exact e.g. 3 years of software engineering experience
             for caps in YOE_EXACT_RE.captures_iter(sentence) {
                 if let Ok(lo) = caps[1].parse::<i64>() {
-                    if lo <= 30 {
-                        if found_min.is_none() || lo < found_min.unwrap() {
-                            found_min = Some(lo);
-                            found_max = None;
-                            found_raw = Some(format!("{}+ years", lo));
-                            found_evidence = Some(sentence.to_string());
-                        }
+                    if lo <= 30 && (found_min.is_none() || lo < found_min.unwrap()) {
+                        found_min = Some(lo);
+                        found_max = None;
+                        found_raw = Some(format!("{}+ years", lo));
+                        found_evidence = Some(sentence.to_string());
                     }
                 }
             }

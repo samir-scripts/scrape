@@ -429,7 +429,7 @@ fn calculate_streak(dates: &[NaiveDate], today: NaiveDate) -> MetricsStreak {
         let mut cur = 0i64;
         while date_set.contains(&anchor) {
             cur += 1;
-            anchor = anchor - Duration::days(1);
+            anchor -= Duration::days(1);
         }
         cur
     } else {

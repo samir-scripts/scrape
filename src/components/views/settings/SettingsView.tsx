@@ -1,9 +1,5 @@
 import type { Settings } from "../../../bindings/Settings";
 import { useUIStore, type SettingsCategory } from "../../../lib/store";
-import { ScheduleSettings } from "./ScheduleSettings";
-import { SourcesSettings } from "./SourcesSettings";
-import { FiltersSettings } from "./FiltersSettings";
-import { LogsSettings } from "./LogsSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { SystemSettings } from "./SystemSettings";
 
@@ -13,10 +9,6 @@ interface SettingsViewProps {
 }
 
 const CATEGORIES: { id: SettingsCategory; label: string }[] = [
-  { id: "schedule", label: "SCHEDULE" },
-  { id: "sources", label: "SOURCES" },
-  { id: "filters", label: "SCRAPER" },
-  { id: "logs", label: "LOGS" },
   { id: "appearance", label: "APPEARANCE" },
   { id: "system", label: "SYSTEM" },
 ];
@@ -65,20 +57,6 @@ export function SettingsView({
 
       {/* Right Content: Active Category Panel */}
       <main className="flex-1 h-full overflow-y-auto p-6 bg-[var(--color-paper)]">
-        {settingsCategory === "schedule" && (
-          <ScheduleSettings
-            settings={settings}
-            onUpdateSetting={onUpdateSetting}
-          />
-        )}
-        {settingsCategory === "sources" && <SourcesSettings />}
-        {settingsCategory === "filters" && (
-          <FiltersSettings
-            settings={settings}
-            onUpdateSetting={onUpdateSetting}
-          />
-        )}
-        {settingsCategory === "logs" && <LogsSettings />}
         {settingsCategory === "appearance" && (
           <AppearanceSettings
             settings={settings}

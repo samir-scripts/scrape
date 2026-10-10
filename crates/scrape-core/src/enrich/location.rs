@@ -130,7 +130,7 @@ pub fn parse(raw_input: &str) -> Vec<ParsedLocation> {
 
     // Split on compound delimiters: ";", "|", "/", " or "
     let parts: Vec<&str> = trimmed
-        .split(|c| c == ';' || c == '|' || c == '/')
+        .split([';', '|', '/'])
         .flat_map(|p| p.split(" or "))
         .map(|p| p.trim())
         .filter(|p| !p.is_empty())

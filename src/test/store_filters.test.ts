@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useUIStore, DEFAULT_FILTER_SPEC, type SettingsCategory } from "../lib/store";
+import {
+  useUIStore,
+  DEFAULT_FILTER_SPEC,
+  type SettingsCategory,
+  type ScraperCategory,
+} from "../lib/store";
 
 describe("UI Store - Filters & Logs State", () => {
   beforeEach(() => {
@@ -61,18 +66,30 @@ describe("UI Store - Filters & Logs State", () => {
     expect(useUIStore.getState().isFilterPanelOpen).toBe(true);
   });
 
-  it("supports 'logs' as a valid settings category", () => {
-    const categories: SettingsCategory[] = [
-      "schedule",
+  it("supports scraper categories (sources, schedule, filters, logs)", () => {
+    const categories: ScraperCategory[] = [
       "sources",
+      "schedule",
       "filters",
       "logs",
-      "appearance",
-      "system",
     ];
     expect(categories).toContain("logs");
 
-    useUIStore.getState().setSettingsCategory("logs");
-    expect(useUIStore.getState().settingsCategory).toBe("logs");
+    useUIStore.getState().setScraperCategory("logs");
+    expect(useUIStore.getState().scraperCategory).toBe("logs");
+
+    useUIStore.getState().setScraperCategory("sources");
+    expect(useUIStore.getState().scraperCategory).toBe("sources");
+  });
+
+  it("supports streamlined settings categories (appearance, system)", () => {
+    const categories: SettingsCategory[] = [
+      "appearance",
+      "system",
+    ];
+    expect(categories).toEqual(["appearance", "system"]);
+
+    useUIStore.getState().setSettingsCategory("system");
+    expect(useUIStore.getState().settingsCategory).toBe("system");
   });
 });

@@ -92,6 +92,7 @@ export const NAV_TABS = [
   { id: "discovered", label: "DISCOVERED" },
   { id: "tracked", label: "TRACKED" },
   { id: "metrics", label: "METRICS" },
+  { id: "scraper", label: "SCRAPER" },
   { id: "settings", label: "SETTINGS" },
 ] as const;
 
