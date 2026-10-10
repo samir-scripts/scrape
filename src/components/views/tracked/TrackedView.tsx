@@ -1,9 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
 import { useUIStore } from "../../../lib/store";
 import {
   buildColumnMatrix,
+  findJobCoordinates,
   navigateVertical,
   navigateHorizontal,
   shiftJobStage,
@@ -37,6 +38,8 @@ export function TrackedView({
     searchQuery,
   } = useUIStore();
 
+  const preferredRowRef = useRef<number>(0);
+
   const filteredJobs = useMemo(() => {
     return jobs.filter((j) => {
       if (searchQuery.trim()) {
@@ -51,6 +54,20 @@ export function TrackedView({
       return true;
     });
   }, [jobs, searchQuery]);
+
+  // Keep selection valid within TrackedView or pick the first tracked job
+  useEffect(() => {
+    if (filteredJobs.length > 0) {
+      const exists = filteredJobs.some((j) => j.id === selectedJobId);
+      if (!exists) {
+        setSelectedJobId(filteredJobs[0].id);
+        preferredRowRef.current = 0;
+      }
+    } else {
+      setSelectedJobId(null);
+      preferredRowRef.current = 0;
+    }
+  }, [filteredJobs, selectedJobId, setSelectedJobId]);
 
   const selectedJob = useMemo(() => {
     return filteredJobs.find((j) => j.id === selectedJobId) || null;
@@ -72,7 +89,11 @@ export function TrackedView({
     onNextItem: () => {
       if (trackedViewMode === "kanban") {
         const nextId = navigateVertical(columnMatrix, selectedJobId, 1);
-        if (nextId) setSelectedJobId(nextId);
+        if (nextId) {
+          setSelectedJobId(nextId);
+          const coords = findJobCoordinates(columnMatrix, nextId);
+          if (coords) preferredRowRef.current = coords.rowIdx;
+        }
       } else {
         if (filteredJobs.length === 0) return;
         const nextIdx = Math.min(currentIndex + 1, filteredJobs.length - 1);
@@ -82,7 +103,11 @@ export function TrackedView({
     onPrevItem: () => {
       if (trackedViewMode === "kanban") {
         const prevId = navigateVertical(columnMatrix, selectedJobId, -1);
-        if (prevId) setSelectedJobId(prevId);
+        if (prevId) {
+          setSelectedJobId(prevId);
+          const coords = findJobCoordinates(columnMatrix, prevId);
+          if (coords) preferredRowRef.current = coords.rowIdx;
+        }
       } else {
         if (filteredJobs.length === 0) return;
         const prevIdx = Math.max(currentIndex - 1, 0);
@@ -91,13 +116,23 @@ export function TrackedView({
     },
     onColLeft: () => {
       if (trackedViewMode === "kanban") {
-        const nextId = navigateHorizontal(columnMatrix, selectedJobId, -1);
+        const nextId = navigateHorizontal(
+          columnMatrix,
+          selectedJobId,
+          -1,
+          preferredRowRef.current
+        );
         if (nextId) setSelectedJobId(nextId);
       }
     },
     onColRight: () => {
       if (trackedViewMode === "kanban") {
-        const nextId = navigateHorizontal(columnMatrix, selectedJobId, 1);
+        const nextId = navigateHorizontal(
+          columnMatrix,
+          selectedJobId,
+          1,
+          preferredRowRef.current
+        );
         if (nextId) setSelectedJobId(nextId);
       }
     },
@@ -120,6 +155,8 @@ export function TrackedView({
   const handleSelectJob = (job: Job) => {
     setSelectedJobId(job.id);
     setDrawerJobId(job.id);
+    const coords = findJobCoordinates(columnMatrix, job.id);
+    if (coords) preferredRowRef.current = coords.rowIdx;
   };
 
   return (

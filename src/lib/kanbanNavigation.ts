@@ -33,9 +33,9 @@ export function findJobCoordinates(
 }
 
 /**
-  * Navigates vertically (up or down) within the currently selected job's column.
-  * Clamps to column top/bottom boundaries without wrapping to other columns.
-  */
+ * Navigates vertically (up or down) within the currently selected job's column.
+ * Clamps to column top/bottom boundaries without wrapping to other columns.
+ */
 export function navigateVertical(
   matrix: ColumnMatrix[],
   currentJobId: string | null,
@@ -44,7 +44,10 @@ export function navigateVertical(
   const coords = findJobCoordinates(matrix, currentJobId);
   if (!coords) {
     const firstNonEmpty = matrix.find((c) => c.jobs.length > 0);
-    return firstNonEmpty?.jobs[0]?.id ?? null;
+    if (!firstNonEmpty) return null;
+    return delta === 1
+      ? firstNonEmpty.jobs[0]?.id ?? null
+      : firstNonEmpty.jobs[firstNonEmpty.jobs.length - 1]?.id ?? null;
   }
 
   const colJobs = matrix[coords.colIdx].jobs;
@@ -55,25 +58,41 @@ export function navigateVertical(
 }
 
 /**
-  * Navigates horizontally (left or right) to adjacent non-empty columns.
-  * Retains the closest vertical row index in the destination column.
-  */
+ * Navigates horizontally (left or right) to adjacent non-empty columns.
+ * Retains the closest vertical row index or preferredRowIdx in the destination column.
+ */
 export function navigateHorizontal(
   matrix: ColumnMatrix[],
   currentJobId: string | null,
-  delta: 1 | -1
+  delta: 1 | -1,
+  preferredRowIdx?: number
 ): string | null {
   const coords = findJobCoordinates(matrix, currentJobId);
+  const targetRowMemory = preferredRowIdx ?? coords?.rowIdx ?? 0;
+
   if (!coords) {
-    const firstNonEmpty = matrix.find((c) => c.jobs.length > 0);
-    return firstNonEmpty?.jobs[0]?.id ?? null;
+    if (delta === 1) {
+      const firstNonEmpty = matrix.find((c) => c.jobs.length > 0);
+      if (!firstNonEmpty || firstNonEmpty.jobs.length === 0) return null;
+      const targetRow = Math.min(targetRowMemory, firstNonEmpty.jobs.length - 1);
+      return firstNonEmpty.jobs[targetRow].id;
+    } else {
+      for (let c = matrix.length - 1; c >= 0; c--) {
+        const colJobs = matrix[c].jobs;
+        if (colJobs.length > 0) {
+          const targetRow = Math.min(targetRowMemory, colJobs.length - 1);
+          return colJobs[targetRow].id;
+        }
+      }
+      return null;
+    }
   }
 
   let nextCol = coords.colIdx + delta;
   while (nextCol >= 0 && nextCol < matrix.length) {
     const targetJobs = matrix[nextCol].jobs;
     if (targetJobs.length > 0) {
-      const targetRow = Math.min(coords.rowIdx, targetJobs.length - 1);
+      const targetRow = Math.min(targetRowMemory, targetJobs.length - 1);
       return targetJobs[targetRow].id;
     }
     nextCol += delta;

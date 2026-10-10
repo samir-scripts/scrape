@@ -23,6 +23,7 @@
 15. [SQLite In-Memory Multi-Connection Table Isolation in SqlitePool](#15-sqlite-in-memory-multi-connection-table-isolation-in-sqlitepool)
 16. [SQLite CHECK Constraint Alteration & ISO 3166-2 Suffix Matching](#16-sqlite-check-constraint-alteration--iso-3166-2-suffix-matching)
 17. [Tracked Kanban Board: Header Seam Bleed, Asymmetrical Column Capping, and Scrollbar Gutter Misalignment](#17-tracked-kanban-board-header-seam-bleed-asymmetrical-column-capping-and-scrollbar-gutter-misalignment)
+18. [Cross-View Selection Orphan & Asymmetric Hotkey Listener Churn in Kanban Navigation](#18-cross-view-selection-orphan--asymmetric-hotkey-listener-churn-in-kanban-navigation)
 
 ---
 
@@ -292,3 +293,28 @@
   1. **Strict 1px Brutalist Grid:** Enclose Kanban in a CSS Grid track container `grid grid-cols-4 min-w-[1120px] w-full h-full divide-x divide-[var(--color-ink)]` without `max-w-sm`, guaranteeing 100% viewport utilization and equal column widths.
   2. **Standardized Header Baseline:** Set column headers to `h-9 px-3 border-b border-[var(--color-ink)] bg-[var(--color-paper-2)]/40` matching `SubNav` rhythm, with visible 1px dividing lines, telemetry indicators (`// 0X`), and `STATUS_CONFIG` status accent pips.
   3. **Stable Scrollbar Tracks:** Apply `overflow-y-scroll` (or `scrollbar-gutter: stable`) to all column card containers to guarantee identical gutter geometry regardless of card counts.
+
+---
+
+### 18. Cross-View Selection Orphan & Asymmetric Hotkey Listener Churn in Kanban Navigation
+
+- **Phase:** Phase 3 / Phase 4 (Tracked Kanban Board & Hotkeys Engine)
+- **Error Signature:**
+  When navigating the Kanban board via keyboard shortcuts (`ArrowRight`/`l` and `ArrowLeft`/`h`), moving right appears to work initially, but navigating back left fails completely or becomes stuck. Additionally, pressing `Shift+H` or `Shift+L` to stage-shift jobs fails silently, and rapid keyboard navigation causes listener re-registration thrashing.
+- **Root Cause:**
+  1. **Cross-View Selection Orphan (Primary Failure Mechanism):**
+     `useUIStore` maintains a single global `selectedJobId`. In `DiscoveredView`, an automatic synchronization effect sets `selectedJobId` to the first discovered job (status `scraped` or `viewed`). However, `TrackedView` lacked a corresponding validation or fallback effect. When the user navigated from Discovered to Tracked, `selectedJobId` pointed to a Discovered job that did not exist in the Tracked `columnMatrix` (statuses `applied`, `interviewing`, `offer`, `rejected`).
+     - When the user pressed `Right` (`ArrowRight` or `l`), `findJobCoordinates(columnMatrix, selectedJobId)` returned `null`. The horizontal navigation fallback triggered: `firstNonEmpty?.jobs[0]?.id` (Column 0, Row 0). The selection visually snapped to Column 0, Row 0, creating the illusion that pressing Right "worked".
+     - When the user immediately pressed `Left` (`ArrowLeft` or `h`), `selectedJobId` was now at Column 0 (`colIdx = 0`). The leftward iteration loop `while (nextCol >= 0)` evaluated `nextCol = -1`, immediately exiting and returning `currentJobId` unchanged. The user observed: *"going right worked, but going back left failed"*.
+  2. **Destructive Row Clamping & Vertical Memory Loss:**
+     `navigateHorizontal` destructively clamped the row index via `Math.min(coords.rowIdx, targetJobs.length - 1)` without retaining the original target row index across sparse columns. Navigating Col 0 (Row 3) $\to$ Col 1 (Row 0) permanently clamped the selection to Row 0, preventing symmetric return to Row 3 when moving back left.
+  3. **Vim Key Asymmetry with Shift (`Shift+H` / `Shift+L`):**
+     `useHotkeys.ts` strictly checked `e.shiftKey && e.key === "ArrowLeft"` and `e.shiftKey && e.key === "ArrowRight"`, omitting `H` and `L`. Because pressing `Shift+h` produces `e.key = "H"` and `e.shiftKey = true`, it bypassed both the stage shift handler and the navigation handler (`!e.shiftKey`), resulting in a silent dead key.
+  4. **Event Listener Churn on Render Cycles:**
+     `useHotkeys` accepted an inline options object literal from `TrackedView` as a `useEffect` dependency (`[view, setView, options]`). Every render cycle, hotkey press, or state update caused the global `keydown` event listener to be detached and re-attached to `window`, introducing micro-latencies and potential dropped keystrokes.
+- **Solution & Rule:**
+  1. **View Selection Self-Healing:** In `TrackedView`, implement an auto-validation effect ensuring that if `selectedJobId` is null or does not exist within `trackedJobs`, it resets to `trackedJobs[0]?.id`, preventing orphaned cross-view selection IDs from corrupting 2D navigation coordinates.
+  2. **Ref-Stabilized Hotkey Dispatcher:** In `useHotkeys.ts`, store options and callbacks in a mutable ref (`optionsRef.current = options`) with an empty dependency array `[]` on listener attachment, completely eliminating listener churn on render cycles.
+  3. **Symmetric Modifier & Key Handling:** Support both arrow keys and Vim keys for all actions: `(e.key === "ArrowLeft" || e.key === "H")` for left stage shift, `(e.key === "ArrowRight" || e.key === "L")` for right stage shift. Ensure modifier guards check `!(e.metaKey || e.ctrlKey || e.altKey)`.
+  4. **Symmetric 2D Column Navigation with Target Memory:** In `kanbanNavigation.ts`, provide robust matrix navigation with virtual row memory or intelligent clamping that guarantees symmetric bidirectional transitions across columns.
+
