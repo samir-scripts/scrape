@@ -60,6 +60,21 @@ pub async fn scrape_lever(
     );
 
     let postings: Vec<LeverPosting> = client.fetch_json(&url).await?;
+    parse_lever_postings(postings, source)
+}
+
+pub fn parse_lever_payload(
+    json: &str,
+    source: &WorkerSource,
+) -> Result<Vec<WorkerEvent>, ClientError> {
+    let postings: Vec<LeverPosting> = serde_json::from_str(json)?;
+    parse_lever_postings(postings, source)
+}
+
+fn parse_lever_postings(
+    postings: Vec<LeverPosting>,
+    source: &WorkerSource,
+) -> Result<Vec<WorkerEvent>, ClientError> {
     let mut events = Vec::with_capacity(postings.len());
 
     for posting in postings {
@@ -238,5 +253,71 @@ mod tests {
                 .map(|dt| dt.to_rfc3339_opts(SecondsFormat::Millis, true))
         });
         assert!(dt.is_some());
+    }
+
+    #[test]
+    fn test_parse_lever_enrichment() {
+        let json = r#"[
+            {
+                "id": "lever-456",
+                "text": "Data Platform Engineer",
+                "hostedUrl": "https://jobs.lever.co/stripe/lever-456",
+                "createdAt": 1727740800000,
+                "workplaceType": "hybrid",
+                "categories": {
+                    "location": "New York, NY",
+                    "commitment": "Full Time",
+                    "allLocations": ["New York, NY", "Toronto, ON"]
+                },
+                "salaryRange": {
+                    "min": 175000,
+                    "max": 225000,
+                    "currency": "USD",
+                    "interval": "per-year-salary"
+                },
+                "descriptionPlain": "We sponsor H1B visas. Requires 3-5 years experience with distributed systems."
+            }
+        ]"#;
+
+        let source = WorkerSource {
+            id: "src-lever".to_string(),
+            kind: scrape_core::SourceKind::Lever,
+            name: "Stripe".to_string(),
+            identifier: "stripe".to_string(),
+            config: serde_json::Value::Null,
+        };
+
+        let events = parse_lever_payload(json, &source).unwrap();
+        assert_eq!(events.len(), 1);
+
+        if let WorkerEvent::Job {
+            salary,
+            locations,
+            sponsorship,
+            experience,
+            workplace_type,
+            ..
+        } = &events[0]
+        {
+            let sal = salary.as_ref().expect("Salary should be extracted");
+            assert_eq!(sal.min, Some(175000));
+            assert_eq!(sal.max, Some(225000));
+            assert_eq!(sal.currency, "USD");
+
+            assert_eq!(locations.len(), 2);
+            assert_eq!(locations[0].city.as_deref(), Some("New York"));
+            assert_eq!(locations[1].city.as_deref(), Some("Toronto"));
+
+            let spon = sponsorship.as_ref().expect("Sponsorship should be extracted");
+            assert_eq!(spon.value, TriState::Yes);
+
+            let exp = experience.as_ref().expect("Experience should be extracted");
+            assert_eq!(exp.min_years, Some(3));
+            assert_eq!(exp.max_years, Some(5));
+
+            assert_eq!(workplace_type, &WorkplaceType::Hybrid);
+        } else {
+            panic!("Expected WorkerEvent::Job");
+        }
     }
 }

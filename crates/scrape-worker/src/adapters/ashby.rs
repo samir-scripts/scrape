@@ -70,9 +70,24 @@ pub async fn scrape_ashby(
     );
 
     let resp: AshbyResponse = client.fetch_json(&url).await?;
-    let mut events = Vec::with_capacity(resp.jobs.len());
+    parse_ashby_jobs(resp.jobs, source)
+}
 
-    for job in resp.jobs {
+pub fn parse_ashby_payload(
+    json: &str,
+    source: &WorkerSource,
+) -> Result<Vec<WorkerEvent>, ClientError> {
+    let resp: AshbyResponse = serde_json::from_str(json)?;
+    parse_ashby_jobs(resp.jobs, source)
+}
+
+fn parse_ashby_jobs(
+    jobs: Vec<AshbyJob>,
+    source: &WorkerSource,
+) -> Result<Vec<WorkerEvent>, ClientError> {
+    let mut events = Vec::with_capacity(jobs.len());
+
+    for job in jobs {
         let role_type = RoleType::infer(&job.title, job.employment_type.as_deref());
 
         // Location parsing
@@ -219,5 +234,84 @@ mod tests {
         assert_eq!(job.id, "ashby-99");
         let role = RoleType::infer(&job.title, job.employment_type.as_deref());
         assert_eq!(role, RoleType::Contract);
+    }
+
+    #[test]
+    fn test_parse_ashby_enrichment() {
+        let json = r#"{
+            "jobs": [
+                {
+                    "id": "ashby-101",
+                    "title": "Staff Backend Engineer",
+                    "jobUrl": "https://jobs.ashbyhq.com/example/ashby-101",
+                    "location": "San Francisco, CA",
+                    "secondaryLocations": [
+                        { "location": "Seattle, WA" }
+                    ],
+                    "employmentType": "FullTime",
+                    "publishedAt": "2026-10-02T10:00:00Z",
+                    "isRemote": false,
+                    "workplaceType": "Hybrid",
+                    "compensation": {
+                        "summaryComponents": [
+                            {
+                                "compensationType": "Salary",
+                                "minValue": 190000.0,
+                                "maxValue": 240000.0,
+                                "currencyCode": "USD",
+                                "interval": "Year"
+                            }
+                        ]
+                    },
+                    "descriptionPlain": "US Citizenship and active Top Secret clearance required. No visa sponsorship provided. Requires 7+ years of software engineering experience."
+                }
+            ]
+        }"#;
+
+        let source = WorkerSource {
+            id: "src-ashby".to_string(),
+            kind: scrape_core::SourceKind::Ashby,
+            name: "Anthropic".to_string(),
+            identifier: "anthropic".to_string(),
+            config: serde_json::Value::Null,
+        };
+
+        let events = parse_ashby_payload(json, &source).unwrap();
+        assert_eq!(events.len(), 1);
+
+        if let WorkerEvent::Job {
+            salary,
+            locations,
+            sponsorship,
+            clearance,
+            experience,
+            is_new_grad,
+            workplace_type,
+            ..
+        } = &events[0]
+        {
+            let sal = salary.as_ref().expect("Salary should be extracted");
+            assert_eq!(sal.min, Some(190000));
+            assert_eq!(sal.max, Some(240000));
+            assert_eq!(sal.currency, "USD");
+
+            assert_eq!(locations.len(), 2);
+            assert_eq!(locations[0].city.as_deref(), Some("San Francisco"));
+            assert_eq!(locations[1].city.as_deref(), Some("Seattle"));
+
+            let spon = sponsorship.as_ref().expect("Sponsorship should be extracted");
+            assert_eq!(spon.value, TriState::No);
+
+            let clr = clearance.as_ref().expect("Clearance should be extracted");
+            assert_eq!(clr.value, TriState::Yes);
+
+            let exp = experience.as_ref().expect("Experience should be extracted");
+            assert_eq!(exp.min_years, Some(7));
+
+            assert_eq!(is_new_grad, &TriState::No);
+            assert_eq!(workplace_type, &WorkplaceType::Hybrid);
+        } else {
+            panic!("Expected WorkerEvent::Job");
+        }
     }
 }

@@ -47,9 +47,24 @@ pub async fn scrape_greenhouse(
     );
 
     let resp: GreenhouseResponse = client.fetch_json(&url).await?;
-    let mut events = Vec::with_capacity(resp.jobs.len());
+    parse_greenhouse_jobs(resp.jobs, source)
+}
 
-    for job in resp.jobs {
+pub fn parse_greenhouse_payload(
+    json: &str,
+    source: &WorkerSource,
+) -> Result<Vec<WorkerEvent>, ClientError> {
+    let resp: GreenhouseResponse = serde_json::from_str(json)?;
+    parse_greenhouse_jobs(resp.jobs, source)
+}
+
+fn parse_greenhouse_jobs(
+    jobs: Vec<GreenhouseJob>,
+    source: &WorkerSource,
+) -> Result<Vec<WorkerEvent>, ClientError> {
+    let mut events = Vec::with_capacity(jobs.len());
+
+    for job in jobs {
         let role_type = RoleType::infer(&job.title, None);
         let location_str = job.location.and_then(|l| l.name).unwrap_or_default();
         let locations = loc_enrich::parse(&location_str);
@@ -149,5 +164,69 @@ mod tests {
         assert_eq!(job.title, "Software Engineer, Data Intern");
         let role_type = RoleType::infer(&job.title, None);
         assert_eq!(role_type, RoleType::Internship);
+    }
+
+    #[test]
+    fn test_parse_greenhouse_enrichment() {
+        let json = r#"{
+            "jobs": [
+                {
+                    "id": 999123,
+                    "title": "Lead Security Engineer",
+                    "absolute_url": "https://boards.greenhouse.io/acme/jobs/999123",
+                    "location": { "name": "San Francisco, CA (Hybrid)" },
+                    "updated_at": "2026-10-01T12:00:00Z",
+                    "content": "Must have an active Secret clearance. We do not provide visa sponsorship. Requires 6+ years experience in Rust.",
+                    "pay_input_ranges": [
+                        {
+                            "min_cents": 16000000,
+                            "max_cents": 21000000,
+                            "currency": "USD"
+                        }
+                    ]
+                }
+            ]
+        }"#;
+
+        let source = WorkerSource {
+            id: "src-gh".to_string(),
+            kind: scrape_core::SourceKind::Greenhouse,
+            name: "Acme".to_string(),
+            identifier: "acme".to_string(),
+            config: serde_json::Value::Null,
+        };
+
+        let events = parse_greenhouse_payload(json, &source).unwrap();
+        assert_eq!(events.len(), 1);
+
+        if let WorkerEvent::Job {
+            salary,
+            sponsorship,
+            clearance,
+            experience,
+            is_new_grad,
+            workplace_type,
+            ..
+        } = &events[0]
+        {
+            let sal = salary.as_ref().expect("Salary should be extracted from pay_input_ranges");
+            assert_eq!(sal.min, Some(160000));
+            assert_eq!(sal.max, Some(210000));
+            assert_eq!(sal.currency, "USD");
+
+            let spon = sponsorship.as_ref().expect("Sponsorship should be extracted");
+            assert_eq!(spon.value, TriState::No);
+
+            let clr = clearance.as_ref().expect("Clearance should be extracted");
+            assert_eq!(clr.value, TriState::Yes);
+
+            let exp = experience.as_ref().expect("Experience should be extracted");
+            assert_eq!(exp.min_years, Some(6));
+
+            assert_eq!(is_new_grad, &TriState::No);
+            assert_eq!(workplace_type, &WorkplaceType::Hybrid);
+        } else {
+            panic!("Expected WorkerEvent::Job");
+        }
     }
 }

@@ -17,7 +17,7 @@ export interface SalaryRangeFilterProps {
 const MAX_SLIDER_VAL = 500000;
 const SLIDER_STEP = 5000;
 
-function parseSalaryInput(raw: string): number | null {
+export function parseSalaryInput(raw: string): number | null {
   const trimmed = raw.trim().toLowerCase().replace(/[$,]/g, "");
   if (!trimmed) return null;
   if (trimmed.endsWith("k")) {

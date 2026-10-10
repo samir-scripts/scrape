@@ -285,4 +285,74 @@ mod tests {
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].id, run.id);
     }
+
+    #[tokio::test]
+    async fn test_scrape_run_logs_persistence_and_ordering() {
+        let pool = init_memory_db().await.unwrap();
+
+        let run = RunsRepo::start(&pool, TriggerType::Schedule).await.unwrap();
+
+        // 1. Add log entries across different levels and source scopes
+        RunsRepo::add_log(
+            &pool,
+            &run.id,
+            LogLevel::Info,
+            Some("source-gh-stripe"),
+            "Discovered 25 postings from Greenhouse API",
+        )
+        .await
+        .unwrap();
+
+        RunsRepo::add_log(
+            &pool,
+            &run.id,
+            LogLevel::Warn,
+            Some("source-gh-stripe"),
+            "HTTP 429 received, backing off 1500ms",
+        )
+        .await
+        .unwrap();
+
+        RunsRepo::add_log(
+            &pool,
+            &run.id,
+            LogLevel::Error,
+            Some("source-lever-figma"),
+            "Connection reset by peer while parsing payload",
+        )
+        .await
+        .unwrap();
+
+        RunsRepo::add_log(
+            &pool,
+            &run.id,
+            LogLevel::Info,
+            None,
+            "Scrape run completed with 1 failure",
+        )
+        .await
+        .unwrap();
+
+        // 2. Query logs for the run
+        let logs = RunsRepo::get_logs(&pool, &run.id).await.unwrap();
+        assert_eq!(logs.len(), 4);
+
+        // 3. Verify monotonic ordering and content preservation
+        assert_eq!(logs[0].level, LogLevel::Info);
+        assert_eq!(logs[0].source_id.as_deref(), Some("source-gh-stripe"));
+        assert_eq!(logs[1].level, LogLevel::Warn);
+        assert_eq!(logs[2].level, LogLevel::Error);
+        assert_eq!(logs[2].source_id.as_deref(), Some("source-lever-figma"));
+        assert_eq!(logs[3].level, LogLevel::Info);
+        assert_eq!(logs[3].source_id, None);
+
+        // Check timestamps are non-decreasing
+        for i in 0..logs.len() - 1 {
+            assert!(logs[i].timestamp <= logs[i + 1].timestamp);
+        }
+
+        // 4. Verify querying an unknown or separate run ID returns empty
+        let empty_logs = RunsRepo::get_logs(&pool, "non-existent-run").await.unwrap();
+        assert!(empty_logs.is_empty());
+    }
 }

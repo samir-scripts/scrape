@@ -1,4 +1,4 @@
-use scrape_core::{RoleType, SourceKind, WorkerEvent, WorkerSource};
+use scrape_core::{RoleType, SourceKind, TriState, WorkerEvent, WorkerSource, WorkplaceType};
 use scrape_worker::adapters::jsonld::extract_job_postings_from_html;
 use scrape_worker::adapters::selector::extract_jobs_with_selectors;
 use std::fs;
@@ -236,3 +236,107 @@ fn test_detect_fixtures() {
     assert_eq!(res.identifier, "figma");
     assert_eq!(res.name, "Figma Careers");
 }
+
+#[test]
+fn test_jsonld_enrichment() {
+    let html = r#"<!DOCTYPE html>
+<html>
+<head>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "JobPosting",
+  "title": "Principal Cyber Operations Engineer",
+  "description": "Looking for senior talent with 8+ years of engineering experience.",
+  "identifier": {
+    "@type": "PropertyValue",
+    "name": "Lockheed",
+    "value": "req-99001"
+  },
+  "datePosted": "2026-10-05",
+  "employmentType": "FULL_TIME",
+  "hiringOrganization": {
+    "@type": "Organization",
+    "name": "Lockheed Martin"
+  },
+  "jobLocation": {
+    "@type": "Place",
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": "Washington",
+      "addressRegion": "DC",
+      "addressCountry": "US"
+    }
+  },
+  "jobLocationType": "TELECOMMUTE",
+  "baseSalary": {
+    "@type": "MonetaryAmount",
+    "currency": "USD",
+    "value": {
+      "@type": "QuantitativeValue",
+      "minValue": 185000,
+      "maxValue": 245000,
+      "unitText": "YEAR"
+    }
+  },
+  "securityClearanceRequirement": "Active Top Secret clearance required",
+  "eligibilityToWorkRequirement": "Must be a US Citizen. No visa sponsorship provided."
+}
+</script>
+</head>
+<body><h1>Job Details</h1></body>
+</html>"#;
+
+    let source = WorkerSource {
+        id: "src-defense".to_string(),
+        kind: SourceKind::Jsonld,
+        name: "Defense Corp".to_string(),
+        identifier: "https://defense.example.com/careers".to_string(),
+        config: serde_json::Value::Null,
+    };
+
+    let events = extract_job_postings_from_html(html, "https://defense.example.com/careers", &source);
+    assert_eq!(events.len(), 1);
+
+    if let WorkerEvent::Job {
+        title,
+        company,
+        salary,
+        locations,
+        workplace_type,
+        sponsorship,
+        clearance,
+        experience,
+        is_new_grad,
+        ..
+    } = &events[0]
+    {
+        assert_eq!(title, "Principal Cyber Operations Engineer");
+        assert_eq!(company, "Lockheed Martin");
+
+        let sal = salary.as_ref().expect("Salary should be extracted");
+        assert_eq!(sal.min, Some(185000));
+        assert_eq!(sal.max, Some(245000));
+        assert_eq!(sal.currency, "USD");
+
+        assert_eq!(workplace_type, &WorkplaceType::Remote);
+
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].city.as_deref(), Some("Washington"));
+        assert_eq!(locations[0].region_code.as_deref(), Some("US-DC"));
+
+        let clr = clearance.as_ref().expect("Clearance requirement should be extracted");
+        assert_eq!(clr.value, TriState::Yes);
+
+        let spon = sponsorship.as_ref().expect("Sponsorship requirement should be extracted");
+        assert_eq!(spon.value, TriState::No);
+
+        let exp = experience.as_ref().expect("Experience should be extracted");
+        assert_eq!(exp.min_years, Some(8));
+
+        assert_eq!(is_new_grad, &TriState::No);
+    } else {
+        panic!("Expected WorkerEvent::Job");
+    }
+}
+

@@ -13,6 +13,24 @@ const OPTIONS: { val: TriState; label: string }[] = [
   { val: "unknown", label: "N/A" },
 ];
 
+export function toggleTriStateSelection(
+  current: TriState[] | null,
+  val: TriState
+): TriState[] | null {
+  const currentList = current || [];
+  let next: TriState[];
+  if (currentList.includes(val)) {
+    next = currentList.filter((v) => v !== val);
+  } else {
+    next = [...currentList, val];
+  }
+  // If all 3 are selected or none are selected, treat as null (no filter)
+  if (next.length === 0 || next.length === 3) {
+    return null;
+  }
+  return next;
+}
+
 export function TriStateFilter({
   label,
   selected,
@@ -22,18 +40,7 @@ export function TriStateFilter({
   const currentList = selected || [];
 
   const handleToggle = (val: TriState) => {
-    let next: TriState[];
-    if (currentList.includes(val)) {
-      next = currentList.filter((v) => v !== val);
-    } else {
-      next = [...currentList, val];
-    }
-    // If all 3 are selected or none are selected, treat as null (no filter)
-    if (next.length === 0 || next.length === 3) {
-      onChange(null);
-    } else {
-      onChange(next);
-    }
+    onChange(toggleTriStateSelection(selected, val));
   };
 
   const isSelected = (val: TriState) => {

@@ -536,11 +536,17 @@ impl JobsRepo {
         // Remote policy
         if let Some(rem) = &filter.remote {
             match rem.as_str() {
-                "remote_only" => {
+                "remote" | "remote_only" => {
                     conditions.push("(workplace_type = 'remote' OR EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id = jobs.id AND jl.is_remote = 1))".to_string());
                 }
                 "exclude_remote" => {
                     conditions.push("(workplace_type != 'remote' AND NOT EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id = jobs.id AND jl.is_remote = 1))".to_string());
+                }
+                "hybrid" | "hybrid_only" => {
+                    conditions.push("workplace_type = 'hybrid'".to_string());
+                }
+                "onsite" | "onsite_only" => {
+                    conditions.push("workplace_type = 'onsite'".to_string());
                 }
                 _ => {}
             }
@@ -1442,5 +1448,305 @@ mod tests {
         .unwrap();
         assert_eq!(preview.total, 2);
         assert_eq!(preview.kept, 1);
+    }
+
+    #[tokio::test]
+    async fn test_upsert_scraped_preserves_user_triage_state_and_updates_enrichment() {
+        let pool = init_memory_db().await.unwrap();
+
+        // 1. Initial scrape ingestion
+        let initial_job = ScrapedJob {
+            dedupe_key: "lever:stripe:eng-1".to_string(),
+            source_id: None,
+            external_id: Some("eng-1".to_string()),
+            title: "Staff Data Engineer".to_string(),
+            company: "Stripe".to_string(),
+            role_type: RoleType::FullTime,
+            location: Some("San Francisco, CA".to_string()),
+            url: "https://stripe.com/jobs/eng-1".to_string(),
+            date_posted: Some("2026-10-01T00:00:00Z".to_string()),
+            salary_min: None,
+            salary_max: None,
+            salary_currency: None,
+            salary_interval: None,
+            salary_raw: None,
+            salary_source: None,
+            workplace_type: WorkplaceType::Onsite,
+            sponsorship: TriState::Unknown,
+            sponsorship_evidence: None,
+            clearance: TriState::Unknown,
+            clearance_level: None,
+            clearance_evidence: None,
+            experience_min: None,
+            experience_max: None,
+            experience_raw: None,
+            is_new_grad: TriState::No,
+            experience_evidence: None,
+            description_text: Some("Initial posting text".to_string()),
+            locations: vec![ParsedLocation {
+                raw: "San Francisco, CA".to_string(),
+                city: Some("San Francisco".to_string()),
+                region_code: Some("US-CA".to_string()),
+                country_code: Some("US".to_string()),
+                is_remote: false,
+            }],
+        };
+
+        let result = JobsRepo::upsert_scraped(&pool, &[initial_job]).await.unwrap();
+        assert_eq!(result.inserted, 1);
+
+        // Fetch inserted job
+        let jobs = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+        assert_eq!(jobs.total, 1);
+        let job_id = jobs.items[0].id.clone();
+        assert_eq!(jobs.items[0].status, JobStatus::Scraped);
+        assert_eq!(jobs.items[0].notes, None);
+
+        // 2. User triages job: moves to 'Applied' and adds custom notes
+        JobsRepo::update_status(&pool, &job_id, JobStatus::Applied).await.unwrap();
+        JobsRepo::update_notes(&pool, &job_id, Some("Referred by Jane Doe")).await.unwrap();
+
+        // Verify user triage is recorded
+        let triaged_job = JobsRepo::get(&pool, &job_id).await.unwrap();
+        assert_eq!(triaged_job.status, JobStatus::Applied);
+        assert_eq!(triaged_job.notes.as_deref(), Some("Referred by Jane Doe"));
+
+        // 3. Re-scrape same job: updated salary and changed location
+        let updated_job = ScrapedJob {
+            dedupe_key: "lever:stripe:eng-1".to_string(),
+            source_id: None,
+            external_id: Some("eng-1".to_string()),
+            title: "Staff Data Engineer".to_string(),
+            company: "Stripe".to_string(),
+            role_type: RoleType::FullTime,
+            location: Some("Seattle, WA".to_string()),
+            url: "https://stripe.com/jobs/eng-1".to_string(),
+            date_posted: Some("2026-10-01T00:00:00Z".to_string()),
+            salary_min: Some(210_000),
+            salary_max: Some(275_000),
+            salary_currency: Some("USD".to_string()),
+            salary_interval: Some(SalaryInterval::Year),
+            salary_raw: Some("$210K - $275K".to_string()),
+            salary_source: Some(SalarySource::Structured),
+            workplace_type: WorkplaceType::Hybrid,
+            sponsorship: TriState::Yes,
+            sponsorship_evidence: Some("Sponsors H1B".to_string()),
+            clearance: TriState::No,
+            clearance_level: None,
+            clearance_evidence: None,
+            experience_min: Some(8),
+            experience_max: None,
+            experience_raw: Some("8+ years".to_string()),
+            is_new_grad: TriState::No,
+            experience_evidence: None,
+            description_text: Some("Updated description text".to_string()),
+            locations: vec![ParsedLocation {
+                raw: "Seattle, WA".to_string(),
+                city: Some("Seattle".to_string()),
+                region_code: Some("US-WA".to_string()),
+                country_code: Some("US".to_string()),
+                is_remote: false,
+            }],
+        };
+
+        let result2 = JobsRepo::upsert_scraped(&pool, &[updated_job]).await.unwrap();
+        assert_eq!(result2.inserted, 0);
+        assert_eq!(result2.updated, 1);
+
+        // 4. Assert user state is strictly PRESERVED, while enrichment data is UPDATED
+        let after_rescrape = JobsRepo::get(&pool, &job_id).await.unwrap();
+        assert_eq!(after_rescrape.status, JobStatus::Applied); // Preserved!
+        assert_eq!(after_rescrape.notes.as_deref(), Some("Referred by Jane Doe")); // Preserved!
+        assert_eq!(after_rescrape.salary_min, Some(210_000)); // Updated!
+        assert_eq!(after_rescrape.salary_max, Some(275_000)); // Updated!
+        assert_eq!(after_rescrape.workplace_type, WorkplaceType::Hybrid); // Updated!
+        assert_eq!(after_rescrape.sponsorship, TriState::Yes); // Updated!
+        assert_eq!(after_rescrape.experience_min, Some(8)); // Updated!
+
+        // Assert job_locations child table replaced old locations without orphans
+        assert_eq!(after_rescrape.locations.len(), 1);
+        assert_eq!(after_rescrape.locations[0].city.as_deref(), Some("Seattle"));
+        assert_eq!(after_rescrape.locations[0].region_code.as_deref(), Some("US-WA"));
+    }
+
+    #[tokio::test]
+    async fn test_reclassify_jobs_extracts_enrichment_from_description() {
+        let pool = init_memory_db().await.unwrap();
+
+        // Insert job with no structured enrichment, only plain description text
+        let raw_job = ScrapedJob {
+            dedupe_key: "gh:unclassified:01".to_string(),
+            source_id: None,
+            external_id: Some("01".to_string()),
+            title: "Security Analyst".to_string(),
+            company: "DefenseCo".to_string(),
+            role_type: RoleType::FullTime,
+            location: Some("Washington, DC".to_string()),
+            url: "https://example.com/01".to_string(),
+            date_posted: Some("2026-10-05T00:00:00Z".to_string()),
+            salary_min: None,
+            salary_max: None,
+            salary_currency: None,
+            salary_interval: None,
+            salary_raw: None,
+            salary_source: None,
+            workplace_type: WorkplaceType::Unknown,
+            sponsorship: TriState::Unknown,
+            sponsorship_evidence: None,
+            clearance: TriState::Unknown,
+            clearance_level: None,
+            clearance_evidence: None,
+            experience_min: None,
+            experience_max: None,
+            experience_raw: None,
+            is_new_grad: TriState::Unknown,
+            experience_evidence: None,
+            description_text: Some(
+                "Annual compensation: $140,000 to $170,000. \
+                 Requires 4+ years of relevant experience. \
+                 Must hold an active Secret security clearance. \
+                 Unfortunately, we cannot sponsor work visas."
+                    .to_string(),
+            ),
+            locations: vec![],
+        };
+
+        JobsRepo::upsert_scraped(&pool, &[raw_job]).await.unwrap();
+
+        // Simulate pre-enrichment historic posting (version = 0)
+        let initial = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+        assert_eq!(initial.items[0].salary_min, None);
+        assert_eq!(initial.items[0].sponsorship, TriState::Unknown);
+        assert_eq!(initial.items[0].clearance, TriState::Unknown);
+
+        sqlx::query("UPDATE jobs SET enrichment_version = 0 WHERE id = ?")
+            .bind(&initial.items[0].id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Run reclassification engine
+        let updated_count = JobsRepo::reclassify_jobs(&pool).await.unwrap();
+        assert_eq!(updated_count, 1);
+
+        // Verify natural language enrichment populated columns
+        let reclassified = JobsRepo::get(&pool, &initial.items[0].id).await.unwrap();
+        assert_eq!(reclassified.salary_min, Some(140_000));
+        assert_eq!(reclassified.salary_max, Some(170_000));
+        assert_eq!(reclassified.experience_min, Some(4));
+        assert_eq!(reclassified.clearance, TriState::Yes);
+        assert_eq!(reclassified.sponsorship, TriState::No);
+        assert!(reclassified.clearance_evidence.is_some());
+        assert!(reclassified.sponsorship_evidence.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_multi_filter_combination_query() {
+        let pool = init_memory_db().await.unwrap();
+
+        // Insert jobs across varied attribute permutations
+        let jobs = vec![
+            ScrapedJob {
+                dedupe_key: "t1".to_string(),
+                source_id: None,
+                external_id: Some("1".to_string()),
+                title: "Frontend Engineer".to_string(),
+                company: "Vercel".to_string(),
+                role_type: RoleType::FullTime,
+                location: Some("Remote".to_string()),
+                url: "https://vercel.com/1".to_string(),
+                date_posted: Some("2026-10-01".to_string()),
+                salary_min: Some(160_000),
+                salary_max: Some(200_000),
+                salary_currency: Some("USD".to_string()),
+                salary_interval: Some(SalaryInterval::Year),
+                salary_raw: None,
+                salary_source: None,
+                workplace_type: WorkplaceType::Remote,
+                sponsorship: TriState::Yes,
+                sponsorship_evidence: None,
+                clearance: TriState::No,
+                clearance_level: None,
+                clearance_evidence: None,
+                experience_min: Some(2),
+                experience_max: Some(5),
+                experience_raw: None,
+                is_new_grad: TriState::No,
+                experience_evidence: None,
+                description_text: None,
+                locations: vec![ParsedLocation {
+                    raw: "Remote, US".to_string(),
+                    city: None,
+                    region_code: None,
+                    country_code: Some("US".to_string()),
+                    is_remote: true,
+                }],
+            },
+            ScrapedJob {
+                dedupe_key: "t2".to_string(),
+                source_id: None,
+                external_id: Some("2".to_string()),
+                title: "Security Engineer".to_string(),
+                company: "Lockheed".to_string(),
+                role_type: RoleType::FullTime,
+                location: Some("Arlington, VA".to_string()),
+                url: "https://lockheed.com/2".to_string(),
+                date_posted: Some("2026-10-02".to_string()),
+                salary_min: Some(130_000),
+                salary_max: Some(170_000),
+                salary_currency: Some("USD".to_string()),
+                salary_interval: Some(SalaryInterval::Year),
+                salary_raw: None,
+                salary_source: None,
+                workplace_type: WorkplaceType::Onsite,
+                sponsorship: TriState::No,
+                sponsorship_evidence: None,
+                clearance: TriState::Yes,
+                clearance_level: None,
+                clearance_evidence: None,
+                experience_min: Some(5),
+                experience_max: Some(8),
+                experience_raw: None,
+                is_new_grad: TriState::No,
+                experience_evidence: None,
+                description_text: None,
+                locations: vec![ParsedLocation {
+                    raw: "Arlington, VA, US".to_string(),
+                    city: Some("Arlington".to_string()),
+                    region_code: Some("US-VA".to_string()),
+                    country_code: Some("US".to_string()),
+                    is_remote: false,
+                }],
+            },
+        ];
+
+        JobsRepo::upsert_scraped(&pool, &jobs).await.unwrap();
+
+        // Query with 5 filters combined simultaneously
+        let combined_filter = JobFilter {
+            salary_min: Some(150_000),
+            salary_max: Some(220_000),
+            salary_include_unknown: Some(false),
+            experience_max: Some(6),
+            experience_include_unknown: Some(false),
+            sponsorship: Some(vec![TriState::Yes]),
+            clearance: Some(vec![TriState::No]),
+            remote: Some("remote".to_string()),
+            search: Some("Frontend".to_string()),
+            ..Default::default()
+        };
+
+        let result = JobsRepo::list(&pool, combined_filter).await.unwrap();
+        assert_eq!(result.total, 1);
+        assert_eq!(result.items[0].company, "Vercel");
+
+        // Mutate one dimension (e.g. require clearance) and ensure empty result without SQL syntax errors
+        let non_matching_filter = JobFilter {
+            clearance: Some(vec![TriState::Yes]),
+            remote: Some("remote".to_string()),
+            ..Default::default()
+        };
+        let result2 = JobsRepo::list(&pool, non_matching_filter).await.unwrap();
+        assert_eq!(result2.total, 0);
     }
 }

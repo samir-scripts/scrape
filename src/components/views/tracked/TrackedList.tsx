@@ -23,7 +23,30 @@ interface TrackedListProps {
   onOpenUrl: (url: string) => void;
 }
 
-type SortField = "company" | "title" | "status" | "salary" | "date_added";
+export type SortField = "company" | "title" | "status" | "salary" | "date_added";
+
+export function compareTrackedJobs(
+  a: Job,
+  b: Job,
+  sortField: SortField,
+  sortAsc: boolean
+): number {
+  let cmp = 0;
+  if (sortField === "company") {
+    cmp = a.company.localeCompare(b.company);
+  } else if (sortField === "title") {
+    cmp = a.title.localeCompare(b.title);
+  } else if (sortField === "status") {
+    cmp = a.status.localeCompare(b.status);
+  } else if (sortField === "salary") {
+    const aSal = a.salary_min ?? a.salary_max ?? -1;
+    const bSal = b.salary_min ?? b.salary_max ?? -1;
+    cmp = aSal - bSal;
+  } else {
+    cmp = a.date_added.localeCompare(b.date_added);
+  }
+  return sortAsc ? cmp : -cmp;
+}
 
 export function TrackedList({
   jobs,
@@ -43,23 +66,9 @@ export function TrackedList({
     }
   };
 
-  const sortedJobs = [...jobs].sort((a, b) => {
-    let cmp = 0;
-    if (sortField === "company") {
-      cmp = a.company.localeCompare(b.company);
-    } else if (sortField === "title") {
-      cmp = a.title.localeCompare(b.title);
-    } else if (sortField === "status") {
-      cmp = a.status.localeCompare(b.status);
-    } else if (sortField === "salary") {
-      const aSal = a.salary_min ?? a.salary_max ?? -1;
-      const bSal = b.salary_min ?? b.salary_max ?? -1;
-      cmp = aSal - bSal;
-    } else {
-      cmp = a.date_added.localeCompare(b.date_added);
-    }
-    return sortAsc ? cmp : -cmp;
-  });
+  const sortedJobs = [...jobs].sort((a, b) =>
+    compareTrackedJobs(a, b, sortField, sortAsc)
+  );
 
   if (jobs.length === 0) {
     return (
