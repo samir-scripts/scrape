@@ -34,6 +34,22 @@ export function Modal({
     }
   }, [isOpen]);
 
+  // Capture-phase keydown listener for Escape: guarantees modal closes immediately regardless of focus/input state
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [isOpen, onClose]);
+
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;

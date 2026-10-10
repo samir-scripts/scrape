@@ -25,6 +25,7 @@
 17. [Tracked Kanban Board: Header Seam Bleed, Asymmetrical Column Capping, and Scrollbar Gutter Misalignment](#17-tracked-kanban-board-header-seam-bleed-asymmetrical-column-capping-and-scrollbar-gutter-misalignment)
 18. [Cross-View Selection Orphan & Asymmetric Hotkey Listener Churn in Kanban Navigation](#18-cross-view-selection-orphan--asymmetric-hotkey-listener-churn-in-kanban-navigation)
 19. [Global Hotkeys Lifecycle Severance & View Unmount Void in Root Navigation](#19-global-hotkeys-lifecycle-severance--view-unmount-void-in-root-navigation)
+20. [Modal Window Escape Trapping & Dialog Event Dissociation](#20-modal-window-escape-trapping--dialog-event-dissociation)
 
 ---
 
@@ -340,5 +341,26 @@
      - **Tier 2 (View-Specific Shortcuts):** Keep `useHotkeys(options)` scoped strictly to in-view item/column navigation and actions (`J`/`K`/`H`/`L`, `Shift+H`/`Shift+L`, `A`, `X`, `V`, `U`, `Enter`), eliminating duplicate tab-switch handlers or unmount dead zones.
   2. **Footer Telemetry Synchronization:**
      Ensure `Footer.tsx` displays consistent `Q/E SWITCH TAB` and `ESC CLOSE` hints across all views (`metrics`, `scraper`, `settings`).
+
+---
+
+### 20. Modal Window Escape Trapping & Dialog Event Dissociation
+
+- **Phase:** Phase 3 / Phase 4 (Modal Dialogs & Keyboard Ergonomics)
+- **Error Signature:**
+  Pressing `Escape` while a modal window is open (such as the "ADD SCRAPE JOB" dialog) fails to close the window. If an input field is focused, the first `Escape` merely blurs the input, and subsequent `Escape` keypresses are completely ignored, leaving the modal stuck open until closed via mouse click.
+- **Root Cause:**
+  1. **Absence of Window Keydown Listener in Modal:**
+     [`Modal.tsx`](file:///Users/samirkatakamsetty/Desktop/Home/Data%20Engineering%20Projects/scrape/src/components/ui/Modal.tsx) relied exclusively on the native HTML `<dialog>` element's `cancel` event (`dialog.addEventListener("cancel", handleCancel)`).
+  2. **Dialog Event Dissociation on Input Focus:**
+     Native `<dialog>` elements only emit a `cancel` event when focus is currently inside the dialog and not captured or intercepted by ancestor key handlers. When the user was typing inside an `<input>` in `AddSourceModal`, `useGlobalHotkeys` caught the `Escape` key on `window`, saw `isInput === true`, executed `(activeEl as HTMLElement).blur()`, and returned without closing the modal.
+  3. **Loss of Focus to Document Body:**
+     Once `activeEl.blur()` executed, focus shifted to `document.body` (outside the `<dialog>`). Subsequent `Escape` keypresses neither triggered `cancel` on the `<dialog>` nor matched any open drawers in `useGlobalHotkeys`, resulting in complete dead-key failure.
+- **Solution & Rule:**
+  1. **Capture-Phase Window Escape Listener in Modal:**
+     In `Modal.tsx`, attach a capture-phase keydown listener to `window` (`window.addEventListener("keydown", handleKeyDown, true)`) while `isOpen === true`. When `e.key === "Escape"`, call `e.preventDefault()`, `e.stopPropagation()`, and `onClose()`.
+  2. **Overlay Priority Guarantee:**
+     Capture-phase execution ensures modal dismissals execute before any child input blurs or background global hotkey handlers can intercept the event, guaranteeing 100% reliable single-press Escape dismissals across all dialogs and drawers.
+
 
 

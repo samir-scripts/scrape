@@ -142,6 +142,7 @@ Default OS scrollbars (with rounded pill corners, transparent overlays, or OS-na
 
 ## Acceptance Criteria
 - [x] All five views (`DISCOVERED`, `TRACKED`, `METRICS`, `SCRAPER`, `SETTINGS`) reachable by mouse and keyboard only via permanent root-level `useGlobalHotkeys` (`Q`/`E`/`[`/`]`).
+- [x] All modal dialog windows (`<Modal>`, `AddSourceModal`, `FilterPanel`, `JobDetailDrawer`) dismiss immediately on single `ESC` keypress via capture-phase listeners, regardless of active input focus.
 - [x] Triage 20 jobs without touching the mouse.
 - [x] Zero `border-radius`, `box-shadow`, or third-party UI components in the bundle (grep check in CI).
 - [x] Theme switch persists across restarts via `app_settings`.
