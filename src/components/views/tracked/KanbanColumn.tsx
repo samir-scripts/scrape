@@ -143,9 +143,19 @@ export function KanbanColumn({
                 }`}
               >
                 <div className="flex items-center justify-between gap-1">
-                  <span className="font-bold text-xs truncate max-w-[180px]">
-                    {job.company}
-                  </span>
+                  <div className="flex items-center gap-1 min-w-0">
+                    {job.favorited && (
+                      <span
+                        className="text-[var(--color-lime)] font-black text-xs shrink-0"
+                        title="Favorited (Protected)"
+                      >
+                        ★
+                      </span>
+                    )}
+                    <span className="font-bold text-xs truncate max-w-[170px]">
+                      {job.company}
+                    </span>
+                  </div>
                   <Tag
                     label={job.role_type.toUpperCase()}
                     variant={isSelected ? "outline" : "muted"}

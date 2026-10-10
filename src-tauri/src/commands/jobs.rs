@@ -83,6 +83,50 @@ pub async fn preview_filter_impact(
 }
 
 #[tauri::command]
-pub async fn list_location_options(state: State<'_, AppState>) -> Result<LocationOptions> {
+pub async fn list_location_options(state: State<'_, AppState>,
+) -> Result<LocationOptions> {
     JobsRepo::list_location_options(&state.db).await
+}
+
+#[tauri::command]
+pub async fn toggle_job_favorite(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<Job> {
+    let job = JobsRepo::toggle_favorite(&state.db, &id).await?;
+    let _ = app.emit("jobs://changed", &job);
+    Ok(job)
+}
+
+#[tauri::command]
+pub async fn set_job_favorite(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    favorited: bool,
+) -> Result<Job> {
+    let job = JobsRepo::set_favorite(&state.db, &id, favorited).await?;
+    let _ = app.emit("jobs://changed", &job);
+    Ok(job)
+}
+
+#[tauri::command]
+pub async fn cleanup_expired_jobs(
+    state: State<'_, AppState>,
+    source_id: Option<String>,
+) -> Result<u64> {
+    if let Some(src_id) = source_id {
+        use crate::db::sources::SourcesRepo;
+        let source = SourcesRepo::get(&state.db, &src_id).await?;
+        JobsRepo::prune_expired_by_source(
+            &state.db,
+            &source.id,
+            source.retention_days,
+            &source.retention_policy,
+        )
+        .await
+    } else {
+        JobsRepo::prune_all_expired(&state.db).await
+    }
 }

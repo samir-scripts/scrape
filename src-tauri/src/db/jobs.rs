@@ -28,6 +28,8 @@ pub struct Job {
     pub status: JobStatus,
     pub status_changed_at: String,
     pub notes: Option<String>,
+    pub favorited: bool,
+    pub favorited_at: Option<String>,
 
     // Enrichment fields
     #[ts(type = "number | null")]
@@ -81,6 +83,7 @@ pub enum JobSort {
     SalaryAsc,
     ExperienceDesc,
     ExperienceAsc,
+    FavoritedDesc,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
@@ -95,6 +98,7 @@ pub struct JobFilter {
     pub limit: Option<i64>,
     #[ts(type = "number | null")]
     pub offset: Option<i64>,
+    pub favorited_only: Option<bool>,
 
     // Salary bounds
     #[ts(type = "number | null")]
@@ -210,7 +214,7 @@ impl JobsRepo {
                    sponsorship_evidence, clearance, clearance_level,
                    clearance_evidence, experience_min, experience_max,
                    experience_raw, is_new_grad, experience_evidence,
-                   description_text, enrichment_version
+                   description_text, enrichment_version, favorited, favorited_at
             FROM jobs
             WHERE id = ?
             "#,
@@ -348,6 +352,12 @@ impl JobsRepo {
             _ => TriState::Unknown,
         };
 
+        let favorited_int: i64 = r.try_get("favorited").unwrap_or(0);
+        let favorited_at: Option<String> = r
+            .try_get::<Option<String>, _>("favorited_at")
+            .unwrap_or(None)
+            .filter(|s| !s.trim().is_empty());
+
         Ok(Job {
             id: r.get("id"),
             dedupe_key: r.get("dedupe_key"),
@@ -364,6 +374,8 @@ impl JobsRepo {
             status,
             status_changed_at: r.get("status_changed_at"),
             notes: r.get("notes"),
+            favorited: favorited_int == 1,
+            favorited_at,
             salary_min: r.get("salary_min"),
             salary_max: r.get("salary_max"),
             salary_currency: r.get("salary_currency"),
@@ -420,6 +432,11 @@ impl JobsRepo {
         // Source ID
         if filter.source_id.is_some() {
             conditions.push("source_id = ?".to_string());
+        }
+
+        // Favorited only filter
+        if filter.favorited_only == Some(true) {
+            conditions.push("favorited = 1".to_string());
         }
 
         // Search term
@@ -610,6 +627,7 @@ impl JobsRepo {
             JobSort::SalaryAsc => "salary_min ASC, date_added DESC",
             JobSort::ExperienceDesc => "experience_min DESC, date_added DESC",
             JobSort::ExperienceAsc => "experience_min ASC, date_added DESC",
+            JobSort::FavoritedDesc => "favorited DESC, date_added DESC",
         };
 
         // Query total count
@@ -653,7 +671,7 @@ impl JobsRepo {
                    sponsorship_evidence, clearance, clearance_level,
                    clearance_evidence, experience_min, experience_max,
                    experience_raw, is_new_grad, experience_evidence,
-                   description_text, enrichment_version
+                   description_text, enrichment_version, favorited, favorited_at
             FROM jobs
             {}
             ORDER BY {}
@@ -787,6 +805,125 @@ impl JobsRepo {
         }
 
         Self::get(pool, id).await
+    }
+
+    pub async fn toggle_favorite(pool: &SqlitePool, id: &str) -> Result<Job> {
+        use sqlx::Row;
+        let current = sqlx::query("SELECT favorited FROM jobs WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("Job {} not found", id)))?;
+
+        let current_fav: i64 = current.get("favorited");
+        let new_fav = if current_fav == 1 { 0 } else { 1 };
+        let now = now_iso();
+        let favorited_at = if new_fav == 1 { Some(now) } else { None };
+
+        sqlx::query(
+            r#"
+            UPDATE jobs
+            SET favorited = ?1, favorited_at = ?2
+            WHERE id = ?3
+            "#,
+        )
+        .bind(new_fav)
+        .bind(&favorited_at)
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+        Self::get(pool, id).await
+    }
+
+    pub async fn set_favorite(pool: &SqlitePool, id: &str, favorited: bool) -> Result<Job> {
+        let fav_int = if favorited { 1 } else { 0 };
+        let now = now_iso();
+        let favorited_at = if favorited { Some(now) } else { None };
+
+        let rows = sqlx::query(
+            r#"
+            UPDATE jobs
+            SET favorited = ?1, favorited_at = ?2
+            WHERE id = ?3
+            "#,
+        )
+        .bind(fav_int)
+        .bind(&favorited_at)
+        .bind(id)
+        .execute(pool)
+        .await?
+        .rows_affected();
+
+        if rows == 0 {
+            return Err(AppError::NotFound(format!("Job {} not found", id)));
+        }
+
+        Self::get(pool, id).await
+    }
+
+    pub async fn prune_expired_by_source(
+        pool: &SqlitePool,
+        source_id: &str,
+        retention_days: i64,
+        policy: &str,
+    ) -> Result<u64> {
+        if retention_days <= 0 {
+            return Ok(0); // 0 = keep forever
+        }
+
+        let cutoff = format!("-{} days", retention_days);
+
+        // Absolute safety shield:
+        // Never delete:
+        // 1. User-tracked stages ('applied', 'interviewing', 'offer', 'rejected')
+        // 2. Postings with candidate notes (notes IS NOT NULL AND notes != '')
+        // 3. Favorited postings (favorited = 1)
+        let query_str = if policy == "all" {
+            r#"
+            DELETE FROM jobs
+            WHERE source_id = ?1
+              AND favorited = 0
+              AND (notes IS NULL OR notes = '')
+              AND date_added <= datetime('now', ?2)
+            "#
+        } else {
+            // Default: untracked_only (prunes only 'scraped', 'viewed', 'ignored')
+            r#"
+            DELETE FROM jobs
+            WHERE source_id = ?1
+              AND status IN ('scraped', 'viewed', 'ignored')
+              AND favorited = 0
+              AND (notes IS NULL OR notes = '')
+              AND date_added <= datetime('now', ?2)
+            "#
+        };
+
+        let result = sqlx::query(query_str)
+            .bind(source_id)
+            .bind(&cutoff)
+            .execute(pool)
+            .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    pub async fn prune_all_expired(pool: &SqlitePool) -> Result<u64> {
+        use crate::db::sources::SourcesRepo;
+        let sources = SourcesRepo::list(pool).await?;
+        let mut total = 0;
+        for source in sources {
+            if source.retention_days > 0 {
+                total += Self::prune_expired_by_source(
+                    pool,
+                    &source.id,
+                    source.retention_days,
+                    &source.retention_policy,
+                )
+                .await?;
+            }
+        }
+        Ok(total)
     }
 
     pub async fn get_status_events(pool: &SqlitePool, job_id: &str) -> Result<Vec<JobStatusEvent>> {
@@ -1859,5 +1996,243 @@ mod tests {
         let on_res = JobsRepo::list(&pool, on_filter).await.unwrap();
         assert_eq!(on_res.total, 1);
         assert_eq!(on_res.items[0].company, "Maple Tech");
+    }
+
+    #[tokio::test]
+    async fn test_toggle_and_set_favorite() {
+        let pool = init_memory_db().await.unwrap();
+
+        let job = ScrapedJob {
+            dedupe_key: "fav:1".to_string(),
+            source_id: None,
+            external_id: Some("1".to_string()),
+            title: "Staff Rust Engineer".to_string(),
+            company: "Acme Corp".to_string(),
+            role_type: RoleType::FullTime,
+            location: Some("Remote".to_string()),
+            url: "https://example.com/fav/1".to_string(),
+            date_posted: None,
+            salary_min: None,
+            salary_max: None,
+            salary_currency: None,
+            salary_interval: None,
+            salary_raw: None,
+            salary_source: None,
+            workplace_type: WorkplaceType::Remote,
+            sponsorship: TriState::Unknown,
+            sponsorship_evidence: None,
+            clearance: TriState::Unknown,
+            clearance_level: None,
+            clearance_evidence: None,
+            experience_min: None,
+            experience_max: None,
+            experience_raw: None,
+            is_new_grad: TriState::Unknown,
+            experience_evidence: None,
+            description_text: None,
+            locations: vec![],
+        };
+
+        JobsRepo::upsert_scraped(&pool, &[job]).await.unwrap();
+
+        let list = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+        let job_id = &list.items[0].id;
+        assert!(!list.items[0].favorited);
+        assert_eq!(list.items[0].favorited_at, None);
+
+        // Toggle on
+        let toggled_on = JobsRepo::toggle_favorite(&pool, job_id).await.unwrap();
+        assert!(toggled_on.favorited);
+        assert!(toggled_on.favorited_at.is_some());
+
+        // Toggle off
+        let toggled_off = JobsRepo::toggle_favorite(&pool, job_id).await.unwrap();
+        assert!(!toggled_off.favorited);
+        assert_eq!(toggled_off.favorited_at, None);
+
+        // Set favorite explicitly
+        let set_on = JobsRepo::set_favorite(&pool, job_id, true).await.unwrap();
+        assert!(set_on.favorited);
+        assert!(set_on.favorited_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_filter_favorited_only() {
+        let pool = init_memory_db().await.unwrap();
+
+        let job_a = ScrapedJob {
+            dedupe_key: "fav:a".to_string(),
+            source_id: None,
+            external_id: Some("a".to_string()),
+            title: "Job A".to_string(),
+            company: "Alpha".to_string(),
+            role_type: RoleType::FullTime,
+            location: None,
+            url: "https://example.com/a".to_string(),
+            date_posted: None,
+            salary_min: None,
+            salary_max: None,
+            salary_currency: None,
+            salary_interval: None,
+            salary_raw: None,
+            salary_source: None,
+            workplace_type: WorkplaceType::Remote,
+            sponsorship: TriState::Unknown,
+            sponsorship_evidence: None,
+            clearance: TriState::Unknown,
+            clearance_level: None,
+            clearance_evidence: None,
+            experience_min: None,
+            experience_max: None,
+            experience_raw: None,
+            is_new_grad: TriState::Unknown,
+            experience_evidence: None,
+            description_text: None,
+            locations: vec![],
+        };
+
+        let job_b = ScrapedJob {
+            dedupe_key: "fav:b".to_string(),
+            source_id: None,
+            external_id: Some("b".to_string()),
+            title: "Job B".to_string(),
+            company: "Beta".to_string(),
+            role_type: RoleType::FullTime,
+            location: None,
+            url: "https://example.com/b".to_string(),
+            date_posted: None,
+            salary_min: None,
+            salary_max: None,
+            salary_currency: None,
+            salary_interval: None,
+            salary_raw: None,
+            salary_source: None,
+            workplace_type: WorkplaceType::Remote,
+            sponsorship: TriState::Unknown,
+            sponsorship_evidence: None,
+            clearance: TriState::Unknown,
+            clearance_level: None,
+            clearance_evidence: None,
+            experience_min: None,
+            experience_max: None,
+            experience_raw: None,
+            is_new_grad: TriState::Unknown,
+            experience_evidence: None,
+            description_text: None,
+            locations: vec![],
+        };
+
+        JobsRepo::upsert_scraped(&pool, &[job_a, job_b]).await.unwrap();
+
+        let list = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+        assert_eq!(list.total, 2);
+        let id_a = list.items.iter().find(|j| j.company == "Alpha").unwrap().id.clone();
+
+        // Favorite Alpha only
+        JobsRepo::set_favorite(&pool, &id_a, true).await.unwrap();
+
+        // Filter favorited only
+        let fav_res = JobsRepo::list(&pool, JobFilter {
+            favorited_only: Some(true),
+            ..Default::default()
+        }).await.unwrap();
+
+        assert_eq!(fav_res.total, 1);
+        assert_eq!(fav_res.items[0].company, "Alpha");
+    }
+
+    #[tokio::test]
+    async fn test_retention_prune_protects_favorited_notes_and_tracked() {
+        use crate::db::sources::{CreateSourceInput, SourcesRepo};
+        use scrape_core::SourceKind;
+
+        let pool = init_memory_db().await.unwrap();
+
+        let source = SourcesRepo::create(
+            &pool,
+            CreateSourceInput {
+                kind: SourceKind::Greenhouse,
+                name: "Retention Test".to_string(),
+                identifier: "retention-test".to_string(),
+                config: None,
+                enabled: Some(true),
+                cadence: None,
+                cadence_cron: None,
+                retention_days: Some(30),
+                retention_policy: Some("untracked_only".to_string()),
+                filters: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Create 4 jobs directly in SQL with date_added = 60 days ago
+        let old_date = "2026-08-01T00:00:00Z";
+
+        // Job 1: Untracked, unfavorited, no notes (WILL BE PRUNED)
+        sqlx::query(
+            r#"
+            INSERT INTO jobs (id, dedupe_key, source_id, title, company, role_type, url, date_added, last_seen_at, status, status_changed_at, favorited)
+            VALUES ('j1', 'key1', ?1, 'Job 1', 'Co 1', 'full_time', 'url1', ?2, ?2, 'scraped', ?2, 0)
+            "#
+        )
+        .bind(&source.id)
+        .bind(old_date)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Job 2: Untracked, FAVORITED = 1 (PROTECTED)
+        sqlx::query(
+            r#"
+            INSERT INTO jobs (id, dedupe_key, source_id, title, company, role_type, url, date_added, last_seen_at, status, status_changed_at, favorited)
+            VALUES ('j2', 'key2', ?1, 'Job 2', 'Co 2', 'full_time', 'url2', ?2, ?2, 'scraped', ?2, 1)
+            "#
+        )
+        .bind(&source.id)
+        .bind(old_date)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Job 3: Untracked, has NOTES (PROTECTED)
+        sqlx::query(
+            r#"
+            INSERT INTO jobs (id, dedupe_key, source_id, title, company, role_type, url, date_added, last_seen_at, status, status_changed_at, notes, favorited)
+            VALUES ('j3', 'key3', ?1, 'Job 3', 'Co 3', 'full_time', 'url3', ?2, ?2, 'scraped', ?2, 'Jane referral', 0)
+            "#
+        )
+        .bind(&source.id)
+        .bind(old_date)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Job 4: TRACKED ('applied') (PROTECTED)
+        sqlx::query(
+            r#"
+            INSERT INTO jobs (id, dedupe_key, source_id, title, company, role_type, url, date_added, last_seen_at, status, status_changed_at, favorited)
+            VALUES ('j4', 'key4', ?1, 'Job 4', 'Co 4', 'full_time', 'url4', ?2, ?2, 'applied', ?2, 0)
+            "#
+        )
+        .bind(&source.id)
+        .bind(old_date)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Run retention pruning
+        let pruned = JobsRepo::prune_expired_by_source(&pool, &source.id, 30, "untracked_only")
+            .await
+            .unwrap();
+
+        // Exactly 1 job (Job 1) should be pruned
+        assert_eq!(pruned, 1);
+
+        // Verify remaining jobs
+        assert!(JobsRepo::get(&pool, "j1").await.is_err(), "Job 1 should be deleted");
+        assert!(JobsRepo::get(&pool, "j2").await.is_ok(), "Job 2 (favorited) must be preserved");
+        assert!(JobsRepo::get(&pool, "j3").await.is_ok(), "Job 3 (notes) must be preserved");
+        assert!(JobsRepo::get(&pool, "j4").await.is_ok(), "Job 4 (applied) must be preserved");
     }
 }

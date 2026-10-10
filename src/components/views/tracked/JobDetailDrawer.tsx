@@ -17,6 +17,7 @@ interface JobDetailDrawerProps {
   onUpdateStatus: (jobId: string, status: JobStatus) => void;
   onUpdateNotes: (jobId: string, notes: string) => void;
   onOpenUrl: (url: string) => void;
+  onToggleFavorite?: (jobId: string) => void;
 }
 
 export function JobDetailDrawer({
@@ -26,6 +27,7 @@ export function JobDetailDrawer({
   onUpdateStatus,
   onUpdateNotes,
   onOpenUrl,
+  onToggleFavorite,
 }: JobDetailDrawerProps) {
   const [events, setEvents] = useState<JobStatusEvent[]>([]);
   const [notes, setNotes] = useState(job?.notes || "");
@@ -100,9 +102,25 @@ export function JobDetailDrawer({
       {/* Drawer Body */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5 select-text">
         <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2 mb-1">
-            <Tag status={job.status} />
-            <Tag label={job.role_type.toUpperCase()} variant="outline" />
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <div className="flex items-center gap-2">
+              <Tag status={job.status} />
+              <Tag label={job.role_type.toUpperCase()} variant="outline" />
+            </div>
+            {onToggleFavorite && (
+              <button
+                type="button"
+                onClick={() => onToggleFavorite(job.id)}
+                className={`px-2 py-0.5 border text-xs font-mono font-bold uppercase tracking-wider cursor-pointer ${
+                  job.favorited
+                    ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
+                    : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
+                }`}
+                title={job.favorited ? "Favorited (Protected from TTL retention) [S]" : "Favorite job [S]"}
+              >
+                {job.favorited ? "★ FAVORITED" : "☆ FAVORITE"}
+              </button>
+            )}
           </div>
           <h2 className="text-xl font-black uppercase tracking-tight text-[var(--color-ink)]">
             {job.title}

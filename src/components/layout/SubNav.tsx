@@ -73,6 +73,26 @@ export function SubNav() {
             </button>
           )}
 
+          {/* Quick Favorites Toggle */}
+          {showFilters && (
+            <button
+              onClick={() =>
+                setFilterSpec((prev) => ({
+                  ...prev,
+                  favorited_only: prev.favorited_only ? null : true,
+                }))
+              }
+              className={`flex items-center gap-1.5 px-2.5 py-0.5 border text-xs font-mono font-bold uppercase tracking-wider cursor-pointer ${
+                filterSpec.favorited_only
+                  ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
+                  : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
+              }`}
+              title="Filter by favorited postings"
+            >
+              <span>{filterSpec.favorited_only ? "★ FAVORITES" : "☆ FAVORITES"}</span>
+            </button>
+          )}
+
           {view === "settings" && (
             <span className="text-[11px] font-mono uppercase text-[var(--color-ink-mute)] tracking-wider">
               SETTINGS

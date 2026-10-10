@@ -101,6 +101,15 @@ Deps: `reqwest` (`rustls-tls`, `json`, `gzip`), `scraper`, `tokio`, `futures`, `
 - [x] Hook into `beforeDevCommand` (`build:sidecar` + `vite`) and `beforeBuildCommand` (`build:sidecar` + `vite build`).
 - [x] Capabilities: host spawns from Rust, so no `shell:allow-execute` permission is granted to the webview.
 
+## 2.7 Autonomous Workflow Execution Pipeline & Retention Hook
+
+The scrape execution engine runs static 5-task DAG pipelines (`Extract -> Filter -> Enrich -> Store -> Retention`):
+- **Per-Source Ingestion Filters:** Each `WorkerSource` config passes source-specific filters to `scrape-worker` (matching title keywords, excluded keywords, locations, role types).
+- **Post-Run Data Retention Hook:** In `runner.rs`, after single-source or batch upserts complete:
+  - Executes `JobsRepo::prune_expired_by_source(&pool, source_id, retention_days, &retention_policy)`.
+  - Prunes untracked postings older than `retention_days` (`scraped`, `viewed`, `ignored`), while strictly safeguarding user-tracked applications (`applied`, `interviewing`, `offer`, `rejected`), candidate notes, and favorited postings.
+- **Per-Source Next Run Queue:** `scheduler.rs` monitors `sources` where `enabled = 1` and `next_run_at <= datetime('now')` every 60 seconds, calculating and updating `next_run_at` upon execution completion.
+
 ## Acceptance Criteria
 
 - [x] App launches with **no window**; tray icon present on macOS/Windows/Linux; closing the window hides it.
@@ -109,3 +118,5 @@ Deps: `reqwest` (`rustls-tls`, `json`, `gzip`), `scraper`, `tokio`, `futures`, `
 - [x] Changing `scraper.cron` reschedules without restart; overlapping triggers are skipped.
 - [x] Killing the worker mid-run marks the run `failed` and the app stays healthy.
 - [x] Notification shows count of new jobs.
+- [ ] Post-scrape hook automatically prunes expired untracked postings according to workflow retention policy.
+- [ ] User-tracked applications, notes, and favorited postings are never pruned by retention hook.

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { TopNav } from "./TopNav";
 import { SubNav } from "./SubNav";
 import { Footer } from "./Footer";
+import { ToastContainer } from "../ui/Toast";
 
 interface ShellProps {
   discoveredCount?: number;
@@ -28,6 +29,7 @@ export function Shell({
       <SubNav />
       <div className="flex-1 overflow-hidden flex flex-col">{children}</div>
       <Footer statusMessage={footerStatus} />
+      <ToastContainer />
     </div>
   );
 }

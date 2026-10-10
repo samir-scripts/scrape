@@ -10,6 +10,7 @@ import { Table, TableHead, TableHeader, TableBody, TableRow, TableCell } from ".
 import { Toggle } from "../../ui/Toggle";
 import { Rule } from "../../ui/Rule";
 import { AddSourceModal } from "./AddSourceModal";
+import { notifySuccess, notifyInfo } from "../../../lib/toast";
 
 type FilterTab = "all" | "ats" | "custom" | "errors";
 
@@ -99,6 +100,16 @@ export function SourcesSettings() {
     }
   };
 
+  const handlePruneExpired = async () => {
+    try {
+      const pruned = await api.cleanupExpiredJobs();
+      notifySuccess(`Pruned ${pruned} expired postings according to TTL policies.`, "TTL PRUNE COMPLETE");
+      fetchSources();
+    } catch (e) {
+      notifyInfo("No expired postings eligible for pruning.", "TTL RETENTION");
+    }
+  };
+
   const handleViewInInbox = (companyName: string) => {
     setSearchQuery(companyName);
     setView("discovered");
@@ -147,16 +158,25 @@ export function SourcesSettings() {
             TARGET COMPANY CAREER PORTALS & INDEPENDENT EXECUTION CADENCES
           </span>
         </div>
-        <Button
-          variant="inverted"
-          onClick={() => {
-            setEditingSource(null);
-            setIsAddModalOpen(true);
-          }}
-          shortcut="+ ADD JOB"
-        >
-          ADD SCRAPE JOB
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="default"
+            onClick={handlePruneExpired}
+            title="Prune expired untracked postings according to TTL retention policies"
+          >
+            CLEANUP EXPIRED
+          </Button>
+          <Button
+            variant="inverted"
+            onClick={() => {
+              setEditingSource(null);
+              setIsAddModalOpen(true);
+            }}
+            shortcut="+ ADD JOB"
+          >
+            ADD WORKFLOW
+          </Button>
+        </div>
       </div>
 
       {/* Sub-Filter Segmented Row + Search */}
@@ -219,17 +239,17 @@ export function SourcesSettings() {
       {/* Scrape Jobs Registry Table */}
       {filteredSources.length === 0 ? (
         <div className="p-8 border border-dashed border-[var(--color-ink-mute)] text-center text-xs font-mono text-[var(--color-ink-mute)]">
-          NO MATCHING SCRAPE JOBS FOUND. CLICK &quot;ADD SCRAPE JOB&quot; TO CONFIGURE A TARGET.
+          NO MATCHING SCRAPE WORKFLOWS FOUND. CLICK &quot;ADD SCRAPE JOB&quot; TO CONFIGURE A TARGET.
         </div>
       ) : (
         <Table>
           <TableHead>
             <TableRow>
               <TableHeader>ON</TableHeader>
-              <TableHeader>COMPANY</TableHeader>
+              <TableHeader>WORKFLOW DAG</TableHeader>
               <TableHeader>KIND</TableHeader>
               <TableHeader>CADENCE</TableHeader>
-              <TableHeader>DURATION</TableHeader>
+              <TableHeader>RETENTION</TableHeader>
               <TableHeader>STATUS</TableHeader>
               <TableHeader>ACTIONS</TableHeader>
             </TableRow>
@@ -271,23 +291,30 @@ export function SourcesSettings() {
                       {s.cadence === "cron" ? "CRON" : s.cadence.replace("_", " ")}
                     </span>
                   </TableCell>
-                  <TableCell className="text-[10px] text-[var(--color-ink-mute)]">
-                    {s.last_run_duration_ms ? `${(Number(s.last_run_duration_ms) / 1000).toFixed(1)}s` : "—"}
+                  <TableCell className="text-[10px] font-mono whitespace-nowrap">
+                    {Number(s.retention_days) === 0
+                      ? "FOREVER"
+                      : `${s.retention_days}D (${s.retention_policy === "untracked_only" ? "SAFE" : "ALL"})`}
                   </TableCell>
                   <TableCell>
-                    <span
-                      className={`px-1.5 py-0.5 text-[10px] font-mono uppercase font-bold border ${
-                        isRunning
-                          ? "bg-[var(--color-signal)] text-white border-[var(--color-signal)] animate-pulse"
-                          : s.last_status === "ok" || s.last_status === "success"
-                          ? "bg-[var(--color-lime)] text-[var(--color-ink)] border-[var(--color-ink)]"
-                          : s.last_status === "error"
-                          ? "bg-[var(--color-cherry)] text-white border-[var(--color-cherry)]"
-                          : "bg-[var(--color-paper-2)] text-[var(--color-ink-mute)] border-[var(--color-ink-mute)]"
-                      }`}
-                    >
-                      {isRunning ? "RUNNING" : s.last_status || "UNTESTED"}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-xs ${
+                          isRunning
+                            ? "text-[var(--color-signal)] animate-pulse"
+                            : s.last_status === "ok" || s.last_status === "success"
+                            ? "text-[var(--color-lime)]"
+                            : s.last_status === "error"
+                            ? "text-[var(--color-cherry)]"
+                            : "text-[var(--color-ink-mute)]"
+                        }`}
+                      >
+                        ■
+                      </span>
+                      <span className="text-[10px] font-mono uppercase font-bold text-[var(--color-ink)]">
+                        {isRunning ? "RUNNING" : s.last_status || "UNTESTED"}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5">

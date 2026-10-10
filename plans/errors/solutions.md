@@ -362,5 +362,35 @@
   2. **Overlay Priority Guarantee:**
      Capture-phase execution ensures modal dismissals execute before any child input blurs or background global hotkey handlers can intercept the event, guaranteeing 100% reliable single-press Escape dismissals across all dialogs and drawers.
 
+---
+
+### 21. SQLx SQLite Text Column NULL Coercion in Option Decoding
+
+- **Phase:** Phase 3.7 (Workflow Data Retention & Job Favoriting)
+- **Error Signature:**
+  Postgres/SQLite row decoding via `r.try_get("favorited_at").ok()` without explicit type parameters caused nullable ISO timestamps (`TEXT NULL`) to be inferred as `String` and decoded as `Some("")` rather than `None`.
+- **Root Cause:**
+  When SQLx reads a NULL text column into a `String` without explicit `Option<String>` typing, some drivers/versions return an empty string or type mismatch error rather than propagating `None`.
+- **Solution & Rule:**
+  Explicitly qualify the nullable type and filter out empty strings:
+  ```rust
+  let favorited_at = r
+      .try_get::<Option<String>, _>("favorited_at")
+      .unwrap_or(None)
+      .filter(|s| !s.trim().is_empty());
+  ```
+
+---
+
+### 22. Static Workflow Engine & Error Toasts (Save Guardrail on Unparseable YAML)
+
+- **Phase:** Phase 3.7 (Static Workflow Architecture & Brutalist Toast Notifications)
+- **Error Signature:**
+  If a user inputs invalid YAML or missing parameters into a workflow editor and clicks save, silently failing or disabling the save button gives no clear tactile feedback.
+- **Root Cause:**
+  Disabling the save button prevents the user from receiving actionable diagnostic feedback about *why* the workflow cannot be saved.
+- **Solution & Rule:**
+  Keep the save button active in the modal. On click, validate the YAML specification (`validateWorkflowYaml`). If invalid, abort the save and throw an auto-dismissing (5-second) brutalist error toast in the bottom-right corner (`fixed bottom-4 right-4 z-50`) detailing the exact line, column, and parameter errors.
+
 
 

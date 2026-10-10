@@ -142,6 +142,39 @@ export default function App() {
     },
   });
 
+  // 5b. Favorite toggle mutation with optimistic updates
+  const toggleFavoriteMutation = useMutation({
+    mutationFn: (jobId: string) => api.toggleJobFavorite(jobId),
+    onMutate: async (jobId) => {
+      await queryClient.cancelQueries({ queryKey: ["jobs"] });
+      const prevData = queryClient.getQueryData<Page<Job>>(["jobs"]);
+      if (prevData) {
+        queryClient.setQueryData<Page<Job>>(["jobs"], {
+          ...prevData,
+          items: prevData.items.map((j) =>
+            j.id === jobId
+              ? {
+                  ...j,
+                  favorited: !j.favorited,
+                  favorited_at: !j.favorited ? new Date().toISOString() : null,
+                }
+              : j
+          ),
+        });
+      }
+      return { prevData };
+    },
+    onError: (_err, _jobId, context) => {
+      if (context?.prevData) {
+        queryClient.setQueryData(["jobs"], context.prevData);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["metrics"] });
+    },
+  });
+
   // 6. Settings mutation
   const updateSettingMutation = useMutation({
     mutationFn: ({ key, value }: { key: string; value: unknown }) =>
@@ -317,6 +350,7 @@ export default function App() {
           }
           onOpenUrl={handleOpenUrl}
           onUndo={handleUndo}
+          onToggleFavorite={(jobId) => toggleFavoriteMutation.mutate(jobId)}
         />
       )}
 
@@ -331,6 +365,7 @@ export default function App() {
           }
           onOpenUrl={handleOpenUrl}
           onUndo={handleUndo}
+          onToggleFavorite={(jobId) => toggleFavoriteMutation.mutate(jobId)}
         />
       )}
 

@@ -26,6 +26,8 @@ const createMockJob = (id: string, status: any): Job =>
     last_seen_at: "2026-10-10T00:00:00Z",
     status_changed_at: "2026-10-10T00:00:00Z",
     notes: null,
+    favorited: false,
+    favorited_at: null,
     salary_min: 120000,
     salary_max: 160000,
     salary_currency: "USD",

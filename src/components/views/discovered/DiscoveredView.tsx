@@ -17,6 +17,7 @@ interface DiscoveredViewProps {
   onUpdateNotes: (jobId: string, notes: string) => void;
   onOpenUrl: (url: string) => void;
   onUndo: () => void;
+  onToggleFavorite?: (jobId: string) => void;
 }
 
 export function DiscoveredView({
@@ -25,6 +26,7 @@ export function DiscoveredView({
   onUpdateNotes,
   onOpenUrl,
   onUndo,
+  onToggleFavorite,
 }: DiscoveredViewProps) {
   const {
     searchQuery,
@@ -105,6 +107,11 @@ export function DiscoveredView({
         onUpdateStatus(selectedJob.id, "viewed");
       }
     },
+    onToggleFavorite: () => {
+      if (selectedJob && onToggleFavorite) {
+        onToggleFavorite(selectedJob.id);
+      }
+    },
     onUndo,
   });
 
@@ -137,9 +144,29 @@ export function DiscoveredView({
                 >
                   <div className="flex flex-col gap-1 pr-1">
                     <div className="flex items-center justify-between gap-1">
-                      <span className="font-bold truncate max-w-[190px]">
-                        {job.title}
-                      </span>
+                      <div className="flex items-center gap-1 min-w-0">
+                        {onToggleFavorite && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleFavorite(job.id);
+                            }}
+                            className={`px-0.5 text-xs font-mono cursor-pointer transition-colors ${
+                              job.favorited
+                                ? "text-[var(--color-lime)] font-black"
+                                : "text-[var(--color-ink-mute)] hover:text-[var(--color-ink)]"
+                            }`}
+                            title={job.favorited ? "Favorited [S]" : "Favorite [S]"}
+                            aria-label={job.favorited ? "Unfavorite posting" : "Favorite posting"}
+                          >
+                            {job.favorited ? "★" : "☆"}
+                          </button>
+                        )}
+                        <span className="font-bold truncate max-w-[170px]">
+                          {job.title}
+                        </span>
+                      </div>
                       <Tag
                         status={job.status}
                         className={isSelected ? "border-[var(--color-paper)]" : ""}
@@ -206,6 +233,7 @@ export function DiscoveredView({
           job={selectedJob}
           onUpdateStatus={onUpdateStatus}
           onOpenUrl={onOpenUrl}
+          onToggleFavorite={onToggleFavorite}
         />
       }
     />

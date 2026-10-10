@@ -53,10 +53,29 @@
 - [x] On first launch, `ensure_defaults` inserts OS-detected locale, timezone, and week_start (never overwrites).
 - [x] `Settings` is a typed struct assembled from rows.
 
+## 1.6 Migration 0005: Workflow Retention, Filters & Job Favoriting (`migrations/0005_workflow_retention_filters_favorites.sql`)
+
+- [ ] **Job Favoriting (`jobs` table):**
+  - Add `favorited INTEGER NOT NULL DEFAULT 0` and `favorited_at TEXT` to `jobs`.
+  - Add index `CREATE INDEX idx_jobs_favorited ON jobs(favorited, date_added DESC);`.
+  - Add `JobsRepo::toggle_favorite(pool, id)` and `JobsRepo::set_favorite(pool, id, favorited)`.
+  - Add `favorited_only: Option<bool>` to `JobFilter`.
+  - Expose Tauri command `toggle_job_favorite(id) -> Result<Job>`.
+- [ ] **Workflow Configuration (`sources` table):**
+  - Add `retention_days INTEGER NOT NULL DEFAULT 30` (0 = keep forever).
+  - Add `retention_policy TEXT NOT NULL DEFAULT 'untracked_only'` CHECK (`retention_policy IN ('untracked_only', 'all')`).
+  - Add `filters TEXT NOT NULL DEFAULT '{}'` (stores source-specific role types, keywords, and locations).
+- [ ] **Retention Pruning Engine (`jobs.rs`):**
+  - Add `JobsRepo::prune_expired_by_source(pool, source_id, retention_days, policy)`.
+  - **Absolute Safety Shield:** Postings in `applied`, `interviewing`, `offer`, `rejected`, postings with notes (`notes IS NOT NULL AND notes != ''`), AND favorited postings (`favorited = 1`) are strictly protected from deletion.
+  - Deletion targets only stale untracked postings (`scraped`, `viewed`, `ignored`) with `date_added <= datetime('now', '-' || retention_days || ' days')`.
+
 ## Acceptance Criteria
 
 - [x] Fresh launch creates `scrape_data.db` with all tables and default settings populated from the OS.
 - [x] Relaunch does not duplicate or overwrite settings.
 - [x] `update_job_status` updates the row **and** writes a `job_status_events` row.
-- [x] `cargo test --workspace` passes (32/32 tests pass).
-- [x] `src/bindings/*.ts` generated and `tsc --noEmit` passes.
+- [ ] Migration 0005 applies cleanly on existing and in-memory test databases.
+- [ ] Favorited jobs are strictly protected from retention pruning.
+- [ ] `cargo test --workspace` passes.
+- [ ] `src/bindings/*.ts` generated and `tsc --noEmit` passes.

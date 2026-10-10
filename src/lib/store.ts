@@ -5,10 +5,11 @@ import type { NavTabId } from "./constants";
 import type { JobFilter } from "../bindings/JobFilter";
 
 export type ScraperCategory =
+  | "workflows"
+  | "logs"
   | "sources"
   | "schedule"
-  | "filters"
-  | "logs";
+  | "filters";
 
 export type SettingsCategory =
   | "appearance"
@@ -20,6 +21,7 @@ export interface UndoItem {
 }
 
 export const DEFAULT_FILTER_SPEC: Partial<JobFilter> = {
+  favorited_only: null,
   salary_min: null,
   salary_max: null,
   salary_currency: null,
@@ -161,7 +163,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   setDrawerJobId: (drawerJobId) => set({ drawerJobId }),
 
   scraperCategory:
-    (getStored("scrape:scraperCategory") as ScraperCategory) || "sources",
+    ((getStored("scrape:scraperCategory") as ScraperCategory) === "logs" ? "logs" : "workflows"),
   setScraperCategory: (scraperCategory) => {
     setStored("scrape:scraperCategory", scraperCategory);
     set({ scraperCategory });

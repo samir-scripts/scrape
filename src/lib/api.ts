@@ -85,6 +85,17 @@ export const api = {
     return invoke<JobStatusEvent[]>("get_job_status_events", { jobId });
   },
 
+  toggleJobFavorite: (id: string): Promise<Job> =>
+    invoke<Job>("toggle_job_favorite", { id }),
+
+  setJobFavorite: (id: string, favorited: boolean): Promise<Job> =>
+    invoke<Job>("set_job_favorite", { id, favorited }),
+
+  cleanupExpiredJobs: (sourceId?: string): Promise<number> => {
+    if (!isTauri()) return Promise.resolve(0);
+    return invoke<number>("cleanup_expired_jobs", { sourceId: sourceId || null });
+  },
+
   // Settings
   getSettings: (): Promise<Settings> => {
     if (!isTauri()) return Promise.resolve({ ...devSettings });
@@ -121,6 +132,9 @@ export const api = {
     enabled?: boolean;
     cadence?: SourceCadence;
     cadence_cron?: string | null;
+    retention_days?: bigint | number | null;
+    retention_policy?: string | null;
+    filters?: unknown;
   }) =>
     invoke<Source>("create_source", {
       input: {
@@ -128,6 +142,9 @@ export const api = {
         enabled: true,
         cadence: "global",
         cadence_cron: null,
+        retention_days: 30,
+        retention_policy: "untracked_only",
+        filters: {},
         ...input,
       },
     }),
@@ -140,6 +157,9 @@ export const api = {
     enabled?: boolean | null;
     cadence?: SourceCadence | null;
     cadence_cron?: string | null;
+    retention_days?: bigint | number | null;
+    retention_policy?: string | null;
+    filters?: unknown;
   }) =>
     invoke<Source>("update_source", {
       input: {
@@ -149,6 +169,9 @@ export const api = {
         enabled: null,
         cadence: null,
         cadence_cron: null,
+        retention_days: null,
+        retention_policy: null,
+        filters: null,
         ...input,
       },
     }),
@@ -238,6 +261,7 @@ export const api = {
           applied: 0,
           interviewing: 0,
           offers: 0,
+          favorited: 0,
           response_rate: 0,
           median_salary: null,
           avg_salary: null,

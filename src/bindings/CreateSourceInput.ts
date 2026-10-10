@@ -3,4 +3,4 @@ import type { JsonValue } from "./serde_json/JsonValue";
 import type { SourceCadence } from "./SourceCadence";
 import type { SourceKind } from "./SourceKind";
 
-export type CreateSourceInput = { kind: SourceKind, name: string, identifier: string, config: JsonValue | null, enabled: boolean | null, cadence: SourceCadence | null, cadence_cron: string | null, };
+export type CreateSourceInput = { kind: SourceKind, name: string, identifier: string, config: JsonValue | null, enabled: boolean | null, cadence: SourceCadence | null, cadence_cron: string | null, retention_days: bigint | null, retention_policy: string | null, filters: JsonValue | null, };

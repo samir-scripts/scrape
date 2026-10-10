@@ -1,8 +1,6 @@
 import type { Settings } from "../../../bindings/Settings";
 import { useUIStore, type ScraperCategory } from "../../../lib/store";
 import { SourcesSettings } from "../settings/SourcesSettings";
-import { ScheduleSettings } from "../settings/ScheduleSettings";
-import { FiltersSettings } from "../settings/FiltersSettings";
 import { LogsSettings } from "../settings/LogsSettings";
 
 interface ScraperViewProps {
@@ -11,17 +9,21 @@ interface ScraperViewProps {
 }
 
 const CATEGORIES: { id: ScraperCategory; label: string }[] = [
-  { id: "sources", label: "SCRAPE JOBS" },
-  { id: "schedule", label: "SCHEDULE" },
-  { id: "filters", label: "FILTERS" },
-  { id: "logs", label: "LOGS" },
+  { id: "workflows", label: "WORKFLOWS" },
+  { id: "logs", label: "EXECUTION LOGS" },
 ];
 
 export function ScraperView({
-  settings,
-  onUpdateSetting,
+  settings: _settings,
+  onUpdateSetting: _onUpdateSetting,
 }: ScraperViewProps) {
   const { scraperCategory, setScraperCategory } = useUIStore();
+
+  const isWorkflows =
+    scraperCategory === "workflows" ||
+    scraperCategory === "sources" ||
+    scraperCategory === "schedule" ||
+    scraperCategory === "filters";
 
   return (
     <div className="flex-1 w-full h-full flex overflow-hidden bg-[var(--color-paper)]">
@@ -35,7 +37,8 @@ export function ScraperView({
 
         <nav className="flex flex-col">
           {CATEGORIES.map((cat) => {
-            const isActive = scraperCategory === cat.id;
+            const isActive =
+              cat.id === "workflows" ? isWorkflows : scraperCategory === "logs";
 
             return (
               <button
@@ -61,19 +64,7 @@ export function ScraperView({
 
       {/* Right Content: Active Category Panel */}
       <main className="flex-1 h-full overflow-y-auto p-6 bg-[var(--color-paper)]">
-        {scraperCategory === "sources" && <SourcesSettings />}
-        {scraperCategory === "schedule" && (
-          <ScheduleSettings
-            settings={settings}
-            onUpdateSetting={onUpdateSetting}
-          />
-        )}
-        {scraperCategory === "filters" && (
-          <FiltersSettings
-            settings={settings}
-            onUpdateSetting={onUpdateSetting}
-          />
-        )}
+        {isWorkflows && <SourcesSettings />}
         {scraperCategory === "logs" && <LogsSettings />}
       </main>
     </div>

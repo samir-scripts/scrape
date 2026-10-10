@@ -18,6 +18,8 @@ const createMockJob = (overrides: Partial<Job> = {}): Job => ({
   status: "applied",
   status_changed_at: "2026-10-05T12:00:00Z",
   notes: null,
+  favorited: false,
+  favorited_at: null,
   salary_min: null,
   salary_max: null,
   salary_currency: null,
