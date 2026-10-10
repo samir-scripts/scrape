@@ -10,6 +10,7 @@ const createMockRun = (overrides: Partial<ScrapeRun> = {}): ScrapeRun => ({
   jobs_found: BigInt(50),
   jobs_new: BigInt(10),
   error: null,
+  source_id: null,
   ...overrides,
 });
 

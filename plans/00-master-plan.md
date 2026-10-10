@@ -206,7 +206,7 @@ scrape/
 |---|---|
 | **M1** (Phase 1) | `npm run tauri dev` opens a window; DB file is created in app-data dir with defaults; commands callable from devtools. |
 | **M2** (Phase 2) | App boots to tray only; a source added via command is scraped on schedule + "run now"; jobs land in DB; OS notification fires. |
-| **M3** (Phase 3) | Full UI: triage inbox with keyboard, Kanban tracking, unified Scraper operations hub (sources, schedule, filters, logs), and application settings (appearance, system). |
+| **M3** (Phase 3) | Full UI: triage inbox with keyboard, Kanban tracking, unified Scraper operations hub ([Phase 3.5](./03b-enrichment-filters.md) & [Phase 3.6](./03c-custom-scrape-jobs.md) for custom company scrape jobs, per-job cadence/cron, YAML specs, isolated execution, and run logs), and application settings (appearance, system). |
 | **M4** (Phase 4) | Metrics tab with 2 charts + 3 cards driven by real data. |
 | **M5** (Phase 5) | Pushing `v0.1.0` produces draft GitHub Release with `.dmg/.app`, `.msi/.exe`, `.deb/.AppImage`. |
 

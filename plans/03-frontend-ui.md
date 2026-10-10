@@ -148,3 +148,5 @@ Default OS scrollbars (with rounded pill corners, transparent overlays, or OS-na
 - [ ] OS default scrollbar replaced with theme-synchronized brutalist scrollbar (0px radius, 1px border, ink/paper colors).
 - [ ] All user-suggested features developed on dedicated feature branches with passing tests before merge.
 - [ ] Extended in [Phase 3.5](./03b-enrichment-filters.md): custom filter panel (state, country, salary range slider + numbers, YOE, New Grad, sponsorship & clearance tri-state `YES`/`NO`/`N/A`), table columns, scraper advanced settings, and scraper logs.
+- [ ] Extended in [Phase 3.6](./03c-custom-scrape-jobs.md): custom company scrape jobs registry, per-job cadence/cron scheduling, isolated `[RUN NOW]` execution, dry-run testing, telemetry inspector drawer, and dual form/YAML specification editor.
+

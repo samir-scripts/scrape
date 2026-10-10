@@ -267,6 +267,180 @@ impl ScrapeRunner {
         }
     }
 
+    pub async fn trigger_single_source(&self, app: &AppHandle, source_id: &str) -> Result<ScrapeRun> {
+        let _guard = self.try_acquire_lock()?;
+
+        let source = SourcesRepo::get(&self.pool, source_id).await?;
+        let run = RunsRepo::start_with_source(&self.pool, TriggerType::SingleSource, Some(source_id)).await?;
+        let _ = app.emit("scrape://started", serde_json::json!({ "run_id": run.id, "source_id": source_id }));
+
+        let include_keywords: Vec<String> =
+            SettingsRepo::get_value(&self.pool, "filters.include_keywords")
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+        let exclude_keywords: Vec<String> =
+            SettingsRepo::get_value(&self.pool, "filters.exclude_keywords")
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+        let locations: Vec<String> = SettingsRepo::get_value(&self.pool, "filters.locations")
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        let role_types: Vec<RoleType> = SettingsRepo::get_value(&self.pool, "filters.role_types")
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+
+        let config = WorkerConfig {
+            version: PROTOCOL_VERSION,
+            sources: vec![WorkerSource {
+                id: source.id.clone(),
+                kind: source.kind,
+                name: source.name.clone(),
+                identifier: source.identifier.clone(),
+                config: source.config.clone(),
+            }],
+            filters: WorkerFilters {
+                include_keywords,
+                exclude_keywords,
+                locations,
+                role_types,
+            },
+            limits: WorkerLimits::default(),
+        };
+
+        let start_time = Instant::now();
+        let run_result = timeout(
+            Duration::from_secs(180),
+            self.execute_sidecar(app, &run.id, config),
+        )
+        .await;
+        let duration_ms = start_time.elapsed().as_millis() as i64;
+
+        let tz_str: String = SettingsRepo::get_value(&self.pool, "system.timezone")
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "UTC".to_string());
+        let next_run = crate::services::scheduler::calculate_next_run_for_source(&source, &tz_str);
+
+        match run_result {
+            Ok(Ok((total_found, total_new, source_statuses))) => {
+                let (status, err_msg) = source_statuses
+                    .get(source_id)
+                    .cloned()
+                    .unwrap_or_else(|| ("ok".to_string(), None));
+
+                let _ = SourcesRepo::set_run_result(
+                    &self.pool,
+                    source_id,
+                    &status,
+                    err_msg.as_deref(),
+                    Some(duration_ms),
+                    next_run.as_deref(),
+                )
+                .await;
+
+                let final_status = if status == "error" {
+                    RunStatus::Failed
+                } else {
+                    RunStatus::Success
+                };
+
+                let finished = RunsRepo::finish(
+                    &self.pool,
+                    &run.id,
+                    final_status,
+                    total_found,
+                    total_new,
+                    err_msg.as_deref(),
+                )
+                .await?;
+
+                let _ = app.emit("scrape://finished", &finished);
+                let _ = app.emit(
+                    "scrape://source_finished",
+                    serde_json::json!({
+                        "source_id": source_id,
+                        "run": finished,
+                        "duration_ms": duration_ms,
+                    }),
+                );
+                let _ = app.emit("sources://changed", ());
+
+                if total_new > 0 {
+                    let _ = app.emit("jobs://changed", ());
+                    let notifications_enabled: bool =
+                        SettingsRepo::get_value(&self.pool, "notifications.enabled")
+                            .await
+                            .ok()
+                            .flatten()
+                            .unwrap_or(true);
+                    if notifications_enabled {
+                        let _ = app
+                            .notification()
+                            .builder()
+                            .title("SCRAPE COMPLETE")
+                            .body(format!("{} NEW POSTINGS", total_new))
+                            .show();
+                    }
+                }
+
+                Ok(finished)
+            }
+            Ok(Err(err)) => {
+                let err_str = err.to_string();
+                tracing::error!("Single source scrape error: {}", err_str);
+                let _ = SourcesRepo::set_run_result(
+                    &self.pool,
+                    source_id,
+                    "error",
+                    Some(&err_str),
+                    Some(duration_ms),
+                    next_run.as_deref(),
+                )
+                .await;
+                let finished =
+                    RunsRepo::finish(&self.pool, &run.id, RunStatus::Failed, 0, 0, Some(&err_str))
+                        .await?;
+                let _ = app.emit("scrape://finished", &finished);
+                let _ = app.emit("sources://changed", ());
+                Err(err)
+            }
+            Err(_) => {
+                tracing::error!("Single source scrape timed out (3m limit)");
+                let err_str = "Execution timed out (3 minute limit)";
+                let _ = SourcesRepo::set_run_result(
+                    &self.pool,
+                    source_id,
+                    "error",
+                    Some(err_str),
+                    Some(duration_ms),
+                    next_run.as_deref(),
+                )
+                .await;
+                let finished = RunsRepo::finish(
+                    &self.pool,
+                    &run.id,
+                    RunStatus::Failed,
+                    0,
+                    0,
+                    Some(err_str),
+                )
+                .await?;
+                let _ = app.emit("scrape://finished", &finished);
+                let _ = app.emit("sources://changed", ());
+                Err(AppError::Internal("Single source scrape timed out".to_string()))
+            }
+        }
+    }
+
     async fn execute_sidecar(
         &self,
         app: &AppHandle,

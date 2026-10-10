@@ -104,6 +104,23 @@ impl SchedulerService {
             });
         }
 
+        // Background ticker for custom cadence sources (checks every 60 seconds)
+        let ticker_pool = pool.clone();
+        let ticker_runner = runner.clone();
+        let ticker_app = app.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                if let Ok(due_sources) = crate::db::sources::SourcesRepo::get_due_sources(&ticker_pool).await {
+                    for source in due_sources {
+                        tracing::info!("Custom cadence trigger for source {} ({})", source.name, source.id);
+                        let _ = ticker_runner.trigger_single_source(&ticker_app, &source.id).await;
+                    }
+                }
+            }
+        });
+
         Ok(service)
     }
 
@@ -214,7 +231,7 @@ pub fn validate_cron_expression(expr: &str, tz_str: &str) -> CronValidationResul
     }
 }
 
-fn calculate_next_run(cron_expr: &str, tz_str: &str) -> Option<String> {
+pub fn calculate_next_run(cron_expr: &str, tz_str: &str) -> Option<String> {
     let tz = Tz::from_str(tz_str).unwrap_or(chrono_tz::UTC);
     let schedule = Schedule::from_str(cron_expr).ok()?;
     let now = chrono::Utc::now().with_timezone(&tz);
@@ -222,6 +239,16 @@ fn calculate_next_run(cron_expr: &str, tz_str: &str) -> Option<String> {
         .after(&now)
         .next()
         .map(|dt| dt.to_rfc3339_opts(SecondsFormat::Millis, true))
+}
+
+pub fn calculate_next_run_for_source(source: &crate::db::sources::Source, tz_str: &str) -> Option<String> {
+    use scrape_core::SourceCadence;
+    let cron_str = match source.cadence {
+        SourceCadence::Global | SourceCadence::Manual => return None,
+        SourceCadence::Cron => source.cadence_cron.as_deref()?,
+        other => other.default_cron()?,
+    };
+    calculate_next_run(cron_str, tz_str)
 }
 
 #[cfg(test)]
@@ -254,6 +281,40 @@ mod tests {
 
         let invalid = calculate_next_run("invalid-cron", "UTC");
         assert!(invalid.is_none());
+    }
+
+    #[test]
+    fn test_calculate_next_run_for_source() {
+        use scrape_core::SourceCadence;
+
+        let mut source = crate::db::sources::Source {
+            id: "src-1".to_string(),
+            kind: scrape_core::SourceKind::Greenhouse,
+            name: "Acme".to_string(),
+            identifier: "acme".to_string(),
+            config: serde_json::json!({}),
+            enabled: true,
+            last_run_at: None,
+            last_status: None,
+            last_error: None,
+            created_at: "2026-10-10T00:00:00Z".to_string(),
+            cadence: SourceCadence::Global,
+            cadence_cron: None,
+            next_run_at: None,
+            last_run_duration_ms: None,
+        };
+
+        // Global cadence has no independent next run
+        assert!(calculate_next_run_for_source(&source, "UTC").is_none());
+
+        // Every 12h preset calculates next run
+        source.cadence = SourceCadence::Every12h;
+        assert!(calculate_next_run_for_source(&source, "UTC").is_some());
+
+        // Custom Cron
+        source.cadence = SourceCadence::Cron;
+        source.cadence_cron = Some("0 30 9 * * *".to_string());
+        assert!(calculate_next_run_for_source(&source, "UTC").is_some());
     }
 
     #[tokio::test]
