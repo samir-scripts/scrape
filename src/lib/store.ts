@@ -72,6 +72,8 @@ interface UIState {
   // Scraper View state
   scraperCategory: ScraperCategory;
   setScraperCategory: (cat: ScraperCategory) => void;
+  scraperMode: "simple" | "advanced";
+  setScraperMode: (mode: "simple" | "advanced") => void;
 
   // Settings View state
   settingsCategory: SettingsCategory;
@@ -167,6 +169,13 @@ export const useUIStore = create<UIState>((set, get) => ({
   setScraperCategory: (scraperCategory) => {
     setStored("scrape:scraperCategory", scraperCategory);
     set({ scraperCategory });
+  },
+
+  scraperMode:
+    ((getStored("scrape:scraperMode") as "simple" | "advanced") === "advanced" ? "advanced" : "simple"),
+  setScraperMode: (scraperMode) => {
+    setStored("scrape:scraperMode", scraperMode);
+    set({ scraperMode });
   },
 
   settingsCategory:

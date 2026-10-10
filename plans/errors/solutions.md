@@ -382,15 +382,23 @@
 
 ---
 
-### 22. Static Workflow Engine & Error Toasts (Save Guardrail on Unparseable YAML)
+---
 
-- **Phase:** Phase 3.7 (Static Workflow Architecture & Brutalist Toast Notifications)
+### 23. Vite / esbuild JSX Transformation Error in `.test.ts` Test Files
+
+- **Phase:** Phase 3.7 (NieR Brutalist Tooltip & Dual-Mode Scraper Testing)
 - **Error Signature:**
-  If a user inputs invalid YAML or missing parameters into a workflow editor and clicks save, silently failing or disabling the save button gives no clear tactile feedback.
+  ```text
+  Error: Transform failed with 1 error:
+  ERROR: Expected ">" but found "content"
+    Plugin: vite:esbuild
+    File: .../src/test/tooltip.test.ts:16:15
+  ```
 - **Root Cause:**
-  Disabling the save button prevents the user from receiving actionable diagnostic feedback about *why* the workflow cannot be saved.
+  Vite's `esbuild` preprocessor only parses JSX/TSX syntax when the file extension is `.tsx` or `.jsx`. When testing UI components with JSX syntax inside a `.test.ts` file, `esbuild` interprets angle brackets `<Component>` as TypeScript generics rather than JSX elements, throwing a syntax parse failure.
 - **Solution & Rule:**
-  Keep the save button active in the modal. On click, validate the YAML specification (`validateWorkflowYaml`). If invalid, abort the save and throw an auto-dismissing (5-second) brutalist error toast in the bottom-right corner (`fixed bottom-4 right-4 z-50`) detailing the exact line, column, and parameter errors.
+  Either name test files containing JSX `.test.tsx`, or test component coordinate geometry, mathematical projections, and state machines in pure TypeScript `.test.ts` files without DOM/JSX dependencies.
+
 
 
 
