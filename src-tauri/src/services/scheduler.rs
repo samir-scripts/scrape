@@ -261,6 +261,21 @@ mod tests {
         assert!(res.ok);
         assert_eq!(res.next_runs.len(), 3);
         assert!(res.error.is_none());
+
+        // Verify clock schedule expressions
+        for expr in &[
+            "0 30 14 * * *",       // Daily at 14:30
+            "0 30 14 * * 1-5",     // Weekdays numeric
+            "0 30 14 * * MON-FRI", // Weekdays named
+            "0 30 14 * * 6,7",     // Weekends numeric
+            "0 30 14 * * SAT,SUN", // Weekends named
+            "0 30 */12 * * *",     // Every 12 hours
+            "0 30 */6 * * *",      // Every 6 hours
+            "0 30 * * * *",        // Hourly
+        ] {
+            let res = validate_cron_expression(expr, "UTC");
+            assert!(res.ok, "Expected expr '{}' to be valid, got error: {:?}", expr, res.error);
+        }
     }
 
     #[test]
