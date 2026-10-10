@@ -136,10 +136,8 @@ fn parse_ashby_jobs(
             } else {
                 None
             }
-        } else if let Some(dh) = &job.description_html {
-            Some(to_plain_text(dh, 32768))
         } else {
-            None
+            job.description_html.as_ref().map(|dh| to_plain_text(dh, 32768))
         };
 
         // Compensation

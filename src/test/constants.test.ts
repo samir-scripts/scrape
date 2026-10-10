@@ -52,10 +52,10 @@ describe("Frontend Constants & Themes", () => {
     ]);
   });
 
-  it("NAV_TABS contains 4 main views with keys", () => {
-    expect(NAV_TABS).toHaveLength(4);
+  it("NAV_TABS contains 5 main views with keys", () => {
+    expect(NAV_TABS).toHaveLength(5);
     const ids = NAV_TABS.map((t) => t.id);
-    expect(ids).toEqual(["discovered", "tracked", "metrics", "settings"]);
+    expect(ids).toEqual(["discovered", "tracked", "metrics", "scraper", "settings"]);
   });
 
   it("ROLE_TYPES matches ROLE_TYPE_LABELS mapping", () => {

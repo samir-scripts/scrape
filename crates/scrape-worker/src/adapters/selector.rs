@@ -18,6 +18,26 @@ pub async fn scrape_selector(
     Ok(events)
 }
 
+fn apply_regex_capture(re: &regex::Regex, text: &str) -> Option<String> {
+    re.captures(text).map(|caps| {
+        if let Some(m) = caps
+            .name("value")
+            .or_else(|| caps.name("title"))
+            .or_else(|| caps.name("link"))
+            .or_else(|| caps.name("location"))
+            .or_else(|| caps.name("salary"))
+        {
+            m.as_str().trim().to_string()
+        } else if let Some(m) = caps.get(1) {
+            m.as_str().trim().to_string()
+        } else if let Some(m) = caps.get(0) {
+            m.as_str().trim().to_string()
+        } else {
+            text.trim().to_string()
+        }
+    })
+}
+
 pub fn extract_jobs_with_selectors(
     html_text: &str,
     base_url: &Url,
@@ -45,6 +65,26 @@ pub fn extract_jobs_with_selectors(
     let sal_sel_str = source.config.get("salary").and_then(|v| v.as_str());
     let desc_sel_str = source.config.get("description").and_then(|v| v.as_str());
 
+    let parse_re = |key: &str| -> Result<Option<regex::Regex>, ClientError> {
+        match source.config.get(key).and_then(|v| v.as_str()) {
+            Some(s) if !s.trim().is_empty() => {
+                let re = regex::Regex::new(s).map_err(|e| {
+                    ClientError::HttpStatus(
+                        reqwest::StatusCode::BAD_REQUEST,
+                        format!("Invalid regex for '{key}': {e}"),
+                    )
+                })?;
+                Ok(Some(re))
+            }
+            _ => Ok(None),
+        }
+    };
+
+    let title_re = parse_re("title_regex")?;
+    let link_re = parse_re("link_regex")?;
+    let loc_re = parse_re("location_regex")?;
+    let sal_re = parse_re("salary_regex")?;
+
     let item_sel = Selector::parse(item_sel_str)
         .map_err(|e| ClientError::HttpStatus(reqwest::StatusCode::BAD_REQUEST, e.to_string()))?;
     let title_sel = Selector::parse(title_sel_str)
@@ -59,35 +99,62 @@ pub fn extract_jobs_with_selectors(
     let mut events = Vec::new();
 
     for item in document.select(&item_sel) {
-        let title_elem = match item.select(&title_sel).next() {
-            Some(t) => t,
-            None => continue,
+        let item_full_text = item.text().collect::<Vec<_>>().join(" ");
+
+        let raw_title = match item.select(&title_sel).next() {
+            Some(t) => t.text().collect::<Vec<_>>().join(" ").trim().to_string(),
+            None => {
+                if title_re.is_some() {
+                    item_full_text.trim().to_string()
+                } else {
+                    continue;
+                }
+            }
         };
-        let title = title_elem
-            .text()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .trim()
-            .to_string();
+
+        let title = if let Some(ref re) = title_re {
+            match apply_regex_capture(re, &raw_title) {
+                Some(val) if !val.is_empty() => val,
+                _ => raw_title,
+            }
+        } else {
+            raw_title
+        };
+
         if title.is_empty() {
             continue;
         }
 
-        let link_elem = match item.select(&link_sel).next() {
-            Some(l) => l,
-            None => continue,
-        };
-        let href = match link_elem.value().attr("href") {
+        let href = match item
+            .select(&link_sel)
+            .next()
+            .and_then(|l| l.value().attr("href"))
+            .or_else(|| {
+                if item.value().name() == "a" {
+                    item.value().attr("href")
+                } else {
+                    None
+                }
+            }) {
             Some(h) => h,
             None => continue,
         };
 
-        let job_url = match base_url.join(href) {
+        let clean_href = if let Some(ref re) = link_re {
+            match apply_regex_capture(re, href) {
+                Some(val) if !val.is_empty() => val,
+                _ => href.to_string(),
+            }
+        } else {
+            href.to_string()
+        };
+
+        let job_url = match base_url.join(&clean_href) {
             Ok(u) => u.to_string(),
             Err(_) => continue,
         };
 
-        let location = if let Some(ref l_sel) = loc_sel {
+        let raw_location = if let Some(ref l_sel) = loc_sel {
             item.select(l_sel)
                 .next()
                 .map(|l| l.text().collect::<Vec<_>>().join(" ").trim().to_string())
@@ -96,13 +163,31 @@ pub fn extract_jobs_with_selectors(
             String::new()
         };
 
+        let location = if let Some(ref re) = loc_re {
+            let target_text = if !raw_location.is_empty() {
+                &raw_location
+            } else {
+                &item_full_text
+            };
+            apply_regex_capture(re, target_text).unwrap_or(raw_location)
+        } else {
+            raw_location
+        };
+
         let role_type = RoleType::infer(&title, None);
 
-        let salary_text = sal_sel.as_ref().and_then(|s| {
+        let raw_salary_text = sal_sel.as_ref().and_then(|s| {
             item.select(s)
                 .next()
                 .map(|el| el.text().collect::<Vec<_>>().join(" ").trim().to_string())
         });
+
+        let salary_text = if let Some(ref re) = sal_re {
+            let target_text = raw_salary_text.as_deref().unwrap_or(&item_full_text);
+            apply_regex_capture(re, target_text).or(raw_salary_text)
+        } else {
+            raw_salary_text
+        };
 
         let desc_text = desc_sel.as_ref().and_then(|s| {
             item.select(s)
@@ -110,7 +195,9 @@ pub fn extract_jobs_with_selectors(
                 .map(|el| to_plain_text(&el.html(), 32768))
         });
 
-        let mut salary = salary_text.as_deref().and_then(Salary::from_text);
+        let mut salary = salary_text.as_deref().and_then(|t| {
+            Salary::from_text(t).or_else(|| Salary::from_text(&format!("salary: {t}")))
+        });
         if salary.is_none() {
             if let Some(text) = &desc_text {
                 salary = Salary::from_text(text);
@@ -221,6 +308,64 @@ mod tests {
             assert_eq!(*role_type, RoleType::Internship);
             assert_eq!(location, "San Francisco, CA");
             assert_eq!(url, "https://customcorp.com/jobs/eng-2");
+        } else {
+            panic!("Expected Job event");
+        }
+    }
+
+    #[test]
+    fn test_extract_jobs_with_custom_regex() {
+        let html = r#"
+        <div class="career-feed">
+            <div class="listing">
+                <h3 class="raw-header">Role: Senior Rust Architect [Ref #42]</h3>
+                <a class="apply-btn" href="/postings/req-999?source=web&tracker=1">Apply</a>
+                <div class="meta-row">Location: Remote - US | Salary: $180,000 - $220,000 / yr</div>
+            </div>
+        </div>
+        "#;
+
+        let config = serde_json::json!({
+            "item": ".listing",
+            "title": ".raw-header",
+            "title_regex": r"Role:\s*(.*?)\s*\[Ref",
+            "link": ".apply-btn",
+            "link_regex": r"(/postings/req-\d+)",
+            "location": ".meta-row",
+            "location_regex": r"Location:\s*([^|]+)",
+            "salary": ".meta-row",
+            "salary_regex": r"Salary:\s*(\$\d+[\d,]*\s*-\s*\$\d+[\d,]*\s*/\s*yr)"
+        });
+
+        let source = WorkerSource {
+            id: "src-regex".to_string(),
+            kind: SourceKind::Selector,
+            name: "Regex Corp".to_string(),
+            identifier: "https://regexcorp.com/careers".to_string(),
+            config,
+        };
+
+        let base_url = Url::parse("https://regexcorp.com/careers").unwrap();
+        let events = extract_jobs_with_selectors(html, &base_url, &source).unwrap();
+        assert_eq!(events.len(), 1);
+
+        if let WorkerEvent::Job {
+            title,
+            location,
+            url,
+            salary,
+            workplace_type,
+            ..
+        } = &events[0]
+        {
+            assert_eq!(title, "Senior Rust Architect");
+            assert_eq!(location, "Remote - US");
+            assert_eq!(url, "https://regexcorp.com/postings/req-999");
+            assert_eq!(*workplace_type, WorkplaceType::Remote);
+
+            let sal = salary.as_ref().expect("Salary should be parsed");
+            assert_eq!(sal.min, Some(180000));
+            assert_eq!(sal.max, Some(220000));
         } else {
             panic!("Expected Job event");
         }

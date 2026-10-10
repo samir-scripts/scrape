@@ -8,7 +8,7 @@ import { EmptyState } from "../../ui/EmptyState";
 
 export function LogsSettings() {
   const queryClient = useQueryClient();
-  const { setSettingsCategory } = useUIStore();
+  const { setScraperCategory, setView } = useUIStore();
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<"all" | "errors">("all");
 
@@ -340,10 +340,13 @@ export function LogsSettings() {
                           {isError && log.source_id && (
                             <div className="mt-2 pt-1.5 border-t border-red-300 flex justify-end">
                               <button
-                                onClick={() => setSettingsCategory("sources")}
+                                onClick={() => {
+                                  setView("scraper");
+                                  setScraperCategory("sources");
+                                }}
                                 className="px-2 py-0.5 border border-red-600 bg-white text-red-700 hover:bg-red-600 hover:text-white text-[10px] font-bold uppercase cursor-pointer"
                               >
-                                [EDIT SOURCE IN SETTINGS →]
+                                [EDIT SOURCE IN SCRAPER →]
                               </button>
                             </div>
                           )}

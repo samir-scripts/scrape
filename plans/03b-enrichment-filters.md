@@ -1,11 +1,11 @@
 # Phase 3.5 — Job Enrichment, Custom Filters & Scraper Logs
 
-**Goal:** Every job carries structured **salary**, **location** (city / state / country / remote), **visa sponsorship**, and **security clearance** data. Users can filter on all of it, both in the UI (instantly, over stored jobs) and in the scraper (at ingest, in Settings → SCRAPER → ADVANCED). Settings also gains a dedicated **LOGS** section displaying chronological scraper run logs, with runs requiring attention marked by a brutalist red square.
+**Goal:** Every job carries structured **salary**, **location** (city / state / country / remote), **visa sponsorship**, and **security clearance** data. Users can filter on all of it, both in the UI (instantly, over stored jobs) and in the scraper (at ingest, in SCRAPER → FILTERS). Scraping operations are unified in the top-level **SCRAPER** tab (`SOURCES`, `SCHEDULE`, `FILTERS`, `LOGS`), where **LOGS** displays chronological scraper run logs with runs requiring attention marked by a brutalist red square. Arbitrary websites can be scraped via custom CSS selectors + regex rules.
 
 ← [Phase 3](./03-frontend-ui.md) · [Master Plan](./00-master-plan.md) · Next → [Phase 4](./04-metrics-dashboard.md)
 
 > [!NOTE]
-> This phase extends Phases 1–3 rather than rewriting them. It has its own migration (`0002`), protocol fields, adapter changes, UI work, and scraper execution log inspector. Branch: `feature/phase-3b-enrichment-filters`.
+> This phase extends Phases 1–3 rather than rewriting them. It has its own migration (`0002`), protocol fields, adapter changes, UI work, scraper execution log inspector, and custom regex scraping engine. Branch: `feature/scraper-tab-and-custom-regex`.
 
 ---
 
@@ -17,7 +17,7 @@
 | **Lever** `GET /v0/postings/{s}?mode=json` | `salaryRange { min, max, currency, interval }` (optional) + `salaryDescriptionPlain`. | `country` (ISO 3166-1 alpha-2, may be null), `workplaceType` (`on-site / remote / hybrid / unspecified`), `categories.allLocations[]`. | `descriptionPlain`, `lists[]` (requirements etc.), `additionalPlain`. |
 | **Ashby** `GET /posting-api/job-board/{n}` | Only with `?includeCompensation=true` → `compensation.summaryComponents[] { compensationType, minValue, maxValue, currencyCode, interval }`. | `address.postalAddress { addressLocality, addressRegion, addressCountry }`, `secondaryLocations[]`, `isRemote`, `workplaceType`. | `descriptionPlain`. |
 | **JSON-LD `JobPosting`** | `baseSalary` (`MonetaryAmount` → `value.minValue/maxValue/unitText`, `currency`). | `jobLocation.address` (`addressRegion`, `addressCountry`), `jobLocationType: "TELECOMMUTE"`, `applicantLocationRequirements`. | `description` (HTML). Also optional `securityClearanceRequirement` and `eligibilityToWorkRequirement`. When present, these win over the text classifier. |
-| **Selector** | Optional `salary` CSS selector, or regex over the item's text. | `location` selector → gazetteer. | Optional `description` selector. |
+| **Selector & Regex** | Optional `salary` CSS selector, or regex over the item's text. | `location` selector → gazetteer. | Optional `description` selector. Custom CSS selectors paired with regex rules (`item_selector`, `title_regex`, `link_regex`, `location_regex`, `salary_regex`) for arbitrary career websites. |
 
 **What this means:**
 1. **No ATS has a structured sponsorship, clearance, YOE, or new grad field.** All must be extracted via **text parsing, regex, and title/description classifiers**. Every result stores the matching **evidence sentence** for verification.
@@ -124,13 +124,13 @@ All parsing/classification lives in `scrape-core`, so the **worker** (to filter 
 - [ ] **Lever:** parse `salaryRange`, `salaryDescriptionPlain`, `country`, `workplaceType`, `categories.allLocations`, and build the description from `descriptionPlain + lists + additionalPlain`.
 - [ ] **Ashby:** add `?includeCompensation=true`. Take the `summaryComponents` entry with `compensationType == "Salary"`. Parse `address`, `secondaryLocations`, `isRemote`, `workplaceType`, `descriptionPlain`.
 - [ ] **JSON-LD:** `baseSalary`, `jobLocation`, `jobLocationType`, `applicantLocationRequirements`, `description`, `securityClearanceRequirement`, `eligibilityToWorkRequirement`.
-- [ ] **Selector:** optional `salary` and `description` selectors in the source config form.
+- [ ] **Selector & Regex:** `item_selector` (container), `title_selector` + optional `title_regex`, `link_selector` + optional `link_regex`, `location_selector` + optional `location_regex`, `salary_selector` + optional `salary_regex`, `description_selector` in the source config. Live extraction preview modal allows dry-running arbitrary pages before persisting the source.
 - [ ] **Two-stage filter in the worker:** (1) cheap filter on title/role/location before any detail fetch. (2) full filter (salary/sponsorship/clearance/experience) after enrichment. Both use `scrape_core::filter::JobPredicate`.
 - [ ] Upsert: enrichment columns use `COALESCE(excluded.x, jobs.x)` so a scrape that's missing data never erases good data. `job_locations` is replaced per job inside the same transaction. `status`, `notes`, `date_added` are untouched.
 
 ## 3.5.4 Two filter layers
 
-| | **Scraper filters** (Settings → SCRAPER) | **View filters** (Discovered / Tracked) |
+| | **Scraper filters** (SCRAPER → FILTERS) | **View filters** (Discovered / Tracked) |
 |---|---|---|
 | Runs in | `scrape-worker`, at ingest | SQL (`list_jobs`), at query time |
 | Effect | Jobs that don't match are **never saved** | Hides saved jobs. Undo is instant. |
@@ -165,7 +165,7 @@ type FilterSpec = {
 ### Shell
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ [■ DISCOVERED (42) ■]  TRACKED (12)  METRICS  SETTINGS     ● NEXT 18:00 │  TopNav (no logo)
+│ [■ DISCOVERED (42) ■]  TRACKED (12)  METRICS  SCRAPER  SETTINGS ● NEXT 18│  TopNav (no logo)
 ├──────────────────────────────────────────────────────────────────────────┤
 │ ROLE [ALL ▾]  [F] FILTERS (3)  US-CA ×  $150K–$250K ×  SPON: YES,N/A ×  [/]│  SubNav: active filters as chips
 ├──────────────────────────────────────────────────────────────────────────┤
@@ -200,29 +200,39 @@ type FilterSpec = {
 - [ ] **Meta panel:** rows for Salary (with original interval), Workplace, Locations (all of them), Required Experience (with quote), New Grad Eligible (with quote), Sponsorship + evidence, Clearance + level + evidence.
 - [ ] **Job detail pane:** show `description_text`. It's stored anyway, and right now the detail pane has no posting body.
 
-### Settings → SCRAPER (replaces FILTERS)
-Left category list becomes `SCHEDULE · SOURCES · SCRAPER · LOGS · APPEARANCE · SYSTEM`. SCRAPER sections:
-- [ ] **KEYWORDS & ROLES:** include/exclude keyword chips, role types (existing).
-- [ ] **LOCATION:** same `LocationFilter` component as the view panel.
-- [ ] **COMPENSATION:** same `SalaryRangeFilter`. **"Keep jobs with no salary listed" defaults to ON.**
-- [ ] **EXPERIENCE & NEW GRAD:** YOE range bounds and New Grad filtering for scraper ingestion.
-- [ ] **ELIGIBILITY:** sponsorship and clearance tri-state checkboxes. **N/A defaults to checked.**
-- [ ] **ADVANCED:** fetch per-job details (Greenhouse pay ranges) on/off, concurrency, per-host delay, request timeout, max pages per `jsonld` source, store descriptions on/off.
-- [ ] **IMPACT PREVIEW:** "These filters would keep **N of M** saved jobs." The shared predicate runs against the DB through `preview_filter_impact(spec)`, so you can see the effect before the next scrape.
+### Top-Level SCRAPER Tab (Unified Operations Hub)
+Left category sub-navigation: `SOURCES · SCHEDULE · FILTERS · LOGS`.
 
-### Settings → LOGS (Execution History & Error Tracking)
-Dedicated audit log for background and manual scraper runs.
-- [ ] **Chronological Run List:** Sorted strictly by date and time (`started_at DESC`, newest first).
-- [ ] **Red Square Error Markers:**
-  - Any run that encountered an issue needing user attention (`status = 'failed'` or `status = 'partial'`, or containing error-level log events such as HTTP 403/429 rate limits, network timeouts, selector extraction errors, or sidecar process crashes) is marked with a prominent brutalist **red square** (`<span className="inline-block w-2.5 h-2.5 bg-red-600 border border-red-700" />` / `■` in `#DC2626`).
-  - Healthy/successful runs are marked with a muted neutral block (`▫` or `■` in `var(--color-ink-mute)`).
-- [ ] **Filter Controls:** Toggle between `ALL RUNS` and `ERRORS ONLY`.
-- [ ] **Master-Detail Inspector:**
-  - Left pane: Scrape run cards showing status square, timestamp, trigger badge (`CRON` / `MANUAL` / `STARTUP`), duration, stats (`+N NEW · M FOUND`), and one-line error summary if failed.
-  - Right pane: Full chronological execution log for the selected run:
-    - Worker spawn events, per-source fetch milestones, matched counts.
-    - Error lines highlighted with red square marker, full error message, HTTP status code, and target URL.
-    - Actionable "EDIT SOURCE" button linking directly to the problematic board in `SOURCES` tab.
+- [ ] **SOURCES:**
+  - Boxed table showing configured targets (`NAME`, `KIND`, `ENABLED`, `LAST RUN`, `STATUS`).
+  - `ADD SOURCE` modal supporting Greenhouse, Lever, Ashby, JSON-LD, CSS Selector, and **Custom Scraper (CSS + Regex)**:
+    - Custom Scraper configuration fields: `item_selector` (card container), `title_selector` + optional `title_regex`, `link_selector` + optional `link_regex`, `location_selector` + optional `location_regex`, `salary_selector` + optional `salary_regex`, `description_selector`.
+    - Live `TEST EXTRACTION` preview modal: executes dry-run against the provided URL and renders the first 10 extracted jobs in a brutalist preview table before saving.
+- [ ] **SCHEDULE:**
+  - Scheduler toggle (`ENABLE AUTOMATION`).
+  - Presets (Hourly, Every 6 Hours, Daily 09:00, Weekdays 09:00) + custom 6-field cron.
+  - Live `validate_cron` next 3 runs preview.
+  - Manual `RUN NOW` trigger button with scanning feedback indicator.
+  - Recent runs table.
+- [ ] **FILTERS:**
+  - Scraper-level ingestion filtering (jobs not matching are dropped at ingest):
+    - **KEYWORDS & ROLES:** Include/exclude keyword chips, role types.
+    - **LOCATION:** Cascading country & state/province filters, remote policy, include unknown.
+    - **COMPENSATION:** Salary range slider & synced numbers, include jobs with no salary listed.
+    - **EXPERIENCE & NEW GRAD:** YOE range bounds and New Grad eligibility filtering.
+    - **ELIGIBILITY:** Sponsorship and clearance tri-state checkboxes.
+    - **RECLASSIFY POSTINGS:** Host command to re-run classifiers over stored postings when rules change.
+    - **IMPACT PREVIEW:** Live preview: "These filters would keep N of M saved jobs."
+- [ ] **LOGS:**
+  - Chronological execution audit log sorted strictly by date and time (`started_at DESC`, newest first).
+  - Prominent brutalist **red square** (`■` in `#DC2626`) next to any run with errors (failed sidecar, HTTP 403/429, parse failures, timeout).
+  - Filter toggle: `ALL RUNS` vs `ERRORS ONLY`.
+  - Master-detail inspector: left run cards, right detailed stdout/stderr event stream with direct "EDIT SOURCE" link for failing targets.
+
+### Streamlined SETTINGS Tab (Application Preferences)
+Left category sub-navigation: `APPEARANCE · SYSTEM`.
+- [x] **APPEARANCE:** Theme switch (`PAPER` / `OBSIDIAN`), dither intensity, reduce motion.
+- [x] **SYSTEM:** Locale/timezone (detected, overridable), launch at login, start hidden in tray, notifications toggle, database file path, data folder button, `EXPORT CSV / JSON`, and `DATA WIPE`.
 
 ### Theme-Synchronized Brutalist Scrollbars
 - [ ] Implement brutalist scrollbar rules in `src/styles/index.css`:
@@ -250,16 +260,21 @@ Dedicated audit log for background and manual scraper runs.
 
 Every feature implemented in this phase must have corresponding automated tests before merge:
 
-- [ ] **scrape-core enrichment tests:**
+- [ ] **scrape-core enrichment & custom regex tests:**
   - Salary parser: ≥ 25 cases including edge cases and false positives (`$5M Series A`, `401(k)`).
   - Location parser & gazetteer: ≥ 40 cases across countries, US states, Canadian provinces, remote tags.
   - Sponsorship & clearance classifiers: ≥ 30 labeled sentences each, verifying classification value, clearance level, and exact evidence sentence capture. Verify "No" priority over "Yes" in mixed contexts.
   - Experience & New Grad parser (`experience.rs`): ≥ 30 labeled test cases verifying extraction of `3-5 years`, `5+ years`, `minimum 3 years`, `0 years / entry level`, new grad title heuristics, and false positive rejection (degree length, company age, roadmap).
+  - Custom regex selector adapter (`selector.rs`): test cases verifying regex extraction of title, link, location, and salary from custom HTML blocks using capture groups and fallback to element text.
 - [ ] **Adapter fixture tests:**
   - Lever with `salaryRange`, Ashby with `includeCompensation`, JSON-LD with `baseSalary` + `securityClearanceRequirement`, Greenhouse with `content=true` and `pay_input_ranges`.
 - [ ] **Database & repository tests:**
   - SQLite migration 0002, location backfill, salary range overlap query, YOE range bound queries, New Grad tri-state filter queries, multi-location `EXISTS` queries, and `COALESCE` upsert behavior.
 - [ ] **Frontend component & interaction tests (Vitest):**
+  - Navigation: 5-tab cycling (`DISCOVERED`, `TRACKED`, `METRICS`, `SCRAPER`, `SETTINGS`) via hotkeys (`[`/`]`, `Q`/`E`).
+  - Scraper hub view: subcategory switching between `SOURCES`, `SCHEDULE`, `FILTERS`, `LOGS`.
+  - Settings view: streamlined subcategory switching between `APPEARANCE` and `SYSTEM`.
+  - AddSourceModal: custom regex and CSS selector configuration and test preview.
   - `RangeSlider`: dual-thumb collision prevention, keyboard step increments, 500K+ upper stop.
   - Number inputs: bidirectionally synced with slider, handles shorthand notation (`150k`), min ≤ max validation.
   - Location, YOE, and tri-state filters: active state tracking, chip generation, and reset actions.
@@ -267,13 +282,16 @@ Every feature implemented in this phase must have corresponding automated tests 
   - Themed scrollbars: CSS styling verification and theme token inheritance.
 
 ## Acceptance Criteria
-- [ ] Strict development workflow: Feature developed on an isolated `feature/phase-3b-enrichment-filters` branch in the local dev environment, with all tests written and passing before merge into `develop`.
+- [ ] Strict development workflow: Feature developed on an isolated `feature/scraper-tab-and-custom-regex` branch in the local dev environment, with all tests written and passing before merge into `develop`.
+- [ ] Top-level `SCRAPER` tab consolidates `SOURCES`, `SCHEDULE`, `FILTERS`, and `LOGS`.
+- [ ] `SETTINGS` tab is streamlined exclusively to `APPEARANCE` and `SYSTEM` application preferences.
+- [ ] Custom scraper mode in `SOURCES` allows configuring arbitrary career pages via CSS selectors and regex capture rules, with live extraction preview testing.
 - [ ] Jobs from Lever/Ashby/JSON-LD fixtures carry structured salary + location. Greenhouse jobs get salary when `pay_input_ranges` exists.
 - [ ] Sponsorship and clearance show `YES` / `NO` / `N/A` with an evidence sentence for every non-N/A value.
 - [ ] Extracted YOE and New Grad status show accurately with evidence sentences for postings containing experience requirements.
 - [ ] Discovered can be filtered by country, state, remote policy, salary range (slider **and** typed numbers), YOE range, New Grad status, sponsorship, and clearance, entirely by keyboard.
-- [ ] Settings → SCRAPER → ADVANCED filters change what the next `RUN NOW` stores, and the impact preview matches the actual result.
-- [ ] Settings includes a `LOGS` section showing chronological scraper runs sorted by date and time (newest first).
+- [ ] Scraper-level filters in SCRAPER → FILTERS change what the next `RUN NOW` stores, and the impact preview matches the actual result.
+- [ ] SCRAPER includes a `LOGS` section showing chronological scraper runs sorted by date and time (newest first).
 - [ ] Scraper runs with errors or issues needing addressing are marked with a distinct brutalist red square (`■`).
 - [ ] Selecting a run opens the inspector showing per-source execution logs, timestamped error events, and remediation actions.
 - [ ] Tracked list table shows SALARY, LOCATION, YOE, NEW GRAD, SPONSORSHIP, CLEARANCE columns.

@@ -11,6 +11,7 @@ import { Shell } from "./components/layout/Shell";
 import { DiscoveredView } from "./components/views/discovered/DiscoveredView";
 import { TrackedView } from "./components/views/tracked/TrackedView";
 import { MetricsView } from "./components/views/metrics/MetricsView";
+import { ScraperView } from "./components/views/scraper/ScraperView";
 import { SettingsView } from "./components/views/settings/SettingsView";
 import { FilterPanel } from "./components/filters/FilterPanel";
 import { matchesJob } from "./lib/filter";
@@ -330,6 +331,15 @@ export default function App() {
       )}
 
       {view === "metrics" && <MetricsView />}
+
+      {view === "scraper" && (
+        <ScraperView
+          settings={settings}
+          onUpdateSetting={(key, value) =>
+            updateSettingMutation.mutate({ key, value })
+          }
+        />
+      )}
 
       {view === "settings" && (
         <SettingsView

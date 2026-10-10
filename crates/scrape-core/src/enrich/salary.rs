@@ -202,7 +202,7 @@ impl Salary {
                 _ => SalaryInterval::Year,
             };
 
-            if interval == SalaryInterval::Year && (val < 15000.0 || val > 2_500_000.0) {
+            if interval == SalaryInterval::Year && !(15000.0..=2_500_000.0).contains(&val) {
                 return None;
             }
 

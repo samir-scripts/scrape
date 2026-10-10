@@ -12,7 +12,8 @@ describe("useUIStore state transitions", () => {
       selectedJobIds: [],
       trackedViewMode: "kanban",
       drawerJobId: null,
-      settingsCategory: "schedule",
+      scraperCategory: "sources",
+      settingsCategory: "appearance",
       isScanning: false,
       scanStatusText: "",
       undoStack: [],
@@ -28,6 +29,9 @@ describe("useUIStore state transitions", () => {
 
     setView("metrics");
     expect(useUIStore.getState().view).toBe("metrics");
+
+    setView("scraper");
+    expect(useUIStore.getState().view).toBe("scraper");
 
     setView("settings");
     expect(useUIStore.getState().view).toBe("settings");

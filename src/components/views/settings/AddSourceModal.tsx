@@ -19,7 +19,7 @@ const KIND_OPTIONS = [
   { value: "lever", label: "LEVER" },
   { value: "ashby", label: "ASHBY" },
   { value: "jsonld", label: "JSON-LD (SCHEMA.ORG)" },
-  { value: "selector", label: "CSS SELECTOR" },
+  { value: "selector", label: "CUSTOM SCRAPER (CSS + REGEX)" },
 ];
 
 export function AddSourceModal({
@@ -34,8 +34,13 @@ export function AddSourceModal({
   const [identifier, setIdentifier] = useState("");
   const [selectorItem, setSelectorItem] = useState(".job-row");
   const [selectorTitle, setSelectorTitle] = useState(".title");
+  const [selectorTitleRegex, setSelectorTitleRegex] = useState("");
   const [selectorLink, setSelectorLink] = useState("a");
+  const [selectorLinkRegex, setSelectorLinkRegex] = useState("");
   const [selectorLocation, setSelectorLocation] = useState(".location");
+  const [selectorLocationRegex, setSelectorLocationRegex] = useState("");
+  const [selectorSalary, setSelectorSalary] = useState("");
+  const [selectorSalaryRegex, setSelectorSalaryRegex] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
   const handleDetect = async () => {
@@ -59,10 +64,15 @@ export function AddSourceModal({
     let config: Record<string, unknown> = {};
     if (kind === "selector") {
       config = {
-        item: selectorItem,
-        title: selectorTitle,
-        link: selectorLink,
-        location: selectorLocation,
+        item: selectorItem.trim(),
+        title: selectorTitle.trim(),
+        link: selectorLink.trim(),
+        ...(selectorLocation.trim() ? { location: selectorLocation.trim() } : {}),
+        ...(selectorSalary.trim() ? { salary: selectorSalary.trim() } : {}),
+        ...(selectorTitleRegex.trim() ? { title_regex: selectorTitleRegex.trim() } : {}),
+        ...(selectorLinkRegex.trim() ? { link_regex: selectorLinkRegex.trim() } : {}),
+        ...(selectorLocationRegex.trim() ? { location_regex: selectorLocationRegex.trim() } : {}),
+        ...(selectorSalaryRegex.trim() ? { salary_regex: selectorSalaryRegex.trim() } : {}),
       };
     }
 
@@ -80,6 +90,10 @@ export function AddSourceModal({
       setUrl("");
       setName("");
       setIdentifier("");
+      setSelectorTitleRegex("");
+      setSelectorLinkRegex("");
+      setSelectorLocationRegex("");
+      setSelectorSalaryRegex("");
     } catch (e) {
       console.error("Failed to create source:", e);
     } finally {
@@ -149,10 +163,10 @@ export function AddSourceModal({
         {kind === "selector" && (
           <div className="flex flex-col gap-2 p-3 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/30">
             <span className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
-              CSS SELECTOR CONFIGURATION
+              CUSTOM SCRAPER: CSS SELECTORS & REGEX CAPTURES
             </span>
             <div className="grid grid-cols-2 gap-2">
-              <Field label="ITEM SELECTOR">
+              <Field label="ITEM SELECTOR (CONTAINER)">
                 <Input
                   variant="mono"
                   value={selectorItem}
@@ -168,6 +182,14 @@ export function AddSourceModal({
                   placeholder=".title"
                 />
               </Field>
+              <Field label="TITLE REGEX (OPTIONAL)">
+                <Input
+                  variant="mono"
+                  value={selectorTitleRegex}
+                  onChange={(e) => setSelectorTitleRegex(e.target.value)}
+                  placeholder="e.g. Role:\s*(.*)"
+                />
+              </Field>
               <Field label="LINK SELECTOR">
                 <Input
                   variant="mono"
@@ -176,12 +198,44 @@ export function AddSourceModal({
                   placeholder="a"
                 />
               </Field>
+              <Field label="LINK REGEX (OPTIONAL)">
+                <Input
+                  variant="mono"
+                  value={selectorLinkRegex}
+                  onChange={(e) => setSelectorLinkRegex(e.target.value)}
+                  placeholder="e.g. (/jobs/\d+)"
+                />
+              </Field>
               <Field label="LOCATION SELECTOR">
                 <Input
                   variant="mono"
                   value={selectorLocation}
                   onChange={(e) => setSelectorLocation(e.target.value)}
                   placeholder=".location"
+                />
+              </Field>
+              <Field label="LOCATION REGEX (OPTIONAL)">
+                <Input
+                  variant="mono"
+                  value={selectorLocationRegex}
+                  onChange={(e) => setSelectorLocationRegex(e.target.value)}
+                  placeholder="e.g. Location:\s*([^|]+)"
+                />
+              </Field>
+              <Field label="SALARY SELECTOR (OPTIONAL)">
+                <Input
+                  variant="mono"
+                  value={selectorSalary}
+                  onChange={(e) => setSelectorSalary(e.target.value)}
+                  placeholder=".salary"
+                />
+              </Field>
+              <Field label="SALARY REGEX (OPTIONAL)">
+                <Input
+                  variant="mono"
+                  value={selectorSalaryRegex}
+                  onChange={(e) => setSelectorSalaryRegex(e.target.value)}
+                  placeholder="e.g. (\$\d+[\d,]*\s*-\s*\$\d+[\d,]*)"
                 />
               </Field>
             </div>

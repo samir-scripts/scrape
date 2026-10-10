@@ -85,6 +85,7 @@ impl Default for WorkerLimits {
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export)]
+#[allow(clippy::large_enum_variant)]
 pub enum WorkerEvent {
     Job {
         source_id: String,

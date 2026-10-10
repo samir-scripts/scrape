@@ -76,7 +76,7 @@ Default OS scrollbars (with rounded pill corners, transparent overlays, or OS-na
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ DISCOVERED (42)  [■ TRACKED ■]   METRICS   SETTINGS        ● NEXT 18:00 │  TopNav
+│ DISCOVERED (42)  [■ TRACKED ■]   METRICS   SCRAPER   SETTINGS  ● NEXT 18 │  TopNav
 ├──────────────────────────────────────────────────────────────────────────┤
 │ ROLE: [ ALL ROLES ▾ ]   MIN SALARY: [ ANY ▾ ]        SEARCH: [ /       ]│  SubNav (Dropdown filters)
 ├───────────────────────┬───────────────────────────────┬──────────────────┤
@@ -92,25 +92,19 @@ Default OS scrollbars (with rounded pill corners, transparent overlays, or OS-na
 ```
 
 - [x] `components/layout/`: `Shell`, `TopNav`, `SubNav`, `Footer` (context-aware key hints + purely functional status/count), `ThreeColumn`.
-- [x] View switching: Zustand `ui.view` (`discovered | tracked | metrics | settings`) — no router needed for 4 views; persist last view in `localStorage`.
+- [x] View switching: Zustand `ui.view` (`discovered | tracked | metrics | scraper | settings`) — 5 views with hotkey cycling; persist last view in `localStorage`.
 - [x] `components/ui/`: `Panel`, `Rule`, `ListRow` (inverted when selected), `Button` (outlined → inverted on hover/active), `Tag`, `KeyHint`, `Field`/`Input`/`Select`/`Toggle` (square checkbox, `■`/`□`), `Table` (boxed 1px grid like palette card), `Modal` (full-bleed paper overlay with dither backdrop), `Dither` (decorative halftone blob, SVG dots), `EmptyState`.
-- [x] Global keyboard map (`useHotkeys` hook, custom ~40 LOC): `Q/E` or `[`/`]` prev/next tab; `↑/↓` or `J/K` move; `↵` open URL; `A` applied; `X` ignored; `V` viewed; `U` undo last status change; `/` search; `Esc` back/clear.
-- [ ] **No flavor text rule:** Strictly remove vanity/decorative text copy (e.g. "KEYBOARD-FIRST TRIAGE ACTIVE", "COMPUTED IN REAL-TIME FROM SQLITE TRANSITIONS", "SYSTEM ONLINE"). Chrome and status labels must be purely functional and informative.
+- [x] Global keyboard map (`useHotkeys` hook): `Q/E` or `[`/`]` cycle across all 5 views; `↑/↓` or `J/K` move; `↵` open URL; `A` applied; `X` ignored; `V` viewed; `U` undo last status change; `/` search; `Esc` back/clear.
+- [ ] **No flavor text rule:** Strictly remove vanity/decorative text copy across all views.
 
 ## 3.4 Views
 
 ### Discovered (Inbox)
 - [x] Query `list_jobs({ statuses: ['scraped','viewed'] })`, sorted newest; search box.
-- [ ] Filter via compact dropdowns (`<Select>` components) and expandable filter panel:
-  - **Role Filter Dropdown:** `ALL ROLES`, `FULL-TIME`, `CONTRACT`, `INTERNSHIP`, `PART-TIME`, `OTHER`.
-  - **Salary Filter Dropdown:** `ANY SALARY`, `$100K+`, `$120K+`, `$150K+`, `$180K+`, `$200K+`, `$250K+`.
-  - **YOE Filter:** `ANY YOE`, `0-1 YRS (ENTRY/NEW GRAD)`, `1-3 YRS (MID)`, `3-5 YRS (SENIOR)`, `5+ YRS (STAFF+)`.
-  - **New Grad Filter:** `ANY`, `NEW GRAD ONLY`, `EXCLUDE NEW GRAD`.
-- [ ] Job row & detail display parsed salary, YOE tag (e.g. `3-5 YOE`, `0-1 YOE`), and New Grad badge (`[NEW GRAD]`) alongside company and location.
 - [x] Selecting a row for >1s auto-marks `viewed` (configurable).
 - [x] Bulk: `Shift+↑/↓` multi-select → `A`/`X`.
-- [x] Right panel: job metadata table (including salary, YOE, and New Grad evidence quotes) + source health; header counter `DISCOVERED (n)`.
-- [x] Live: listens to `jobs://changed` / `scrape://*` → invalidate queries; shows `SCANNING… ▓▓▓░░ 3/6 SOURCES` in TopNav during runs.
+- [x] Right panel: job metadata table + source health; header counter `DISCOVERED (n)`.
+- [x] Live: listens to `jobs://changed` / `scrape://*` → invalidate queries; shows `SCANNING…` in TopNav during runs.
 
 ### Tracked (Kanban / List)
 - [x] Columns: `APPLIED · INTERVIEWING · OFFER · REJECTED`; column header = inverted block with count.
@@ -119,15 +113,17 @@ Default OS scrollbars (with rounded pill corners, transparent overlays, or OS-na
 - [x] Card detail drawer: notes (autosave debounce 500ms), status history timeline from `job_status_events`.
 
 ### Metrics
-- Placeholder grid in Phase 3; implemented in [Phase 4](./04-metrics-dashboard.md). Zero vanity/preview subtitle text.
+- Real-time pipeline conversions, streaks, role type donut, and salary distribution histogram.
 
-### Settings (NieR "SYSTEM" style: left category list, right detail)
-- [x] **SCHEDULE:** enable toggle; presets (hourly / every 6h / daily 09:00 / weekdays 09:00) + custom 6-field cron with live `validate_cron` preview of next 3 runs; `RUN NOW`; recent runs table.
-- [x] **SOURCES:** boxed table (name, kind, enabled, last status/error); `ADD SOURCE` → paste URL → `DETECT` → confirm kind/identifier → `TEST` (dry run shows first 10) → save. Selector config form for `selector` kind.
-- [x] **FILTERS / SCRAPER:** include/exclude keyword chips, locations, role types (extended with advanced scraper pre-filters in Phase 3.5).
-- [ ] **LOGS:** Chronological scraper execution history, sorted by date and time (newest first). Any run with issues needing addressing (e.g. source HTTP 403/429 errors, timeouts, parsing/adapter failures) is marked with a prominent brutalist red square (`■` / red block). Master-detail view: left run list with status/timestamp/trigger/duration, right inspector with per-source events and diagnostic logs.
+### Scraper (Unified Scraper Hub: left category list, right detail)
+- [ ] **SOURCES:** Job boards table (name, kind, enabled, last status/error); `ADD SOURCE` modal supporting Greenhouse, Lever, Ashby, JSON-LD, CSS Selector, and **Custom Scraper (CSS + Regex)** with live preview testing.
+- [ ] **SCHEDULE:** Run schedule presets (hourly / every 6h / daily 09:00 / weekdays 09:00), custom 6-field cron with live validation, next 3 run preview, and `RUN NOW` trigger.
+- [ ] **FILTERS:** Scraper-level ingestion filtering: role types, include/exclude keywords, locations, and `RECLASSIFY POSTINGS` button.
+- [ ] **LOGS:** Chronological scraper execution history, sorted by date and time (newest first). Any run encountering issues or errors is marked with a prominent brutalist red square (`■`). Master-detail log inspector.
+
+### Settings (Application Preferences: left category list, right detail)
 - [x] **APPEARANCE:** theme `PAPER / OBSIDIAN`, dither intensity, reduce motion.
-- [x] **SYSTEM:** locale/timezone (detected, overridable), launch at login, start hidden, notifications, `OPEN DATA FOLDER`, `EXPORT CSV / JSON`.
+- [x] **SYSTEM:** locale/timezone, launch at login, start hidden, notifications, database file path, data folder, `EXPORT CSV / JSON`, and `DATA WIPE`.
 
 ## 3.5 Data layer
 - [x] `src/lib/api.ts` typed `invoke` wrappers using generated `src/bindings`.
@@ -141,11 +137,11 @@ Default OS scrollbars (with rounded pill corners, transparent overlays, or OS-na
 - [x] Manual visual QA checklist against the NieR reference (spacing, rules, inverted states, no radii).
 
 ## Acceptance Criteria
-- [x] All four views reachable by mouse and keyboard only.
+- [x] All five views (`DISCOVERED`, `TRACKED`, `METRICS`, `SCRAPER`, `SETTINGS`) reachable by mouse and keyboard only.
 - [x] Triage 20 jobs without touching the mouse.
 - [x] Zero `border-radius`, `box-shadow`, or third-party UI components in the bundle (grep check in CI).
 - [x] Theme switch persists across restarts via `app_settings`.
-- [x] Adding a source end-to-end from Settings results in jobs appearing in Discovered after `RUN NOW`.
+- [x] Adding a source end-to-end from Scraper tab results in jobs appearing in Discovered after `RUN NOW`.
 - [x] SubNav filters implemented via dropdowns (`<Select>`), not horizontal button pills.
 - [x] Zero unhelpful vanity flavor text across the entire UI.
 - [x] "SCRAPE" logo removed from TopNav; tabs align flush left.
