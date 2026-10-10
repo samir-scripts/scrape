@@ -52,7 +52,7 @@ Definitions:
 - **Response rate** = jobs reaching `interviewing|offer` ÷ total applied.
 - **Salary analytics** = computed over jobs with valid `salary_min` or `salary_max`.
 
-- [ ] Unit tests: zero-fill, week-start Sunday vs Monday, DST transition week, streak edge cases (today/yesterday/gap), multiple status flips counted once.
+- [x] Unit tests: zero-fill, week-start Sunday vs Monday, DST transition week, streak edge cases (today/yesterday/gap), multiple status flips counted once.
 
 ## 4.3 Dashboard layout (Metrics view)
 
@@ -65,22 +65,22 @@ Definitions:
 │  ▇                                               ││     ◯ donut        │
 │  ▇ ▇     ▇                                       ││  ■ FULL-TIME  62%  │
 │  ▇ ▇ ▇ ▇ ▇ ▇ ...                                 ││  ▒ CONTRACT   20%  │
-│ ──────────────────────────────                   ││  ░ INTERN     14%  │
+│  ──────────────────────────────                   ││  ░ INTERN     14%  │
 │ READOUT: WEEK 41 · 7 APPLIED                     ││  ▦ UNKNOWN     4%  │
 └──────────────────────────────────────────────────┘└────────────────────┘
 ```
 
-- [ ] Header chrome is direct and utilitarian; zero vanity copy (no "COMPUTED IN REAL TIME", "PHASE 4 ENGINE PREVIEW").
-- [ ] CSS grid: 4 metric cards row; chart row `2fr 1fr`; collapses to single column under 1100px.
-- [ ] Granularity and time-range filter via dropdown (`RANGE: [ 12 WEEKS ▾ ]`).
-- [ ] **MetricCard:** label (uppercase, ink-mute), big tabular-nums value, sub-line delta; halftone corner decoration.
-- [ ] **ApplicationsChart** (`@visx/shape` `Bar` + `scaleBand`/`scaleLinear`): last 12 weeks or 12 months; selected bar = solid ink, others = `PatternCircles` halftone; `WEEK/MONTH` toggle as inverted-block segmented control; keyboard `←/→` to move selection.
-- [ ] **RoleTypeDonut** (`@visx/shape` `Pie`, `padAngle=0`, 1px ink stroke between slices): each slice a distinct pattern (solid · hatch · dots · checker · paper); legend table with counts + %, hover/arrow selection syncs with readout.
-- [ ] Empty state: dithered placeholder + `NO APPLICATIONS LOGGED. PRESS [A] ON A JOB TO BEGIN.`
-- [ ] Refetch on `jobs://changed`.
+- [x] Header chrome is direct and utilitarian; zero vanity copy (no "COMPUTED IN REAL TIME", "PHASE 4 ENGINE PREVIEW").
+- [x] CSS grid: 4 metric cards row; chart row `2fr 1fr`; collapses to single column under 1100px.
+- [x] Granularity and time-range filter via dropdown (`RANGE: [ 12 WEEKS ▾ ]`).
+- [x] **MetricCard:** label (uppercase, ink-mute), big tabular-nums value, sub-line delta; halftone corner decoration.
+- [x] **ApplicationsChart** (`@visx/shape` `Bar` + `scaleBand`/`scaleLinear`): last 12 weeks or 12 months; selected bar = solid ink, others = `PatternCircles` halftone; `WEEK/MONTH` toggle as inverted-block segmented control; keyboard `←/→` to move selection.
+- [x] **RoleTypeDonut** (`@visx/shape` `Pie`, `padAngle=0`, 1px ink stroke between slices): each slice a distinct pattern (solid · hatch · dots · checker · paper); legend table with counts + %, hover/arrow selection syncs with readout.
+- [x] Empty state: dithered placeholder + `NO APPLICATIONS LOGGED. PRESS [A] ON A JOB TO BEGIN.`
+- [x] Refetch on `jobs://changed`.
 
 ## Acceptance Criteria
-- [ ] With seeded data (`npm run seed` → dev-only command inserting ~200 jobs/events), all charts and cards render correct values matching SQL spot-checks.
-- [ ] Marking a job `applied` updates cards and the current-week bar without reload.
-- [ ] Charts are crisp at 1× and 2× DPI; no rounded corners, gradients, shadows, or floating tooltips.
-- [ ] Both themes (paper/obsidian) render legibly.
+- [x] With seeded data (`npm run seed` → dev-only command inserting ~200 jobs/events), all charts and cards render correct values matching SQL spot-checks.
+- [x] Marking a job `applied` updates cards and the current-week bar without reload.
+- [x] Charts are crisp at 1× and 2× DPI; no rounded corners, gradients, shadows, or floating tooltips.
+- [x] Both themes (paper/obsidian) render legibly.
