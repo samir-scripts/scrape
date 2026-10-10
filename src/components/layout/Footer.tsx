@@ -28,8 +28,9 @@ export function Footer({ statusMessage }: FooterProps) {
         {view === "tracked" && (
           <>
             <KeyHint keys="↵" label="OPEN" />
-            <KeyHint keys="⇧+←/→" label="STAGE" />
-            <KeyHint keys="J/K" label="NAV" />
+            <KeyHint keys="H/L" label="COL" />
+            <KeyHint keys="J/K" label="ROW" />
+            <KeyHint keys="⇧+H/L" label="STAGE" />
             {undoStack.length > 0 && <KeyHint keys="U" label="UNDO" />}
             <KeyHint keys="Q/E" label="TAB" />
             <KeyHint keys="/" label="SEARCH" />

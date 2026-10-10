@@ -132,6 +132,35 @@ describe("Kanban 2D Matrix Navigation & Stage Shifting", () => {
     const emptyMatrix = buildColumnMatrix([]);
     expect(navigateVertical(emptyMatrix, null, 1)).toBeNull();
     expect(navigateHorizontal(emptyMatrix, null, 1)).toBeNull();
+    expect(navigateHorizontal(emptyMatrix, null, -1)).toBeNull();
+  });
+
+  it("handles orphaned or null jobId with directional boundary fallbacks", () => {
+    const matrix = buildColumnMatrix(jobs);
+    // Moving right from null/orphaned picks the first non-empty column from the left
+    expect(navigateHorizontal(matrix, null, 1)).toBe("app-1");
+    expect(navigateHorizontal(matrix, "orphaned-discovered-job-id", 1)).toBe("app-1");
+
+    // Moving left from null/orphaned picks the last non-empty column from the right
+    expect(navigateHorizontal(matrix, null, -1)).toBe("rej-1");
+    expect(navigateHorizontal(matrix, "orphaned-discovered-job-id", -1)).toBe("rej-1");
+
+    // Vertical fallback
+    expect(navigateVertical(matrix, null, 1)).toBe("app-1");
+    expect(navigateVertical(matrix, null, -1)).toBe("app-2");
+  });
+
+  it("preserves vertical row memory across unequal column heights", () => {
+    const matrix = buildColumnMatrix(jobs);
+    // Col 0 has 2 jobs (app-1 @ row 0, app-2 @ row 1)
+    // Col 1 has 1 job (int-1 @ row 0)
+    // Navigating from app-2 (row 1) to Col 1 clamps to int-1 (row 0), but with preferredRowIdx=1
+    const nextColJob = navigateHorizontal(matrix, "app-2", 1, 1);
+    expect(nextColJob).toBe("int-1");
+
+    // Moving back left with preferredRowIdx=1 symmetrically lands on app-2 (row 1)
+    const returnColJob = navigateHorizontal(matrix, nextColJob, -1, 1);
+    expect(returnColJob).toBe("app-2");
   });
 
   it("STATUS_CONFIG maps colors and labels for all tracked stages", () => {
@@ -145,3 +174,4 @@ describe("Kanban 2D Matrix Navigation & Stage Shifting", () => {
     }
   });
 });
+

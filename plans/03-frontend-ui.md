@@ -112,7 +112,7 @@ Default OS scrollbars (with rounded pill corners, transparent overlays, or OS-na
 - [x] Standardized `h-9 px-3 border-b border-[var(--color-ink)] bg-[var(--color-paper-2)]/40` column headers matching `SubNav` baseline, featuring stage telemetry (`// 01` to `// 04`), `STATUS_CONFIG` status accent pips, and tabular count badges (`[ 03 ]`).
 - [x] Gutter stability: uniform `overflow-y-scroll` tracks ensuring card borders and header count badges stay pixel-aligned across all card count variations.
 - [x] Native HTML5 drag-and-drop (no library) with delayed ghost snapshot, drag counter flicker protection, and full-height brutalist drop zone targets (`[ + ] DROP TO STAGE`).
-- [x] Full 2D keyboard matrix navigation (`src/lib/kanbanNavigation.ts`): in-column vertical (`j`/`k`/`↑`/`↓`), cross-column horizontal (`h`/`l`/`←`/`→`), stage shifting (`Shift+←/→`), inspect drawer (`Enter`), and external URL launch (`Shift+Enter`).
+- [x] Full 2D keyboard matrix navigation (`src/lib/kanbanNavigation.ts`): in-column vertical (`j`/`k`/`↑`/`↓`), cross-column horizontal (`h`/`l`/`←`/`→`), stage shifting (`Shift+←/→` and `Shift+H/L`), inspect drawer (`Enter`), and external URL launch (`Shift+Enter`). Ref-stabilized keyboard listeners in `useHotkeys` (zero listener thrashing) and view selection self-healing in `TrackedView` preventing cross-view selection orphan lockups.
 - [x] Toggle `[KANBAN] [LIST]`; list mode = boxed table with sortable columns: `TITLE`, `COMPANY`, `ROLE`, `SALARY`, `LOCATION`, `YOE`, `NEW GRAD`, `SPONSORSHIP`, `CLEARANCE`, `STAGE`, `DATE`.
 - [x] Card detail drawer: notes (autosave debounce 500ms), status history timeline from `job_status_events`, with responsive padding shift to prevent 4th column occlusion.
 
@@ -135,7 +135,7 @@ Default OS scrollbars (with rounded pill corners, transparent overlays, or OS-na
 - [x] `src/lib/events.ts`: subscribe to Tauri events once in `App`, map to query invalidations.
 
 ## 3.6 Tests
-- [x] Vitest + Testing Library for: hotkey hook, status color map, Kanban move reducer, cron preset mapping, application readiness gate.
+- [x] Vitest + Testing Library for: hotkey hook (ref stabilization, modifier guards, Vim and arrow keys), status color map, Kanban move reducer, 2D matrix navigation with orphaned ID directional fallbacks, cron preset mapping, application readiness gate.
 - [ ] Theme tests: verify custom brutalist scrollbar classes and CSS variables switch cleanly between Paper and Obsidian themes.
 - [ ] Mandatory feature test coverage: every new feature developed on its own `feature/*` branch must include automated unit/component tests covering all state variations before merging into `develop`.
 - [x] Manual visual QA checklist against the NieR reference (spacing, rules, inverted states, no radii).

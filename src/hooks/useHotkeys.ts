@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useUIStore } from "../lib/store";
 import { NAV_TABS } from "../lib/constants";
 
@@ -18,6 +18,8 @@ export interface HotkeyOptions {
 
 export function useHotkeys(options: HotkeyOptions = {}) {
   const { view, setView } = useUIStore();
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -38,8 +40,10 @@ export function useHotkeys(options: HotkeyOptions = {}) {
         return;
       }
 
+      const hasMod = e.ctrlKey || e.metaKey || e.altKey;
+
       // Tab switching: Q / [ (prev), E / ] (next)
-      if (e.key === "q" || e.key === "Q" || e.key === "[") {
+      if (!hasMod && !e.shiftKey && (e.key === "q" || e.key === "Q" || e.key === "[")) {
         e.preventDefault();
         const currentIdx = NAV_TABS.findIndex((t) => t.id === view);
         const prevIdx = (currentIdx - 1 + NAV_TABS.length) % NAV_TABS.length;
@@ -47,7 +51,7 @@ export function useHotkeys(options: HotkeyOptions = {}) {
         return;
       }
 
-      if (e.key === "e" || e.key === "E" || e.key === "]") {
+      if (!hasMod && !e.shiftKey && (e.key === "e" || e.key === "E" || e.key === "]")) {
         e.preventDefault();
         const currentIdx = NAV_TABS.findIndex((t) => t.id === view);
         const nextIdx = (currentIdx + 1) % NAV_TABS.length;
@@ -56,7 +60,7 @@ export function useHotkeys(options: HotkeyOptions = {}) {
       }
 
       // Search: /
-      if (e.key === "/") {
+      if (!hasMod && e.key === "/") {
         e.preventDefault();
         const searchInput = document.getElementById(
           "global-search-input"
@@ -67,87 +71,90 @@ export function useHotkeys(options: HotkeyOptions = {}) {
       }
 
       // Filter Drawer toggle: F
-      if (e.key === "f" || e.key === "F") {
-        if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      if (!hasMod && !e.shiftKey && (e.key === "f" || e.key === "F")) {
+        e.preventDefault();
+        useUIStore.getState().toggleFilterPanel();
+        return;
+      }
+
+      // Column shift in Tracked Kanban: Shift + Left / Right OR Shift + H / L
+      if (!hasMod && e.shiftKey) {
+        if (e.key === "ArrowLeft" || e.key === "H" || e.key === "h") {
           e.preventDefault();
-          useUIStore.getState().toggleFilterPanel();
+          optionsRef.current.onShiftLeft?.();
+          return;
+        }
+        if (e.key === "ArrowRight" || e.key === "L" || e.key === "l") {
+          e.preventDefault();
+          optionsRef.current.onShiftRight?.();
           return;
         }
       }
 
-      // Column shift in Tracked Kanban: Shift + Left / Right
-      if (e.shiftKey && e.key === "ArrowLeft") {
-        e.preventDefault();
-        options.onShiftLeft?.();
-        return;
-      }
-
-      if (e.shiftKey && e.key === "ArrowRight") {
-        e.preventDefault();
-        options.onShiftRight?.();
-        return;
-      }
-
       // Horizontal column navigation in Kanban: Left / H, Right / L (when Shift not held)
-      if (!e.shiftKey && (e.key === "ArrowLeft" || e.key === "h" || e.key === "H")) {
-        e.preventDefault();
-        options.onColLeft?.();
-        return;
-      }
-
-      if (!e.shiftKey && (e.key === "ArrowRight" || e.key === "l" || e.key === "L")) {
-        e.preventDefault();
-        options.onColRight?.();
-        return;
+      if (!hasMod && !e.shiftKey) {
+        if (e.key === "ArrowLeft" || e.key === "h" || e.key === "H") {
+          e.preventDefault();
+          optionsRef.current.onColLeft?.();
+          return;
+        }
+        if (e.key === "ArrowRight" || e.key === "l" || e.key === "L") {
+          e.preventDefault();
+          optionsRef.current.onColRight?.();
+          return;
+        }
       }
 
       // Item navigation: Down / J, Up / K
-      if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") {
-        e.preventDefault();
-        options.onNextItem?.();
-        return;
-      }
-
-      if (e.key === "ArrowUp" || e.key === "k" || e.key === "K") {
-        e.preventDefault();
-        options.onPrevItem?.();
-        return;
+      if (!hasMod && !e.shiftKey) {
+        if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") {
+          e.preventDefault();
+          optionsRef.current.onNextItem?.();
+          return;
+        }
+        if (e.key === "ArrowUp" || e.key === "k" || e.key === "K") {
+          e.preventDefault();
+          optionsRef.current.onPrevItem?.();
+          return;
+        }
       }
 
       // Open URL: Enter
-      if (e.key === "Enter") {
+      if (!hasMod && e.key === "Enter") {
         e.preventDefault();
-        options.onOpenUrl?.();
+        optionsRef.current.onOpenUrl?.();
         return;
       }
 
       // Actions: A (Apply), X (Ignore), V (Viewed), U (Undo)
-      if (e.key === "a" || e.key === "A") {
-        e.preventDefault();
-        options.onApply?.();
-        return;
-      }
+      if (!hasMod && !e.shiftKey) {
+        if (e.key === "a" || e.key === "A") {
+          e.preventDefault();
+          optionsRef.current.onApply?.();
+          return;
+        }
 
-      if (e.key === "x" || e.key === "X") {
-        e.preventDefault();
-        options.onIgnore?.();
-        return;
-      }
+        if (e.key === "x" || e.key === "X") {
+          e.preventDefault();
+          optionsRef.current.onIgnore?.();
+          return;
+        }
 
-      if (e.key === "v" || e.key === "V") {
-        e.preventDefault();
-        options.onViewed?.();
-        return;
-      }
+        if (e.key === "v" || e.key === "V") {
+          e.preventDefault();
+          optionsRef.current.onViewed?.();
+          return;
+        }
 
-      if (e.key === "u" || e.key === "U") {
-        e.preventDefault();
-        options.onUndo?.();
-        return;
+        if (e.key === "u" || e.key === "U") {
+          e.preventDefault();
+          optionsRef.current.onUndo?.();
+          return;
+        }
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [view, setView, options]);
+  }, [view, setView]);
 }
