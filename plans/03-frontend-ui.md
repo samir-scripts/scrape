@@ -107,10 +107,14 @@ Default OS scrollbars (with rounded pill corners, transparent overlays, or OS-na
 - [x] Live: listens to `jobs://changed` / `scrape://*` → invalidate queries; shows `SCANNING…` in TopNav during runs.
 
 ### Tracked (Kanban / List)
-- [x] Columns: `APPLIED · INTERVIEWING · OFFER · REJECTED`; column header = inverted block with count.
-- [x] Native HTML5 drag-and-drop (no library) + keyboard `Shift+←/→` to move card between columns.
+- [x] Columns: `APPLIED · INTERVIEWING · OFFER · REJECTED` (`TRACKED_STAGES`).
+- [x] Responsive CSS Grid architecture: `grid grid-cols-4 min-w-[1120px] w-full h-full divide-x divide-[var(--color-ink)]` inside `overflow-x-auto` viewport (no dead space on wide monitors, no crushing on narrow screens).
+- [x] Standardized `h-9 px-3 border-b border-[var(--color-ink)] bg-[var(--color-paper-2)]/40` column headers matching `SubNav` baseline, featuring stage telemetry (`// 01` to `// 04`), `STATUS_CONFIG` status accent pips, and tabular count badges (`[ 03 ]`).
+- [x] Gutter stability: uniform `overflow-y-scroll` tracks ensuring card borders and header count badges stay pixel-aligned across all card count variations.
+- [x] Native HTML5 drag-and-drop (no library) with delayed ghost snapshot, drag counter flicker protection, and full-height brutalist drop zone targets (`[ + ] DROP TO STAGE`).
+- [x] Full 2D keyboard matrix navigation (`src/lib/kanbanNavigation.ts`): in-column vertical (`j`/`k`/`↑`/`↓`), cross-column horizontal (`h`/`l`/`←`/`→`), stage shifting (`Shift+←/→`), inspect drawer (`Enter`), and external URL launch (`Shift+Enter`).
 - [x] Toggle `[KANBAN] [LIST]`; list mode = boxed table with sortable columns: `TITLE`, `COMPANY`, `ROLE`, `SALARY`, `LOCATION`, `YOE`, `NEW GRAD`, `SPONSORSHIP`, `CLEARANCE`, `STAGE`, `DATE`.
-- [x] Card detail drawer: notes (autosave debounce 500ms), status history timeline from `job_status_events`.
+- [x] Card detail drawer: notes (autosave debounce 500ms), status history timeline from `job_status_events`, with responsive padding shift to prevent 4th column occlusion.
 
 ### Metrics
 - Real-time pipeline conversions, streaks, role type donut, and salary distribution histogram.

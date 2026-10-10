@@ -21,6 +21,8 @@
 13. [Zustand & React 19: Vitest Headless LocalStorage & noUnusedLocals](#13-zustand--react-19-vitest-headless-localstorage--nounusedlocals)
 14. [Dual Range Input: Pointer Capture Inversion in Multi-Thumb HTML Sliders](#14-dual-range-input-pointer-capture-inversion-in-multi-thumb-html-sliders)
 15. [SQLite In-Memory Multi-Connection Table Isolation in SqlitePool](#15-sqlite-in-memory-multi-connection-table-isolation-in-sqlitepool)
+16. [SQLite CHECK Constraint Alteration & ISO 3166-2 Suffix Matching](#16-sqlite-check-constraint-alteration--iso-3166-2-suffix-matching)
+17. [Tracked Kanban Board: Header Seam Bleed, Asymmetrical Column Capping, and Scrollbar Gutter Misalignment](#17-tracked-kanban-board-header-seam-bleed-asymmetrical-column-capping-and-scrollbar-gutter-misalignment)
 
 ---
 
@@ -274,5 +276,19 @@
   1. Recreate the table via migration: `CREATE TABLE jobs_new (... CHECK (role_type IN (..., 'seasonal', ...))); INSERT INTO jobs_new SELECT ... FROM jobs; DROP TABLE jobs; ALTER TABLE jobs_new RENAME TO jobs;` and re-create all indexes.
   2. Implement dual-mode matching across SQL and client filters: check both exact match and suffix match (`jl.region_code = 'CA' OR jl.region_code LIKE '%-CA'`), allowing both full ISO codes and state abbreviations to filter seamlessly.
 
+---
 
+### 17. Tracked Kanban Board: Header Seam Bleed, Asymmetrical Column Capping, and Scrollbar Gutter Misalignment
 
+- **Phase:** Phase 3 / Phase 4 (Tracked Kanban Board UI)
+- **Error Signature:**
+  Kanban column headers appear misaligned with column bodies, melt into a single unbordered black slab across columns while cards below have 1px vertical borders, terminate abruptly leaving an empty void on displays > 1536px, and shift out of alignment when vertical scrollbars appear.
+- **Root Cause:**
+  1. **Color Bleed & Missing Separators:** `KanbanColumn` header applied `bg-[var(--color-ink)]` directly abutting `border-r border-[var(--color-ink)]`. Because the background and border shared the identical CSS color, the 1px vertical column dividers vanished in the header row, creating a monolithic solid black bar. Furthermore, no bottom border (`border-b border-[var(--color-ink)]`) separated the header from the cards list.
+  2. **Asymmetrical Width Clamping:** Columns used `flex-1 min-w-[240px] max-w-sm`. At $4 \times 384\text{px} = 1536\text{px}$, the columns clamped, leaving up to 40% dead space on 1080p/1440p monitors, while `last:border-r-0` caused Column 4's body to dissolve into the void without a right border.
+  3. **Scrollbar Gutter Asymmetry:** Dynamic vertical scrollbars (8px width) appeared only on overflowing columns, shifting the right edge of cards 8px inward while column headers had no scrollbar and remained unshifted.
+  4. **Status Theme Bypassing:** `KanbanBoard` defined an ad-hoc `STAGE_TITLES` map and rendered solid black headers, completely bypassing `STATUS_CONFIG` semantic colors (`lime`, `signal`, `ink`, `cherry`).
+- **Solution & Rule:**
+  1. **Strict 1px Brutalist Grid:** Enclose Kanban in a CSS Grid track container `grid grid-cols-4 min-w-[1120px] w-full h-full divide-x divide-[var(--color-ink)]` without `max-w-sm`, guaranteeing 100% viewport utilization and equal column widths.
+  2. **Standardized Header Baseline:** Set column headers to `h-9 px-3 border-b border-[var(--color-ink)] bg-[var(--color-paper-2)]/40` matching `SubNav` rhythm, with visible 1px dividing lines, telemetry indicators (`// 0X`), and `STATUS_CONFIG` status accent pips.
+  3. **Stable Scrollbar Tracks:** Apply `overflow-y-scroll` (or `scrollbar-gutter: stable`) to all column card containers to guarantee identical gutter geometry regardless of card counts.

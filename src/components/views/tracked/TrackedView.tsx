@@ -2,7 +2,12 @@ import { useMemo } from "react";
 import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
 import { useUIStore } from "../../../lib/store";
-import { TRACKED_STAGES } from "../../../lib/constants";
+import {
+  buildColumnMatrix,
+  navigateVertical,
+  navigateHorizontal,
+  shiftJobStage,
+} from "../../../lib/kanbanNavigation";
 import { KanbanBoard } from "./KanbanBoard";
 import { TrackedList } from "./TrackedList";
 import { JobDetailDrawer } from "./JobDetailDrawer";
@@ -59,33 +64,56 @@ export function TrackedView({
     return filteredJobs.findIndex((j) => j.id === selectedJobId);
   }, [filteredJobs, selectedJobId]);
 
-  // Stage shift helper: move job to prev/next stage in TRACKED_STAGES
-  const shiftStage = (direction: -1 | 1) => {
-    if (!selectedJob) return;
-    const currentStageIdx = TRACKED_STAGES.indexOf(selectedJob.status);
-    if (currentStageIdx === -1) return;
-    const nextStageIdx = currentStageIdx + direction;
-    if (nextStageIdx >= 0 && nextStageIdx < TRACKED_STAGES.length) {
-      onUpdateStatus(selectedJob.id, TRACKED_STAGES[nextStageIdx]);
-    }
-  };
+  const columnMatrix = useMemo(() => {
+    return buildColumnMatrix(filteredJobs);
+  }, [filteredJobs]);
 
   useHotkeys({
     onNextItem: () => {
-      if (filteredJobs.length === 0) return;
-      const nextIdx = Math.min(currentIndex + 1, filteredJobs.length - 1);
-      setSelectedJobId(filteredJobs[nextIdx].id);
+      if (trackedViewMode === "kanban") {
+        const nextId = navigateVertical(columnMatrix, selectedJobId, 1);
+        if (nextId) setSelectedJobId(nextId);
+      } else {
+        if (filteredJobs.length === 0) return;
+        const nextIdx = Math.min(currentIndex + 1, filteredJobs.length - 1);
+        setSelectedJobId(filteredJobs[nextIdx].id);
+      }
     },
     onPrevItem: () => {
-      if (filteredJobs.length === 0) return;
-      const prevIdx = Math.max(currentIndex - 1, 0);
-      setSelectedJobId(filteredJobs[prevIdx].id);
+      if (trackedViewMode === "kanban") {
+        const prevId = navigateVertical(columnMatrix, selectedJobId, -1);
+        if (prevId) setSelectedJobId(prevId);
+      } else {
+        if (filteredJobs.length === 0) return;
+        const prevIdx = Math.max(currentIndex - 1, 0);
+        setSelectedJobId(filteredJobs[prevIdx].id);
+      }
+    },
+    onColLeft: () => {
+      if (trackedViewMode === "kanban") {
+        const nextId = navigateHorizontal(columnMatrix, selectedJobId, -1);
+        if (nextId) setSelectedJobId(nextId);
+      }
+    },
+    onColRight: () => {
+      if (trackedViewMode === "kanban") {
+        const nextId = navigateHorizontal(columnMatrix, selectedJobId, 1);
+        if (nextId) setSelectedJobId(nextId);
+      }
     },
     onOpenUrl: () => {
       if (selectedJob) onOpenUrl(selectedJob.url);
     },
-    onShiftLeft: () => shiftStage(-1),
-    onShiftRight: () => shiftStage(1),
+    onShiftLeft: () => {
+      if (!selectedJob) return;
+      const nextStatus = shiftJobStage(selectedJob.status, -1);
+      if (nextStatus) onUpdateStatus(selectedJob.id, nextStatus);
+    },
+    onShiftRight: () => {
+      if (!selectedJob) return;
+      const nextStatus = shiftJobStage(selectedJob.status, 1);
+      if (nextStatus) onUpdateStatus(selectedJob.id, nextStatus);
+    },
     onUndo,
   });
 
@@ -95,7 +123,11 @@ export function TrackedView({
   };
 
   return (
-    <div className="flex-1 w-full h-full relative overflow-hidden flex flex-col bg-[var(--color-paper)]">
+    <div
+      className={`flex-1 w-full h-full relative overflow-hidden flex flex-col bg-[var(--color-paper)] transition-[padding] duration-150 ${
+        drawerJobId ? "pr-96" : ""
+      }`}
+    >
       {trackedViewMode === "kanban" ? (
         <KanbanBoard
           jobs={filteredJobs}
