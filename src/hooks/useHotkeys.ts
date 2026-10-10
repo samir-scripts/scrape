@@ -2,6 +2,91 @@ import { useEffect, useRef } from "react";
 import { useUIStore } from "../lib/store";
 import { NAV_TABS } from "../lib/constants";
 
+/**
+ * Root-level application hotkeys.
+ * Mounted at the top level in App.tsx so navigation is active across all views:
+ * - Tab switching: Q / [ (prev), E / ] (next)
+ * - Global search: /
+ * - Filter drawer toggle: F
+ * - Escape: blur input, close drawer/filter panel
+ */
+export function useGlobalHotkeys() {
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const activeEl = document.activeElement;
+      const isInput =
+        activeEl?.tagName === "INPUT" ||
+        activeEl?.tagName === "TEXTAREA" ||
+        activeEl?.tagName === "SELECT";
+
+      if (e.key === "Escape") {
+        if (isInput) {
+          (activeEl as HTMLElement).blur();
+          return;
+        }
+        const { isFilterPanelOpen, setFilterPanelOpen, drawerJobId, setDrawerJobId } =
+          useUIStore.getState();
+        if (isFilterPanelOpen) {
+          setFilterPanelOpen(false);
+          return;
+        }
+        if (drawerJobId) {
+          setDrawerJobId(null);
+          return;
+        }
+        return;
+      }
+
+      if (isInput) {
+        return;
+      }
+
+      const hasMod = e.ctrlKey || e.metaKey || e.altKey;
+      if (hasMod) return;
+
+      // Tab switching: Q / [ (prev), E / ] (next)
+      if (!e.shiftKey && (e.key === "q" || e.key === "Q" || e.key === "[")) {
+        e.preventDefault();
+        const currentView = useUIStore.getState().view;
+        const currentIdx = NAV_TABS.findIndex((t) => t.id === currentView);
+        const prevIdx = (currentIdx - 1 + NAV_TABS.length) % NAV_TABS.length;
+        useUIStore.getState().setView(NAV_TABS[prevIdx].id);
+        return;
+      }
+
+      if (!e.shiftKey && (e.key === "e" || e.key === "E" || e.key === "]")) {
+        e.preventDefault();
+        const currentView = useUIStore.getState().view;
+        const currentIdx = NAV_TABS.findIndex((t) => t.id === currentView);
+        const nextIdx = (currentIdx + 1) % NAV_TABS.length;
+        useUIStore.getState().setView(NAV_TABS[nextIdx].id);
+        return;
+      }
+
+      // Search: /
+      if (e.key === "/") {
+        e.preventDefault();
+        const searchInput = document.getElementById(
+          "global-search-input"
+        ) as HTMLInputElement | null;
+        searchInput?.focus();
+        searchInput?.select();
+        return;
+      }
+
+      // Filter Drawer toggle: F
+      if (!e.shiftKey && (e.key === "f" || e.key === "F")) {
+        e.preventDefault();
+        useUIStore.getState().toggleFilterPanel();
+        return;
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+}
+
 export interface HotkeyOptions {
   onNextItem?: () => void;
   onPrevItem?: () => void;
@@ -16,8 +101,11 @@ export interface HotkeyOptions {
   onShiftRight?: () => void;
 }
 
+/**
+ * View-specific hotkeys for Discovered and Tracked views.
+ * Handles in-view list/grid navigation, stage shifts, and job status mutations.
+ */
 export function useHotkeys(options: HotkeyOptions = {}) {
-  const { view, setView } = useUIStore();
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
@@ -29,53 +117,11 @@ export function useHotkeys(options: HotkeyOptions = {}) {
         activeEl?.tagName === "TEXTAREA" ||
         activeEl?.tagName === "SELECT";
 
-      if (e.key === "Escape") {
-        if (isInput) {
-          (activeEl as HTMLElement).blur();
-          return;
-        }
-      }
-
       if (isInput) {
         return;
       }
 
       const hasMod = e.ctrlKey || e.metaKey || e.altKey;
-
-      // Tab switching: Q / [ (prev), E / ] (next)
-      if (!hasMod && !e.shiftKey && (e.key === "q" || e.key === "Q" || e.key === "[")) {
-        e.preventDefault();
-        const currentIdx = NAV_TABS.findIndex((t) => t.id === view);
-        const prevIdx = (currentIdx - 1 + NAV_TABS.length) % NAV_TABS.length;
-        setView(NAV_TABS[prevIdx].id);
-        return;
-      }
-
-      if (!hasMod && !e.shiftKey && (e.key === "e" || e.key === "E" || e.key === "]")) {
-        e.preventDefault();
-        const currentIdx = NAV_TABS.findIndex((t) => t.id === view);
-        const nextIdx = (currentIdx + 1) % NAV_TABS.length;
-        setView(NAV_TABS[nextIdx].id);
-        return;
-      }
-
-      // Search: /
-      if (!hasMod && e.key === "/") {
-        e.preventDefault();
-        const searchInput = document.getElementById(
-          "global-search-input"
-        ) as HTMLInputElement | null;
-        searchInput?.focus();
-        searchInput?.select();
-        return;
-      }
-
-      // Filter Drawer toggle: F
-      if (!hasMod && !e.shiftKey && (e.key === "f" || e.key === "F")) {
-        e.preventDefault();
-        useUIStore.getState().toggleFilterPanel();
-        return;
-      }
 
       // Column shift in Tracked Kanban: Shift + Left / Right OR Shift + H / L
       if (!hasMod && e.shiftKey) {
@@ -156,5 +202,5 @@ export function useHotkeys(options: HotkeyOptions = {}) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [view, setView]);
+  }, []);
 }

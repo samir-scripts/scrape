@@ -141,7 +141,7 @@ Default OS scrollbars (with rounded pill corners, transparent overlays, or OS-na
 - [x] Manual visual QA checklist against the NieR reference (spacing, rules, inverted states, no radii).
 
 ## Acceptance Criteria
-- [x] All five views (`DISCOVERED`, `TRACKED`, `METRICS`, `SCRAPER`, `SETTINGS`) reachable by mouse and keyboard only.
+- [x] All five views (`DISCOVERED`, `TRACKED`, `METRICS`, `SCRAPER`, `SETTINGS`) reachable by mouse and keyboard only via permanent root-level `useGlobalHotkeys` (`Q`/`E`/`[`/`]`).
 - [x] Triage 20 jobs without touching the mouse.
 - [x] Zero `border-radius`, `box-shadow`, or third-party UI components in the bundle (grep check in CI).
 - [x] Theme switch persists across restarts via `app_settings`.

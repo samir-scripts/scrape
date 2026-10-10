@@ -15,6 +15,7 @@ import { ScraperView } from "./components/views/scraper/ScraperView";
 import { SettingsView } from "./components/views/settings/SettingsView";
 import { FilterPanel } from "./components/filters/FilterPanel";
 import { matchesJob } from "./lib/filter";
+import { useGlobalHotkeys } from "./hooks/useHotkeys";
 
 export default function App() {
   const queryClient = useQueryClient();
@@ -28,6 +29,9 @@ export default function App() {
     isFilterPanelOpen,
     setFilterPanelOpen,
   } = useUIStore();
+
+  // 0. Register root-level application hotkeys (Tabs Q/E, Search /, Filters F, Escape)
+  useGlobalHotkeys();
 
   // 1. Subscribe to backend events on mount
   useEffect(() => {

@@ -267,4 +267,140 @@ describe("Hotkeys Engine & Dispatch Logic", () => {
     mockWindow.dispatchEvent({ type: "keydown", key: "h" });
     expect(onColLeft).toHaveBeenCalledTimes(1);
   });
+
+  it("cycles across all five tabs bidirectionally via Q/E and [/] without dead zones", () => {
+    // Handler matching useGlobalHotkeys
+    const NAV_TABS = [
+      { id: "discovered" },
+      { id: "tracked" },
+      { id: "metrics" },
+      { id: "scraper" },
+      { id: "settings" },
+    ];
+
+    const handleGlobalKeyDown = (e: any) => {
+      const activeEl = (globalThis as any).document.activeElement;
+      const isInput =
+        activeEl?.tagName === "INPUT" ||
+        activeEl?.tagName === "TEXTAREA" ||
+        activeEl?.tagName === "SELECT";
+      if (isInput) return;
+
+      const hasMod = e.ctrlKey || e.metaKey || e.altKey;
+      if (hasMod) return;
+
+      // Q / [ -> prev
+      if (!e.shiftKey && (e.key === "q" || e.key === "Q" || e.key === "[")) {
+        e.preventDefault?.();
+        const currentView = useUIStore.getState().view;
+        const currentIdx = NAV_TABS.findIndex((t) => t.id === currentView);
+        const prevIdx = (currentIdx - 1 + NAV_TABS.length) % NAV_TABS.length;
+        useUIStore.getState().setView(NAV_TABS[prevIdx].id as any);
+        return;
+      }
+
+      // E / ] -> next
+      if (!e.shiftKey && (e.key === "e" || e.key === "E" || e.key === "]")) {
+        e.preventDefault?.();
+        const currentView = useUIStore.getState().view;
+        const currentIdx = NAV_TABS.findIndex((t) => t.id === currentView);
+        const nextIdx = (currentIdx + 1) % NAV_TABS.length;
+        useUIStore.getState().setView(NAV_TABS[nextIdx].id as any);
+        return;
+      }
+    };
+
+    mockWindow.addEventListener("keydown", handleGlobalKeyDown);
+
+    // Start at discovered
+    useUIStore.setState({ view: "discovered" });
+
+    // Press 'e': discovered -> tracked
+    mockWindow.dispatchEvent({ type: "keydown", key: "e", shiftKey: false });
+    expect(useUIStore.getState().view).toBe("tracked");
+
+    // Press 'e': tracked -> metrics
+    mockWindow.dispatchEvent({ type: "keydown", key: "e", shiftKey: false });
+    expect(useUIStore.getState().view).toBe("metrics");
+
+    // Press 'E' (capital): metrics -> scraper (CRITICAL: was previously dead!)
+    mockWindow.dispatchEvent({ type: "keydown", key: "E", shiftKey: false });
+    expect(useUIStore.getState().view).toBe("scraper");
+
+    // Press ']': scraper -> settings
+    mockWindow.dispatchEvent({ type: "keydown", key: "]", shiftKey: false });
+    expect(useUIStore.getState().view).toBe("settings");
+
+    // Press 'e': settings -> wrap around to discovered
+    mockWindow.dispatchEvent({ type: "keydown", key: "e", shiftKey: false });
+    expect(useUIStore.getState().view).toBe("discovered");
+
+    // Backward cycle with 'q': discovered -> settings
+    mockWindow.dispatchEvent({ type: "keydown", key: "q", shiftKey: false });
+    expect(useUIStore.getState().view).toBe("settings");
+
+    // Press 'q': settings -> scraper
+    mockWindow.dispatchEvent({ type: "keydown", key: "q", shiftKey: false });
+    expect(useUIStore.getState().view).toBe("scraper");
+
+    // Press '[': scraper -> metrics
+    mockWindow.dispatchEvent({ type: "keydown", key: "[", shiftKey: false });
+    expect(useUIStore.getState().view).toBe("metrics");
+
+    // Press 'Q' (capital): metrics -> tracked
+    mockWindow.dispatchEvent({ type: "keydown", key: "Q", shiftKey: false });
+    expect(useUIStore.getState().view).toBe("tracked");
+
+    // Press 'q': tracked -> discovered
+    mockWindow.dispatchEvent({ type: "keydown", key: "q", shiftKey: false });
+    expect(useUIStore.getState().view).toBe("discovered");
+  });
+
+  it("handles Escape by closing filter panel or drawer before blurring", () => {
+    const handleGlobalKeyDown = (e: any) => {
+      const activeEl = (globalThis as any).document.activeElement;
+      const isInput =
+        activeEl?.tagName === "INPUT" ||
+        activeEl?.tagName === "TEXTAREA" ||
+        activeEl?.tagName === "SELECT";
+
+      if (e.key === "Escape") {
+        if (isInput) {
+          activeEl?.blur?.();
+          return;
+        }
+        const { isFilterPanelOpen, setFilterPanelOpen, drawerJobId, setDrawerJobId } =
+          useUIStore.getState();
+        if (isFilterPanelOpen) {
+          setFilterPanelOpen(false);
+          return;
+        }
+        if (drawerJobId) {
+          setDrawerJobId(null);
+          return;
+        }
+      }
+    };
+
+    mockWindow.addEventListener("keydown", handleGlobalKeyDown);
+
+    // 1. Filter panel open
+    useUIStore.setState({ isFilterPanelOpen: true, drawerJobId: null });
+    mockWindow.dispatchEvent({ type: "keydown", key: "Escape" });
+    expect(useUIStore.getState().isFilterPanelOpen).toBe(false);
+
+    // 2. Detail drawer open
+    useUIStore.setState({ isFilterPanelOpen: false, drawerJobId: "job-123" });
+    mockWindow.dispatchEvent({ type: "keydown", key: "Escape" });
+    expect(useUIStore.getState().drawerJobId).toBeNull();
+
+    // 3. Input blur
+    const blurFn = vi.fn();
+    (globalThis as any).document.activeElement = {
+      tagName: "INPUT",
+      blur: blurFn,
+    };
+    mockWindow.dispatchEvent({ type: "keydown", key: "Escape" });
+    expect(blurFn).toHaveBeenCalledTimes(1);
+  });
 });
