@@ -13,12 +13,14 @@ interface JobMetaPanelProps {
   job: Job | null;
   onUpdateStatus: (jobId: string, status: JobStatus) => void;
   onOpenUrl: (url: string) => void;
+  onToggleFavorite?: (jobId: string) => void;
 }
 
 export function JobMetaPanel({
   job,
   onUpdateStatus,
   onOpenUrl,
+  onToggleFavorite,
 }: JobMetaPanelProps) {
   if (!job) {
     return (
@@ -57,6 +59,16 @@ export function JobMetaPanel({
         <div className="flex justify-between items-center px-3 py-1.5 border-b border-[var(--color-ink)]">
           <span className="text-[var(--color-ink-mute)]">STATUS</span>
           <Tag status={job.status} />
+        </div>
+        <div className="flex justify-between items-center px-3 py-1.5 border-b border-[var(--color-ink)]">
+          <span className="text-[var(--color-ink-mute)]">FAVORITED</span>
+          <span
+            className={`font-bold ${
+              job.favorited ? "text-[var(--color-lime)]" : "text-[var(--color-ink-mute)]"
+            }`}
+          >
+            {job.favorited ? "★ YES (PROTECTED)" : "☆ NO"}
+          </span>
         </div>
         <div className="flex justify-between items-center px-3 py-1.5 border-b border-[var(--color-ink)]">
           <span className="text-[var(--color-ink-mute)]">ROLE TYPE</span>
@@ -220,6 +232,17 @@ export function JobMetaPanel({
         >
           IGNORE POSTING
         </Button>
+
+        {onToggleFavorite && (
+          <Button
+            variant={job.favorited ? "inverted" : "default"}
+            onClick={() => onToggleFavorite(job.id)}
+            className="w-full justify-between"
+            shortcut="S"
+          >
+            {job.favorited ? "★ FAVORITED (PROTECTED)" : "☆ FAVORITE POSTING"}
+          </Button>
+        )}
 
         {job.status === "scraped" && (
           <Button

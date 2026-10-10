@@ -357,6 +357,9 @@ mod tests {
                 enabled: Some(true),
                 cadence: Some(scrape_core::SourceCadence::Every12h),
                 cadence_cron: None,
+                retention_days: None,
+                retention_policy: None,
+                filters: None,
             },
         )
         .await

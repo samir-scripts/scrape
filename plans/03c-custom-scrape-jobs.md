@@ -1,172 +1,102 @@
-# Phase 3.6 — Custom Company Scrape Jobs, Cadence Scheduling & YAML Specs
+# Phase 3.7 — Autonomous Scrape Workflows, Data Retention, Job Favoriting, YAML Validation & Airflow Observability
 
-**Goal:** Allow users to monitor any company career site (especially lesser-known companies and startups without standard ATS portals) as an independent **Scrape Job**. Jobs can be scraped on-demand, scheduled on independent cadences (or custom 6-field cron), tested with live dry-runs, inspected via telemetry drawers, and configured through either a brutalist form or declarative YAML.
+**Goal:** Transform the Scraper feature from fragmented global tabs into self-contained **Autonomous Static Workflows** modeled after **Apache Airflow DAGs** and **Google Cloud Composer**. Consolidate the Scraper hub into `[ WORKFLOWS ]` and `[ EXECUTION LOGS ]`, implement a TTL **Data Retention Engine** with a strict multi-tier safety shield (protecting tracked applications, notes, and **favorited** postings), provide real-time **YAML Live Validation**, and display auto-dismissing **Bottom-Right Error Toasts**.
 
 ← [Phase 3.5](./03b-enrichment-filters.md) · [Master Plan](./00-master-plan.md) · Next → [Phase 4](./04-metrics-dashboard.md)
 
 ---
 
-## 3.6.0 Motivation & Mental Model
+## 3.7.0 Motivation & Architectural Mental Model
 
-In standard job boards, users are locked into platform-wide scraping schedules and predetermined ATS adapters. However, candidates frequently track specific target employers—regional firms, boutique engineering consultancies, stealth startups—that publish postings directly on their own corporate domains (`https://acmecorp.com/careers`).
+In traditional architectures, schedule and ingestion filters are global settings, while target sources are configured separately. This creates friction: a user monitoring Stripe for Staff Distributed Systems in SF on an hourly basis cannot simultaneously monitor an early-stage startup for Junior Rust on a weekly basis without rules clashing. Furthermore, scraped postings accumulate indefinitely without a TTL policy.
 
-### Progressive Extraction Cascade
+### The Static DAG Pipeline Lifecycle
+Every scrape target is an autonomous linear pipeline DAG:
 ```
-[User inputs URL: https://acmecorp.com/careers]
-                     │
-                     ▼
-       ┌───────────────────────────┐
-       │ Tier 1: ATS Auto-Detector │ ── Found Greenhouse/Lever/Ashby? ──► [Auto-configured ATS Job]
-       └─────────────┬─────────────┘
-                     │ No
-                     ▼
-       ┌───────────────────────────┐
-       │ Tier 2: JSON-LD Detector  │ ── Found schema.org/JobPosting? ──► [Auto-configured JSON-LD Job]
-       └─────────────┬─────────────┘
-                     │ No
-                     ▼
-       ┌───────────────────────────┐
-       │ Tier 3: Custom Selectors  │ ── Inputs CSS selectors & regex ──► [Configures Selector Engine]
-       │         & Regex Capture   │
-       └─────────────┬─────────────┘
-                     │ User clicks [TEST SCRAPER]
-                     ▼
-       ┌───────────────────────────┐
-       │ Tier 4: Dry-Run Preview   │ ── Verifies Title, Link, Location ─► [Save & Activate Job]
-       └───────────────────────────┘
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  1. EXTRACT  │ ──► │  2. FILTER   │ ──► │  3. ENRICH   │ ──► │  4. STORE    │ ──► │ 5. RETENTION │
+└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
+ ATS / Selectors       Per-Source Roles,    Salaries, Geo,       SQLite Upsert &      Purge Expired
+ HTML Extraction       Keywords, Locations  YOE, Sponsorship     Deduplication        Untracked Jobs
 ```
+
+### Streamlined Scraper Hub Layout
+The root `SCRAPER` hub eliminates separate `SCHEDULE` and `FILTERS` sub-tabs, consolidating into two clean categories:
+1. **`[ WORKFLOWS ]`**: Airflow-style DAG registry & inspector.
+2. **`[ EXECUTION LOGS ]`**: Central observability hub with brutalist red square (`■`) error diagnostics.
 
 ---
 
-## 3.6.1 Cadence Matrix & Custom Cron
+## 3.7.1 Data Retention Engine (TTL Policy) & Favorites Safety Shield
 
-Every Scrape Job supports independent execution cadence:
+### Three-Tier Protection Shield
+A job posting is **strictly protected** and will **NEVER** be pruned by the data retention engine if:
+1. **Tracked Status**: Status is in `applied`, `interviewing`, `offer`, or `rejected`.
+2. **Candidate Notes**: `notes IS NOT NULL AND notes != ''`.
+3. **Favorited**: `favorited = 1`.
 
-| Cadence Option | Behavior | Cron Mapping / Interval |
-|---|---|---|
-| `INHERIT_GLOBAL` | Runs whenever the master scraper cron fires (default: daily at 12:00) | `global` |
-| `HOURLY` | Runs every hour | `0 0 * * * *` |
-| `EVERY_6H` | Runs every 6 hours | `0 0 */6 * * *` |
-| `EVERY_12H` | Runs every 12 hours | `0 0 */12 * * *` |
-| `DAILY` | Runs daily at 09:00 local time | `0 0 9 * * *` |
-| `WEEKLY` | Runs Monday at 09:00 local time | `0 0 9 * * MON` |
-| `MANUAL_ONLY` | Never runs automatically; only triggered via `[RUN NOW]` | `manual` |
-| `CUSTOM_CRON` | Arbitrary user-defined 6-field cron expression | User input with real-time preview of next 3 run times |
-
-### Scheduler Engine
-The `SchedulerService` runs a 60-second polling tick:
+### Pruning SQL Query
 ```sql
-SELECT id, cadence, cadence_cron, next_run_at FROM sources
-WHERE enabled = 1
-  AND cadence != 'global'
-  AND cadence != 'manual'
-  AND next_run_at <= datetime('now');
+DELETE FROM jobs
+WHERE source_id = ?
+  AND status IN ('scraped', 'viewed', 'ignored')
+  AND favorited = 0
+  AND (notes IS NULL OR notes = '')
+  AND date_added <= datetime('now', '-' || ? || ' days');
 ```
-When due, each source is scraped in isolation via `runner.trigger_single_source(app, &source.id)` and its `next_run_at` timestamp is recalculated.
 
 ---
 
-## 3.6.2 Declarative YAML Specification
+## 3.7.2 Job Favoriting Architecture & UI Interactions
 
-To give power users full portability and text-editor friendliness, jobs can be viewed, edited, exported, and imported as clean YAML:
+- **Schema:** `favorited INTEGER NOT NULL DEFAULT 0` and `favorited_at TEXT` in `jobs` with index `CREATE INDEX idx_jobs_favorited ON jobs(favorited, date_added DESC);`.
+- **Hotkey:** Key `S` (Star / Save / Favorite) toggles favorite state for the active job in Discovered and Tracked views.
+- **Discovered View:** Star toggle button `[★] / [☆]` in `ListRow` and `JobMetaPanel` triage actions.
+- **Tracked View:** Star badge `★` on Kanban cards and sortable column in Tracked list.
+- **Quick Filter:** `[★ FAVORITES]` toggle button in `SubNav` filters down to favorited postings with one click.
+
+---
+
+## 3.7.3 Declarative YAML Specification v2 & Real-Time Validation
 
 ```yaml
-version: 1
-company: Acme Corp
-url: https://acmecorp.com/careers
-cadence:
-  type: every_12h # options: global, hourly, every_6h, every_12h, daily, weekly, manual, cron
-  cron: "0 0 */12 * * *"
-engine:
-  kind: selector
-  selectors:
-    item: ".job-listing"
-    title: "h3.title"
-    link: "a.apply-link"
-    location: ".location-pill"
-    salary: ".compensation"
-  regex:
-    salary: '(?P<value>\$\d+[\d,]*\s*-\s*\$\d+[\d,]*)'
+version: 2
+metadata:
+  name: "Stripe — Core Infrastructure"
+  company: "Stripe"
+  enabled: true
+extractor:
+  kind: greenhouse
+  url: "https://boards.greenhouse.io/stripe"
+schedule:
+  cadence: daily
+  time: "09:00"
+  cron: "0 0 9 * * *"
+filters:
+  role_types: [full_time, contract]
+  include_keywords: ["Software Engineer", "Rust"]
+  exclude_keywords: ["Manager"]
+  locations: ["Remote", "San Francisco, CA"]
+retention:
+  days: 30
+  policy: untracked_only
 ```
 
-- **Storage:** SQLite remains the transactional database of record (guaranteeing ACID referential integrity with `jobs.source_id` and indexed queries).
-- **UI:** The Add/Edit Job modal features a toggle between **[FORM VIEW]** and **[YAML SPEC]**. Changes in either view sync bidirectionally.
-- **Import/Export:** One-click copy/paste of YAML specifications.
+### Real-Time Validation & Bottom-Right Error Toasts
+1. **Live Editor Feedback:** `[✓ PARSABLE · SPEC V2]` (lime) vs `[■ SYNTAX ERROR: Line X, Col Y]` (cherry red).
+2. **Save Enforcement:** If the user attempts to save a workflow with invalid YAML or parameters:
+   - Save is blocked.
+   - An auto-dismissing brutalist toast appears in the **bottom-right corner** (`fixed bottom-4 right-4 z-50`):
+     `"YAML could not be saved due to parsing issues or invalid parameters: <error details>"`
+   - Automatically disappears after 5 seconds or via manual `[×]` click.
 
 ---
 
-## 3.6.3 Database Migration — `0004_scrape_jobs_cadence.sql`
+## 3.7.4 Automated Test Matrix
 
-```sql
--- Migration 0004: Scrape jobs cadence, execution duration, and single source runs
-
-ALTER TABLE sources ADD COLUMN cadence TEXT NOT NULL DEFAULT 'global'
-  CHECK (cadence IN ('global', 'hourly', 'every_6h', 'every_12h', 'daily', 'weekly', 'manual', 'cron'));
-ALTER TABLE sources ADD COLUMN cadence_cron TEXT;
-ALTER TABLE sources ADD COLUMN next_run_at TEXT;
-ALTER TABLE sources ADD COLUMN last_run_duration_ms INTEGER;
-
-ALTER TABLE scrape_runs ADD COLUMN source_id TEXT REFERENCES sources(id) ON DELETE SET NULL;
-
-CREATE INDEX IF NOT EXISTS idx_sources_cadence ON sources(cadence, enabled);
-CREATE INDEX IF NOT EXISTS idx_scrape_runs_source_id ON scrape_runs(source_id, started_at DESC);
-```
-
----
-
-## 3.6.4 Backend IPC Protocol & Commands
-
-```rust
-// 1. Run a single source on demand into SQLite
-#[tauri::command]
-pub async fn run_source_now(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<ScrapeRun>;
-
-// 2. Pre-flight test of transient config via sidecar stdin without saving
-#[tauri::command]
-pub async fn test_source_transient(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    input: TransientSourceConfig,
-) -> Result<Vec<WorkerEvent>>;
-
-// 3. List recent runs for a specific source
-#[tauri::command]
-pub async fn list_source_runs(
-    state: State<'_, AppState>,
-    source_id: String,
-    limit: Option<i64>,
-) -> Result<Vec<ScrapeRun>>;
-```
-
----
-
-## 3.6.5 UI/UX Specification (NieR Brutalist)
-
-1. **SCRAPE JOBS Registry View:**
-   - Replaces static Sources list under `SCRAPER` tab.
-   - Header with `[ALL]`, `[ATS]`, `[CUSTOM]`, `[ERRORS]` filter segmented toggle.
-   - Per-row action buttons: `[RUN]`, `[TEST]`, `[EDIT]`, `[DELETE]`.
-   - Status indicators: `[ OK ]` (Lime), `[ EMPTY ]` (Lavender), `[ ERROR ]` (Cherry), `[ RUNNING ]` (Signal).
-2. **Inspector Drawer:**
-   - Clicking a row expands telemetry: URL, cadence, lifetime postings discovered, last 5 runs, error logs.
-   - Direct button `[VIEW POSTINGS IN INBOX →]` pre-filtering the Discovered inbox.
-3. **Add/Edit Modal:**
-   - 4-step workflow: Target URL & Auto-Detect → Metadata & Cadence → Selectors & Regex → Live Dry-Run Preview.
-   - Dual-mode editor: `[FORM]` vs `[YAML]`.
-
----
-
-## 3.6.6 Automated Test Coverage Matrix
-
-- [x] **Database Migration 0004:** Unit test verifying SQLite migration, column additions, check constraints, and index creation.
-- [x] **Cadence Calculation:** Unit tests for `next_run_at` computation across presets and custom cron expressions.
-- [x] **YAML Conversion:** Round-trip tests converting between `Source` / input structures and YAML strings.
-- [x] **Single Source Execution:** Runner test verifying `trigger_single_source` runs only the target source and updates `last_run_duration_ms`.
-- [x] **Frontend Vitest Suite:**
-  - Cadence picker preset selection and custom cron input.
-  - YAML preview toggle and syntax parsing.
-  - Single-source scrape trigger button and status reflection.
+- [x] **Database Migration 0005:** Verify `favorited`, `retention_days`, `retention_policy`, and `filters` columns and indexes.
+- [x] **Retention Pruning Test:** Expired postings that are favorited, tracked, or have notes are NOT deleted.
+- [x] **YAML Validator Tests (`yaml_workflow.test.ts`):** Valid v2 specs, syntax errors with line/column coordinates, parameter errors.
+- [x] **Toast Store Tests (`toast.test.ts`):** Triggering error toast, 5000ms auto-dismissal, manual dismissal.
+- [x] **Hotkeys Test:** Pressing `S` toggles favorite state.
+- [x] **Workflow Modal Test:** Attempting save with invalid YAML triggers bottom-right toast and aborts save.

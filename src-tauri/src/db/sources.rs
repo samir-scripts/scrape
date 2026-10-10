@@ -22,6 +22,9 @@ pub struct Source {
     pub cadence_cron: Option<String>,
     pub next_run_at: Option<String>,
     pub last_run_duration_ms: Option<i64>,
+    pub retention_days: i64,
+    pub retention_policy: String,
+    pub filters: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -34,6 +37,9 @@ pub struct CreateSourceInput {
     pub enabled: Option<bool>,
     pub cadence: Option<SourceCadence>,
     pub cadence_cron: Option<String>,
+    pub retention_days: Option<i64>,
+    pub retention_policy: Option<String>,
+    pub filters: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -46,6 +52,9 @@ pub struct UpdateSourceInput {
     pub enabled: Option<bool>,
     pub cadence: Option<SourceCadence>,
     pub cadence_cron: Option<String>,
+    pub retention_days: Option<i64>,
+    pub retention_policy: Option<String>,
+    pub filters: Option<serde_json::Value>,
 }
 
 pub struct SourcesRepo;
@@ -64,6 +73,13 @@ impl SourcesRepo {
                 .unwrap_or(SourceCadence::Global),
             None => SourceCadence::Global,
         };
+        let retention_days: i64 = r.try_get("retention_days").unwrap_or(30);
+        let retention_policy: String = r
+            .try_get("retention_policy")
+            .unwrap_or_else(|_| "untracked_only".to_string());
+        let filters_str: String = r.try_get("filters").unwrap_or_else(|_| "{}".to_string());
+        let filters: serde_json::Value =
+            serde_json::from_str(&filters_str).unwrap_or_else(|_| serde_json::json!({}));
 
         Ok(Source {
             id: r.get("id"),
@@ -80,6 +96,9 @@ impl SourcesRepo {
             cadence_cron: r.get("cadence_cron"),
             next_run_at: r.get("next_run_at"),
             last_run_duration_ms: r.get("last_run_duration_ms"),
+            retention_days,
+            retention_policy,
+            filters,
         })
     }
 
@@ -87,7 +106,7 @@ impl SourcesRepo {
         let rows = sqlx::query(
             r#"
             SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_error, created_at,
-                   cadence, cadence_cron, next_run_at, last_run_duration_ms
+                   cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters
             FROM sources
             ORDER BY created_at DESC
             "#
@@ -107,7 +126,7 @@ impl SourcesRepo {
         let r = sqlx::query(
             r#"
             SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_error, created_at,
-                   cadence, cadence_cron, next_run_at, last_run_duration_ms
+                   cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters
             FROM sources
             WHERE id = ?
             "#
@@ -137,11 +156,19 @@ impl SourcesRepo {
             serde_json::Value::String(s) => s,
             _ => "global".to_string(),
         };
+        let retention_days = input.retention_days.unwrap_or(30).max(0);
+        let retention_policy = input
+            .retention_policy
+            .unwrap_or_else(|| "untracked_only".to_string());
+        let filters_str = match input.filters {
+            Some(ref f) => serde_json::to_string(f)?,
+            None => "{}".to_string(),
+        };
 
         sqlx::query(
             r#"
-            INSERT INTO sources (id, kind, name, identifier, config, enabled, created_at, cadence, cadence_cron, next_run_at, last_run_duration_ms)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, NULL)
+            INSERT INTO sources (id, kind, name, identifier, config, enabled, created_at, cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, NULL, ?10, ?11, ?12)
             "#,
         )
         .bind(&id)
@@ -153,6 +180,9 @@ impl SourcesRepo {
         .bind(created_at)
         .bind(cadence_str)
         .bind(input.cadence_cron)
+        .bind(retention_days)
+        .bind(retention_policy)
+        .bind(filters_str)
         .execute(pool)
         .await?;
 
@@ -174,12 +204,17 @@ impl SourcesRepo {
             _ => "global".to_string(),
         };
         let cadence_cron = input.cadence_cron.or(existing.cadence_cron);
+        let retention_days = input.retention_days.unwrap_or(existing.retention_days).max(0);
+        let retention_policy = input.retention_policy.unwrap_or(existing.retention_policy);
+        let filters = input.filters.unwrap_or(existing.filters);
+        let filters_str = serde_json::to_string(&filters)?;
 
         sqlx::query(
             r#"
             UPDATE sources
-            SET name = ?1, identifier = ?2, config = ?3, enabled = ?4, cadence = ?5, cadence_cron = ?6
-            WHERE id = ?7
+            SET name = ?1, identifier = ?2, config = ?3, enabled = ?4, cadence = ?5, cadence_cron = ?6,
+                retention_days = ?7, retention_policy = ?8, filters = ?9
+            WHERE id = ?10
             "#,
         )
         .bind(name)
@@ -188,6 +223,9 @@ impl SourcesRepo {
         .bind(enabled_val)
         .bind(cadence_str)
         .bind(cadence_cron)
+        .bind(retention_days)
+        .bind(retention_policy)
+        .bind(filters_str)
         .bind(input.id.clone())
         .execute(pool)
         .await?;
@@ -265,7 +303,7 @@ impl SourcesRepo {
         let rows = sqlx::query(
             r#"
             SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_error, created_at,
-                   cadence, cadence_cron, next_run_at, last_run_duration_ms
+                   cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters
             FROM sources
             WHERE enabled = 1
               AND cadence != 'global'
@@ -305,6 +343,9 @@ mod tests {
                 enabled: Some(true),
                 cadence: Some(SourceCadence::Every12h),
                 cadence_cron: None,
+                retention_days: Some(45),
+                retention_policy: Some("untracked_only".to_string()),
+                filters: Some(serde_json::json!({"include_keywords": ["rust"]})),
             },
         )
         .await
@@ -314,11 +355,15 @@ mod tests {
         assert_eq!(created.identifier, "stripe");
         assert_eq!(created.kind, SourceKind::Greenhouse);
         assert_eq!(created.cadence, SourceCadence::Every12h);
+        assert_eq!(created.retention_days, 45);
+        assert_eq!(created.retention_policy, "untracked_only");
+        assert_eq!(created.filters["include_keywords"][0], "rust");
         assert!(created.enabled);
 
         let list = SourcesRepo::list(&pool).await.unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].cadence, SourceCadence::Every12h);
+        assert_eq!(list[0].retention_days, 45);
 
         let updated = SourcesRepo::update(
             &pool,
@@ -330,6 +375,9 @@ mod tests {
                 enabled: Some(false),
                 cadence: Some(SourceCadence::Cron),
                 cadence_cron: Some("0 30 9 * * *".to_string()),
+                retention_days: Some(60),
+                retention_policy: None,
+                filters: None,
             },
         )
         .await
@@ -338,6 +386,7 @@ mod tests {
         assert_eq!(updated.name, "Stripe Global");
         assert_eq!(updated.cadence, SourceCadence::Cron);
         assert_eq!(updated.cadence_cron.as_deref(), Some("0 30 9 * * *"));
+        assert_eq!(updated.retention_days, 60);
         assert!(!updated.enabled);
 
         SourcesRepo::set_run_result(

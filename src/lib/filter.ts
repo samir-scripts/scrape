@@ -37,6 +37,11 @@ export function matchesJob(job: Job, filter: Partial<JobFilter>): boolean {
     return false;
   }
 
+  // 4b. Favorited only
+  if (filter.favorited_only && !job.favorited) {
+    return false;
+  }
+
   // 5. Salary range overlap
   const hasSalaryFilter =
     filter.salary_min != null || filter.salary_max != null;
@@ -239,6 +244,7 @@ export function formatExperience(job: Job): string {
  */
 export function countActiveFilters(filter: Partial<JobFilter>): number {
   let count = 0;
+  if (filter.favorited_only) count++;
   if (filter.salary_min != null || filter.salary_max != null) count++;
   if (filter.experience_min != null || filter.experience_max != null) count++;
   if (filter.new_grad && filter.new_grad !== "any") count++;

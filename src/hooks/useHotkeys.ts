@@ -97,6 +97,7 @@ export interface HotkeyOptions {
   onIgnore?: () => void;
   onViewed?: () => void;
   onUndo?: () => void;
+  onToggleFavorite?: () => void;
   onShiftLeft?: () => void;
   onShiftRight?: () => void;
 }
@@ -195,6 +196,12 @@ export function useHotkeys(options: HotkeyOptions = {}) {
         if (e.key === "u" || e.key === "U") {
           e.preventDefault();
           optionsRef.current.onUndo?.();
+          return;
+        }
+
+        if (e.key === "s" || e.key === "S") {
+          e.preventDefault();
+          optionsRef.current.onToggleFavorite?.();
           return;
         }
       }

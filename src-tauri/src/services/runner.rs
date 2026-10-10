@@ -698,6 +698,31 @@ impl ScrapeRunner {
             job_buffer.clear();
         }
 
+        // Task 5 in DAG: Post-run retention pruning for participating sources
+        for src_id in source_statuses.keys() {
+            if let Ok(source) = SourcesRepo::get(&self.pool, src_id).await {
+                if source.retention_days > 0 {
+                    if let Ok(pruned) = JobsRepo::prune_expired_by_source(
+                        &self.pool,
+                        &source.id,
+                        source.retention_days,
+                        &source.retention_policy,
+                    )
+                    .await
+                    {
+                        if pruned > 0 {
+                            tracing::info!(
+                                "Retention pruned {} expired jobs for workflow '{}' ({})",
+                                pruned,
+                                source.name,
+                                source.id
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         Ok((total_found, total_new, source_statuses))
     }
 }

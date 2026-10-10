@@ -58,6 +58,7 @@ export function FilterPanel({
       sort: filterSpec.sort ?? null,
       limit: null,
       offset: null,
+      favorited_only: filterSpec.favorited_only ?? null,
       salary_min: filterSpec.salary_min ?? null,
       salary_max: filterSpec.salary_max ?? null,
       salary_currency: filterSpec.salary_currency ?? null,

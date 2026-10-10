@@ -31,6 +31,8 @@ pub struct MetricsTotals {
     pub interviewing: i64,
     #[ts(type = "number")]
     pub offers: i64,
+    #[ts(type = "number")]
+    pub favorited: i64,
     pub response_rate: f64,
     #[ts(type = "number | null")]
     pub median_salary: Option<i64>,
@@ -131,6 +133,11 @@ impl MetricsRepo {
         } else {
             0.0
         };
+
+        let favorited: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM jobs WHERE favorited = 1")
+            .fetch_one(pool)
+            .await
+            .unwrap_or(0);
 
         // 2. Salary calculations
         let salary_rows: Vec<(Option<i64>, Option<i64>)> = sqlx::query_as(
@@ -280,6 +287,7 @@ impl MetricsRepo {
                 applied,
                 interviewing,
                 offers,
+                favorited,
                 response_rate,
                 median_salary,
                 avg_salary,
@@ -460,6 +468,7 @@ mod tests {
         assert_eq!(metrics.totals.interviewing, 0);
         assert_eq!(metrics.totals.offers, 0);
         assert_eq!(metrics.totals.response_rate, 0.0);
+        assert_eq!(metrics.totals.favorited, 0);
         assert_eq!(metrics.totals.median_salary, None);
         assert_eq!(metrics.totals.avg_salary, None);
         assert_eq!(metrics.series.len(), 12);

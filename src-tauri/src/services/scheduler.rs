@@ -317,6 +317,9 @@ mod tests {
             cadence_cron: None,
             next_run_at: None,
             last_run_duration_ms: None,
+            retention_days: 30,
+            retention_policy: "untracked_only".to_string(),
+            filters: serde_json::json!({}),
         };
 
         // Global cadence has no independent next run

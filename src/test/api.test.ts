@@ -46,6 +46,8 @@ describe("Domain models & types", () => {
       status: "applied",
       status_changed_at: "2026-10-09T01:00:00Z",
       notes: "Referred by friend",
+      favorited: true,
+      favorited_at: "2026-10-09T01:00:00Z",
       salary_min: 140000,
       salary_max: 180000,
       salary_currency: "USD",

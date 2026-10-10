@@ -23,7 +23,7 @@ interface TrackedListProps {
   onOpenUrl: (url: string) => void;
 }
 
-export type SortField = "company" | "title" | "status" | "salary" | "date_added";
+export type SortField = "company" | "title" | "status" | "salary" | "date_added" | "favorited";
 
 export function compareTrackedJobs(
   a: Job,
@@ -32,7 +32,9 @@ export function compareTrackedJobs(
   sortAsc: boolean
 ): number {
   let cmp = 0;
-  if (sortField === "company") {
+  if (sortField === "favorited") {
+    cmp = (a.favorited ? 1 : 0) - (b.favorited ? 1 : 0);
+  } else if (sortField === "company") {
     cmp = a.company.localeCompare(b.company);
   } else if (sortField === "title") {
     cmp = a.title.localeCompare(b.title);
@@ -86,6 +88,9 @@ export function TrackedList({
       <Table>
         <TableHead>
           <TableRow>
+            <TableHeader onClick={() => handleSort("favorited")} className="cursor-pointer w-8 text-center" title="Sort by Favorited">
+              ★ {sortField === "favorited" ? (sortAsc ? "▲" : "▼") : ""}
+            </TableHeader>
             <TableHeader onClick={() => handleSort("company")} className="cursor-pointer">
               COMPANY {sortField === "company" ? (sortAsc ? "▲" : "▼") : ""}
             </TableHeader>
@@ -121,6 +126,9 @@ export function TrackedList({
                   isSelected ? "bg-[var(--color-paper-2)] font-bold" : ""
                 }`}
               >
+                <TableCell className={`text-center font-bold ${job.favorited ? "text-[var(--color-lime)]" : "text-[var(--color-ink-mute)]"}`}>
+                  {job.favorited ? "★" : "☆"}
+                </TableCell>
                 <TableCell className="font-bold uppercase">{job.company}</TableCell>
                 <TableCell>{job.title}</TableCell>
                 <TableCell>

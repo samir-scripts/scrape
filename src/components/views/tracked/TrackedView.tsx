@@ -20,6 +20,7 @@ interface TrackedViewProps {
   onUpdateNotes: (jobId: string, notes: string) => void;
   onOpenUrl: (url: string) => void;
   onUndo: () => void;
+  onToggleFavorite?: (jobId: string) => void;
 }
 
 export function TrackedView({
@@ -28,6 +29,7 @@ export function TrackedView({
   onUpdateNotes,
   onOpenUrl,
   onUndo,
+  onToggleFavorite,
 }: TrackedViewProps) {
   const {
     trackedViewMode,
@@ -149,6 +151,11 @@ export function TrackedView({
       const nextStatus = shiftJobStage(selectedJob.status, 1);
       if (nextStatus) onUpdateStatus(selectedJob.id, nextStatus);
     },
+    onToggleFavorite: () => {
+      if (selectedJob && onToggleFavorite) {
+        onToggleFavorite(selectedJob.id);
+      }
+    },
     onUndo,
   });
 
@@ -189,6 +196,7 @@ export function TrackedView({
         onUpdateStatus={onUpdateStatus}
         onUpdateNotes={onUpdateNotes}
         onOpenUrl={onOpenUrl}
+        onToggleFavorite={onToggleFavorite}
       />
     </div>
   );
