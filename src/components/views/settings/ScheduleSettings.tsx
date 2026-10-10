@@ -197,6 +197,7 @@ export function ScheduleSettings({
               value={clockState}
               onChange={handleClockChange}
               className="flex-1"
+              is24h={settings.system_time_format === "24h"}
             />
 
             {/* Side Action & Validation Panel */}

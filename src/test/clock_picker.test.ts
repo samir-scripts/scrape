@@ -224,5 +224,226 @@ describe("ClockPicker Mechanics & Geometry Snapping", () => {
       expect(shouldAutoAdvanceMin("4")).toBe(false);
       expect(shouldAutoAdvanceMin("45")).toBe(true);
     });
+
+    it("handles overtyping when length > 2 by extracting the latest keystroke", () => {
+      const resolveRawInput = (value: string): string => {
+        let raw = value.replace(/\D/g, "");
+        if (!raw) return "";
+        if (raw.length > 2) {
+          raw = raw.slice(-1);
+        }
+        return raw;
+      };
+
+      expect(resolveRawInput("094")).toBe("4");
+      expect(resolveRawInput("125")).toBe("5");
+      expect(resolveRawInput("001")).toBe("1");
+      expect(resolveRawInput("08")).toBe("08");
+      expect(resolveRawInput("")).toBe("");
+    });
+
+    it("simulates 12H direct typing state machine and blur transitions", () => {
+      // Helper simulating the ClockPicker 12H typing and blur logic
+      class ClockPickerTypingHarness {
+        hour12 = 9;
+        minute = 0;
+        hourDraft: string | null = null;
+        hourDraftRef: string | null = null;
+        mode: "hours" | "minutes" = "hours";
+
+        setDraft(val: string | null) {
+          this.hourDraft = val;
+          this.hourDraftRef = val;
+        }
+
+        typeInput(text: string) {
+          let raw = text.replace(/\D/g, "");
+          if (!raw) {
+            this.setDraft("");
+            return;
+          }
+          if (raw.length > 2) {
+            raw = raw.slice(-1);
+          }
+
+          if (raw.length === 1) {
+            const digit = parseInt(raw, 10);
+            if (digit >= 2) {
+              this.hour12 = digit;
+              this.setDraft(null);
+              this.mode = "minutes";
+              // Synchronous blur occurs when focus moves to minute input
+              this.handleBlur();
+            } else {
+              this.setDraft(raw);
+              if (digit === 1) {
+                this.hour12 = 1;
+              }
+            }
+          } else {
+            let val = parseInt(raw.slice(0, 2), 10);
+            if (val === 0) val = 12;
+            if (val > 12) val = 12;
+            this.hour12 = val;
+            this.setDraft(null);
+            this.mode = "minutes";
+            this.handleBlur();
+          }
+        }
+
+        handleBlur() {
+          const draft = this.hourDraftRef;
+          if (draft === null) {
+            return; // Already committed; blur is no-op
+          }
+          if (draft === "" || draft === "0") {
+            const val = draft === "0" ? 12 : this.hour12;
+            this.hour12 = val;
+          } else {
+            let val = parseInt(draft, 10);
+            let clamped = Math.min(12, Math.max(1, val));
+            if (clamped === 0) clamped = 12;
+            this.hour12 = clamped;
+          }
+          this.setDraft(null);
+        }
+      }
+
+      // 1. Typing '4' directly should set hour to 4, advance to minutes, and NOT default to 12 on blur
+      const harness1 = new ClockPickerTypingHarness();
+      harness1.typeInput("4");
+      expect(harness1.hour12).toBe(4);
+      expect(harness1.mode).toBe("minutes");
+      expect(harness1.hourDraftRef).toBeNull();
+
+      // 2. Typing '1' (draft '1') and then blurring should commit 1, NOT 12
+      const harness2 = new ClockPickerTypingHarness();
+      harness2.typeInput("1");
+      expect(harness2.hourDraftRef).toBe("1");
+      harness2.handleBlur();
+      expect(harness2.hour12).toBe(1);
+      expect(harness2.hourDraftRef).toBeNull();
+
+      // 3. Typing '1' then '0' commits 10 and does not revert to 12
+      const harness3 = new ClockPickerTypingHarness();
+      harness3.typeInput("1");
+      harness3.typeInput("10");
+      expect(harness3.hour12).toBe(10);
+      expect(harness3.mode).toBe("minutes");
+
+      // 4. Typing '1' then '2' commits 12
+      const harness4 = new ClockPickerTypingHarness();
+      harness4.typeInput("1");
+      harness4.typeInput("12");
+      expect(harness4.hour12).toBe(12);
+      expect(harness4.mode).toBe("minutes");
+
+      // 5. Backspacing to empty and blurring should revert to previous value (9), NOT force 12
+      const harness5 = new ClockPickerTypingHarness();
+      harness5.typeInput("");
+      expect(harness5.hourDraftRef).toBe("");
+      harness5.handleBlur();
+      expect(harness5.hour12).toBe(9);
+
+      // 6. Typing '0' (draft) and blurring defaults to 12 because 0 is invalid in 12H
+      const harness6 = new ClockPickerTypingHarness();
+      harness6.typeInput("0");
+      expect(harness6.hourDraftRef).toBe("0");
+      harness6.handleBlur();
+      expect(harness6.hour12).toBe(12);
+
+      // 7. Typing '0' then '5' sets 5
+      const harness7 = new ClockPickerTypingHarness();
+      harness7.typeInput("0");
+      harness7.typeInput("05");
+      expect(harness7.hour12).toBe(5);
+      expect(harness7.mode).toBe("minutes");
+
+      // 8. Overtyping '09' with '3' without selecting text: '093' -> '3' sets 3
+      const harness8 = new ClockPickerTypingHarness();
+      harness8.typeInput("093");
+      expect(harness8.hour12).toBe(3);
+      expect(harness8.mode).toBe("minutes");
+    });
+
+    it("simulates 24H direct typing state machine and conversions", () => {
+      class ClockPicker24HTypingHarness {
+        hour24 = 14;
+        hourDraftRef: string | null = null;
+        mode: "hours" | "minutes" = "hours";
+
+        setDraft(val: string | null) {
+          this.hourDraftRef = val;
+        }
+
+        typeInput(text: string) {
+          let raw = text.replace(/\D/g, "");
+          if (!raw) {
+            this.setDraft("");
+            return;
+          }
+          if (raw.length > 2) {
+            raw = raw.slice(-1);
+          }
+
+          if (raw.length === 1) {
+            const digit = parseInt(raw, 10);
+            if (digit >= 3) {
+              this.hour24 = digit;
+              this.setDraft(null);
+              this.mode = "minutes";
+              this.handleBlur();
+            } else {
+              this.setDraft(raw);
+              this.hour24 = digit;
+            }
+          } else {
+            const val = Math.min(23, Math.max(0, parseInt(raw.slice(0, 2), 10)));
+            this.hour24 = val;
+            this.setDraft(null);
+            this.mode = "minutes";
+            this.handleBlur();
+          }
+        }
+
+        handleBlur() {
+          const draft = this.hourDraftRef;
+          if (draft === null) return;
+          if (draft === "" || draft === "0") {
+            this.hour24 = 0;
+          } else {
+            const val = parseInt(draft, 10);
+            this.hour24 = Math.min(23, Math.max(0, val));
+          }
+          this.setDraft(null);
+        }
+      }
+
+      // Typing '5' auto-advances to minutes with 05
+      const h1 = new ClockPicker24HTypingHarness();
+      h1.typeInput("5");
+      expect(h1.hour24).toBe(5);
+      expect(h1.mode).toBe("minutes");
+
+      // Typing '2' then '1' commits 21
+      const h2 = new ClockPicker24HTypingHarness();
+      h2.typeInput("2");
+      h2.typeInput("21");
+      expect(h2.hour24).toBe(21);
+      expect(h2.mode).toBe("minutes");
+
+      // Typing '2' then '8' clamps to 23
+      const h3 = new ClockPicker24HTypingHarness();
+      h3.typeInput("2");
+      h3.typeInput("28");
+      expect(h3.hour24).toBe(23);
+      expect(h3.mode).toBe("minutes");
+
+      // Typing '0' and blurring commits 0 (Midnight 00:00)
+      const h4 = new ClockPicker24HTypingHarness();
+      h4.typeInput("0");
+      h4.handleBlur();
+      expect(h4.hour24).toBe(0);
+    });
   });
 });

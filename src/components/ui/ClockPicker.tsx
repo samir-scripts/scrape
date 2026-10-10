@@ -47,6 +47,18 @@ export function ClockPicker({
   // Direct typing draft buffers
   const [hourDraft, setHourDraft] = useState<string | null>(null);
   const [minuteDraft, setMinuteDraft] = useState<string | null>(null);
+  const hourDraftRef = useRef<string | null>(null);
+  const minuteDraftRef = useRef<string | null>(null);
+
+  const updateHourDraft = useCallback((val: string | null) => {
+    hourDraftRef.current = val;
+    setHourDraft(val);
+  }, []);
+
+  const updateMinuteDraft = useCallback((val: string | null) => {
+    minuteDraftRef.current = val;
+    setMinuteDraft(val);
+  }, []);
 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const hourInputRef = useRef<HTMLInputElement | null>(null);
@@ -106,8 +118,8 @@ export function ClockPicker({
 
   const updateFromPointer = useCallback(
     (deg: number, distance: number) => {
-      setHourDraft(null);
-      setMinuteDraft(null);
+      updateHourDraft(null);
+      updateMinuteDraft(null);
 
       if (mode === "hours") {
         const step = 360 / 12;
@@ -133,7 +145,7 @@ export function ClockPicker({
         notifyChange(hour12, m, ampm, cadence);
       }
     },
-    [mode, minute, hour12, ampm, cadence, is24h, notifyChange]
+    [mode, minute, hour12, ampm, cadence, is24h, notifyChange, updateHourDraft, updateMinuteDraft]
   );
 
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
@@ -171,10 +183,14 @@ export function ClockPicker({
 
   // Keyboard and direct typing handlers for Hour Input
   const handleHourChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/\D/g, "");
+    let raw = e.target.value.replace(/\D/g, "");
     if (!raw) {
-      setHourDraft("");
+      updateHourDraft("");
       return;
+    }
+
+    if (raw.length > 2) {
+      raw = raw.slice(-1);
     }
 
     if (is24h) {
@@ -184,13 +200,13 @@ export function ClockPicker({
           const converted = from24Hour(digit);
           setHour12(converted.hour12);
           setAmPm(converted.ampm);
-          setHourDraft(null);
+          updateHourDraft(null);
           notifyChange(converted.hour12, minute, converted.ampm, cadence);
           setMode("minutes");
           minuteInputRef.current?.focus();
           minuteInputRef.current?.select();
         } else {
-          setHourDraft(raw);
+          updateHourDraft(raw);
           const converted = from24Hour(digit);
           setHour12(converted.hour12);
           setAmPm(converted.ampm);
@@ -201,7 +217,7 @@ export function ClockPicker({
         const converted = from24Hour(val);
         setHour12(converted.hour12);
         setAmPm(converted.ampm);
-        setHourDraft(null);
+        updateHourDraft(null);
         notifyChange(converted.hour12, minute, converted.ampm, cadence);
         setMode("minutes");
         minuteInputRef.current?.focus();
@@ -212,13 +228,13 @@ export function ClockPicker({
         const digit = parseInt(raw, 10);
         if (digit >= 2) {
           setHour12(digit);
-          setHourDraft(null);
+          updateHourDraft(null);
           notifyChange(digit, minute, ampm, cadence);
           setMode("minutes");
           minuteInputRef.current?.focus();
           minuteInputRef.current?.select();
         } else {
-          setHourDraft(raw);
+          updateHourDraft(raw);
           if (digit === 1) {
             setHour12(1);
             notifyChange(1, minute, ampm, cadence);
@@ -229,7 +245,7 @@ export function ClockPicker({
         if (val === 0) val = 12;
         if (val > 12) val = 12;
         setHour12(val);
-        setHourDraft(null);
+        updateHourDraft(null);
         notifyChange(val, minute, ampm, cadence);
         setMode("minutes");
         minuteInputRef.current?.focus();
@@ -239,43 +255,68 @@ export function ClockPicker({
   };
 
   const handleHourBlur = () => {
-    if (hourDraft !== null) {
-      if (hourDraft === "" || hourDraft === "0") {
-        const val = is24h ? 0 : 12;
+    const draft = hourDraftRef.current;
+    if (draft === null) {
+      return;
+    }
+
+    if (draft === "" || draft === "0") {
+      if (is24h) {
+        const val = 0;
         const converted = from24Hour(val);
         setHour12(converted.hour12);
-        if (is24h) setAmPm(converted.ampm);
-        notifyChange(converted.hour12, minute, is24h ? converted.ampm : ampm, cadence);
+        setAmPm(converted.ampm);
+        notifyChange(converted.hour12, minute, converted.ampm, cadence);
       } else {
-        const val = parseInt(hourDraft, 10);
-        if (is24h) {
-          const clamped = Math.min(23, Math.max(0, val));
-          const converted = from24Hour(clamped);
-          setHour12(converted.hour12);
-          setAmPm(converted.ampm);
-          notifyChange(converted.hour12, minute, converted.ampm, cadence);
-        } else {
-          let clamped = Math.min(12, Math.max(1, val));
-          if (clamped === 0) clamped = 12;
-          setHour12(clamped);
-          notifyChange(clamped, minute, ampm, cadence);
-        }
+        const val = draft === "0" ? 12 : hour12;
+        setHour12(val);
+        notifyChange(val, minute, ampm, cadence);
       }
-      setHourDraft(null);
+    } else {
+      const val = parseInt(draft, 10);
+      if (is24h) {
+        const clamped = Math.min(23, Math.max(0, val));
+        const converted = from24Hour(clamped);
+        setHour12(converted.hour12);
+        setAmPm(converted.ampm);
+        notifyChange(converted.hour12, minute, converted.ampm, cadence);
+      } else {
+        let clamped = Math.min(12, Math.max(1, val));
+        if (clamped === 0) clamped = 12;
+        setHour12(clamped);
+        notifyChange(clamped, minute, ampm, cadence);
+      }
     }
+    updateHourDraft(null);
   };
 
   const handleHourKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === ":" || e.key === "Tab" || e.key === "ArrowRight") {
       if (e.key === ":") {
         e.preventDefault();
+        if (hourDraftRef.current !== null && hourDraftRef.current !== "") {
+          const val = parseInt(hourDraftRef.current, 10);
+          if (is24h) {
+            const clamped = Math.min(23, Math.max(0, val));
+            const converted = from24Hour(clamped);
+            setHour12(converted.hour12);
+            setAmPm(converted.ampm);
+            notifyChange(converted.hour12, minute, converted.ampm, cadence);
+          } else {
+            let clamped = Math.min(12, Math.max(1, val));
+            if (clamped === 0) clamped = 12;
+            setHour12(clamped);
+            notifyChange(clamped, minute, ampm, cadence);
+          }
+        }
+        updateHourDraft(null);
         setMode("minutes");
         minuteInputRef.current?.focus();
         minuteInputRef.current?.select();
       }
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setHourDraft(null);
+      updateHourDraft(null);
       if (is24h) {
         const next = (current24h + 1) % 24;
         const converted = from24Hour(next);
@@ -289,7 +330,7 @@ export function ClockPicker({
       }
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
-      setHourDraft(null);
+      updateHourDraft(null);
       if (is24h) {
         const prev = current24h === 0 ? 23 : current24h - 1;
         const converted = from24Hour(prev);
@@ -306,50 +347,56 @@ export function ClockPicker({
 
   // Keyboard and direct typing handlers for Minute Input
   const handleMinuteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/\D/g, "");
+    let raw = e.target.value.replace(/\D/g, "");
     if (!raw) {
-      setMinuteDraft("");
+      updateMinuteDraft("");
       return;
+    }
+
+    if (raw.length > 2) {
+      raw = raw.slice(-1);
     }
 
     if (raw.length === 1) {
       const digit = parseInt(raw, 10);
       if (digit >= 6) {
         setMinute(digit);
-        setMinuteDraft(null);
+        updateMinuteDraft(null);
         notifyChange(hour12, digit, ampm, cadence);
       } else {
-        setMinuteDraft(raw);
+        updateMinuteDraft(raw);
         setMinute(digit);
         notifyChange(hour12, digit, ampm, cadence);
       }
     } else {
       const val = Math.min(59, Math.max(0, parseInt(raw.slice(0, 2), 10)));
       setMinute(val);
-      setMinuteDraft(null);
+      updateMinuteDraft(null);
       notifyChange(hour12, val, ampm, cadence);
     }
   };
 
   const handleMinuteBlur = () => {
-    if (minuteDraft !== null) {
-      if (minuteDraft === "") {
-        setMinute(0);
-        notifyChange(hour12, 0, ampm, cadence);
-      } else {
-        const val = Math.min(59, Math.max(0, parseInt(minuteDraft, 10)));
-        setMinute(val);
-        notifyChange(hour12, val, ampm, cadence);
-      }
-      setMinuteDraft(null);
+    const draft = minuteDraftRef.current;
+    if (draft === null) {
+      return;
     }
+    if (draft === "") {
+      setMinute(minute);
+      notifyChange(hour12, minute, ampm, cadence);
+    } else {
+      const val = Math.min(59, Math.max(0, parseInt(draft, 10)));
+      setMinute(val);
+      notifyChange(hour12, val, ampm, cadence);
+    }
+    updateMinuteDraft(null);
   };
 
   const handleMinuteKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (
       e.key === "Backspace" &&
-      (minuteDraft === "" ||
-        (minuteDraft === null && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0))
+      (minuteDraftRef.current === "" ||
+        (minuteDraftRef.current === null && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0))
     ) {
       e.preventDefault();
       setMode("hours");
@@ -357,13 +404,13 @@ export function ClockPicker({
       hourInputRef.current?.select();
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setMinuteDraft(null);
+      updateMinuteDraft(null);
       const next = (minute + 1) % 60;
       setMinute(next);
       notifyChange(hour12, next, ampm, cadence);
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
-      setMinuteDraft(null);
+      updateMinuteDraft(null);
       const prev = minute === 0 ? 59 : minute - 1;
       setMinute(prev);
       notifyChange(hour12, prev, ampm, cadence);
@@ -442,11 +489,16 @@ export function ClockPicker({
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
-            maxLength={2}
+            maxLength={3}
             value={hourDraft !== null ? hourDraft : pad2(displayHour)}
             onFocus={() => {
               setMode("hours");
               hourInputRef.current?.select();
+            }}
+            onMouseUp={(e) => {
+              if (e.currentTarget.selectionStart === e.currentTarget.selectionEnd) {
+                e.currentTarget.select();
+              }
             }}
             onChange={handleHourChange}
             onKeyDown={handleHourKeyDown}
@@ -464,11 +516,16 @@ export function ClockPicker({
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
-            maxLength={2}
+            maxLength={3}
             value={minuteDraft !== null ? minuteDraft : pad2(minute)}
             onFocus={() => {
               setMode("minutes");
               minuteInputRef.current?.select();
+            }}
+            onMouseUp={(e) => {
+              if (e.currentTarget.selectionStart === e.currentTarget.selectionEnd) {
+                e.currentTarget.select();
+              }
             }}
             onChange={handleMinuteChange}
             onKeyDown={handleMinuteKeyDown}
