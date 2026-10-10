@@ -101,19 +101,21 @@ Default OS scrollbars (with rounded pill corners, transparent overlays, or OS-na
 
 ### Discovered (Inbox)
 - [x] Query `list_jobs({ statuses: ['scraped','viewed'] })`, sorted newest; search box.
-- [ ] Filter via compact dropdowns (`<Select>` components):
+- [ ] Filter via compact dropdowns (`<Select>` components) and expandable filter panel:
   - **Role Filter Dropdown:** `ALL ROLES`, `FULL-TIME`, `CONTRACT`, `INTERNSHIP`, `PART-TIME`, `OTHER`.
   - **Salary Filter Dropdown:** `ANY SALARY`, `$100K+`, `$120K+`, `$150K+`, `$180K+`, `$200K+`, `$250K+`.
-- [ ] Job row & detail display parsed salary (e.g., `$160K–$210K/YR` or raw string) alongside company and location.
+  - **YOE Filter:** `ANY YOE`, `0-1 YRS (ENTRY/NEW GRAD)`, `1-3 YRS (MID)`, `3-5 YRS (SENIOR)`, `5+ YRS (STAFF+)`.
+  - **New Grad Filter:** `ANY`, `NEW GRAD ONLY`, `EXCLUDE NEW GRAD`.
+- [ ] Job row & detail display parsed salary, YOE tag (e.g. `3-5 YOE`, `0-1 YOE`), and New Grad badge (`[NEW GRAD]`) alongside company and location.
 - [x] Selecting a row for >1s auto-marks `viewed` (configurable).
 - [x] Bulk: `Shift+↑/↓` multi-select → `A`/`X`.
-- [x] Right panel: job metadata table (including salary row) + source health; header counter `DISCOVERED (n)`.
+- [x] Right panel: job metadata table (including salary, YOE, and New Grad evidence quotes) + source health; header counter `DISCOVERED (n)`.
 - [x] Live: listens to `jobs://changed` / `scrape://*` → invalidate queries; shows `SCANNING… ▓▓▓░░ 3/6 SOURCES` in TopNav during runs.
 
 ### Tracked (Kanban / List)
 - [x] Columns: `APPLIED · INTERVIEWING · OFFER · REJECTED`; column header = inverted block with count.
 - [x] Native HTML5 drag-and-drop (no library) + keyboard `Shift+←/→` to move card between columns.
-- [x] Toggle `[KANBAN] [LIST]`; list mode = boxed table with sortable columns (applied date, company, salary, stage).
+- [x] Toggle `[KANBAN] [LIST]`; list mode = boxed table with sortable columns: `TITLE`, `COMPANY`, `ROLE`, `SALARY`, `LOCATION`, `YOE`, `NEW GRAD`, `SPONSORSHIP`, `CLEARANCE`, `STAGE`, `DATE`.
 - [x] Card detail drawer: notes (autosave debounce 500ms), status history timeline from `job_status_events`.
 
 ### Metrics
@@ -149,4 +151,4 @@ Default OS scrollbars (with rounded pill corners, transparent overlays, or OS-na
 - [x] "SCRAPE" logo removed from TopNav; tabs align flush left.
 - [ ] OS default scrollbar replaced with theme-synchronized brutalist scrollbar (0px radius, 1px border, ink/paper colors).
 - [ ] All user-suggested features developed on dedicated feature branches with passing tests before merge.
-- [ ] Extended in [Phase 3.5](./03b-enrichment-filters.md): custom filter panel (state, country, salary range slider + numbers, sponsorship & clearance tri-state `YES`/`NO`/`N/A`), table columns, scraper advanced settings, and scraper logs.
+- [ ] Extended in [Phase 3.5](./03b-enrichment-filters.md): custom filter panel (state, country, salary range slider + numbers, YOE, New Grad, sponsorship & clearance tri-state `YES`/`NO`/`N/A`), table columns, scraper advanced settings, and scraper logs.

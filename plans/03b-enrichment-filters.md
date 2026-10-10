@@ -20,9 +20,12 @@
 | **Selector** | Optional `salary` CSS selector, or regex over the item's text. | `location` selector → gazetteer. | Optional `description` selector. |
 
 **What this means:**
-1. **No ATS has a structured sponsorship or clearance field.** Both have to come from a **text classifier over the job description**, which means we have to fetch descriptions. Every result keeps the **sentence that triggered it** so you can check it.
-2. **Salary is often missing.** Pay-transparency laws only cover some jurisdictions, and Greenhouse needs an extra request per job. Any filter on salary/sponsorship/clearance needs an **"include N/A"** option, or it will quietly drop most jobs.
+1. **No ATS has a structured sponsorship, clearance, YOE, or new grad field.** All must be extracted via **text parsing, regex, and title/description classifiers**. Every result stores the matching **evidence sentence** for verification.
+2. **Salary and YOE are often missing.** Pay-transparency laws only cover some jurisdictions, and some postings do not write explicit experience years. Any filter on salary, YOE, sponsorship, or clearance needs an **"include N/A"** option, or it will quietly discard valuable jobs.
 3. **Locations are often free text and often multiple per job.** They need normalizing into a child table (`job_locations`). Regions use ISO 3166-2 codes (`US-CA` vs `CA-ON`) so `"CA"` isn't ambiguous.
+4. **Validity of YOE & New Grad as Filters and Columns:**
+   - **As Filters:** High candidate value. Candidates either target early-career / new grad positions (and want to filter out 3+ or 5+ YOE postings), or have extensive experience and want to filter out junior roles.
+   - **As Table Columns:** Adding `YOE` (e.g. `3–5 YRS`, `0–1 YRS`, `—`) and `NEW GRAD` (`YES`, `NO`, `N/A`) columns provides instant scannability and sorting capability in both Discovered triage and Tracked pipeline tables.
 
 ---
 
@@ -42,6 +45,11 @@ ALTER TABLE jobs ADD COLUMN sponsorship_evidence TEXT;
 ALTER TABLE jobs ADD COLUMN clearance         TEXT NOT NULL DEFAULT 'unknown' CHECK (clearance IN ('yes','no','unknown'));
 ALTER TABLE jobs ADD COLUMN clearance_level   TEXT CHECK (clearance_level IN ('public_trust','confidential','secret','top_secret','ts_sci'));
 ALTER TABLE jobs ADD COLUMN clearance_evidence TEXT;
+ALTER TABLE jobs ADD COLUMN experience_min    INTEGER;               -- minimum years of experience (0 for new grad/entry)
+ALTER TABLE jobs ADD COLUMN experience_max    INTEGER;               -- maximum years (e.g. 5 for "3-5 years", null for "5+")
+ALTER TABLE jobs ADD COLUMN experience_raw    TEXT;                  -- e.g. "3-5 years", "5+ years", "0-1 years"
+ALTER TABLE jobs ADD COLUMN is_new_grad       TEXT NOT NULL DEFAULT 'unknown' CHECK (is_new_grad IN ('yes','no','unknown'));
+ALTER TABLE jobs ADD COLUMN experience_evidence TEXT;                -- matching snippet/quote
 ALTER TABLE jobs ADD COLUMN description_text  TEXT;                  -- plain text, capped at 32 KB
 ALTER TABLE jobs ADD COLUMN enrichment_version INTEGER NOT NULL DEFAULT 0;
 
@@ -57,6 +65,8 @@ CREATE TABLE IF NOT EXISTS job_locations (
 CREATE INDEX IF NOT EXISTS idx_job_locations_geo ON job_locations(country_code, region_code);
 CREATE INDEX IF NOT EXISTS idx_jobs_salary       ON jobs(salary_currency, salary_max);
 CREATE INDEX IF NOT EXISTS idx_jobs_eligibility  ON jobs(sponsorship, clearance);
+CREATE INDEX IF NOT EXISTS idx_jobs_experience   ON jobs(experience_min, experience_max);
+CREATE INDEX IF NOT EXISTS idx_jobs_new_grad     ON jobs(is_new_grad);
 ```
 
 - [ ] Keep `jobs.location` (the raw display string) for backward compatibility. Backfill `job_locations` from it with the gazetteer during migration (a Rust post-migration step, not SQL).
@@ -72,6 +82,7 @@ All parsing/classification lives in `scrape-core`, so the **worker** (to filter 
 | `salary.rs` | `from_structured(min, max, currency, interval)`, `from_text(&str) -> Option<Salary>` | Matches `$120,000 – $150,000`, `$120k-150k`, `USD 120,000`, `$55/hr`, `£60,000`. **Rejects false positives:** needs a salary context word nearby (`salary`, `compensation`, `pay`, `base`, `range`, `/yr`, `per hour`). Ignores `$5M Series A`, `401(k)`, `$100 stipend`, and annualized amounts < 10,000. |
 | `location.rs` | `parse(raw) -> Vec<ParsedLocation>` | Splits on `;` `\|` `/` ` or `. Embedded gazetteer: US states + DC + territories, Canadian provinces, ISO 3166 country names / alpha-2 / alpha-3 + aliases (`USA`, `U.S.`, `UK`), and about 300 major cities mapped to region (`NYC` → `US-NY`). Handles `Remote - US`, `Remote (Canada)`, `Anywhere`. Ambiguity rules: `City, CA` → `US-CA`. `Georgia` → `US-GA` unless paired with `Tbilisi`. |
 | `eligibility.rs` | `classify_sponsorship(text) -> Classified`, `classify_clearance(text) -> Classified { value, level, evidence }` | Works per sentence. Patterns below. **"No" beats "Yes" in the same posting** (e.g. "we sponsor for some roles but cannot sponsor for this one"). |
+| `experience.rs` | `extract_experience(title, text) -> ExperienceClassification { min_years, max_years, raw, is_new_grad, evidence }` | Title heuristics: "New Grad", "University Grad", "Campus Hire", "Early Career", "Class of 202X", "Entry Level", "Associate" → `is_new_grad = Yes`, `min = 0, max = 1`. "Senior" → default min 5, "Staff/Principal" → default min 8. Text regex matches `3-5 years`, `5+ years`, `minimum 3 years of experience`. Rejects false positives: degree duration ("4-year degree"), company age ("10+ years in business"), roadmap ("next 2-3 years"). Multi-degree tiers (BS 3+ vs MS 1+) pick lowest threshold. |
 | `html.rs` | `to_plain_text(html, max_bytes)` | Turns ATS HTML into text for storage and classification. |
 
 **Sponsorship patterns (case-insensitive, sentence-scoped):**
@@ -83,6 +94,15 @@ All parsing/classification lives in `scrape-core`, so the **worker** (to filter 
 - `yes` (+ level) → `(active|current)? (TS/SCI|top secret|secret|public trust) (security)? clearance`, `security clearance (is)? required`, `must (be able to)? (obtain|maintain|hold) … clearance`, `polygraph`.
 - `no` → `no (security)? clearance (is)? required`, `clearance (is)? not required`.
 - Plain "clearance" with no qualifier doesn't count (e.g. "clearance sale"). The text needs `security clearance` or a level term.
+
+**YOE & New Grad patterns (case-insensitive, sentence/title-scoped):**
+- Title indicators for New Grad: `(?i)\b(new grad(uate)?|university grad(uate)?|campus hire|early career|class of 202[4-7]|intern to hire|rotational program|entry level|associate)\b`.
+- Description YOE regex:
+  - Range: `(?i)(\d+)\s*(?:-|to)\s*(\d+)\+?\s*(?:years?|yrs?)(?:\s+of)?(?:\s+(?:relevant|professional|software|industry|work))?\s*experience`
+  - Minimum: `(?i)(\d+)\+\s*(?:years?|yrs?)(?:\s+of)?(?:\s+(?:relevant|professional|software|industry|work))?\s*experience`
+  - Explicit words: `(?i)(?:at least|minimum of|minimum)\s*(\d+)\s*(?:years?|yrs?)(?:\s+of)?(?:\s+(?:relevant|professional|software|industry|work))?\s*experience`
+  - Zero / Entry: `(?i)(?:0|no)\s*(?:years?|yrs?)(?:\s+of)?\s*experience` → `min = 0, max = 0, is_new_grad = 'yes'`
+- Disqualifiers / Non-new grad: `(?i)(this is not an entry[- ]level role|minimum \d+ years of post[- ]graduate experience)`.
 
 - [ ] `ENRICHMENT_VERSION` constant. Bump it whenever the rules change. A host command `reclassify_jobs()` re-runs the classifiers on stored `description_text` for every row with an older `enrichment_version`, with no rescrape needed. Runs automatically on startup after an upgrade.
 
@@ -96,6 +116,8 @@ All parsing/classification lives in `scrape-core`, so the **worker** (to filter 
    "workplace_type": "hybrid",
    "sponsorship": {"value":"no","evidence":"Applicants must be authorized to work in the U.S. without sponsorship."},
    "clearance":   {"value":"unknown","level":null,"evidence":null},
+   "experience":  {"min":3,"max":5,"raw":"3-5 years","evidence":"3+ years of experience in distributed systems."},
+   "is_new_grad": "no",
    "description_text": "…"}
   ```
 - [ ] **Greenhouse:** list with `?content=true`. Per-job pay call (`?pay_transparency=true`) only for jobs that **pass the cheap pre-filters** (keyword/role/location). Uses the existing per-host semaphore and delay. Can be turned off with `scraper.fetch_details` (ADVANCED).
@@ -103,7 +125,7 @@ All parsing/classification lives in `scrape-core`, so the **worker** (to filter 
 - [ ] **Ashby:** add `?includeCompensation=true`. Take the `summaryComponents` entry with `compensationType == "Salary"`. Parse `address`, `secondaryLocations`, `isRemote`, `workplaceType`, `descriptionPlain`.
 - [ ] **JSON-LD:** `baseSalary`, `jobLocation`, `jobLocationType`, `applicantLocationRequirements`, `description`, `securityClearanceRequirement`, `eligibilityToWorkRequirement`.
 - [ ] **Selector:** optional `salary` and `description` selectors in the source config form.
-- [ ] **Two-stage filter in the worker:** (1) cheap filter on title/role/location before any detail fetch. (2) full filter (salary/sponsorship/clearance) after enrichment. Both use `scrape_core::filter::JobPredicate`.
+- [ ] **Two-stage filter in the worker:** (1) cheap filter on title/role/location before any detail fetch. (2) full filter (salary/sponsorship/clearance/experience) after enrichment. Both use `scrape_core::filter::JobPredicate`.
 - [ ] Upsert: enrichment columns use `COALESCE(excluded.x, jobs.x)` so a scrape that's missing data never erases good data. `job_locations` is replaced per job inside the same transaction. `status`, `notes`, `date_added` are untouched.
 
 ## 3.5.4 Two filter layers
@@ -123,6 +145,8 @@ type FilterSpec = {
   role_types: RoleType[];
   location: { countries: string[]; regions: string[]; remote: "any" | "remote_only" | "exclude_remote"; include_unknown: boolean };
   salary:   { min: number | null; max: number | null; currency: string; include_unknown: boolean };
+  experience: { min: number | null; max: number | null; include_unknown: boolean };
+  new_grad: "any" | "new_grad_only" | "exclude_new_grad";
   sponsorship: Tri[];        // subset of ["yes","no","unknown"]; all three = no filter
   clearance:   Tri[];
   workplace_types: WorkplaceType[];
@@ -131,6 +155,8 @@ type FilterSpec = {
 ```
 
 - **Salary matching uses range overlap:** a job matches `[lo, hi]` if `salary_max >= lo AND salary_min <= hi`. Missing bounds count as open. Jobs in other currencies only match when `include_unknown` is on (**no FX conversion**, because rates drift and the source data is approximate).
+- **YOE matching uses experience bounds:** a job matches `[min_yoe, max_yoe]` if `(experience_min IS NULL AND include_unknown) OR (experience_min <= max_yoe AND (experience_max IS NULL OR experience_max >= min_yoe))`.
+- **New Grad matching:** `new_grad_only` matches `is_new_grad = 'yes' OR experience_min = 0`. `exclude_new_grad` matches `is_new_grad = 'no' OR experience_min >= 2`.
 - **Location matching:** `EXISTS (SELECT 1 FROM job_locations l WHERE l.job_id = jobs.id AND (l.country_code IN (…) OR l.region_code IN (…)))`, so a job listed in "NYC; London" matches either. Built with `sqlx::QueryBuilder`.
 - Loosening scraper filters later is safe. ATS APIs return the full board every run, so previously dropped jobs come back on the next scrape.
 
@@ -163,10 +189,15 @@ type FilterSpec = {
 - [ ] **Saved presets** (stretch): name a filter set. Stored in `app_settings` under `ui.filter_presets`.
 
 ### Columns & display
-- [ ] **Tracked → LIST table:** add **SALARY**, **LOCATION**, **SPONSORSHIP**, **CLEARANCE** columns. All sortable.
-- [ ] **Discovered list rows:** compact second line `Stripe · SF, CA · $160–210K` plus two fixed-width tags `SPON Y|N|—` and `CLR Y|N|—`.
-- [ ] **Value display:** `YES` / `NO` / `N/A`. **No good/bad colors.** Whether clearance is good depends on the user. `YES` = inverted ink block, `NO` = 1px outline, `N/A` = muted text + checker dither. Hovering (or the meta panel) shows the **evidence sentence** and the clearance level (`TS/SCI`).
-- [ ] **Meta panel:** rows for Salary (with original interval), Workplace, Locations (all of them), Sponsorship + evidence, Clearance + level + evidence.
+- [ ] **Tracked → LIST table:** add **SALARY**, **LOCATION**, **YOE**, **NEW GRAD**, **SPONSORSHIP**, **CLEARANCE** columns. All sortable.
+  - `YOE`: fixed width 80px, displays e.g. `3–5 YRS`, `5+ YRS`, `0–1 YRS`, or `—` (N/A).
+  - `NEW GRAD`: fixed width 85px, displays `YES`, `NO`, or `N/A`.
+- [ ] **Discovered list rows:** compact line `Stripe · SF, CA · $160–210K` plus tags `3-5 YOE`, `[GRAD]`, `SPON Y|N|—`, `CLR Y|N|—`.
+- [ ] **Filter panel components:**
+  - `ExperienceFilter`: YOE range selection (preset chips `[ALL]`, `[0-1 ENTRY]`, `[1-3 MID]`, `[3-5 SENIOR]`, `[5+ STAFF+]` plus synced numeric min/max inputs and `■ INCLUDE N/A` checkbox).
+  - `NewGradFilter`: Tri-toggle `[ ANY ]`, `[ NEW GRAD ONLY ]`, `[ EXCLUDE NEW GRAD ]`.
+- [ ] **Value display:** `YES` / `NO` / `N/A`. **No good/bad colors.** Whether clearance or new grad status is desired depends on the user. `YES` = inverted ink block, `NO` = 1px outline, `N/A` = muted text + checker dither. Hovering (or the meta panel) shows the **evidence sentence** and details.
+- [ ] **Meta panel:** rows for Salary (with original interval), Workplace, Locations (all of them), Required Experience (with quote), New Grad Eligible (with quote), Sponsorship + evidence, Clearance + level + evidence.
 - [ ] **Job detail pane:** show `description_text`. It's stored anyway, and right now the detail pane has no posting body.
 
 ### Settings → SCRAPER (replaces FILTERS)
@@ -174,6 +205,7 @@ Left category list becomes `SCHEDULE · SOURCES · SCRAPER · LOGS · APPEARANCE
 - [ ] **KEYWORDS & ROLES:** include/exclude keyword chips, role types (existing).
 - [ ] **LOCATION:** same `LocationFilter` component as the view panel.
 - [ ] **COMPENSATION:** same `SalaryRangeFilter`. **"Keep jobs with no salary listed" defaults to ON.**
+- [ ] **EXPERIENCE & NEW GRAD:** YOE range bounds and New Grad filtering for scraper ingestion.
 - [ ] **ELIGIBILITY:** sponsorship and clearance tri-state checkboxes. **N/A defaults to checked.**
 - [ ] **ADVANCED:** fetch per-job details (Greenhouse pay ranges) on/off, concurrency, per-host delay, request timeout, max pages per `jsonld` source, store descriptions on/off.
 - [ ] **IMPACT PREVIEW:** "These filters would keep **N of M** saved jobs." The shared predicate runs against the DB through `preview_filter_impact(spec)`, so you can see the effect before the next scrape.
@@ -208,7 +240,7 @@ Dedicated audit log for background and manual scraper runs.
 
 ## 3.5.6 Commands & API
 
-- [ ] `list_jobs(filter: JobFilter)`: `JobFilter` embeds `FilterSpec` plus `statuses`, `search`, `sort` (`salary_desc`, `salary_asc` added), `limit`, `offset`.
+- [ ] `list_jobs(filter: JobFilter)`: `JobFilter` embeds `FilterSpec` plus `statuses`, `search`, `sort` (`salary_desc`, `salary_asc`, `experience_desc`, `experience_asc` added), `limit`, `offset`.
 - [ ] `get_job_locations(job_id)` (or include locations inline on `Job` as `locations: ParsedLocation[]`; preferred, it saves a round trip).
 - [ ] `reclassify_jobs() -> { updated }`, `preview_filter_impact(spec) -> { kept, total }`, `list_location_options() -> { countries, regions }` (only values present in the DB, so the checklists stay short).
 - [ ] `list_scrape_runs(limit: Option<i64>) -> Vec<ScrapeRun>` (chronological runs, newest first).
@@ -222,14 +254,15 @@ Every feature implemented in this phase must have corresponding automated tests 
   - Salary parser: ≥ 25 cases including edge cases and false positives (`$5M Series A`, `401(k)`).
   - Location parser & gazetteer: ≥ 40 cases across countries, US states, Canadian provinces, remote tags.
   - Sponsorship & clearance classifiers: ≥ 30 labeled sentences each, verifying classification value, clearance level, and exact evidence sentence capture. Verify "No" priority over "Yes" in mixed contexts.
+  - Experience & New Grad parser (`experience.rs`): ≥ 30 labeled test cases verifying extraction of `3-5 years`, `5+ years`, `minimum 3 years`, `0 years / entry level`, new grad title heuristics, and false positive rejection (degree length, company age, roadmap).
 - [ ] **Adapter fixture tests:**
   - Lever with `salaryRange`, Ashby with `includeCompensation`, JSON-LD with `baseSalary` + `securityClearanceRequirement`, Greenhouse with `content=true` and `pay_input_ranges`.
 - [ ] **Database & repository tests:**
-  - SQLite migration 0002, location backfill, salary range overlap query, multi-location `EXISTS` queries, and `COALESCE` upsert behavior.
+  - SQLite migration 0002, location backfill, salary range overlap query, YOE range bound queries, New Grad tri-state filter queries, multi-location `EXISTS` queries, and `COALESCE` upsert behavior.
 - [ ] **Frontend component & interaction tests (Vitest):**
   - `RangeSlider`: dual-thumb collision prevention, keyboard step increments, 500K+ upper stop.
   - Number inputs: bidirectionally synced with slider, handles shorthand notation (`150k`), min ≤ max validation.
-  - Location and tri-state filters: active state tracking, chip generation, and reset actions.
+  - Location, YOE, and tri-state filters: active state tracking, chip generation, and reset actions.
   - Logs viewer (`LogsSettings`): verifies chronological descending sort by `started_at`, red square marker rendering on error runs, and `ERRORS ONLY` filter switching.
   - Themed scrollbars: CSS styling verification and theme token inheritance.
 
@@ -237,12 +270,13 @@ Every feature implemented in this phase must have corresponding automated tests 
 - [ ] Strict development workflow: Feature developed on an isolated `feature/phase-3b-enrichment-filters` branch in the local dev environment, with all tests written and passing before merge into `develop`.
 - [ ] Jobs from Lever/Ashby/JSON-LD fixtures carry structured salary + location. Greenhouse jobs get salary when `pay_input_ranges` exists.
 - [ ] Sponsorship and clearance show `YES` / `NO` / `N/A` with an evidence sentence for every non-N/A value.
-- [ ] Discovered can be filtered by country, state, remote policy, salary range (slider **and** typed numbers), sponsorship, and clearance, entirely by keyboard.
+- [ ] Extracted YOE and New Grad status show accurately with evidence sentences for postings containing experience requirements.
+- [ ] Discovered can be filtered by country, state, remote policy, salary range (slider **and** typed numbers), YOE range, New Grad status, sponsorship, and clearance, entirely by keyboard.
 - [ ] Settings → SCRAPER → ADVANCED filters change what the next `RUN NOW` stores, and the impact preview matches the actual result.
 - [ ] Settings includes a `LOGS` section showing chronological scraper runs sorted by date and time (newest first).
 - [ ] Scraper runs with errors or issues needing addressing are marked with a distinct brutalist red square (`■`).
 - [ ] Selecting a run opens the inspector showing per-source execution logs, timestamped error events, and remediation actions.
-- [ ] Tracked list table shows SALARY, LOCATION, SPONSORSHIP, CLEARANCE columns.
+- [ ] Tracked list table shows SALARY, LOCATION, YOE, NEW GRAD, SPONSORSHIP, CLEARANCE columns.
 - [ ] Default OS scrollbar replaced with theme-synchronized brutalist scrollbar (0px radius, 1px border, ink/paper colors).
 - [ ] No `SCRAPE` logo and no flavor text anywhere in the UI.
 - [ ] Bumping `ENRICHMENT_VERSION` and restarting reclassifies stored jobs without a rescrape.

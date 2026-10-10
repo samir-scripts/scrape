@@ -17,7 +17,7 @@ Each phase is a self-contained, shippable increment. Implement in order; every s
 | 1 | [Database & Configuration](./01-database-config.md) | Repo scaffold, SQLite schema + migrations, Rust DB layer, Tauri commands, OS-derived defaults | — |
 | 2 | [Background Services](./02-background-services.md) | Tray-first app lifecycle, CRON scheduler, `scrape-worker` sidecar (ATS APIs + company pages) | 1 |
 | 3 | [Frontend & Brutalist UI](./03-frontend-ui.md) | Design system (Tailwind v4 tokens), shell, 4 views, keyboard nav | 1 (2 for live events) |
-| 3.5 | [Job Enrichment, Custom Filters & Scraper Logs](./03b-enrichment-filters.md) | Salary, country/state/remote, sponsorship & clearance classification, dual-layer filtering, RangeSlider, logo removal, Settings Logs with red square error markers | 3 |
+| 3.5 | [Job Enrichment, Custom Filters, YOE & Scraper Logs](./03b-enrichment-filters.md) | Salary, country/state/remote, sponsorship & clearance, YOE & New Grad classification, dual-layer filtering, RangeSlider, logo removal, Settings Logs with red square error markers | 3 |
 | 4 | [Metrics Dashboard](./04-metrics-dashboard.md) | Visx charts, metric cards, Rust metrics aggregation | 1, 3 |
 | 5 | [CI/CD](./05-ci-cd.md) | PR checks + tag-triggered cross-platform release builds | 1–2 (sidecar build script) |
 | — | [Error Log & Solutions](./errors/solutions.md) | Living troubleshooting runbook; recorded errors, causes, and solutions | Ongoing |
@@ -59,6 +59,7 @@ Each phase is a self-contained, shippable increment. Implement in order; every s
 13. **Theme-Synchronized Brutalist Scrollbars:** Complete elimination of default OS scrollbars. Custom scrollbars use strict 0px border-radius, thin 8px geometry, `var(--color-paper-2)` track with 1px ink boundary, and `var(--color-ink-mute)` thumb inverting to `var(--color-ink)` on hover, reacting dynamically to active theme tokens (Paper & Obsidian).
 14. **Mandatory Automated Test Coverage for All Features:** Every suggested feature, parser, filter permutation, schema addition, and UI interaction must be accompanied by relevant unit and component tests before being marked complete.
 15. **Feature-Branch Development Discipline:** Strict workflow requirement: All development must occur on isolated feature branches (`feature/<name>`) created from `develop`. No unverified code is pushed directly to mainline branches.
+16. **Years of Experience (YOE) & New Grad Classification, Filtering, and Columns:** Structured extraction of minimum and maximum required years of experience (`experience_min`, `experience_max`, `experience_raw`) and new graduate eligibility (`is_new_grad: 'yes' | 'no' | 'unknown'`) via title heuristics and description regex in `scrape-core::enrich::experience`. Dedicated `YOE` and `NEW GRAD` filter controls in the filter panel and sortable table columns in Tracked list view.
 
 ### 2.2 Development & Branching Discipline (Strict Requirement)
 
