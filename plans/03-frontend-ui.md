@@ -121,7 +121,10 @@ Default OS scrollbars (with rounded pill corners, transparent overlays, or OS-na
 
 ### Scraper (Unified Scraper Hub: left category list, right detail)
 - [ ] **SOURCES:** Job boards table (name, kind, enabled, last status/error); `ADD SOURCE` modal supporting Greenhouse, Lever, Ashby, JSON-LD, CSS Selector, and **Custom Scraper (CSS + Regex)** with live preview testing.
-- [ ] **SCHEDULE:** Run schedule presets (hourly / every 6h / daily 09:00 / weekdays 09:00), custom 6-field cron with live validation, next 3 run preview, and `RUN NOW` trigger.
+- [ ] **SCHEDULE:** Dual-mode schedule configuration via discrete sub-tabs:
+  - **CLOCK SCHEDULE:** Interactive Google-style clock dial (`ClockPicker.tsx`) with polar coordinate snapping ($30^\circ$ hours, $6^\circ$ minutes), pointer capture dragging, auto-advance from hour to minute, AM/PM toggle, cadence options (Daily, Weekdays, Weekends, Every 12h, Every 6h, Hourly), live 6-field cron formula, and validation previews.
+  - **CUSTOM CRON:** Freeform 6-field tokio-cron input with real-time validation, syntax error explanations, and next 3 run preview.
+  - Global `RUN SCRAPE NOW` trigger and scheduled scraping / startup toggles.
 - [ ] **FILTERS:** Scraper-level ingestion filtering: role types, include/exclude keywords, locations, and `RECLASSIFY POSTINGS` button.
 - [ ] **LOGS:** Chronological scraper execution history, sorted by date and time (newest first). Any run encountering issues or errors is marked with a prominent brutalist red square (`■`). Master-detail log inspector.
 
