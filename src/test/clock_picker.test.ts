@@ -144,4 +144,85 @@ describe("ClockPicker Mechanics & Geometry Snapping", () => {
       expect(formatTime12(1, 30, "PM")).toBe("01:30 PM");
     });
   });
+
+  describe("24H Concentric Dial Snapping", () => {
+    const snap24Hour = (deg: number, distance: number): number => {
+      const step = 360 / 12;
+      const sector = Math.round(deg / step) % 12;
+      const isInner = distance < 79;
+      return isInner ? (sector === 0 ? 0 : sector + 12) : (sector === 0 ? 12 : sector);
+    };
+
+    it("snaps outer ring to 01-12", () => {
+      // 0 deg outer -> 12:00
+      expect(snap24Hour(0, 94)).toBe(12);
+      // 90 deg outer -> 03:00
+      expect(snap24Hour(90, 94)).toBe(3);
+      // 180 deg outer -> 06:00
+      expect(snap24Hour(180, 94)).toBe(6);
+      // 270 deg outer -> 09:00
+      expect(snap24Hour(270, 94)).toBe(9);
+    });
+
+    it("snaps inner ring to 13-23 and 00", () => {
+      // 0 deg inner -> 00:00 (Midnight)
+      expect(snap24Hour(0, 64)).toBe(0);
+      // 90 deg inner -> 15:00
+      expect(snap24Hour(90, 64)).toBe(15);
+      // 180 deg inner -> 18:00
+      expect(snap24Hour(180, 64)).toBe(18);
+      // 270 deg inner -> 21:00
+      expect(snap24Hour(270, 64)).toBe(21);
+      // 30 deg inner -> 13:00
+      expect(snap24Hour(30, 64)).toBe(13);
+      // 330 deg inner -> 23:00
+      expect(snap24Hour(330, 64)).toBe(23);
+    });
+  });
+
+  describe("Direct Typing & Input Validation", () => {
+    it("auto-advances single digit 12h hours >= 2 immediately", () => {
+      const shouldAutoAdvance12h = (input: string): boolean => {
+        if (input.length === 1) {
+          const digit = parseInt(input, 10);
+          return digit >= 2;
+        }
+        return input.length >= 2;
+      };
+
+      expect(shouldAutoAdvance12h("3")).toBe(true);
+      expect(shouldAutoAdvance12h("9")).toBe(true);
+      expect(shouldAutoAdvance12h("1")).toBe(false); // buffer "1" for 10, 11, 12
+      expect(shouldAutoAdvance12h("12")).toBe(true);
+    });
+
+    it("auto-advances single digit 24h hours >= 3 immediately", () => {
+      const shouldAutoAdvance24h = (input: string): boolean => {
+        if (input.length === 1) {
+          const digit = parseInt(input, 10);
+          return digit >= 3;
+        }
+        return input.length >= 2;
+      };
+
+      expect(shouldAutoAdvance24h("4")).toBe(true);
+      expect(shouldAutoAdvance24h("8")).toBe(true);
+      expect(shouldAutoAdvance24h("2")).toBe(false); // buffer "2" for 20-23
+      expect(shouldAutoAdvance24h("23")).toBe(true);
+    });
+
+    it("auto-advances minute input when tens digit >= 6", () => {
+      const shouldAutoAdvanceMin = (input: string): boolean => {
+        if (input.length === 1) {
+          const digit = parseInt(input, 10);
+          return digit >= 6;
+        }
+        return input.length >= 2;
+      };
+
+      expect(shouldAutoAdvanceMin("7")).toBe(true);
+      expect(shouldAutoAdvanceMin("4")).toBe(false);
+      expect(shouldAutoAdvanceMin("45")).toBe(true);
+    });
+  });
 });

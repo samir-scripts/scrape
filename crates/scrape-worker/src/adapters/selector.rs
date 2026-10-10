@@ -38,6 +38,38 @@ fn apply_regex_capture(re: &regex::Regex, text: &str) -> Option<String> {
     })
 }
 
+pub fn glob_to_regex(pattern: &str) -> Result<regex::Regex, regex::Error> {
+    let mut regex_str = String::from("^");
+    let trimmed = pattern.trim();
+    let has_prefix = trimmed.starts_with("http://")
+        || trimmed.starts_with("https://")
+        || trimmed.starts_with('/')
+        || trimmed.starts_with('*');
+    if !has_prefix {
+        regex_str.push_str(".*");
+    }
+
+    let mut chars = trimmed.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '*' => {
+                if chars.peek() == Some(&'*') {
+                    chars.next();
+                }
+                regex_str.push_str(".*");
+            }
+            '?' => regex_str.push('.'),
+            '.' | '+' | '(' | ')' | '{' | '}' | '[' | ']' | '^' | '$' | '|' | '\\' => {
+                regex_str.push('\\');
+                regex_str.push(c);
+            }
+            _ => regex_str.push(c),
+        }
+    }
+    regex_str.push('$');
+    regex::Regex::new(&regex_str)
+}
+
 pub fn extract_jobs_with_selectors(
     html_text: &str,
     base_url: &Url,
@@ -84,6 +116,43 @@ pub fn extract_jobs_with_selectors(
     let link_re = parse_re("link_regex")?;
     let loc_re = parse_re("location_regex")?;
     let sal_re = parse_re("salary_regex")?;
+
+    let mut include_patterns = Vec::new();
+    if let Some(pat) = source.config.get("url_pattern").and_then(|v| v.as_str()) {
+        if !pat.trim().is_empty() {
+            if let Ok(re) = glob_to_regex(pat) {
+                include_patterns.push(re);
+            }
+        }
+    }
+    if let Some(pats) = source.config.get("url_patterns").and_then(|v| v.as_array()) {
+        for p in pats {
+            if let Some(s) = p.as_str() {
+                if !s.trim().is_empty() {
+                    if let Ok(re) = glob_to_regex(s) {
+                        include_patterns.push(re);
+                    }
+                }
+            }
+        }
+    }
+
+    let mut exclude_patterns = Vec::new();
+    if let Some(pats) = source
+        .config
+        .get("exclude_url_patterns")
+        .and_then(|v| v.as_array())
+    {
+        for p in pats {
+            if let Some(s) = p.as_str() {
+                if !s.trim().is_empty() {
+                    if let Ok(re) = glob_to_regex(s) {
+                        exclude_patterns.push(re);
+                    }
+                }
+            }
+        }
+    }
 
     let item_sel = Selector::parse(item_sel_str)
         .map_err(|e| ClientError::HttpStatus(reqwest::StatusCode::BAD_REQUEST, e.to_string()))?;
@@ -153,6 +222,17 @@ pub fn extract_jobs_with_selectors(
             Ok(u) => u.to_string(),
             Err(_) => continue,
         };
+
+        if !include_patterns.is_empty() {
+            let matched = include_patterns.iter().any(|re| re.is_match(&job_url));
+            if !matched {
+                continue;
+            }
+        }
+
+        if exclude_patterns.iter().any(|re| re.is_match(&job_url)) {
+            continue;
+        }
 
         let raw_location = if let Some(ref l_sel) = loc_sel {
             item.select(l_sel)
@@ -366,6 +446,79 @@ mod tests {
             let sal = salary.as_ref().expect("Salary should be parsed");
             assert_eq!(sal.min, Some(180000));
             assert_eq!(sal.max, Some(220000));
+        } else {
+            panic!("Expected Job event");
+        }
+    }
+
+    #[test]
+    fn test_glob_to_regex() {
+        let r1 = glob_to_regex("https://company.com/careers/*").unwrap();
+        assert!(r1.is_match("https://company.com/careers/123"));
+        assert!(!r1.is_match("https://other.com/careers/123"));
+
+        let r2 = glob_to_regex("example/link/*").unwrap();
+        assert!(r2.is_match("https://myco.com/example/link/engineer-1"));
+        assert!(!r2.is_match("https://myco.com/about/team"));
+
+        let r3 = glob_to_regex("*/privacy").unwrap();
+        assert!(r3.is_match("https://myco.com/privacy"));
+        assert!(!r3.is_match("https://myco.com/privacy/more"));
+    }
+
+    #[test]
+    fn test_extract_jobs_with_url_pattern_glob() {
+        let html = r#"
+        <div class="jobs-list">
+            <div class="item">
+                <span class="title">Staff Engineer</span>
+                <a href="/careers/jobs/101">Apply</a>
+            </div>
+            <div class="item">
+                <span class="title">Privacy Policy</span>
+                <a href="/legal/privacy">Read Policy</a>
+            </div>
+            <div class="item">
+                <span class="title">Product Manager</span>
+                <a href="/careers/jobs/102">Apply</a>
+            </div>
+            <div class="item">
+                <span class="title">Company Blog</span>
+                <a href="/blog/hello-world">Read Blog</a>
+            </div>
+        </div>
+        "#;
+
+        let config = serde_json::json!({
+            "item": ".item",
+            "title": ".title",
+            "link": "a",
+            "url_pattern": "*/careers/jobs/*",
+            "exclude_url_patterns": ["*/privacy", "*/legal/*"]
+        });
+
+        let source = WorkerSource {
+            id: "src-glob".to_string(),
+            kind: SourceKind::Selector,
+            name: "Glob Corp".to_string(),
+            identifier: "https://globcorp.com".to_string(),
+            config,
+        };
+
+        let base_url = Url::parse("https://globcorp.com").unwrap();
+        let events = extract_jobs_with_selectors(html, &base_url, &source).unwrap();
+        assert_eq!(events.len(), 2);
+
+        if let WorkerEvent::Job { title, url, .. } = &events[0] {
+            assert_eq!(title, "Staff Engineer");
+            assert_eq!(url, "https://globcorp.com/careers/jobs/101");
+        } else {
+            panic!("Expected Job event");
+        }
+
+        if let WorkerEvent::Job { title, url, .. } = &events[1] {
+            assert_eq!(title, "Product Manager");
+            assert_eq!(url, "https://globcorp.com/careers/jobs/102");
         } else {
             panic!("Expected Job event");
         }

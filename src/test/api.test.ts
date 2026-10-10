@@ -86,6 +86,8 @@ describe("Domain models & types", () => {
       system_locale: "en-US",
       system_timezone: "America/New_York",
       system_week_start: "sunday",
+      system_time_format: "12h",
+      system_date_format: "MM/DD/YYYY",
       ui_theme: "paper",
       ui_reduce_motion: false,
       scraper_enabled: true,

@@ -1,5 +1,6 @@
 import type { Settings } from "../../../bindings/Settings";
 import { api } from "../../../lib/api";
+import { formatDateTime } from "../../../lib/formatters";
 import { Toggle } from "../../ui/Toggle";
 import { Button } from "../../ui/Button";
 import { Rule } from "../../ui/Rule";
@@ -126,6 +127,72 @@ export function SystemSettings({
             <span className="font-bold uppercase">
               {settings.system_week_start}
             </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Regional & Time Format */}
+      <div className="flex flex-col gap-3 p-4 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 font-mono text-xs">
+        <div className="flex justify-between items-center border-b border-[var(--color-ink)]/30 pb-2">
+          <span className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
+            REGIONAL & TIME FORMAT
+          </span>
+          <span className="text-[10px] text-[var(--color-ink-mute)]">
+            PREVIEW: {formatDateTime(new Date(), { timeFormat: settings.system_time_format, dateFormat: settings.system_date_format })}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 pt-1">
+          <div>
+            <span className="text-[11px] text-[var(--color-ink-mute)] block mb-1">
+              TIME FORMAT
+            </span>
+            <div className="flex border border-[var(--color-ink)]">
+              <button
+                type="button"
+                onClick={() => onUpdateSetting("system.time_format", "12h")}
+                className={`flex-1 py-1 text-center font-bold text-xs cursor-pointer ${
+                  settings.system_time_format === "12h"
+                    ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
+                    : "hover:bg-[var(--color-paper-2)]"
+                }`}
+              >
+                12-HOUR (AM/PM)
+              </button>
+              <button
+                type="button"
+                onClick={() => onUpdateSetting("system.time_format", "24h")}
+                className={`flex-1 py-1 text-center font-bold text-xs cursor-pointer ${
+                  settings.system_time_format === "24h"
+                    ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
+                    : "hover:bg-[var(--color-paper-2)]"
+                }`}
+              >
+                24-HOUR
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <span className="text-[11px] text-[var(--color-ink-mute)] block mb-1">
+              DATE FORMAT
+            </span>
+            <div className="flex border border-[var(--color-ink)]">
+              {(["MM/DD/YY", "DD/MM/YY", "MM/DD/YYYY", "DD/MM/YYYY"] as const).map((fmt) => (
+                <button
+                  key={fmt}
+                  type="button"
+                  onClick={() => onUpdateSetting("system.date_format", fmt)}
+                  className={`flex-1 py-1 text-center font-bold text-[10px] cursor-pointer ${
+                    settings.system_date_format === fmt
+                      ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
+                      : "hover:bg-[var(--color-paper-2)]"
+                  }`}
+                >
+                  {fmt}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
