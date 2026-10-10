@@ -50,7 +50,15 @@ let devSettings: Settings = (() => {
   try {
     if (typeof localStorage !== "undefined") {
       const saved = localStorage.getItem("scrape:dev_settings");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved) as Record<string, unknown>;
+        const normalized: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          normalized[k.replace(/\./g, "_")] = v;
+          normalized[k] = v;
+        }
+        return { ...DEFAULT_SETTINGS, ...normalized };
+      }
     }
   } catch {}
   return { ...DEFAULT_SETTINGS };
@@ -106,6 +114,8 @@ export const api = {
 
   updateSetting: (key: string, value: unknown): Promise<Settings> => {
     if (!isTauri()) {
+      const fieldKey = key.replace(/\./g, "_");
+      (devSettings as unknown as Record<string, unknown>)[fieldKey] = value;
       (devSettings as unknown as Record<string, unknown>)[key] = value;
       try {
         if (typeof localStorage !== "undefined") {

@@ -45,8 +45,16 @@ export function AppearanceSettings({
         <div className="grid grid-cols-2 gap-4">
           {/* Paper Theme Card */}
           <div
+            role="button"
+            tabIndex={0}
             onClick={() => handleSelectTheme("paper")}
-            className={`p-4 border-2 cursor-pointer flex flex-col gap-3 bg-[#F5F5DC] text-[#1A1A1A] ${
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleSelectTheme("paper");
+              }
+            }}
+            className={`p-4 border-2 cursor-pointer flex flex-col gap-3 bg-[#F5F5DC] text-[#1A1A1A] focus:outline-none ${
               currentTheme === "paper"
                 ? "border-[var(--color-ink)]"
                 : "border-[var(--color-ink-mute)]/50 opacity-70 hover:opacity-100"
@@ -75,8 +83,16 @@ export function AppearanceSettings({
 
           {/* Obsidian Theme Card */}
           <div
+            role="button"
+            tabIndex={0}
             onClick={() => handleSelectTheme("obsidian")}
-            className={`p-4 border-2 cursor-pointer flex flex-col gap-3 bg-[#262628] text-[#FFF6EE] ${
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleSelectTheme("obsidian");
+              }
+            }}
+            className={`p-4 border-2 cursor-pointer flex flex-col gap-3 bg-[#262628] text-[#FFF6EE] focus:outline-none ${
               currentTheme === "obsidian"
                 ? "border-[var(--color-ink)]"
                 : "border-[var(--color-ink-mute)]/50 opacity-70 hover:opacity-100"

@@ -104,4 +104,36 @@ describe("Domain models & types", () => {
     expect(settings.ui_theme).toBe("paper");
     expect(settings.scraper_enabled).toBe(true);
   });
+
+  it("updates dev settings correctly with dot-notation keys", async () => {
+    const { api } = await import("../lib/api");
+
+    const updatedTheme = await api.updateSetting("ui.theme", "obsidian");
+    expect(updatedTheme.ui_theme).toBe("obsidian");
+
+    const updatedTime = await api.updateSetting("system.time_format", "24h");
+    expect(updatedTime.system_time_format).toBe("24h");
+
+    const updatedDate = await api.updateSetting("system.date_format", "DD/MM/YYYY");
+    expect(updatedDate.system_date_format).toBe("DD/MM/YYYY");
+
+    const updatedApp = await api.updateSetting("app.launch_at_login", true);
+    expect(updatedApp.app_launch_at_login).toBe(true);
+
+    const updatedNotif = await api.updateSetting("notifications.enabled", false);
+    expect(updatedNotif.notifications_enabled).toBe(false);
+
+    // Verify getSettings reflects the changes
+    const current = await api.getSettings();
+    expect(current.ui_theme).toBe("obsidian");
+    expect(current.system_time_format).toBe("24h");
+    expect(current.system_date_format).toBe("DD/MM/YYYY");
+    expect(current.app_launch_at_login).toBe(true);
+    expect(current.notifications_enabled).toBe(false);
+
+    // Revert back for test cleanliness
+    await api.updateSetting("ui.theme", "paper");
+    await api.updateSetting("system.time_format", "12h");
+    await api.updateSetting("system.date_format", "MM/DD/YYYY");
+  });
 });

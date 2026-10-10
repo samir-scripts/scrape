@@ -7,6 +7,7 @@ import { setupAppEventListeners } from "./lib/events";
 import type { Job } from "./bindings/Job";
 import type { JobStatus } from "./bindings/JobStatus";
 import type { Page } from "./bindings/Page";
+import type { Settings } from "./bindings/Settings";
 import { Shell } from "./components/layout/Shell";
 import { DiscoveredView } from "./components/views/discovered/DiscoveredView";
 import { TrackedView } from "./components/views/tracked/TrackedView";
@@ -175,10 +176,28 @@ export default function App() {
     },
   });
 
-  // 6. Settings mutation
+  // 6. Settings mutation with optimistic updates
   const updateSettingMutation = useMutation({
     mutationFn: ({ key, value }: { key: string; value: unknown }) =>
       api.updateSetting(key, value),
+    onMutate: async ({ key, value }) => {
+      await queryClient.cancelQueries({ queryKey: ["settings"] });
+      const previousSettings = queryClient.getQueryData<Settings>(["settings"]);
+      if (previousSettings) {
+        const fieldKey = key.replace(/\./g, "_") as keyof Settings;
+        queryClient.setQueryData<Settings>(["settings"], {
+          ...previousSettings,
+          [fieldKey]: value,
+        });
+      }
+      return { previousSettings };
+    },
+    onError: (err, _vars, context) => {
+      console.error("Failed to update setting:", err);
+      if (context?.previousSettings) {
+        queryClient.setQueryData(["settings"], context.previousSettings);
+      }
+    },
     onSuccess: (newSettings) => {
       queryClient.setQueryData(["settings"], newSettings);
       queryClient.invalidateQueries({ queryKey: ["scheduler_status"] });

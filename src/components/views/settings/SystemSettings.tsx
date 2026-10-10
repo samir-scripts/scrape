@@ -5,6 +5,7 @@ import { Toggle } from "../../ui/Toggle";
 import { Button } from "../../ui/Button";
 import { Rule } from "../../ui/Rule";
 import { openPath } from "@tauri-apps/plugin-opener";
+import { isTauri } from "@tauri-apps/api/core";
 
 interface SystemSettingsProps {
   settings: Settings;
@@ -17,9 +18,11 @@ export function SystemSettings({
 }: SystemSettingsProps) {
   const handleOpenDataFolder = async () => {
     try {
-      // In macOS, Scrape SQLite DB is at ~/Library/Application Support/com.scrape.dev or similar appDataDir
-      // If path is not known, we can request opener to open the app support directory or current dir
-      await openPath(".");
+      if (isTauri()) {
+        await openPath(".");
+      } else {
+        console.info("Opening project data folder is only available in desktop application.");
+      }
     } catch (e) {
       console.error("Failed to open data folder:", e);
     }
@@ -178,7 +181,7 @@ export function SystemSettings({
               DATE FORMAT
             </span>
             <div className="flex border border-[var(--color-ink)]">
-              {(["MM/DD/YY", "DD/MM/YY", "MM/DD/YYYY", "DD/MM/YYYY"] as const).map((fmt) => (
+              {(["MM/DD/YY", "DD/MM/YY", "MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"] as const).map((fmt) => (
                 <button
                   key={fmt}
                   type="button"

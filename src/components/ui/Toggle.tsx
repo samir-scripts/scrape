@@ -16,25 +16,31 @@ export function Toggle({
   className = "",
 }: ToggleProps) {
   return (
-    <label
-      className={`inline-flex items-start gap-2.5 cursor-pointer select-none ${
+    <div
+      role="switch"
+      aria-checked={checked}
+      aria-disabled={disabled}
+      tabIndex={disabled ? -1 : 0}
+      onClick={() => !disabled && onChange(!checked)}
+      onKeyDown={(e) => {
+        if (!disabled && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onChange(!checked);
+        }
+      }}
+      className={`inline-flex items-start gap-2.5 cursor-pointer select-none focus:outline-none ${
         disabled ? "opacity-50 cursor-not-allowed" : ""
       } ${className}`}
     >
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        disabled={disabled}
-        onClick={() => !disabled && onChange(!checked)}
-        className={`w-4 h-4 mt-0.5 border border-[var(--color-ink)] flex items-center justify-center font-mono text-xs leading-none shrink-0 cursor-pointer ${
+      <div
+        className={`w-4 h-4 mt-0.5 border border-[var(--color-ink)] flex items-center justify-center font-mono text-xs leading-none shrink-0 ${
           checked
             ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
             : "bg-transparent text-transparent"
         }`}
       >
         {checked ? "■" : "□"}
-      </button>
+      </div>
       {(label || description) && (
         <div className="flex flex-col">
           {label && (
@@ -49,6 +55,6 @@ export function Toggle({
           )}
         </div>
       )}
-    </label>
+    </div>
   );
 }
