@@ -5,6 +5,8 @@ import type { JobStatusEvent } from "../bindings/JobStatusEvent";
 import type { Page } from "../bindings/Page";
 import type { Settings } from "../bindings/Settings";
 import type { Source } from "../bindings/Source";
+import type { SourceCadence } from "../bindings/SourceCadence";
+import type { TransientSourceInput } from "../bindings/TransientSourceInput";
 import type { ScrapeRun } from "../bindings/ScrapeRun";
 import type { CronValidationResult } from "../bindings/CronValidationResult";
 import type { SchedulerStatus } from "../bindings/SchedulerStatus";
@@ -117,11 +119,15 @@ export const api = {
     identifier: string;
     config?: unknown;
     enabled?: boolean;
+    cadence?: SourceCadence;
+    cadence_cron?: string | null;
   }) =>
     invoke<Source>("create_source", {
       input: {
         config: null,
         enabled: true,
+        cadence: "global",
+        cadence_cron: null,
         ...input,
       },
     }),
@@ -132,6 +138,8 @@ export const api = {
     identifier?: string | null;
     config?: unknown;
     enabled?: boolean | null;
+    cadence?: SourceCadence | null;
+    cadence_cron?: string | null;
   }) =>
     invoke<Source>("update_source", {
       input: {
@@ -139,6 +147,8 @@ export const api = {
         identifier: null,
         config: null,
         enabled: null,
+        cadence: null,
+        cadence_cron: null,
         ...input,
       },
     }),
@@ -150,9 +160,17 @@ export const api = {
   runScrapeNow: () =>
     invoke<ScrapeRun>("run_scrape_now"),
 
+  runSourceNow: (id: string) =>
+    invoke<ScrapeRun>("run_source_now", { id }),
+
   listScrapeRuns: (limit?: number) => {
     if (!isTauri()) return Promise.resolve([]);
     return invoke<ScrapeRun[]>("list_scrape_runs", { limit });
+  },
+
+  listSourceRuns: (sourceId: string, limit?: number) => {
+    if (!isTauri()) return Promise.resolve([]);
+    return invoke<ScrapeRun[]>("list_source_runs", { sourceId, limit });
   },
 
   validateCron: (expr: string): Promise<CronValidationResult> => {
@@ -179,6 +197,9 @@ export const api = {
 
   testSource: (id: string) =>
     invoke<WorkerEvent[]>("test_source", { id }),
+
+  testSourceTransient: (input: TransientSourceInput) =>
+    invoke<WorkerEvent[]>("test_source_transient", { input }),
 
   getJobLocations: (jobId: string): Promise<ParsedLocation[]> => {
     if (!isTauri()) return Promise.resolve([]);

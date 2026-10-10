@@ -2,4 +2,4 @@
 import type { RunStatus } from "./RunStatus";
 import type { TriggerType } from "./TriggerType";
 
-export type ScrapeRun = { id: string, trigger: TriggerType, status: RunStatus, started_at: string, finished_at: string | null, jobs_found: bigint, jobs_new: bigint, error: string | null, };
+export type ScrapeRun = { id: string, trigger: TriggerType, status: RunStatus, started_at: string, finished_at: string | null, jobs_found: bigint, jobs_new: bigint, error: string | null, source_id: string | null, };

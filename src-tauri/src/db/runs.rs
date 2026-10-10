@@ -12,6 +12,7 @@ pub enum TriggerType {
     Schedule,
     Manual,
     Startup,
+    SingleSource,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -35,6 +36,7 @@ pub struct ScrapeRun {
     pub jobs_found: i64,
     pub jobs_new: i64,
     pub error: Option<String>,
+    pub source_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -61,6 +63,14 @@ pub struct RunsRepo;
 
 impl RunsRepo {
     pub async fn start(pool: &SqlitePool, trigger: TriggerType) -> Result<ScrapeRun> {
+        Self::start_with_source(pool, trigger, None).await
+    }
+
+    pub async fn start_with_source(
+        pool: &SqlitePool,
+        trigger: TriggerType,
+        source_id: Option<&str>,
+    ) -> Result<ScrapeRun> {
         let id = Uuid::now_v7().to_string();
         let started_at = now_iso();
         let trigger_str = match serde_json::to_value(trigger)? {
@@ -70,13 +80,14 @@ impl RunsRepo {
 
         sqlx::query(
             r#"
-            INSERT INTO scrape_runs (id, trigger, status, started_at)
-            VALUES (?1, ?2, 'running', ?3)
+            INSERT INTO scrape_runs (id, trigger, status, started_at, source_id)
+            VALUES (?1, ?2, 'running', ?3, ?4)
             "#,
         )
         .bind(&id)
         .bind(trigger_str)
         .bind(&started_at)
+        .bind(source_id)
         .execute(pool)
         .await?;
 
@@ -89,6 +100,7 @@ impl RunsRepo {
             jobs_found: 0,
             jobs_new: 0,
             error: None,
+            source_id: source_id.map(ToString::to_string),
         })
     }
 
@@ -129,7 +141,7 @@ impl RunsRepo {
         use sqlx::Row;
         let r = sqlx::query(
             r#"
-            SELECT id, trigger, status, started_at, finished_at, jobs_found, jobs_new, error
+            SELECT id, trigger, status, started_at, finished_at, jobs_found, jobs_new, error, source_id
             FROM scrape_runs
             WHERE id = ?
             "#,
@@ -153,6 +165,7 @@ impl RunsRepo {
             jobs_found: r.get("jobs_found"),
             jobs_new: r.get("jobs_new"),
             error: r.get("error"),
+            source_id: r.get("source_id"),
         })
     }
 
@@ -160,7 +173,7 @@ impl RunsRepo {
         use sqlx::Row;
         let rows = sqlx::query(
             r#"
-            SELECT id, trigger, status, started_at, finished_at, jobs_found, jobs_new, error
+            SELECT id, trigger, status, started_at, finished_at, jobs_found, jobs_new, error, source_id
             FROM scrape_runs
             ORDER BY started_at DESC
             LIMIT ?
@@ -186,6 +199,50 @@ impl RunsRepo {
                 jobs_found: r.get("jobs_found"),
                 jobs_new: r.get("jobs_new"),
                 error: r.get("error"),
+                source_id: r.get("source_id"),
+            });
+        }
+
+        Ok(runs)
+    }
+
+    pub async fn list_by_source(
+        pool: &SqlitePool,
+        source_id: &str,
+        limit: i64,
+    ) -> Result<Vec<ScrapeRun>> {
+        use sqlx::Row;
+        let rows = sqlx::query(
+            r#"
+            SELECT id, trigger, status, started_at, finished_at, jobs_found, jobs_new, error, source_id
+            FROM scrape_runs
+            WHERE source_id = ?
+            ORDER BY started_at DESC
+            LIMIT ?
+            "#,
+        )
+        .bind(source_id)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?;
+
+        let mut runs = Vec::new();
+        for r in rows {
+            let trigger_str: String = r.get("trigger");
+            let status_str: String = r.get("status");
+            let trigger: TriggerType =
+                serde_json::from_value(serde_json::Value::String(trigger_str))?;
+            let status: RunStatus = serde_json::from_value(serde_json::Value::String(status_str))?;
+            runs.push(ScrapeRun {
+                id: r.get("id"),
+                trigger,
+                status,
+                started_at: r.get("started_at"),
+                finished_at: r.get("finished_at"),
+                jobs_found: r.get("jobs_found"),
+                jobs_new: r.get("jobs_new"),
+                error: r.get("error"),
+                source_id: r.get("source_id"),
             });
         }
 
@@ -284,6 +341,51 @@ mod tests {
         let list = RunsRepo::recent(&pool, 10).await.unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].id, run.id);
+    }
+
+    #[tokio::test]
+    async fn test_scrape_run_with_source_id_and_single_source() {
+        let pool = init_memory_db().await.unwrap();
+
+        let source = crate::db::sources::SourcesRepo::create(
+            &pool,
+            crate::db::sources::CreateSourceInput {
+                kind: scrape_core::SourceKind::Greenhouse,
+                name: "Test Co".to_string(),
+                identifier: "testco".to_string(),
+                config: None,
+                enabled: Some(true),
+                cadence: Some(scrape_core::SourceCadence::Every12h),
+                cadence_cron: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let source_id = source.id.as_str();
+        let run = RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(source_id))
+            .await
+            .unwrap();
+
+        assert_eq!(run.trigger, TriggerType::SingleSource);
+        assert_eq!(run.source_id.as_deref(), Some(source_id));
+        assert_eq!(run.status, RunStatus::Running);
+
+        let finished = RunsRepo::finish(&pool, &run.id, RunStatus::Success, 15, 3, None)
+            .await
+            .unwrap();
+
+        assert_eq!(finished.source_id.as_deref(), Some(source_id));
+        assert_eq!(finished.jobs_found, 15);
+        assert_eq!(finished.jobs_new, 3);
+
+        let source_runs = RunsRepo::list_by_source(&pool, source_id, 10).await.unwrap();
+        assert_eq!(source_runs.len(), 1);
+        assert_eq!(source_runs[0].id, run.id);
+        assert_eq!(source_runs[0].trigger, TriggerType::SingleSource);
+
+        let other_runs = RunsRepo::list_by_source(&pool, "non-existent-source", 10).await.unwrap();
+        assert!(other_runs.is_empty());
     }
 
     #[tokio::test]

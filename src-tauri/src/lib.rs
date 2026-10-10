@@ -114,7 +114,9 @@ pub fn run() {
             commands::sources::update_source,
             commands::sources::delete_source,
             commands::scrape::run_scrape_now,
+            commands::scrape::run_source_now,
             commands::scrape::list_scrape_runs,
+            commands::scrape::list_source_runs,
             commands::scrape::get_scrape_run,
             commands::scrape::get_scrape_logs,
             commands::scrape::validate_cron,
@@ -122,6 +124,7 @@ pub fn run() {
             commands::scrape::set_scheduler_paused,
             commands::scrape::detect_source,
             commands::scrape::test_source,
+            commands::scrape::test_source_transient,
             commands::metrics::get_metrics,
         ])
         .run(tauri::generate_context!())
@@ -138,6 +141,7 @@ mod bindings_test {
         scrape_core::RoleType::export().unwrap();
         scrape_core::JobStatus::export().unwrap();
         scrape_core::SourceKind::export().unwrap();
+        scrape_core::SourceCadence::export().unwrap();
         scrape_core::TriState::export().unwrap();
         scrape_core::WorkplaceType::export().unwrap();
         scrape_core::SalaryInterval::export().unwrap();
@@ -180,5 +184,6 @@ mod bindings_test {
         db::metrics::MetricsStreak::export().unwrap();
         services::scheduler::CronValidationResult::export().unwrap();
         services::scheduler::SchedulerStatus::export().unwrap();
+        commands::scrape::TransientSourceInput::export().unwrap();
     }
 }

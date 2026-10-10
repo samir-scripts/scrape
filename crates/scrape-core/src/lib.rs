@@ -14,8 +14,8 @@ pub use protocol::{
     PROTOCOL_VERSION,
 };
 pub use types::{
-    ClearanceLevel, JobStatus, RoleType, SalaryInterval, SalarySource, SourceKind, TriState,
-    WorkplaceType,
+    ClearanceLevel, JobStatus, RoleType, SalaryInterval, SalarySource, SourceCadence, SourceKind,
+    TriState, WorkplaceType,
 };
 
 use chrono::{SecondsFormat, Utc};

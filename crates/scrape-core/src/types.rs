@@ -55,6 +55,43 @@ impl SourceKind {
     }
 }
 
+/// Execution cadence for a scrape job.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS, Default)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(feature = "sqlx", sqlx(rename_all = "snake_case"))]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum SourceCadence {
+    #[default]
+    Global,
+    Hourly,
+    #[serde(rename = "every_6h")]
+    #[cfg_attr(feature = "sqlx", sqlx(rename = "every_6h"))]
+    Every6h,
+    #[serde(rename = "every_12h")]
+    #[cfg_attr(feature = "sqlx", sqlx(rename = "every_12h"))]
+    Every12h,
+    Daily,
+    Weekly,
+    Manual,
+    Cron,
+}
+
+impl SourceCadence {
+    /// Returns default 6-field cron expression if applicable.
+    pub fn default_cron(self) -> Option<&'static str> {
+        match self {
+            SourceCadence::Global | SourceCadence::Manual => None,
+            SourceCadence::Hourly => Some("0 0 * * * *"),
+            SourceCadence::Every6h => Some("0 0 */6 * * *"),
+            SourceCadence::Every12h => Some("0 0 */12 * * *"),
+            SourceCadence::Daily => Some("0 0 9 * * *"),
+            SourceCadence::Weekly => Some("0 0 9 * * MON"),
+            SourceCadence::Cron => None,
+        }
+    }
+}
+
 /// Tri-state boolean used for optional qualification attributes (Sponsorship, Clearance, New Grad).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS, Default)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
@@ -141,5 +178,11 @@ mod tests {
             serde_json::to_string(&SourceKind::Jsonld).unwrap(),
             "\"jsonld\""
         );
+        assert_eq!(
+            serde_json::to_string(&SourceCadence::Every12h).unwrap(),
+            "\"every_12h\""
+        );
+        assert_eq!(SourceCadence::Every12h.default_cron(), Some("0 0 */12 * * *"));
+        assert_eq!(SourceCadence::Global.default_cron(), None);
     }
 }

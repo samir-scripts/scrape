@@ -11,7 +11,7 @@ interface ScraperViewProps {
 }
 
 const CATEGORIES: { id: ScraperCategory; label: string }[] = [
-  { id: "sources", label: "SOURCES" },
+  { id: "sources", label: "SCRAPE JOBS" },
   { id: "schedule", label: "SCHEDULE" },
   { id: "filters", label: "FILTERS" },
   { id: "logs", label: "LOGS" },
