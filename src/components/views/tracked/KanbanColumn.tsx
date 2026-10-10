@@ -1,39 +1,66 @@
-import { useState, type DragEvent } from "react";
+import { useState, useRef, type DragEvent } from "react";
 import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
+import { STATUS_CONFIG } from "../../../lib/constants";
 import { Tag } from "../../ui/Tag";
 
 interface KanbanColumnProps {
   status: JobStatus;
-  title: string;
+  columnIndex: number;
   jobs: Job[];
   selectedJobId: string | null;
+  draggingJobId: string | null;
   onSelectJob: (job: Job) => void;
   onDropJob: (jobId: string, targetStatus: JobStatus) => void;
+  onDragStartJob: (jobId: string) => void;
+  onDragEndJob: () => void;
 }
 
 export function KanbanColumn({
   status,
-  title,
+  columnIndex,
   jobs,
   selectedJobId,
+  draggingJobId,
   onSelectJob,
   onDropJob,
+  onDragStartJob,
+  onDragEndJob,
 }: KanbanColumnProps) {
   const [isOver, setIsOver] = useState(false);
+  const dragCounterRef = useRef(0);
+  const config = STATUS_CONFIG[status] || {
+    label: status.toUpperCase(),
+    bg: "var(--color-ink)",
+    text: "var(--color-paper)",
+    border: "var(--color-ink)",
+  };
+
+  const handleDragEnter = (e: DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current += 1;
+    if (e.dataTransfer.types.includes("text/plain")) {
+      setIsOver(true);
+    }
+  };
 
   const handleDragOver = (e: DragEvent) => {
     e.preventDefault();
-    setIsOver(true);
+    e.dataTransfer.dropEffect = "move";
   };
 
   const handleDragLeave = () => {
-    setIsOver(false);
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      setIsOver(false);
+      dragCounterRef.current = 0;
+    }
   };
 
   const handleDrop = (e: DragEvent) => {
     e.preventDefault();
     setIsOver(false);
+    dragCounterRef.current = 0;
     const jobId = e.dataTransfer.getData("text/plain");
     if (jobId) {
       onDropJob(jobId, status);
@@ -42,45 +69,75 @@ export function KanbanColumn({
 
   return (
     <div
+      onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`flex-1 flex flex-col min-w-[240px] max-w-sm h-full border-r border-[var(--color-ink)] last:border-r-0 bg-[var(--color-paper)] transition-colors ${
+      className={`flex flex-col h-full overflow-hidden bg-[var(--color-paper)] transition-colors select-none ${
         isOver ? "bg-[var(--color-paper-2)]" : ""
       }`}
     >
-      {/* Column Header */}
-      <div className="bg-[var(--color-ink)] text-[var(--color-paper)] p-2.5 flex items-center justify-between select-none">
-        <h3 className="font-mono font-bold text-xs uppercase tracking-wider">
-          {title}
-        </h3>
-        <span className="font-mono text-xs px-1.5 py-0.5 bg-[var(--color-paper)] text-[var(--color-ink)] font-bold">
-          {jobs.length}
+      {/* Pinned Brutalist Header (h-9) */}
+      <div className="h-9 shrink-0 px-3 border-b border-[var(--color-ink)] bg-[var(--color-paper-2)]/40 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {/* Stage index & status accent pip */}
+          <span className="font-mono text-[10px] text-[var(--color-ink-mute)]">
+            // 0{columnIndex + 1}
+          </span>
+          <span
+            className="w-2 h-2 border border-[var(--color-ink)] shrink-0"
+            style={{ backgroundColor: config.bg }}
+            aria-hidden="true"
+          />
+          <h3 className="font-mono font-bold text-xs uppercase tracking-wider text-[var(--color-ink)]">
+            {config.label}
+          </h3>
+        </div>
+
+        {/* Tabular Count Badge */}
+        <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] min-w-[28px] text-center">
+          {String(jobs.length).padStart(2, "0")}
         </span>
       </div>
 
-      {/* Cards List */}
-      <div className="flex-1 overflow-y-auto p-2.5 flex flex-col gap-2">
+      {/* Cards List with Stable Scrollbar Gutter */}
+      <div className="flex-1 overflow-y-scroll p-2.5 flex flex-col gap-2">
         {jobs.length === 0 ? (
-          <div className="h-28 border border-dashed border-[var(--color-ink-mute)] flex items-center justify-center text-center p-3 select-none">
-            <span className="text-[11px] font-mono uppercase text-[var(--color-ink-mute)]">
-              DROP HERE
+          <div
+            className={`flex-1 min-h-[140px] border border-dashed border-[var(--color-ink-mute)] flex flex-col items-center justify-center p-3 text-center transition-colors ${
+              isOver
+                ? "border-solid border-[var(--color-ink)] bg-[var(--color-paper-2)] font-bold"
+                : "bg-[var(--color-paper-2)]/20"
+            }`}
+          >
+            <span className="text-[10px] font-mono font-bold tracking-wider text-[var(--color-ink-mute)]">
+              [ + ] DROP TO STAGE
+            </span>
+            <span className="text-[9px] font-mono text-[var(--color-ink-mute)]/60 mt-1">
+              // NO ACTIVE APPLICATIONS
             </span>
           </div>
         ) : (
           jobs.map((job) => {
             const isSelected = job.id === selectedJobId;
+            const isDragging = job.id === draggingJobId;
 
             return (
               <div
                 key={job.id}
+                id={`kanban-card-${job.id}`}
                 draggable
                 onDragStart={(e) => {
                   e.dataTransfer.setData("text/plain", job.id);
+                  e.dataTransfer.effectAllowed = "move";
+                  setTimeout(() => onDragStartJob(job.id), 0);
                 }}
+                onDragEnd={onDragEndJob}
                 onClick={() => onSelectJob(job)}
                 className={`p-3 border border-[var(--color-ink)] cursor-pointer select-none transition-none flex flex-col gap-1.5 ${
-                  isSelected
+                  isDragging
+                    ? "opacity-30 border-dashed"
+                    : isSelected
                     ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold"
                     : "bg-[var(--color-paper)] text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
                 }`}

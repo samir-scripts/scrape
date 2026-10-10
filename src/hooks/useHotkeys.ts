@@ -5,6 +5,8 @@ import { NAV_TABS } from "../lib/constants";
 export interface HotkeyOptions {
   onNextItem?: () => void;
   onPrevItem?: () => void;
+  onColLeft?: () => void;
+  onColRight?: () => void;
   onOpenUrl?: () => void;
   onApply?: () => void;
   onIgnore?: () => void;
@@ -83,6 +85,19 @@ export function useHotkeys(options: HotkeyOptions = {}) {
       if (e.shiftKey && e.key === "ArrowRight") {
         e.preventDefault();
         options.onShiftRight?.();
+        return;
+      }
+
+      // Horizontal column navigation in Kanban: Left / H, Right / L (when Shift not held)
+      if (!e.shiftKey && (e.key === "ArrowLeft" || e.key === "h" || e.key === "H")) {
+        e.preventDefault();
+        options.onColLeft?.();
+        return;
+      }
+
+      if (!e.shiftKey && (e.key === "ArrowRight" || e.key === "l" || e.key === "L")) {
+        e.preventDefault();
+        options.onColRight?.();
         return;
       }
 

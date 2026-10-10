@@ -1,7 +1,8 @@
+import { useState, useEffect } from "react";
 import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
-import { KanbanColumn } from "./KanbanColumn";
 import { TRACKED_STAGES } from "../../../lib/constants";
+import { KanbanColumn } from "./KanbanColumn";
 
 interface KanbanBoardProps {
   jobs: Job[];
@@ -10,35 +11,43 @@ interface KanbanBoardProps {
   onDropJob: (jobId: string, targetStatus: JobStatus) => void;
 }
 
-const STAGE_TITLES: Record<string, string> = {
-  applied: "APPLIED",
-  interviewing: "INTERVIEWING",
-  offer: "OFFER",
-  rejected: "REJECTED",
-};
-
 export function KanbanBoard({
   jobs,
   selectedJobId,
   onSelectJob,
   onDropJob,
 }: KanbanBoardProps) {
+  const [draggingJobId, setDraggingJobId] = useState<string | null>(null);
+
+  // Auto-scroll selected card into view without shifting document scroll
+  useEffect(() => {
+    if (selectedJobId) {
+      const el = document.getElementById(`kanban-card-${selectedJobId}`);
+      el?.scrollIntoView({ block: "nearest", behavior: "auto" });
+    }
+  }, [selectedJobId]);
+
   return (
-    <div className="flex-1 flex w-full h-full overflow-x-auto bg-[var(--color-paper)]">
-      {TRACKED_STAGES.map((stage) => {
-        const stageJobs = jobs.filter((j) => j.status === stage);
-        return (
-          <KanbanColumn
-            key={stage}
-            status={stage}
-            title={STAGE_TITLES[stage] || stage}
-            jobs={stageJobs}
-            selectedJobId={selectedJobId}
-            onSelectJob={onSelectJob}
-            onDropJob={onDropJob}
-          />
-        );
-      })}
+    <div className="flex-1 w-full h-full overflow-x-auto overflow-y-hidden bg-[var(--color-paper)]">
+      <div className="grid grid-cols-4 min-w-[1120px] w-full h-full divide-x divide-[var(--color-ink)]">
+        {TRACKED_STAGES.map((stage, colIdx) => {
+          const stageJobs = jobs.filter((j) => j.status === stage);
+          return (
+            <KanbanColumn
+              key={stage}
+              status={stage}
+              columnIndex={colIdx}
+              jobs={stageJobs}
+              selectedJobId={selectedJobId}
+              draggingJobId={draggingJobId}
+              onSelectJob={onSelectJob}
+              onDropJob={onDropJob}
+              onDragStartJob={(id) => setDraggingJobId(id)}
+              onDragEndJob={() => setDraggingJobId(null)}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }
