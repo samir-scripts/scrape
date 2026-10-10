@@ -7,6 +7,7 @@ import { ExperienceFilter } from "./ExperienceFilter";
 import { NewGradFilter } from "./NewGradFilter";
 import { LocationFilter } from "./LocationFilter";
 import { TriStateFilter } from "./TriStateFilter";
+import { RoleTypeFilter } from "./RoleTypeFilter";
 import { Rule } from "../ui/Rule";
 
 export interface FilterPanelProps {
@@ -111,6 +112,16 @@ export function FilterPanel({
 
         {/* Scrollable Filter Form */}
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
+          {/* Employment Type / Role Filter */}
+          <RoleTypeFilter
+            selected={filterSpec.role_types ?? null}
+            onChange={(roles) =>
+              onUpdateFilter((prev) => ({ ...prev, role_types: roles }))
+            }
+          />
+
+          <Rule />
+
           {/* Salary Filter */}
           <SalaryRangeFilter
             salaryMin={filterSpec.salary_min ?? null}

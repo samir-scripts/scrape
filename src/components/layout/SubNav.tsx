@@ -1,15 +1,11 @@
 import { useUIStore } from "../../lib/store";
-import { ROLE_TYPES, ROLE_TYPE_LABELS } from "../../lib/constants";
 import { KeyHint } from "../ui/KeyHint";
-import { Select } from "../ui/Select";
 import { FilterChips } from "../filters/FilterChips";
 import { countActiveFilters } from "../../lib/filter";
 
 export function SubNav() {
   const {
     view,
-    roleTypeFilter,
-    setRoleTypeFilter,
     trackedViewMode,
     setTrackedViewMode,
     searchQuery,
@@ -27,26 +23,8 @@ export function SubNav() {
   return (
     <div className="flex flex-col w-full shrink-0 select-none">
       <div className="flex items-center justify-between h-9 px-3 border-b border-[var(--color-ink)] bg-[var(--color-paper-2)]/40">
-        {/* Left: View-specific sub-categories */}
+        {/* Left: View-specific sub-categories & consolidated Filters button */}
         <div className="flex items-center gap-4 text-xs font-mono">
-          {view === "discovered" && (
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-[var(--color-ink-mute)] font-bold uppercase tracking-wider">
-                ROLE:
-              </span>
-              <Select
-                value={roleTypeFilter || "all"}
-                onChange={(e) =>
-                  setRoleTypeFilter(e.target.value === "all" ? null : e.target.value)
-                }
-                options={ROLE_TYPES.map((rt) => ({
-                  value: rt,
-                  label: ROLE_TYPE_LABELS[rt] || rt.toUpperCase(),
-                }))}
-                className="py-0.5 text-xs bg-[var(--color-paper)] h-7"
-              />
-            </div>
-          )}
 
           {view === "tracked" && (
             <div className="flex items-center gap-1">

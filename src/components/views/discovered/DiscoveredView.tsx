@@ -27,18 +27,14 @@ export function DiscoveredView({
   onUndo,
 }: DiscoveredViewProps) {
   const {
-    roleTypeFilter,
     searchQuery,
     selectedJobId,
     setSelectedJobId,
   } = useUIStore();
 
-  // Filter jobs based on role type and search query
+  // Filter jobs based on search query
   const filteredJobs = useMemo(() => {
     return jobs.filter((j) => {
-      if (roleTypeFilter && j.role_type !== roleTypeFilter) {
-        return false;
-      }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesTitle = j.title.toLowerCase().includes(q);
@@ -50,7 +46,7 @@ export function DiscoveredView({
       }
       return true;
     });
-  }, [jobs, roleTypeFilter, searchQuery]);
+  }, [jobs, searchQuery]);
 
   // Keep selection valid or pick the first job
   useEffect(() => {
@@ -120,7 +116,7 @@ export function DiscoveredView({
             <EmptyState
               title="NO POSTINGS FOUND"
               description={
-                searchQuery || roleTypeFilter
+                searchQuery
                   ? "TRY CLEARING FILTERS OR SEARCH TERMS."
                   : "ALL DISCOVERED JOBS HAVE BEEN TRIAGED."
               }

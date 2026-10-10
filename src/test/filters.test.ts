@@ -8,6 +8,7 @@ import {
   triStateToLabel,
   countActiveFilters,
 } from "../lib/filter";
+import { toggleRoleSelection } from "../components/filters/RoleTypeFilter";
 
 const createMockJob = (overrides: Partial<Job> = {}): Job => ({
   id: "job-1",
@@ -219,7 +220,44 @@ describe("Formatting Helpers", () => {
       salary_min: 100000,
       new_grad: "only",
       sponsorship: ["yes"],
+      role_types: ["full_time"],
     };
-    expect(countActiveFilters(filter2)).toBe(3);
+    expect(countActiveFilters(filter2)).toBe(4);
+  });
+
+  it("filters jobs by consolidated role_types filter spec", () => {
+    const ftJob = createMockJob({ role_type: "full_time" });
+    const contractJob = createMockJob({ role_type: "contract" });
+    const internJob = createMockJob({ role_type: "internship" });
+
+    const filter: Partial<JobFilter> = {
+      role_types: ["full_time", "contract"],
+    };
+
+    expect(matchesJob(ftJob, filter)).toBe(true);
+    expect(matchesJob(contractJob, filter)).toBe(true);
+    expect(matchesJob(internJob, filter)).toBe(false);
+
+    // Empty or null role_types matches all roles
+    expect(matchesJob(internJob, { role_types: null })).toBe(true);
+    expect(matchesJob(internJob, { role_types: [] })).toBe(true);
+  });
+
+  it("toggles role selections cleanly", () => {
+    // Starting with null, adding full_time
+    const sel1 = toggleRoleSelection(null, "full_time");
+    expect(sel1).toEqual(["full_time"]);
+
+    // Adding contract
+    const sel2 = toggleRoleSelection(sel1, "contract");
+    expect(sel2).toEqual(["full_time", "contract"]);
+
+    // Removing full_time
+    const sel3 = toggleRoleSelection(sel2, "full_time");
+    expect(sel3).toEqual(["contract"]);
+
+    // Removing last role resets to null (any)
+    const sel4 = toggleRoleSelection(sel3, "contract");
+    expect(sel4).toBeNull();
   });
 });

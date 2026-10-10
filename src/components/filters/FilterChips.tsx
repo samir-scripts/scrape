@@ -1,4 +1,5 @@
 import type { JobFilter } from "../../bindings/JobFilter";
+import { ROLE_TYPE_LABELS } from "../../lib/constants";
 
 export interface FilterChipsProps {
   filter: Partial<JobFilter>;
@@ -95,9 +96,12 @@ export function FilterChips({ filter, onUpdate, onClearAll }: FilterChipsProps) 
 
   // Role Types
   if (filter.role_types && filter.role_types.length > 0) {
+    const roleLabels = filter.role_types
+      .map((r) => ROLE_TYPE_LABELS[r] || r.toUpperCase())
+      .join(", ");
     chips.push({
       id: "role_types",
-      label: `ROLES: ${filter.role_types.join(", ").toUpperCase()}`,
+      label: `ROLES: ${roleLabels}`,
       onRemove: () => onUpdate((prev) => ({ ...prev, role_types: null })),
     });
   }
