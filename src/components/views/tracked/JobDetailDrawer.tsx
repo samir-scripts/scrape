@@ -49,6 +49,22 @@ export function JobDetailDrawer({
     }
   }, [debouncedNotes, job?.id]);
 
+  // Capture-phase keydown listener for Escape
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !job) return null;
 
   const formatDate = (iso: string) => {

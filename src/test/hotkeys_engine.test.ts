@@ -1,33 +1,58 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useUIStore } from "../lib/store";
 
-// Create minimal DOM mocks for Node.js environment
+// Create minimal DOM mocks for Node.js environment supporting capture and bubble phases
 class MockEventTarget {
-  private listeners: Record<string, Set<(e: any) => void>> = {};
+  private captureListeners: Record<string, Set<(e: any) => void>> = {};
+  private bubbleListeners: Record<string, Set<(e: any) => void>> = {};
 
-  addEventListener(type: string, listener: (e: any) => void) {
-    if (!this.listeners[type]) {
-      this.listeners[type] = new Set();
+  addEventListener(type: string, listener: (e: any) => void, useCapture = false) {
+    const target = useCapture ? this.captureListeners : this.bubbleListeners;
+    if (!target[type]) {
+      target[type] = new Set();
     }
-    this.listeners[type].add(listener);
+    target[type].add(listener);
   }
 
-  removeEventListener(type: string, listener: (e: any) => void) {
-    this.listeners[type]?.delete(listener);
+  removeEventListener(type: string, listener: (e: any) => void, useCapture = false) {
+    const target = useCapture ? this.captureListeners : this.bubbleListeners;
+    target[type]?.delete(listener);
   }
 
   dispatchEvent(event: { type: string; [key: string]: any }) {
-    const handlers = this.listeners[event.type];
-    if (handlers) {
-      for (const handler of Array.from(handlers)) {
+    let stopped = false;
+    event.stopPropagation = () => {
+      stopped = true;
+    };
+    event.stopImmediatePropagation = () => {
+      stopped = true;
+    };
+
+    // 1. Capture phase
+    const captureHandlers = this.captureListeners[event.type];
+    if (captureHandlers) {
+      for (const handler of Array.from(captureHandlers)) {
         handler(event);
+        if (stopped) return true;
+      }
+    }
+
+    // 2. Bubble phase
+    const bubbleHandlers = this.bubbleListeners[event.type];
+    if (bubbleHandlers) {
+      for (const handler of Array.from(bubbleHandlers)) {
+        handler(event);
+        if (stopped) return true;
       }
     }
     return true;
   }
 
   listenerCount(type: string): number {
-    return this.listeners[type]?.size ?? 0;
+    return (
+      (this.captureListeners[type]?.size ?? 0) +
+      (this.bubbleListeners[type]?.size ?? 0)
+    );
   }
 }
 
@@ -402,5 +427,55 @@ describe("Hotkeys Engine & Dispatch Logic", () => {
     };
     mockWindow.dispatchEvent({ type: "keydown", key: "Escape" });
     expect(blurFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("dismisses Modal dialogs immediately on Escape via capture phase even when input is focused", () => {
+    const onModalClose = vi.fn();
+    let isModalOpen = true;
+
+    // Capture-phase listener (matching Modal.tsx)
+    const handleModalKeyDown = (e: any) => {
+      if (!isModalOpen) return;
+      if (e.key === "Escape") {
+        e.preventDefault?.();
+        e.stopPropagation?.();
+        onModalClose();
+        isModalOpen = false;
+      }
+    };
+
+    // Bubble-phase listener (matching useGlobalHotkeys in App.tsx)
+    const handleGlobalKeyDown = (e: any) => {
+      if (e.key === "Escape") {
+        const activeEl = (globalThis as any).document.activeElement;
+        if (activeEl?.tagName === "INPUT") {
+          activeEl.blur?.();
+        }
+      }
+    };
+
+    mockWindow.addEventListener("keydown", handleModalKeyDown, true); // capture = true
+    mockWindow.addEventListener("keydown", handleGlobalKeyDown, false); // bubble = false
+
+    // Simulate input actively focused inside the AddSourceModal
+    const inputBlurFn = vi.fn();
+    (globalThis as any).document.activeElement = {
+      tagName: "INPUT",
+      blur: inputBlurFn,
+    };
+
+    // User presses Escape
+    mockWindow.dispatchEvent({ type: "keydown", key: "Escape" });
+
+    // 1. Modal's onClose MUST be called immediately
+    expect(onModalClose).toHaveBeenCalledTimes(1);
+
+    // 2. Global hotkey handler was prevented from running due to stopPropagation in capture phase
+    expect(inputBlurFn).not.toHaveBeenCalled();
+
+    // 3. Subsequent keydown when modal is closed now falls through to global handlers
+    mockWindow.dispatchEvent({ type: "keydown", key: "Escape" });
+    expect(onModalClose).toHaveBeenCalledTimes(1); // not called again
+    expect(inputBlurFn).toHaveBeenCalledTimes(1); // now global handler runs
   });
 });

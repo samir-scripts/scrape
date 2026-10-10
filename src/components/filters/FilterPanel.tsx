@@ -26,20 +26,22 @@ export function FilterPanel({
 }: FilterPanelProps) {
   const [impact, setImpact] = useState<FilterImpactPreview | null>(null);
 
-  // Keyboard shortcut listener for Esc
+  // Keyboard shortcut listener for Esc (capture phase for priority)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isOpen) return;
       if (e.key === "Escape") {
         e.preventDefault();
+        e.stopPropagation();
         onClose();
       } else if (e.shiftKey && (e.key === "F" || e.key === "f")) {
         e.preventDefault();
+        e.stopPropagation();
         onResetFilters();
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [isOpen, onClose, onResetFilters]);
 
   // Preview impact query on filter change
