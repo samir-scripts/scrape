@@ -37,7 +37,7 @@ export function Footer({ statusMessage }: FooterProps) {
           </>
         )}
 
-        {(view === "settings" || view === "metrics") && (
+        {(view === "settings" || view === "metrics" || view === "scraper") && (
           <>
             <KeyHint keys="Q/E" label="SWITCH TAB" />
             <KeyHint keys="ESC" label="CLOSE" />

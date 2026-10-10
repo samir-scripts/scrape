@@ -24,6 +24,7 @@
 16. [SQLite CHECK Constraint Alteration & ISO 3166-2 Suffix Matching](#16-sqlite-check-constraint-alteration--iso-3166-2-suffix-matching)
 17. [Tracked Kanban Board: Header Seam Bleed, Asymmetrical Column Capping, and Scrollbar Gutter Misalignment](#17-tracked-kanban-board-header-seam-bleed-asymmetrical-column-capping-and-scrollbar-gutter-misalignment)
 18. [Cross-View Selection Orphan & Asymmetric Hotkey Listener Churn in Kanban Navigation](#18-cross-view-selection-orphan--asymmetric-hotkey-listener-churn-in-kanban-navigation)
+19. [Global Hotkeys Lifecycle Severance & View Unmount Void in Root Navigation](#19-global-hotkeys-lifecycle-severance--view-unmount-void-in-root-navigation)
 
 ---
 
@@ -317,4 +318,27 @@
   2. **Ref-Stabilized Hotkey Dispatcher:** In `useHotkeys.ts`, store options and callbacks in a mutable ref (`optionsRef.current = options`) with an empty dependency array `[]` on listener attachment, completely eliminating listener churn on render cycles.
   3. **Symmetric Modifier & Key Handling:** Support both arrow keys and Vim keys for all actions: `(e.key === "ArrowLeft" || e.key === "H")` for left stage shift, `(e.key === "ArrowRight" || e.key === "L")` for right stage shift. Ensure modifier guards check `!(e.metaKey || e.ctrlKey || e.altKey)`.
   4. **Symmetric 2D Column Navigation with Target Memory:** In `kanbanNavigation.ts`, provide robust matrix navigation with virtual row memory or intelligent clamping that guarantees symmetric bidirectional transitions across columns.
+
+---
+
+### 19. Global Hotkeys Lifecycle Severance & View Unmount Void in Root Navigation
+
+- **Phase:** Phase 3 / Phase 4 (App Shell Architecture & Global Keyboard Navigation)
+- **Error Signature:**
+  Pressing `Q` or `E` (and `[` or `]`) to navigate through application tabs works partially or unpredictably between `Discovered` and `Tracked`, but completely ceases to function once the user enters `Metrics`, `Scraper`, or `Settings`. The user becomes trapped on those tabs with no response to keyboard navigation.
+- **Root Cause:**
+  1. **Sub-View Lifecycle Coupling:**
+     Global application hotkeys (such as tab cycling via `Q`/`E`/`[`/`]`, global search focus via `/`, filter drawer toggling via `F`, and `Escape`) were implemented inside the `useHotkeys` hook, which was only mounted in leaf view components: `DiscoveredView.tsx` and `TrackedView.tsx`.
+     When the user navigated from `Tracked` to `Metrics`, `TrackedView` unmounted, tearing down its `keydown` event listener. Because neither `MetricsView`, `ScraperView`, nor `SettingsView` mounted `useHotkeys`, the desktop application had **zero** event listeners registered on `window`. The keyboard shortcuts ceased functioning entirely.
+  2. **Stale Closure Race on Rapid Keypresses:**
+     Tab calculations referenced `view` captured in the component closure rather than reading the live Zustand store state directly (`useUIStore.getState().view`).
+  3. **Absence of Root Lifecycle Listener:**
+     Global application navigation was not bound to the root application shell (`App.tsx`), which remains mounted throughout the entire desktop runtime.
+- **Solution & Rule:**
+  1. **Two-Tier Hotkey Architecture:**
+     - **Tier 1 (Global Shell Shortcuts):** Decouple global application shortcuts into `useGlobalHotkeys()`, mounted permanently at the root in `App.tsx`. Handles tab cycling (`Q`/`E`/`[`/`]`), search focus (`/`), filter drawer toggle (`F`), and `Escape`. Attaches once on mount with an empty dependency array `[]` and reads canonical instantaneous state via `useUIStore.getState().view`.
+     - **Tier 2 (View-Specific Shortcuts):** Keep `useHotkeys(options)` scoped strictly to in-view item/column navigation and actions (`J`/`K`/`H`/`L`, `Shift+H`/`Shift+L`, `A`, `X`, `V`, `U`, `Enter`), eliminating duplicate tab-switch handlers or unmount dead zones.
+  2. **Footer Telemetry Synchronization:**
+     Ensure `Footer.tsx` displays consistent `Q/E SWITCH TAB` and `ESC CLOSE` hints across all views (`metrics`, `scraper`, `settings`).
+
 
