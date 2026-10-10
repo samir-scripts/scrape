@@ -68,6 +68,7 @@ export const ROLE_TYPE_LABELS: Record<string, string> = {
   contract: "CONTRACT",
   internship: "INTERNSHIP",
   part_time: "PART-TIME",
+  seasonal: "SEASONAL",
   unknown: "OTHER",
 };
 
@@ -77,6 +78,7 @@ export const ROLE_TYPES: (RoleType | "all")[] = [
   "contract",
   "internship",
   "part_time",
+  "seasonal",
 ];
 
 export const CRON_PRESETS = [

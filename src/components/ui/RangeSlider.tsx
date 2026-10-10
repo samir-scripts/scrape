@@ -44,6 +44,10 @@ export function RangeSlider({
     [onChange]
   );
 
+  // Dynamic z-index layering ensures the thumb closer to the user interaction is reachable
+  const minZ = minPercent > 50 ? 40 : 30;
+  const maxZ = minPercent > 50 ? 30 : 40;
+
   return (
     <div className={`relative flex items-center w-full h-8 select-none ${className}`}>
       {/* Background Track */}
@@ -58,7 +62,7 @@ export function RangeSlider({
         }}
       />
 
-      {/* Low Thumb Input */}
+      {/* Low Thumb Input: track is pointer-events-none, thumb is pointer-events-auto */}
       <input
         type="range"
         min={min}
@@ -68,10 +72,11 @@ export function RangeSlider({
         disabled={disabled}
         onChange={handleMinChange}
         aria-label="Minimum value"
-        className="thumb-range pointer-events-auto absolute w-full h-2 opacity-0 z-20 cursor-pointer appearance-none"
+        style={{ zIndex: minZ }}
+        className="pointer-events-none absolute w-full h-2 opacity-0 cursor-pointer appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:h-6 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none"
       />
 
-      {/* High Thumb Input */}
+      {/* High Thumb Input: track is pointer-events-none, thumb is pointer-events-auto */}
       <input
         type="range"
         min={min}
@@ -81,7 +86,8 @@ export function RangeSlider({
         disabled={disabled}
         onChange={handleMaxChange}
         aria-label="Maximum value"
-        className="thumb-range pointer-events-auto absolute w-full h-2 opacity-0 z-30 cursor-pointer appearance-none"
+        style={{ zIndex: maxZ }}
+        className="pointer-events-none absolute w-full h-2 opacity-0 cursor-pointer appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:h-6 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none"
       />
 
       {/* Visible Low Thumb Marker */}

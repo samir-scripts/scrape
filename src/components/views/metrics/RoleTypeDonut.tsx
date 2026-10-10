@@ -20,6 +20,8 @@ export function formatRoleType(rt: RoleType): string {
       return "INTERNSHIP";
     case "part_time":
       return "PART-TIME";
+    case "seasonal":
+      return "SEASONAL";
     case "unknown":
       return "UNKNOWN";
   }
@@ -35,6 +37,8 @@ function getPatternId(rt: RoleType): string {
       return "role-dots";
     case "part_time":
       return "role-checker";
+    case "seasonal":
+      return "role-grid";
     case "unknown":
       return "role-paper";
   }
@@ -113,6 +117,22 @@ function InnerDonut({
           <rect width="6" height="6" fill="var(--color-paper)" />
           <rect width="3" height="3" fill="var(--color-ink)" />
           <rect x="3" y="3" width="3" height="3" fill="var(--color-ink)" />
+        </pattern>
+
+        {/* Grid Pattern */}
+        <pattern
+          id="role-grid"
+          width="6"
+          height="6"
+          patternUnits="userSpaceOnUse"
+        >
+          <rect width="6" height="6" fill="var(--color-paper)" />
+          <path
+            d="M 6 0 L 0 0 0 6"
+            fill="none"
+            stroke="var(--color-ink)"
+            strokeWidth="1"
+          />
         </pattern>
       </defs>
 
@@ -254,6 +274,8 @@ export function RoleTypeDonut({ data, className = "" }: RoleTypeDonutProps) {
                       ? "dither-dots"
                       : patternId === "role-checker"
                       ? "dither-checker"
+                      : patternId === "role-grid"
+                      ? "bg-[var(--color-ink)] opacity-50"
                       : "bg-[var(--color-paper)]"
                   }`}
                 />

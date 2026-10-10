@@ -144,9 +144,11 @@ export function matchesJob(job: Job, filter: Partial<JobFilter>): boolean {
     } else {
       const match = job.locations.some((loc) => {
         if (!loc.region_code) return false;
-        return filter.regions!.some(
-          (r) => r.toLowerCase() === loc.region_code?.toLowerCase()
-        );
+        const regLow = loc.region_code.toLowerCase();
+        return filter.regions!.some((r) => {
+          const rLow = r.toLowerCase();
+          return regLow === rLow || regLow.endsWith(`-${rLow}`) || rLow.endsWith(`-${regLow}`);
+        });
       });
       if (!match) return false;
     }

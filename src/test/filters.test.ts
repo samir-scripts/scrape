@@ -229,13 +229,15 @@ describe("Formatting Helpers", () => {
     const ftJob = createMockJob({ role_type: "full_time" });
     const contractJob = createMockJob({ role_type: "contract" });
     const internJob = createMockJob({ role_type: "internship" });
+    const seasonalJob = createMockJob({ role_type: "seasonal" });
 
     const filter: Partial<JobFilter> = {
-      role_types: ["full_time", "contract"],
+      role_types: ["full_time", "seasonal"],
     };
 
     expect(matchesJob(ftJob, filter)).toBe(true);
-    expect(matchesJob(contractJob, filter)).toBe(true);
+    expect(matchesJob(seasonalJob, filter)).toBe(true);
+    expect(matchesJob(contractJob, filter)).toBe(false);
     expect(matchesJob(internJob, filter)).toBe(false);
 
     // Empty or null role_types matches all roles
@@ -243,21 +245,42 @@ describe("Formatting Helpers", () => {
     expect(matchesJob(internJob, { role_types: [] })).toBe(true);
   });
 
-  it("toggles role selections cleanly", () => {
+  it("matches region codes flexibly across ISO and short abbreviations", () => {
+    const usCaJob = createMockJob({
+      locations: [
+        {
+          raw: "San Francisco, CA",
+          city: "San Francisco",
+          region_code: "US-CA",
+          country_code: "US",
+          is_remote: false,
+        },
+      ],
+    });
+
+    // Filtering by short code "CA" matches "US-CA"
+    expect(matchesJob(usCaJob, { regions: ["CA"] })).toBe(true);
+    // Filtering by full ISO code "US-CA" matches "US-CA"
+    expect(matchesJob(usCaJob, { regions: ["US-CA"] })).toBe(true);
+    // Filtering by "NY" does not match
+    expect(matchesJob(usCaJob, { regions: ["NY"] })).toBe(false);
+  });
+
+  it("toggles role selections cleanly including seasonal", () => {
     // Starting with null, adding full_time
     const sel1 = toggleRoleSelection(null, "full_time");
     expect(sel1).toEqual(["full_time"]);
 
-    // Adding contract
-    const sel2 = toggleRoleSelection(sel1, "contract");
-    expect(sel2).toEqual(["full_time", "contract"]);
+    // Adding seasonal
+    const sel2 = toggleRoleSelection(sel1, "seasonal");
+    expect(sel2).toEqual(["full_time", "seasonal"]);
 
-    // Removing full_time
+    // Removing full_time leaves seasonal
     const sel3 = toggleRoleSelection(sel2, "full_time");
-    expect(sel3).toEqual(["contract"]);
+    expect(sel3).toEqual(["seasonal"]);
 
-    // Removing last role resets to null (any)
-    const sel4 = toggleRoleSelection(sel3, "contract");
+    // Removing seasonal resets to null (any)
+    const sel4 = toggleRoleSelection(sel3, "seasonal");
     expect(sel4).toBeNull();
   });
 });

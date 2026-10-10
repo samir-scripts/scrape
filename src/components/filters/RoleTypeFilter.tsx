@@ -11,6 +11,7 @@ const ALL_ROLES: RoleType[] = [
   "contract",
   "internship",
   "part_time",
+  "seasonal",
   "unknown",
 ];
 

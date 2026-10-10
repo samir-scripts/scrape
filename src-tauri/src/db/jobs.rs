@@ -570,12 +570,12 @@ impl JobsRepo {
             }
             if let Some(r_list) = &filter.regions {
                 if !r_list.is_empty() {
-                    let formatted = r_list
-                        .iter()
-                        .map(|r| format!("'{}'", r.replace('\'', "''")))
-                        .collect::<Vec<_>>()
-                        .join(",");
-                    geo_sub.push(format!("jl.region_code IN ({})", formatted));
+                    let mut region_conditions = Vec::new();
+                    for r in r_list {
+                        let clean = r.replace('\'', "''");
+                        region_conditions.push(format!("jl.region_code = '{clean}' OR jl.region_code LIKE '%-{clean}'"));
+                    }
+                    geo_sub.push(format!("({})", region_conditions.join(" OR ")));
                 }
             }
 
@@ -1748,5 +1748,116 @@ mod tests {
         };
         let result2 = JobsRepo::list(&pool, non_matching_filter).await.unwrap();
         assert_eq!(result2.total, 0);
+    }
+
+    #[tokio::test]
+    async fn test_location_country_and_cascading_region_filter() {
+        let pool = init_memory_db().await.unwrap();
+
+        let job_ca = ScrapedJob {
+            dedupe_key: "k1".to_string(),
+            source_id: None,
+            external_id: None,
+            title: "Engineer CA".to_string(),
+            company: "Tech Corp".to_string(),
+            role_type: RoleType::FullTime,
+            location: Some("San Francisco, CA".to_string()),
+            url: "https://example.com/ca".to_string(),
+            date_posted: None,
+            salary_min: None,
+            salary_max: None,
+            salary_currency: None,
+            salary_interval: None,
+            salary_raw: None,
+            salary_source: None,
+            workplace_type: WorkplaceType::Hybrid,
+            sponsorship: TriState::Unknown,
+            sponsorship_evidence: None,
+            clearance: TriState::Unknown,
+            clearance_level: None,
+            clearance_evidence: None,
+            experience_min: None,
+            experience_max: None,
+            experience_raw: None,
+            is_new_grad: TriState::Unknown,
+            experience_evidence: None,
+            description_text: None,
+            locations: vec![ParsedLocation {
+                raw: "San Francisco, CA".to_string(),
+                city: Some("San Francisco".to_string()),
+                region_code: Some("US-CA".to_string()),
+                country_code: Some("US".to_string()),
+                is_remote: false,
+            }],
+        };
+
+        let job_on = ScrapedJob {
+            dedupe_key: "k2".to_string(),
+            source_id: None,
+            external_id: None,
+            title: "Engineer ON".to_string(),
+            company: "Maple Tech".to_string(),
+            role_type: RoleType::FullTime,
+            location: Some("Toronto, ON".to_string()),
+            url: "https://example.com/on".to_string(),
+            date_posted: None,
+            salary_min: None,
+            salary_max: None,
+            salary_currency: None,
+            salary_interval: None,
+            salary_raw: None,
+            salary_source: None,
+            workplace_type: WorkplaceType::Hybrid,
+            sponsorship: TriState::Unknown,
+            sponsorship_evidence: None,
+            clearance: TriState::Unknown,
+            clearance_level: None,
+            clearance_evidence: None,
+            experience_min: None,
+            experience_max: None,
+            experience_raw: None,
+            is_new_grad: TriState::Unknown,
+            experience_evidence: None,
+            description_text: None,
+            locations: vec![ParsedLocation {
+                raw: "Toronto, ON".to_string(),
+                city: Some("Toronto".to_string()),
+                region_code: Some("CA-ON".to_string()),
+                country_code: Some("CA".to_string()),
+                is_remote: false,
+            }],
+        };
+
+        JobsRepo::upsert_scraped(&pool, &[job_ca, job_on]).await.unwrap();
+
+        // 1. Filter by country US
+        let us_filter = JobFilter {
+            countries: Some(vec!["US".to_string()]),
+            location_include_unknown: Some(false),
+            ..Default::default()
+        };
+        let us_res = JobsRepo::list(&pool, us_filter).await.unwrap();
+        assert_eq!(us_res.total, 1);
+        assert_eq!(us_res.items[0].company, "Tech Corp");
+
+        // 2. Filter by region code suffix "CA" (should match "US-CA")
+        let ca_suffix_filter = JobFilter {
+            regions: Some(vec!["CA".to_string()]),
+            location_include_unknown: Some(false),
+            ..Default::default()
+        };
+        let ca_res = JobsRepo::list(&pool, ca_suffix_filter).await.unwrap();
+        assert_eq!(ca_res.total, 1);
+        assert_eq!(ca_res.items[0].company, "Tech Corp");
+
+        // 3. Filter by full ISO region code "CA-ON"
+        let on_filter = JobFilter {
+            regions: Some(vec!["CA-ON".to_string()]),
+            location_include_unknown: Some(false),
+            ..Default::default()
+        };
+        let on_res = JobsRepo::list(&pool, on_filter).await.unwrap();
+        assert_eq!(on_res.total, 1);
+        assert_eq!(on_res.items[0].company, "Maple Tech");
     }
 }

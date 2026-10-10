@@ -19,6 +19,8 @@
 11. [Tauri v2: Retaining Menu Items for Dynamic Tray Updates](#11-tauri-v2-retaining-menu-items-for-dynamic-tray-updates)
 12. [TypeScript: ts-rs BigInt IPC Serialization](#12-typescript-ts-rs-bigint-ipc-serialization)
 13. [Zustand & React 19: Vitest Headless LocalStorage & noUnusedLocals](#13-zustand--react-19-vitest-headless-localstorage--nounusedlocals)
+14. [Dual Range Input: Pointer Capture Inversion in Multi-Thumb HTML Sliders](#14-dual-range-input-pointer-capture-inversion-in-multi-thumb-html-sliders)
+15. [SQLite In-Memory Multi-Connection Table Isolation in SqlitePool](#15-sqlite-in-memory-multi-connection-table-isolation-in-sqlitepool)
 
 ---
 
@@ -229,5 +231,48 @@
 - **Solution & Rule:**
   1. Use named imports (`import { useState } from "react"`, `import type { ReactNode } from "react"`).
   2. Wrap browser `localStorage` reads and writes in safe conditional guards (`typeof window !== "undefined" && window.localStorage`).
+
+---
+
+### 14. Dual Range Input: Pointer Capture Inversion in Multi-Thumb HTML Sliders
+
+- **Phase:** Phase 3/4 (Salary Filter)
+- **Error Signature:**
+  One slider end is unresponsive or cannot be dragged; clicking anywhere on the track moves only the higher z-index thumb.
+- **Root Cause:**
+  In dual `<input type="range">` implementations sharing the same track, applying `pointer-events: auto` to both full-width input elements causes the higher z-index input's transparent track to sit over the entire container, blocking click and drag events from reaching the lower thumb.
+- **Solution & Rule:**
+  Set `pointer-events: none` on both `<input type="range">` elements, and enable `pointer-events: auto` exclusively on the thumbs via pseudo-elements (`[&::-webkit-slider-thumb]:pointer-events-auto` and `[&::-moz-range-thumb]:pointer-events-auto`). Dynamically swap `z-index` when the lower thumb approaches the upper value or based on pointer proximity so neither thumb gets occluded.
+
+---
+
+### 15. SQLite In-Memory Multi-Connection Table Isolation in SqlitePool
+
+- **Phase:** Phase 4 (Metrics Testing)
+- **Error Signature:**
+  ```text
+  Database(SqliteError { code: 1, message: "no such table: app_settings" })
+  ```
+- **Root Cause:**
+  SQLite in-memory databases with URI `:memory:` are private to each distinct database connection. A `SqlitePool` with `max_connections > 1` creates separate, empty in-memory databases for subsequent connections, meaning migrations executed on connection 1 are invisible to connection 2.
+- **Solution & Rule:**
+  In unit tests using in-memory SQLite, always use `max_connections(1)` (via `crate::db::init_memory_db()`) or a shared in-memory URI (`file:memdb?mode=memory&cache=shared`) to guarantee all pooled queries access the same migrated schema.
+
+---
+
+### 16. SQLite CHECK Constraint Alteration & ISO 3166-2 Suffix Matching
+
+- **Phase:** Phase 4 (Employment Type & Cascading Location Dropdowns)
+- **Error Signature:**
+  ```text
+  Database(SqliteError { code: 19, message: "CHECK constraint failed: jobs" })
+  ```
+- **Root Cause:**
+  1. SQLite does not support `ALTER TABLE ... MODIFY CONSTRAINT` or modifying an existing `CHECK` clause. Adding a new enum variant (e.g., `'seasonal'` to `role_type`) throws a constraint violation unless the table is recreated.
+  2. Standard gazetteers store ISO 3166-2 codes (e.g. `"US-CA"`, `"CA-ON"`). Querying with 2-letter state codes (e.g., `"CA"`) via direct `IN ('CA')` produces zero results despite matches existing.
+- **Solution & Rule:**
+  1. Recreate the table via migration: `CREATE TABLE jobs_new (... CHECK (role_type IN (..., 'seasonal', ...))); INSERT INTO jobs_new SELECT ... FROM jobs; DROP TABLE jobs; ALTER TABLE jobs_new RENAME TO jobs;` and re-create all indexes.
+  2. Implement dual-mode matching across SQL and client filters: check both exact match and suffix match (`jl.region_code = 'CA' OR jl.region_code LIKE '%-CA'`), allowing both full ISO codes and state abbreviations to filter seamlessly.
+
 
 

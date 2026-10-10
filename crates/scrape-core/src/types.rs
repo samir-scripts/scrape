@@ -13,6 +13,7 @@ pub enum RoleType {
     Contract,
     Internship,
     PartTime,
+    Seasonal,
     Unknown,
 }
 

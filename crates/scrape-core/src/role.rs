@@ -23,7 +23,9 @@ impl RoleType {
         if squashed.is_empty() {
             return None;
         }
-        if squashed.contains("intern") || squashed.contains("coop") {
+        if squashed.contains("seasonal") {
+            Some(RoleType::Seasonal)
+        } else if squashed.contains("intern") || squashed.contains("coop") {
             Some(RoleType::Internship)
         } else if squashed.contains("parttime") {
             Some(RoleType::PartTime)
@@ -53,7 +55,9 @@ impl RoleType {
         let has = |w: &str| tokens.contains(&w);
         let has_pair = |a: &str, b: &str| tokens.windows(2).any(|p| p[0] == a && p[1] == b);
 
-        if has("intern")
+        if has("seasonal") {
+            Some(RoleType::Seasonal)
+        } else if has("intern")
             || has("interns")
             || has("internship")
             || has("coop")
@@ -96,6 +100,8 @@ mod tests {
         assert_eq!(RoleType::from_hint("INTERN"), Some(RoleType::Internship));
         assert_eq!(RoleType::from_hint("Temporary"), Some(RoleType::Contract));
         assert_eq!(RoleType::from_hint("Contractor"), Some(RoleType::Contract));
+        assert_eq!(RoleType::from_hint("Seasonal"), Some(RoleType::Seasonal));
+        assert_eq!(RoleType::from_hint("Seasonal / Temp"), Some(RoleType::Seasonal));
         assert_eq!(RoleType::from_hint("Hybrid"), None);
         assert_eq!(RoleType::from_hint(""), None);
     }
@@ -105,6 +111,14 @@ mod tests {
         assert_eq!(
             RoleType::from_title("Summer 2027 Data Engineering Intern"),
             Some(RoleType::Internship)
+        );
+        assert_eq!(
+            RoleType::from_title("Seasonal Warehouse Associate"),
+            Some(RoleType::Seasonal)
+        );
+        assert_eq!(
+            RoleType::from_title("Seasonal Support Specialist"),
+            Some(RoleType::Seasonal)
         );
         assert_eq!(
             RoleType::from_title("Co-op, Platform Team"),

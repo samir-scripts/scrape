@@ -1,5 +1,10 @@
 import { useState, useEffect } from "react";
 import { api } from "../../lib/api";
+import {
+  COUNTRIES,
+  getRegionsForCountry,
+  detectUserLocation,
+} from "../../lib/locationData";
 
 export interface LocationFilterProps {
   countries: string[] | null;
@@ -13,19 +18,6 @@ export interface LocationFilterProps {
     includeUnknown: boolean;
   }) => void;
 }
-
-const COMMON_COUNTRIES = [
-  "United States",
-  "Canada",
-  "United Kingdom",
-  "Germany",
-  "France",
-  "India",
-];
-
-const COMMON_US_STATES = [
-  "CA", "NY", "TX", "WA", "MA", "IL", "CO", "NC", "VA", "FL", "GA"
-];
 
 const REMOTE_OPTIONS: { id: string; label: string }[] = [
   { id: "all", label: "ANY WORKPLACE" },
@@ -41,21 +33,17 @@ export function LocationFilter({
   includeUnknown,
   onChange,
 }: LocationFilterProps) {
-  const [availableCountries, setAvailableCountries] = useState<string[]>(COMMON_COUNTRIES);
-  const [availableRegions, setAvailableRegions] = useState<string[]>(COMMON_US_STATES);
-  const [countryInput, setCountryInput] = useState("");
-  const [regionInput, setRegionInput] = useState("");
+  const [dynamicCountries, setDynamicCountries] = useState<string[]>([]);
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [detectStatus, setDetectStatus] = useState<string | null>(null);
 
   useEffect(() => {
     api.listLocationOptions()
       .then((opts) => {
         if (opts.countries && opts.countries.length > 0) {
-          const merged = Array.from(new Set([...COMMON_COUNTRIES, ...opts.countries]));
-          setAvailableCountries(merged);
-        }
-        if (opts.regions && opts.regions.length > 0) {
-          const merged = Array.from(new Set([...COMMON_US_STATES, ...opts.regions]));
-          setAvailableRegions(merged);
+          const knownCodes = new Set(COUNTRIES.map((c) => c.code));
+          const extra = opts.countries.filter((c) => !knownCodes.has(c.toUpperCase()));
+          setDynamicCountries(extra);
         }
       })
       .catch(() => {
@@ -63,31 +51,52 @@ export function LocationFilter({
       });
   }, []);
 
-  const selectedCountries = countries || [];
+  const selectedCountryCode =
+    countries && countries.length > 0 ? countries[0].toUpperCase() : "ALL";
+
   const selectedRegions = regions || [];
 
-  const handleToggleCountry = (country: string) => {
-    let next: string[];
-    if (selectedCountries.includes(country)) {
-      next = selectedCountries.filter((c) => c !== country);
+  const cascadingRegions = getRegionsForCountry(selectedCountryCode);
+
+  const handleCountryChange = (newCode: string) => {
+    if (newCode === "ALL") {
+      onChange({
+        countries: null,
+        regions,
+        remote,
+        includeUnknown,
+      });
     } else {
-      next = [...selectedCountries, country];
+      // Filter existing regions to only those relevant to the newly selected country
+      const validForNewCountry = getRegionsForCountry(newCode).map((r) => r.code);
+      const filteredRegions = selectedRegions.filter((reg) =>
+        validForNewCountry.includes(reg.toUpperCase())
+      );
+
+      onChange({
+        countries: [newCode],
+        regions: filteredRegions.length > 0 ? filteredRegions : null,
+        remote,
+        includeUnknown,
+      });
     }
-    onChange({
-      countries: next.length > 0 ? next : null,
-      regions,
-      remote,
-      includeUnknown,
-    });
   };
 
-  const handleToggleRegion = (reg: string) => {
-    let next: string[];
-    if (selectedRegions.includes(reg)) {
-      next = selectedRegions.filter((r) => r !== reg);
-    } else {
-      next = [...selectedRegions, reg];
+  const handleAddRegion = (regCode: string) => {
+    if (!regCode) return;
+    const upper = regCode.toUpperCase();
+    if (!selectedRegions.includes(upper)) {
+      onChange({
+        countries,
+        regions: [...selectedRegions, upper],
+        remote,
+        includeUnknown,
+      });
     }
+  };
+
+  const handleRemoveRegion = (regCode: string) => {
+    const next = selectedRegions.filter((r) => r !== regCode);
     onChange({
       countries,
       regions: next.length > 0 ? next : null,
@@ -96,32 +105,44 @@ export function LocationFilter({
     });
   };
 
-  const handleAddCustomCountry = () => {
-    const trimmed = countryInput.trim();
-    if (!trimmed) return;
-    if (!selectedCountries.includes(trimmed)) {
-      onChange({
-        countries: [...selectedCountries, trimmed],
-        regions,
-        remote,
-        includeUnknown,
-      });
-    }
-    setCountryInput("");
+  const handleClearRegions = () => {
+    onChange({
+      countries,
+      regions: null,
+      remote,
+      includeUnknown,
+    });
   };
 
-  const handleAddCustomRegion = () => {
-    const trimmed = regionInput.trim().toUpperCase();
-    if (!trimmed) return;
-    if (!selectedRegions.includes(trimmed)) {
-      onChange({
-        countries,
-        regions: [...selectedRegions, trimmed],
-        remote,
-        includeUnknown,
-      });
+  const handleAutoDetect = async () => {
+    setIsDetecting(true);
+    setDetectStatus(null);
+    try {
+      const loc = await detectUserLocation();
+      if (loc.country) {
+        const nextCountries = [loc.country];
+        const nextRegions = loc.region ? [loc.region] : null;
+
+        onChange({
+          countries: nextCountries,
+          regions: nextRegions,
+          remote,
+          includeUnknown,
+        });
+
+        const label = `${loc.country}${loc.region ? " · " + loc.region : ""}`;
+        setDetectStatus(`DETECTED: ${label}`);
+        setTimeout(() => setDetectStatus(null), 4000);
+      } else {
+        setDetectStatus("LOCATION UNAVAILABLE");
+        setTimeout(() => setDetectStatus(null), 3000);
+      }
+    } catch {
+      setDetectStatus("DETECTION ERROR");
+      setTimeout(() => setDetectStatus(null), 3000);
+    } finally {
+      setIsDetecting(false);
     }
-    setRegionInput("");
   };
 
   const hasFilter =
@@ -131,26 +152,44 @@ export function LocationFilter({
 
   return (
     <div className="flex flex-col gap-3 font-mono text-xs select-none">
+      {/* Header with Auto-Detect and Reset */}
       <div className="flex justify-between items-center">
         <label className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
           GEOGRAPHY & REMOTE POLICY
         </label>
-        {hasFilter && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={() =>
-              onChange({
-                countries: null,
-                regions: null,
-                remote: "all",
-                includeUnknown,
-              })
-            }
-            className="text-[10px] text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
+            type="button"
+            onClick={handleAutoDetect}
+            disabled={isDetecting}
+            className="text-[10px] text-[var(--color-ink)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] border border-[var(--color-ink)] px-1.5 py-0.5 uppercase cursor-pointer disabled:opacity-50"
+            title="Auto-detect system/user location"
           >
-            [RESET]
+            {isDetecting ? "DETECTING..." : "📍 AUTO-DETECT"}
           </button>
-        )}
+          {hasFilter && (
+            <button
+              onClick={() =>
+                onChange({
+                  countries: null,
+                  regions: null,
+                  remote: "all",
+                  includeUnknown,
+                })
+              }
+              className="text-[10px] text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
+            >
+              [RESET]
+            </button>
+          )}
+        </div>
       </div>
+
+      {detectStatus && (
+        <div className="text-[10px] font-bold text-[var(--color-ink)] bg-[var(--color-paper-2)] border border-[var(--color-ink)] px-2 py-0.5 uppercase">
+          {detectStatus}
+        </div>
+      )}
 
       {/* Workplace Mode (Remote / Hybrid / Onsite) */}
       <div className="flex flex-col gap-1">
@@ -185,90 +224,112 @@ export function LocationFilter({
         </div>
       </div>
 
-      {/* Target Countries */}
+      {/* Target Country Dropdown */}
       <div className="flex flex-col gap-1 pt-1">
-        <span className="text-[10px] text-[var(--color-ink-mute)] uppercase font-bold">
-          COUNTRIES
-        </span>
-        <div className="flex flex-wrap gap-1">
-          {availableCountries.slice(0, 8).map((c) => {
-            const active = selectedCountries.includes(c);
-            return (
-              <button
-                key={c}
-                type="button"
-                onClick={() => handleToggleCountry(c)}
-                className={`px-2 py-0.5 text-[10px] uppercase font-bold border cursor-pointer ${
-                  active
-                    ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
-                    : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-                }`}
-              >
-                {c}
-              </button>
-            );
-          })}
+        <div className="flex justify-between items-center">
+          <span className="text-[10px] text-[var(--color-ink-mute)] uppercase font-bold">
+            COUNTRY
+          </span>
+          {selectedCountryCode !== "ALL" && (
+            <button
+              type="button"
+              onClick={() => handleCountryChange("ALL")}
+              className="text-[10px] text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
+            >
+              [ANY COUNTRY]
+            </button>
+          )}
         </div>
-        <div className="flex gap-1.5 mt-1">
-          <input
-            type="text"
-            value={countryInput}
-            placeholder="ADD COUNTRY (E.G. JAPAN, GERMANY)..."
-            onChange={(e) => setCountryInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAddCustomCountry()}
-            className="flex-1 px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] text-xs uppercase focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={handleAddCustomCountry}
-            className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] text-[10px] font-bold uppercase cursor-pointer"
-          >
-            + ADD
-          </button>
-        </div>
+        <select
+          value={selectedCountryCode}
+          onChange={(e) => handleCountryChange(e.target.value)}
+          className="w-full px-2 py-1 border border-[var(--color-ink)] bg-[var(--color-paper)] text-xs uppercase font-mono font-bold focus:outline-none cursor-pointer"
+        >
+          <option value="ALL">ALL COUNTRIES / ANY REGION</option>
+          {COUNTRIES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.name.toUpperCase()} ({c.code})
+            </option>
+          ))}
+          {dynamicCountries.map((c) => (
+            <option key={c} value={c}>
+              {c.toUpperCase()}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {/* Target States / Regions */}
+      {/* Cascading States & Provinces Dropdown */}
       <div className="flex flex-col gap-1 pt-1">
-        <span className="text-[10px] text-[var(--color-ink-mute)] uppercase font-bold">
-          STATES & PROVINCES
-        </span>
-        <div className="flex flex-wrap gap-1">
-          {availableRegions.slice(0, 12).map((r) => {
-            const active = selectedRegions.includes(r);
+        <div className="flex justify-between items-center">
+          <span className="text-[10px] text-[var(--color-ink-mute)] uppercase font-bold">
+            STATES & PROVINCES
+            {selectedCountryCode !== "ALL" ? ` (${selectedCountryCode})` : ""}
+          </span>
+          {selectedRegions.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearRegions}
+              className="text-[10px] text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
+            >
+              [CLEAR ({selectedRegions.length})]
+            </button>
+          )}
+        </div>
+
+        <select
+          value=""
+          onChange={(e) => {
+            handleAddRegion(e.target.value);
+            e.target.value = "";
+          }}
+          className="w-full px-2 py-1 border border-[var(--color-ink)] bg-[var(--color-paper)] text-xs uppercase font-mono font-bold focus:outline-none cursor-pointer"
+        >
+          <option value="">+ ADD STATE / PROVINCE...</option>
+          {cascadingRegions.map((r) => {
+            const alreadySelected = selectedRegions.includes(r.code);
             return (
-              <button
-                key={r}
-                type="button"
-                onClick={() => handleToggleRegion(r)}
-                className={`w-7 h-6 flex items-center justify-center text-[10px] font-bold border cursor-pointer ${
-                  active
-                    ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
-                    : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-                }`}
+              <option
+                key={r.code}
+                value={r.code}
+                disabled={alreadySelected}
               >
-                {r}
-              </button>
+                {r.name.toUpperCase()} ({r.code}) {alreadySelected ? "✓" : ""}
+              </option>
             );
           })}
-        </div>
-        <div className="flex gap-1.5 mt-1">
-          <input
-            type="text"
-            value={regionInput}
-            placeholder="STATE/PROV CODE (E.G. NY, TX, ON)..."
-            onChange={(e) => setRegionInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAddCustomRegion()}
-            className="flex-1 px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] text-xs uppercase focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={handleAddCustomRegion}
-            className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] text-[10px] font-bold uppercase cursor-pointer"
-          >
-            + ADD
-          </button>
-        </div>
+        </select>
+
+        {/* Selected State Tags / Chips */}
+        {selectedRegions.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {selectedRegions.map((reg) => {
+              const matched = cascadingRegions.find(
+                (r) => r.code === reg.toUpperCase()
+              );
+              const label = matched
+                ? `${matched.name.toUpperCase()} (${reg})`
+                : reg.toUpperCase();
+
+              return (
+                <span
+                  key={reg}
+                  className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-mono font-bold uppercase border border-[var(--color-ink)] bg-[var(--color-paper-2)] text-[var(--color-ink)]"
+                >
+                  <span>{label}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveRegion(reg)}
+                    className="hover:text-[var(--color-cherry)] cursor-pointer text-xs leading-none"
+                    aria-label={`Remove ${reg}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Include Unknown Toggle */}

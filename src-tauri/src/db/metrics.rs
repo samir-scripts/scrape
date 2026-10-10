@@ -222,6 +222,7 @@ impl MetricsRepo {
             RoleType::Contract,
             RoleType::Internship,
             RoleType::PartTime,
+            RoleType::Seasonal,
             RoleType::Unknown,
         ];
 

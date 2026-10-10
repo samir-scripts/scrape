@@ -4,4 +4,4 @@
  * Employment type of a posting. `Unknown` is used when neither the source nor
  * the title heuristic can determine it (keeps the Job Types chart honest).
  */
-export type RoleType = "full_time" | "contract" | "internship" | "part_time" | "unknown";
+export type RoleType = "full_time" | "contract" | "internship" | "part_time" | "seasonal" | "unknown";
