@@ -4,7 +4,6 @@ import type { FilterImpactPreview } from "../../bindings/FilterImpactPreview";
 import { api } from "../../lib/api";
 import { SalaryRangeFilter } from "./SalaryRangeFilter";
 import { ExperienceFilter } from "./ExperienceFilter";
-import { NewGradFilter } from "./NewGradFilter";
 import { LocationFilter } from "./LocationFilter";
 import { TriStateFilter } from "./TriStateFilter";
 import { RoleTypeFilter } from "./RoleTypeFilter";
@@ -141,28 +140,20 @@ export function FilterPanel({
 
           <Rule />
 
-          {/* Experience Filter */}
+          {/* Experience & Career Level Filter (Consolidated) */}
           <ExperienceFilter
             experienceMin={filterSpec.experience_min ?? null}
             experienceMax={filterSpec.experience_max ?? null}
+            newGrad={filterSpec.new_grad ?? "any"}
             includeUnknown={filterSpec.experience_include_unknown ?? true}
-            onChange={({ experienceMin, experienceMax, includeUnknown }) =>
+            onChange={({ experienceMin, experienceMax, newGrad, includeUnknown }) =>
               onUpdateFilter((prev) => ({
                 ...prev,
                 experience_min: experienceMin,
                 experience_max: experienceMax,
+                new_grad: newGrad,
                 experience_include_unknown: includeUnknown,
               }))
-            }
-          />
-
-          <Rule />
-
-          {/* New Grad Filter */}
-          <NewGradFilter
-            value={filterSpec.new_grad ?? "any"}
-            onChange={(val) =>
-              onUpdateFilter((prev) => ({ ...prev, new_grad: val }))
             }
           />
 
