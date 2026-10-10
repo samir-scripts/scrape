@@ -118,4 +118,15 @@ describe("useUIStore state transitions", () => {
     }
     expect(useUIStore.getState().undoStack.length).toBeLessThanOrEqual(20);
   });
+
+  it("manages scraperMode state transitions between simple and advanced", () => {
+    const { setScraperMode } = useUIStore.getState();
+    expect(useUIStore.getState().scraperMode).toBe("simple");
+
+    setScraperMode("advanced");
+    expect(useUIStore.getState().scraperMode).toBe("advanced");
+
+    setScraperMode("simple");
+    expect(useUIStore.getState().scraperMode).toBe("simple");
+  });
 });

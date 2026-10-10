@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import type { Source } from "../../../bindings/Source";
 import type { ScrapeRun } from "../../../bindings/ScrapeRun";
+import type { ScrapeLogEntry } from "../../../bindings/ScrapeLogEntry";
 import type { WorkerEvent } from "../../../bindings/WorkerEvent";
 import { api } from "../../../lib/api";
 import { useUIStore } from "../../../lib/store";
@@ -9,6 +10,7 @@ import { Input } from "../../ui/Input";
 import { Table, TableHead, TableHeader, TableBody, TableRow, TableCell } from "../../ui/Table";
 import { Toggle } from "../../ui/Toggle";
 import { Rule } from "../../ui/Rule";
+import { Tooltip } from "../../ui/Tooltip";
 import { AddSourceModal } from "./AddSourceModal";
 import { notifySuccess, notifyInfo } from "../../../lib/toast";
 
@@ -28,12 +30,16 @@ export function SourcesSettings() {
   const [testingSourceId, setTestingSourceId] = useState<string | null>(null);
   const [testEvents, setTestEvents] = useState<WorkerEvent[] | null>(null);
 
-  // Inspector Drawer state
+  // Inspector & Consolidated Logs Dock state
   const [inspectedSource, setInspectedSource] = useState<Source | null>(null);
   const [sourceRuns, setSourceRuns] = useState<ScrapeRun[]>([]);
   const [isLoadingRuns, setIsLoadingRuns] = useState(false);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [runLogs, setRunLogs] = useState<ScrapeLogEntry[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [logFilter, setLogFilter] = useState<"all" | "errors">("all");
 
-  const { setView, setSearchQuery } = useUIStore();
+  const { setView, setSearchQuery, scraperMode, setScraperMode } = useUIStore();
 
   const fetchSources = () => {
     api.listSources().then(setSources).catch(() => {});
@@ -47,14 +53,39 @@ export function SourcesSettings() {
   useEffect(() => {
     if (!inspectedSource) {
       setSourceRuns([]);
+      setSelectedRunId(null);
+      setRunLogs([]);
       return;
     }
     setIsLoadingRuns(true);
-    api.listSourceRuns(inspectedSource.id, 5)
-      .then(setSourceRuns)
-      .catch(() => setSourceRuns([]))
+    api.listSourceRuns(inspectedSource.id, 10)
+      .then((runs) => {
+        setSourceRuns(runs);
+        if (runs.length > 0) {
+          setSelectedRunId((prev) => (prev && runs.some((r) => r.id === prev) ? prev : runs[0].id));
+        } else {
+          setSelectedRunId(null);
+        }
+      })
+      .catch(() => {
+        setSourceRuns([]);
+        setSelectedRunId(null);
+      })
       .finally(() => setIsLoadingRuns(false));
   }, [inspectedSource]);
+
+  // Fetch logs for the selected run
+  useEffect(() => {
+    if (!selectedRunId) {
+      setRunLogs([]);
+      return;
+    }
+    setIsLoadingLogs(true);
+    api.getScrapeLogs(selectedRunId)
+      .then(setRunLogs)
+      .catch(() => setRunLogs([]))
+      .finally(() => setIsLoadingLogs(false));
+  }, [selectedRunId]);
 
   const handleToggleSource = async (source: Source, enabled: boolean) => {
     await api.updateSource({
@@ -65,7 +96,7 @@ export function SourcesSettings() {
   };
 
   const handleDeleteSource = async (id: string) => {
-    if (window.confirm("ARE YOU SURE YOU WANT TO DELETE THIS SCRAPE JOB?")) {
+    if (window.confirm("ARE YOU SURE YOU WANT TO DELETE THIS SCRAPE WORKFLOW?")) {
       await api.deleteSource(id);
       if (inspectedSource?.id === id) setInspectedSource(null);
       fetchSources();
@@ -78,7 +109,10 @@ export function SourcesSettings() {
       await api.runSourceNow(source.id);
       fetchSources();
       if (inspectedSource?.id === source.id) {
-        api.listSourceRuns(source.id, 5).then(setSourceRuns).catch(() => {});
+        api.listSourceRuns(source.id, 10).then((runs) => {
+          setSourceRuns(runs);
+          if (runs[0]) setSelectedRunId(runs[0].id);
+        }).catch(() => {});
       }
     } catch (e) {
       console.error("Run single source error:", e);
@@ -105,7 +139,7 @@ export function SourcesSettings() {
       const pruned = await api.cleanupExpiredJobs();
       notifySuccess(`Pruned ${pruned} expired postings according to TTL policies.`, "TTL PRUNE COMPLETE");
       fetchSources();
-    } catch (e) {
+    } catch (_e) {
       notifyInfo("No expired postings eligible for pruning.", "TTL RETENTION");
     }
   };
@@ -146,36 +180,82 @@ export function SourcesSettings() {
     return { all: sources.length, ats, custom, errors };
   }, [sources]);
 
+  // Filter logs based on level toggle
+  const displayedLogs = useMemo(() => {
+    if (logFilter === "errors") {
+      return runLogs.filter((l) => l.level === "error" || l.level === "warn");
+    }
+    return runLogs;
+  }, [runLogs, logFilter]);
+
+  const selectedRun = useMemo(() => {
+    return sourceRuns.find((r) => r.id === selectedRunId) || null;
+  }, [sourceRuns, selectedRunId]);
+
   return (
-    <div className="flex flex-col gap-6 w-full max-w-5xl select-none font-mono">
+    <div className="flex flex-col gap-5 w-full select-none font-mono">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-black uppercase tracking-tight text-[var(--color-ink)]">
-            SCRAPE JOBS REGISTRY ({sources.length})
+            WORKFLOWS REGISTRY ({sources.length})
           </h2>
           <span className="text-[11px] text-[var(--color-ink-mute)] uppercase">
-            TARGET COMPANY CAREER PORTALS & INDEPENDENT EXECUTION CADENCES
+            AUTONOMOUS STATIC WORKFLOWS & CONSOLIDATED EXECUTION LOGS
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="default"
-            onClick={handlePruneExpired}
-            title="Prune expired untracked postings according to TTL retention policies"
-          >
-            CLEANUP EXPIRED
-          </Button>
-          <Button
-            variant="inverted"
-            onClick={() => {
-              setEditingSource(null);
-              setIsAddModalOpen(true);
-            }}
-            shortcut="+ ADD JOB"
-          >
-            ADD WORKFLOW
-          </Button>
+          {/* Simple vs Advanced Mode Switcher */}
+          <div className="flex items-center border border-[var(--color-ink)] p-0.5 bg-[var(--color-paper-2)]/30 mr-2">
+            <Tooltip content="Simple Mode: streamlined 2-field creation and clean dashboard">
+              <button
+                type="button"
+                onClick={() => setScraperMode("simple")}
+                className={`px-2.5 py-1 text-xs font-mono font-bold uppercase cursor-pointer ${
+                  scraperMode === "simple"
+                    ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
+                    : "text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
+                }`}
+              >
+                SIMPLE
+              </button>
+            </Tooltip>
+            <Tooltip content="Advanced Mode: 5-tier pipeline, custom selectors, cron, and YAML editor">
+              <button
+                type="button"
+                onClick={() => setScraperMode("advanced")}
+                className={`px-2.5 py-1 text-xs font-mono font-bold uppercase cursor-pointer ${
+                  scraperMode === "advanced"
+                    ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
+                    : "text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
+                }`}
+              >
+                ADVANCED
+              </button>
+            </Tooltip>
+          </div>
+
+          <Tooltip content="Prune untracked postings past retention TTL. Favorited and tracked jobs are strictly protected.">
+            <Button
+              variant="default"
+              onClick={handlePruneExpired}
+            >
+              CLEANUP EXPIRED
+            </Button>
+          </Tooltip>
+
+          <Tooltip content="Create a new autonomous scrape workflow for a company careers site">
+            <Button
+              variant="inverted"
+              onClick={() => {
+                setEditingSource(null);
+                setIsAddModalOpen(true);
+              }}
+              shortcut="+ ADD"
+            >
+              ADD WORKFLOW
+            </Button>
+          </Tooltip>
         </div>
       </div>
 
@@ -228,7 +308,7 @@ export function SourcesSettings() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="SEARCH JOBS..."
+            placeholder="SEARCH WORKFLOWS..."
             className="text-xs"
           />
         </div>
@@ -236,21 +316,43 @@ export function SourcesSettings() {
 
       <Rule />
 
-      {/* Scrape Jobs Registry Table */}
+      {/* Workflows Table */}
       {filteredSources.length === 0 ? (
         <div className="p-8 border border-dashed border-[var(--color-ink-mute)] text-center text-xs font-mono text-[var(--color-ink-mute)]">
-          NO MATCHING SCRAPE WORKFLOWS FOUND. CLICK &quot;ADD SCRAPE JOB&quot; TO CONFIGURE A TARGET.
+          NO MATCHING WORKFLOWS FOUND. CLICK &quot;+ ADD WORKFLOW&quot; TO CONFIGURE A TARGET.
         </div>
       ) : (
         <Table>
           <TableHead>
             <TableRow>
-              <TableHeader>ON</TableHeader>
-              <TableHeader>WORKFLOW DAG</TableHeader>
-              <TableHeader>KIND</TableHeader>
-              <TableHeader>CADENCE</TableHeader>
-              <TableHeader>RETENTION</TableHeader>
-              <TableHeader>STATUS</TableHeader>
+              <TableHeader>
+                <Tooltip content="Toggle automated scheduling for this workflow">
+                  <span>ON</span>
+                </Tooltip>
+              </TableHeader>
+              <TableHeader>WORKFLOW / COMPANY</TableHeader>
+              <TableHeader>
+                <Tooltip content="Target extraction adapter: Greenhouse, Lever, Ashby, JSON-LD, or Custom Selector">
+                  <span>EXTRACTOR</span>
+                </Tooltip>
+              </TableHeader>
+              <TableHeader>
+                <Tooltip content="Dedicated execution frequency for this workflow">
+                  <span>CADENCE</span>
+                </Tooltip>
+              </TableHeader>
+              {scraperMode === "advanced" && (
+                <TableHeader>
+                  <Tooltip content="Data retention lifespan and untracked pruning policy">
+                    <span>RETENTION</span>
+                  </Tooltip>
+                </TableHeader>
+              )}
+              <TableHeader>
+                <Tooltip content="Status of the most recent execution run">
+                  <span>STATUS</span>
+                </Tooltip>
+              </TableHeader>
               <TableHeader>ACTIONS</TableHeader>
             </TableRow>
           </TableHead>
@@ -272,11 +374,14 @@ export function SourcesSettings() {
                     />
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-bold uppercase tracking-tight text-[var(--color-ink)]">
+                    <div
+                      onClick={() => setInspectedSource(isInspected ? null : s)}
+                      className="flex flex-col cursor-pointer group"
+                    >
+                      <span className="font-bold uppercase tracking-tight text-[var(--color-ink)] group-hover:underline">
                         {s.name}
                       </span>
-                      <span className="text-[10px] text-[var(--color-ink-mute)] truncate max-w-[200px]">
+                      <span className="text-[10px] text-[var(--color-ink-mute)] truncate max-w-[240px]">
                         {s.identifier}
                       </span>
                     </div>
@@ -291,11 +396,13 @@ export function SourcesSettings() {
                       {s.cadence === "cron" ? "CRON" : s.cadence.replace("_", " ")}
                     </span>
                   </TableCell>
-                  <TableCell className="text-[10px] font-mono whitespace-nowrap">
-                    {Number(s.retention_days) === 0
-                      ? "FOREVER"
-                      : `${s.retention_days}D (${s.retention_policy === "untracked_only" ? "SAFE" : "ALL"})`}
-                  </TableCell>
+                  {scraperMode === "advanced" && (
+                    <TableCell className="text-[10px] font-mono whitespace-nowrap">
+                      {Number(s.retention_days) === 0
+                        ? "FOREVER"
+                        : `${s.retention_days}D (${s.retention_policy === "untracked_only" ? "SAFE" : "ALL"})`}
+                    </TableCell>
+                  )}
                   <TableCell>
                     <div className="flex items-center gap-1.5">
                       <span
@@ -318,50 +425,61 @@ export function SourcesSettings() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleRunSourceNow(s)}
-                        disabled={isRunning}
-                        title="Run this scrape job immediately into database"
-                        className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-80 text-[10px] font-mono uppercase cursor-pointer disabled:opacity-50"
-                      >
-                        {isRunning ? "RUNNING…" : "RUN"}
-                      </button>
-                      <button
-                        onClick={() => handleTestSource(s.id)}
-                        disabled={isTesting}
-                        title="Dry run test without saving jobs"
-                        className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[10px] font-mono uppercase cursor-pointer"
-                      >
-                        {isTesting ? "…" : "TEST"}
-                      </button>
-                      <button
-                        onClick={() => {
-                          setEditingSource(s);
-                          setIsAddModalOpen(true);
-                        }}
-                        title="Edit selectors, cadence, or target URL"
-                        className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[10px] font-mono uppercase cursor-pointer"
-                      >
-                        EDIT
-                      </button>
-                      <button
-                        onClick={() => setInspectedSource(isInspected ? null : s)}
-                        title="Inspect run history and telemetry"
-                        className={`px-2 py-0.5 border text-[10px] font-mono uppercase cursor-pointer ${
-                          isInspected
-                            ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] font-bold"
-                            : "border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)]"
-                        }`}
-                      >
-                        {isInspected ? "HIDE" : "INSPECT"}
-                      </button>
-                      <button
-                        onClick={() => handleDeleteSource(s.id)}
-                        title="Delete scrape job"
-                        className="px-2 py-0.5 border border-[var(--color-cherry)] text-[var(--color-cherry)] hover:bg-[var(--color-cherry)] hover:text-white text-[10px] font-mono uppercase cursor-pointer"
-                      >
-                        DEL
-                      </button>
+                      <Tooltip content="Run this workflow immediately into database">
+                        <button
+                          onClick={() => handleRunSourceNow(s)}
+                          disabled={isRunning}
+                          className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-80 text-[10px] font-mono uppercase cursor-pointer disabled:opacity-50"
+                        >
+                          {isRunning ? "RUNNING…" : "RUN"}
+                        </button>
+                      </Tooltip>
+
+                      {scraperMode === "advanced" && (
+                        <Tooltip content="Dry run extraction without writing to database">
+                          <button
+                            onClick={() => handleTestSource(s.id)}
+                            disabled={isTesting}
+                            className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[10px] font-mono uppercase cursor-pointer"
+                          >
+                            {isTesting ? "…" : "TEST"}
+                          </button>
+                        </Tooltip>
+                      )}
+
+                      <Tooltip content="View run history, duration telemetry, and live execution logs">
+                        <button
+                          onClick={() => setInspectedSource(isInspected ? null : s)}
+                          className={`px-2 py-0.5 border text-[10px] font-mono uppercase cursor-pointer ${
+                            isInspected
+                              ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] font-bold"
+                              : "border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)]"
+                          }`}
+                        >
+                          {isInspected ? "HIDE" : "LOGS"}
+                        </button>
+                      </Tooltip>
+
+                      <Tooltip content="Edit workflow target, cadence, or filters">
+                        <button
+                          onClick={() => {
+                            setEditingSource(s);
+                            setIsAddModalOpen(true);
+                          }}
+                          className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[10px] font-mono uppercase cursor-pointer"
+                        >
+                          EDIT
+                        </button>
+                      </Tooltip>
+
+                      <Tooltip content="Delete scrape workflow">
+                        <button
+                          onClick={() => handleDeleteSource(s.id)}
+                          className="px-2 py-0.5 border border-[var(--color-cherry)] text-[var(--color-cherry)] hover:bg-[var(--color-cherry)] hover:text-white text-[10px] font-mono uppercase cursor-pointer"
+                        >
+                          DEL
+                        </button>
+                      </Tooltip>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -371,37 +489,49 @@ export function SourcesSettings() {
         </Table>
       )}
 
-      {/* Telemetry Inspector Drawer */}
+      {/* Consolidated Workflow Inspector & Execution Logs Dock */}
       {inspectedSource && (
-        <div className="flex flex-col gap-3 p-4 border-2 border-[var(--color-ink)] bg-[var(--color-paper-2)]/40 text-xs">
+        <div className="flex flex-col gap-3 p-4 border-2 border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 text-xs">
+          {/* Dock Header */}
           <div className="flex justify-between items-center border-b border-[var(--color-ink)] pb-2 font-bold">
             <div className="flex items-center gap-2">
               <span className="text-sm uppercase tracking-tight text-[var(--color-ink)]">
-                {inspectedSource.name} // TELEMETRY & RUN HISTORY
+                {inspectedSource.name} // WORKFLOW OBSERVABILITY & EXECUTION LOGS
               </span>
               <span className="px-1.5 py-0.5 text-[10px] border border-[var(--color-ink)] bg-[var(--color-paper)] uppercase">
                 {inspectedSource.kind}
               </span>
+              <span className="px-1.5 py-0.5 text-[10px] border border-[var(--color-ink)] bg-[var(--color-paper)] uppercase">
+                {inspectedSource.cadence}
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <button
+                onClick={() => handleRunSourceNow(inspectedSource)}
+                disabled={runningSourceId === inspectedSource.id}
+                className="px-2.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-85 text-[10px] uppercase font-bold cursor-pointer disabled:opacity-50"
+              >
+                {runningSourceId === inspectedSource.id ? "RUNNING WORKFLOW…" : "RUN WORKFLOW NOW"}
+              </button>
+              <button
                 onClick={() => handleViewInInbox(inspectedSource.name)}
-                className="px-2.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-85 text-[10px] uppercase font-bold cursor-pointer"
+                className="px-2.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[10px] uppercase font-bold cursor-pointer"
               >
                 VIEW JOBS IN INBOX →
               </button>
               <button
                 onClick={() => setInspectedSource(null)}
-                className="text-xs hover:opacity-75 cursor-pointer"
+                className="text-xs hover:opacity-75 cursor-pointer ml-1"
               >
                 [CLOSE]
               </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 p-2.5 border border-[var(--color-ink)] bg-[var(--color-paper)] text-[11px]">
+          {/* Telemetry Row */}
+          <div className="grid grid-cols-4 gap-2 p-2 border border-[var(--color-ink)] bg-[var(--color-paper)] text-[11px]">
             <div>
-              <span className="text-[10px] text-[var(--color-ink-mute)] uppercase">TARGET URL / SLUG:</span>
+              <span className="text-[10px] text-[var(--color-ink-mute)] uppercase">TARGET URL:</span>
               <div className="font-mono truncate">{inspectedSource.identifier}</div>
             </div>
             <div>
@@ -419,48 +549,155 @@ export function SourcesSettings() {
                   : "NONE"}
               </div>
             </div>
+            <div>
+              <span className="text-[10px] text-[var(--color-ink-mute)] uppercase">TTL RETENTION:</span>
+              <div className="font-mono">
+                {Number(inspectedSource.retention_days) === 0
+                  ? "KEEP FOREVER"
+                  : `${inspectedSource.retention_days} DAYS (${inspectedSource.retention_policy})`}
+              </div>
+            </div>
           </div>
 
-          {/* Recent 5 runs */}
-          <div className="flex flex-col gap-1.5">
-            <span className="font-bold text-[10px] uppercase tracking-wider text-[var(--color-ink)]">
-              RECENT EXECUTION RUNS (LAST 5)
-            </span>
-            {isLoadingRuns ? (
-              <span className="text-[var(--color-ink-mute)] text-[11px]">LOADING RUNS…</span>
-            ) : sourceRuns.length === 0 ? (
-              <span className="text-[var(--color-ink-mute)] text-[11px]">
-                NO ISOLATED RUNS RECORDED YET FOR THIS JOB.
+          {/* Master-Detail Split: Runs History (Left) + Terminal Log Stream (Right) */}
+          <div className="grid grid-cols-12 gap-3 pt-1">
+            {/* Left 4 Cols: Recent Runs List */}
+            <div className="col-span-4 flex flex-col gap-1.5 border border-[var(--color-ink)] bg-[var(--color-paper)] p-2">
+              <span className="font-bold text-[10px] uppercase tracking-wider text-[var(--color-ink)] border-b border-[var(--color-ink)]/30 pb-1">
+                EXECUTION RUNS (LAST 10)
               </span>
-            ) : (
-              <div className="flex flex-col border border-[var(--color-ink)] bg-[var(--color-paper)] divide-y divide-[var(--color-ink)]/20">
-                {sourceRuns.map((r) => (
-                  <div key={r.id} className="p-2 flex items-center justify-between text-[11px]">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`px-1 py-0.2 text-[9px] uppercase font-bold border ${
-                          r.status === "success"
-                            ? "bg-[var(--color-lime)] text-[var(--color-ink)] border-[var(--color-ink)]"
-                            : "bg-[var(--color-cherry)] text-white border-[var(--color-cherry)]"
+
+              {isLoadingRuns ? (
+                <span className="text-[var(--color-ink-mute)] text-[11px] p-2">LOADING RUNS…</span>
+              ) : sourceRuns.length === 0 ? (
+                <span className="text-[var(--color-ink-mute)] text-[11px] p-2">
+                  NO ISOLATED RUNS RECORDED YET. CLICK &quot;RUN WORKFLOW NOW&quot; TO TRIGGER.
+                </span>
+              ) : (
+                <div className="flex flex-col divide-y divide-[var(--color-ink)]/20 max-h-64 overflow-y-auto">
+                  {sourceRuns.map((r) => {
+                    const isSelected = selectedRunId === r.id;
+                    return (
+                      <div
+                        key={r.id}
+                        onClick={() => setSelectedRunId(r.id)}
+                        className={`p-2 flex flex-col gap-0.5 cursor-pointer text-[11px] transition-none ${
+                          isSelected
+                            ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold"
+                            : "hover:bg-[var(--color-paper-2)]"
                         }`}
                       >
-                        {r.status}
-                      </span>
-                      <span>{r.started_at.slice(0, 19).replace("T", " ")}</span>
-                    </div>
-                    <div className="flex items-center gap-4 text-[10px]">
-                      <span>+{Number(r.jobs_new)} NEW</span>
-                      <span>{Number(r.jobs_found)} FOUND</span>
-                      {r.error && (
-                        <span className="text-[var(--color-cherry)] truncate max-w-[200px]">
-                          ERR: {r.error}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`px-1 py-0.2 text-[9px] uppercase font-bold border ${
+                                r.status === "success"
+                                  ? "bg-[var(--color-lime)] text-[var(--color-ink)] border-[var(--color-ink)]"
+                                  : "bg-[var(--color-cherry)] text-white border-[var(--color-cherry)]"
+                              }`}
+                            >
+                              {r.status}
+                            </span>
+                            <span className="text-[10px]">
+                              {r.started_at.slice(0, 19).replace("T", " ")}
+                            </span>
+                          </div>
+                          <span className="text-[10px]">
+                            +{Number(r.jobs_new)}
+                          </span>
+                        </div>
+                        {r.error && (
+                          <span className={`text-[10px] truncate ${isSelected ? "text-red-300" : "text-[var(--color-cherry)]"}`}>
+                            ERR: {r.error}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Right 8 Cols: Terminal Execution Log Viewer */}
+            <div className="col-span-8 flex flex-col gap-1.5 border border-[var(--color-ink)] bg-[var(--color-paper)] p-2">
+              <div className="flex items-center justify-between border-b border-[var(--color-ink)]/30 pb-1">
+                <span className="font-bold text-[10px] uppercase tracking-wider text-[var(--color-ink)]">
+                  TERMINAL LOG STREAM {selectedRun ? `· RUN ${selectedRun.id.slice(0, 8)}` : ""}
+                </span>
+                <div className="flex gap-1 text-[10px]">
+                  <button
+                    onClick={() => setLogFilter("all")}
+                    className={`px-2 py-0.5 border cursor-pointer ${
+                      logFilter === "all"
+                        ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)] font-bold"
+                        : "border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
+                    }`}
+                  >
+                    ALL LOGS
+                  </button>
+                  <button
+                    onClick={() => setLogFilter("errors")}
+                    className={`px-2 py-0.5 border cursor-pointer ${
+                      logFilter === "errors"
+                        ? "bg-[var(--color-cherry)] text-white border-[var(--color-cherry)] font-bold"
+                        : "border-[var(--color-cherry)] text-[var(--color-cherry)] hover:bg-[var(--color-cherry)]/10"
+                    }`}
+                  >
+                    ERRORS ONLY
+                  </button>
+                </div>
               </div>
-            )}
+
+              {isLoadingLogs ? (
+                <div className="p-4 text-center text-[11px] text-[var(--color-ink-mute)] font-mono">
+                  STREAMING LOGS…
+                </div>
+              ) : !selectedRunId ? (
+                <div className="p-4 text-center text-[11px] text-[var(--color-ink-mute)] font-mono">
+                  SELECT AN EXECUTION RUN ON THE LEFT TO INSPECT ITS TERMINAL LOGS.
+                </div>
+              ) : displayedLogs.length === 0 ? (
+                <div className="p-4 text-center text-[11px] text-[var(--color-ink-mute)] font-mono">
+                  NO LOG EVENTS RECORDED FOR THIS RUN.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1 max-h-64 overflow-y-auto font-mono text-[11px] p-1 bg-[var(--color-paper-2)]/20 border border-[var(--color-ink)]/20">
+                  {displayedLogs.map((log) => {
+                    const isError = log.level === "error";
+                    const isWarn = log.level === "warn";
+                    return (
+                      <div
+                        key={log.id}
+                        className={`p-1.5 border text-[11px] leading-relaxed ${
+                          isError
+                            ? "border-red-600 bg-red-50/50 text-red-900"
+                            : isWarn
+                            ? "border-amber-600 bg-amber-50/50 text-amber-900"
+                            : "border-[var(--color-ink)]/20 bg-[var(--color-paper)] text-[var(--color-ink)]"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-[10px] opacity-80 mb-0.5 font-bold">
+                          <span className={isError ? "text-red-700" : isWarn ? "text-amber-700" : "text-[var(--color-ink)]"}>
+                            [{log.level.toUpperCase()}]
+                          </span>
+                          <span>
+                            {new Date(log.timestamp).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit",
+                              hour12: false,
+                            })}
+                          </span>
+                        </div>
+                        <div className="break-all whitespace-pre-wrap">
+                          {log.message}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
