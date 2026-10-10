@@ -3,8 +3,10 @@ import type { Source } from "../../../bindings/Source";
 import type { ScrapeRun } from "../../../bindings/ScrapeRun";
 import type { ScrapeLogEntry } from "../../../bindings/ScrapeLogEntry";
 import type { WorkerEvent } from "../../../bindings/WorkerEvent";
+import type { Settings } from "../../../bindings/Settings";
 import { api } from "../../../lib/api";
 import { useUIStore } from "../../../lib/store";
+import { formatDateTime, formatTime } from "../../../lib/formatters";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Table, TableHead, TableHeader, TableBody, TableRow, TableCell } from "../../ui/Table";
@@ -16,7 +18,11 @@ import { notifySuccess, notifyInfo } from "../../../lib/toast";
 
 type FilterTab = "all" | "ats" | "custom" | "errors";
 
-export function SourcesSettings() {
+interface SourcesSettingsProps {
+  settings?: Settings;
+}
+
+export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   const [sources, setSources] = useState<Source[]>([]);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
@@ -39,7 +45,7 @@ export function SourcesSettings() {
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [logFilter, setLogFilter] = useState<"all" | "errors">("all");
 
-  const { setView, setSearchQuery, scraperMode, setScraperMode } = useUIStore();
+  const { setView, setSearchQuery } = useUIStore();
 
   const fetchSources = () => {
     api.listSources().then(setSources).catch(() => {});
@@ -205,36 +211,6 @@ export function SourcesSettings() {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {/* Simple vs Advanced Mode Switcher */}
-          <div className="flex items-center border border-[var(--color-ink)] p-0.5 bg-[var(--color-paper-2)]/30 mr-2">
-            <Tooltip content="Simple Mode: streamlined 2-field creation and clean dashboard">
-              <button
-                type="button"
-                onClick={() => setScraperMode("simple")}
-                className={`px-2.5 py-1 text-xs font-mono font-bold uppercase cursor-pointer ${
-                  scraperMode === "simple"
-                    ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
-                    : "text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-                }`}
-              >
-                SIMPLE
-              </button>
-            </Tooltip>
-            <Tooltip content="Advanced Mode: 5-tier pipeline, custom selectors, cron, and YAML editor">
-              <button
-                type="button"
-                onClick={() => setScraperMode("advanced")}
-                className={`px-2.5 py-1 text-xs font-mono font-bold uppercase cursor-pointer ${
-                  scraperMode === "advanced"
-                    ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
-                    : "text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-                }`}
-              >
-                ADVANCED
-              </button>
-            </Tooltip>
-          </div>
-
           <Tooltip content="Prune untracked postings past retention TTL. Favorited and tracked jobs are strictly protected.">
             <Button
               variant="default"
@@ -341,13 +317,11 @@ export function SourcesSettings() {
                   <span>CADENCE</span>
                 </Tooltip>
               </TableHeader>
-              {scraperMode === "advanced" && (
-                <TableHeader>
-                  <Tooltip content="Data retention lifespan and untracked pruning policy">
-                    <span>RETENTION</span>
-                  </Tooltip>
-                </TableHeader>
-              )}
+              <TableHeader>
+                <Tooltip content="Data retention lifespan and untracked pruning policy">
+                  <span>RETENTION</span>
+                </Tooltip>
+              </TableHeader>
               <TableHeader>
                 <Tooltip content="Status of the most recent execution run">
                   <span>STATUS</span>
@@ -396,13 +370,11 @@ export function SourcesSettings() {
                       {s.cadence === "cron" ? "CRON" : s.cadence.replace("_", " ")}
                     </span>
                   </TableCell>
-                  {scraperMode === "advanced" && (
-                    <TableCell className="text-[10px] font-mono whitespace-nowrap">
-                      {Number(s.retention_days) === 0
-                        ? "FOREVER"
-                        : `${s.retention_days}D (${s.retention_policy === "untracked_only" ? "SAFE" : "ALL"})`}
-                    </TableCell>
-                  )}
+                  <TableCell className="text-[10px] font-mono whitespace-nowrap">
+                    {Number(s.retention_days) === 0
+                      ? "FOREVER"
+                      : `${s.retention_days}D (${s.retention_policy === "untracked_only" ? "SAFE" : "ALL"})`}
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5">
                       <span
@@ -435,17 +407,15 @@ export function SourcesSettings() {
                         </button>
                       </Tooltip>
 
-                      {scraperMode === "advanced" && (
-                        <Tooltip content="Dry run extraction without writing to database">
-                          <button
-                            onClick={() => handleTestSource(s.id)}
-                            disabled={isTesting}
-                            className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[10px] font-mono uppercase cursor-pointer"
-                          >
-                            {isTesting ? "…" : "TEST"}
-                          </button>
-                        </Tooltip>
-                      )}
+                      <Tooltip content="Dry run extraction without writing to database">
+                        <button
+                          onClick={() => handleTestSource(s.id)}
+                          disabled={isTesting}
+                          className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[10px] font-mono uppercase cursor-pointer"
+                        >
+                          {isTesting ? "…" : "TEST"}
+                        </button>
+                      </Tooltip>
 
                       <Tooltip content="View run history, duration telemetry, and live execution logs">
                         <button
@@ -599,7 +569,7 @@ export function SourcesSettings() {
                               {r.status}
                             </span>
                             <span className="text-[10px]">
-                              {r.started_at.slice(0, 19).replace("T", " ")}
+                              {formatDateTime(r.started_at, settings)}
                             </span>
                           </div>
                           <span className="text-[10px]">
@@ -681,12 +651,7 @@ export function SourcesSettings() {
                             [{log.level.toUpperCase()}]
                           </span>
                           <span>
-                            {new Date(log.timestamp).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                              second: "2-digit",
-                              hour12: false,
-                            })}
+                            {formatTime(log.timestamp, settings)}
                           </span>
                         </div>
                         <div className="break-all whitespace-pre-wrap">
@@ -751,6 +716,7 @@ export function SourcesSettings() {
         }}
         onSourceSaved={fetchSources}
         initialSource={editingSource}
+        settings={settings}
       />
     </div>
   );

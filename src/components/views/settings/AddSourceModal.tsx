@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import type { Source } from "../../../bindings/Source";
 import type { SourceKind } from "../../../bindings/SourceKind";
 import type { SourceCadence } from "../../../bindings/SourceCadence";
 import type { RoleType } from "../../../bindings/RoleType";
 import type { WorkerEvent } from "../../../bindings/WorkerEvent";
+import type { Settings } from "../../../bindings/Settings";
 import { api, type DetectResult } from "../../../lib/api";
-import { useUIStore } from "../../../lib/store";
 import { Modal } from "../../ui/Modal";
 import { Input } from "../../ui/Input";
 import { Select } from "../../ui/Select";
@@ -20,13 +20,18 @@ import {
   workflowSpecToYaml,
   type WorkflowSpec,
 } from "../../../lib/yamlWorkflow";
-import type { ClockScheduleState } from "../../../lib/cronClock";
+import {
+  clockToCron,
+  cronToClock,
+  type ClockScheduleState,
+} from "../../../lib/cronClock";
 
 interface AddSourceModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSourceSaved: () => void;
   initialSource?: Source | null;
+  settings?: Settings;
 }
 
 const KIND_OPTIONS = [
@@ -46,16 +51,6 @@ const SIMPLE_CADENCE_OPTIONS: { value: SourceCadence; label: string }[] = [
   { value: "global", label: "GLOBAL SCHEDULE" },
 ];
 
-const CADENCE_OPTIONS: { value: SourceCadence; label: string }[] = [
-  { value: "global", label: "GLOBAL SCHEDULE" },
-  { value: "every_12h", label: "EVERY 12 HOURS" },
-  { value: "every_6h", label: "EVERY 6 HOURS" },
-  { value: "hourly", label: "HOURLY" },
-  { value: "daily", label: "DAILY" },
-  { value: "weekly", label: "WEEKLY" },
-  { value: "manual", label: "MANUAL ONLY" },
-  { value: "cron", label: "CUSTOM CRON..." },
-];
 
 const ALL_ROLE_TYPES: { id: RoleType; label: string }[] = [
   { id: "full_time", label: "FULL TIME" },
@@ -70,9 +65,21 @@ export function AddSourceModal({
   onClose,
   onSourceSaved,
   initialSource,
+  settings: propSettings,
 }: AddSourceModalProps) {
   const isEditing = Boolean(initialSource);
-  const { scraperMode } = useUIStore();
+
+  const [localSettings, setLocalSettings] = useState<Settings | null>(propSettings || null);
+
+  useEffect(() => {
+    if (propSettings) {
+      setLocalSettings(propSettings);
+    } else {
+      api.getSettings().then(setLocalSettings).catch(() => {});
+    }
+  }, [propSettings]);
+
+  const is24h = localSettings?.system_time_format === "24h";
 
   // Experience mode within modal: simple vs advanced
   const [modalMode, setModalMode] = useState<"simple" | "advanced">("simple");
@@ -80,6 +87,9 @@ export function AddSourceModal({
   // Editor mode in advanced: form vs yaml
   const [editorMode, setEditorMode] = useState<"form" | "yaml">("form");
   const [yamlText, setYamlText] = useState("");
+
+  // Hidden file input for YAML import
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Core fields
   const [url, setUrl] = useState("");
@@ -89,8 +99,16 @@ export function AddSourceModal({
   const [kind, setKind] = useState<SourceKind>("greenhouse");
   const [identifier, setIdentifier] = useState("");
 
-  // Schedule
-  const [scheduleSubTab, setScheduleSubTab] = useState<"presets" | "clock" | "cron">("presets");
+  // URL pattern globs
+  const [urlPatterns, setUrlPatterns] = useState("");
+  const [excludeUrlPatterns, setExcludeUrlPatterns] = useState("");
+
+  // Schedule selection
+  // Simple Mode: "presets" | "clock"
+  const [simpleCadenceType, setSimpleCadenceType] = useState<"presets" | "clock">("presets");
+  // Advanced Mode: "clock" | "cron"
+  const [advCadenceType, setAdvCadenceType] = useState<"clock" | "cron">("clock");
+
   const [cadence, setCadence] = useState<SourceCadence>("daily");
   const [cadenceCron, setCadenceCron] = useState("0 0 12 * * *");
   const [clockState, setClockState] = useState<ClockScheduleState>({
@@ -164,16 +182,45 @@ export function AddSourceModal({
       setSelectorSalary(sel.salary || (cfg.salary as string) || "");
       setSelectorSalaryRegex((cfg.salary_regex as string) || "");
 
+      const pats: string[] = Array.isArray(cfg.url_patterns)
+        ? (cfg.url_patterns as string[])
+        : typeof cfg.url_pattern === "string"
+        ? [cfg.url_pattern]
+        : [];
+      setUrlPatterns(pats.join(", "));
+      const excPats: string[] = Array.isArray(cfg.exclude_url_patterns)
+        ? (cfg.exclude_url_patterns as string[])
+        : [];
+      setExcludeUrlPatterns(excPats.join(", "));
+
       const flt = (initialSource.filters as Record<string, unknown>) || {};
       if (Array.isArray(flt.role_types)) setSelectedRoleTypes(flt.role_types as RoleType[]);
       if (Array.isArray(flt.include_keywords)) setIncludeKeywords(flt.include_keywords.join(", "));
       if (Array.isArray(flt.exclude_keywords)) setExcludeKeywords(flt.exclude_keywords.join(", "));
       if (Array.isArray(flt.locations)) setLocations(flt.locations.join(", "));
 
+      // Schedule parsing
+      if (initialSource.cadence === "cron" && initialSource.cadence_cron) {
+        const parsed = cronToClock(initialSource.cadence_cron);
+        if (parsed) {
+          setClockState(parsed);
+          setSimpleCadenceType("clock");
+          setAdvCadenceType("clock");
+        } else {
+          setSimpleCadenceType("presets");
+          setAdvCadenceType("cron");
+        }
+      } else {
+        setSimpleCadenceType("presets");
+        setAdvCadenceType("clock");
+      }
+
       // Auto-elevation guard: If source has advanced features, open in advanced mode
       const hasAdvancedFeatures =
         initialSource.kind === "selector" ||
         initialSource.cadence === "cron" ||
+        pats.length > 0 ||
+        excPats.length > 0 ||
         (Array.isArray(flt.role_types) && flt.role_types.length > 0) ||
         (Array.isArray(flt.include_keywords) && flt.include_keywords.length > 0) ||
         (Array.isArray(flt.exclude_keywords) && flt.exclude_keywords.length > 0) ||
@@ -181,7 +228,7 @@ export function AddSourceModal({
         Number(initialSource.retention_days) !== 30 ||
         initialSource.retention_policy !== "untracked_only";
 
-      setModalMode(hasAdvancedFeatures ? "advanced" : scraperMode);
+      setModalMode(hasAdvancedFeatures ? "advanced" : "simple");
       setDetectedKind(initialSource.kind);
     } else {
       setName("");
@@ -190,6 +237,16 @@ export function AddSourceModal({
       setUrl("");
       setCadence("daily");
       setCadenceCron("0 0 12 * * *");
+      setSimpleCadenceType("presets");
+      setAdvCadenceType("clock");
+      setClockState({
+        hour12: 9,
+        minute: 0,
+        ampm: "AM",
+        cadence: "daily",
+      });
+      setUrlPatterns("");
+      setExcludeUrlPatterns("");
       setRetentionDays(30);
       setRetentionPolicy("untracked_only");
       setSelectedRoleTypes([]);
@@ -206,12 +263,11 @@ export function AddSourceModal({
       setSelectorSalary("");
       setSelectorSalaryRegex("");
       setDetectedKind(null);
-      setModalMode(scraperMode);
+      setModalMode("simple");
     }
     setEditorMode("form");
-    setScheduleSubTab("presets");
     setDryRunEvents(null);
-  }, [initialSource, isOpen, scraperMode]);
+  }, [initialSource, isOpen]);
 
   // Validate custom cron when cadence is 'cron'
   useEffect(() => {
@@ -257,6 +313,21 @@ export function AddSourceModal({
       if (selectorLocationRegex.trim()) config.location_regex = selectorLocationRegex.trim();
       if (selectorSalaryRegex.trim()) config.salary_regex = selectorSalaryRegex.trim();
     }
+    const incGlobs = urlPatterns
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (incGlobs.length > 0) {
+      config.url_patterns = incGlobs;
+      if (incGlobs.length === 1) config.url_pattern = incGlobs[0];
+    }
+    const excGlobs = excludeUrlPatterns
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (excGlobs.length > 0) {
+      config.exclude_url_patterns = excGlobs;
+    }
     return config;
   };
 
@@ -284,7 +355,93 @@ export function AddSourceModal({
     return filters;
   };
 
+  const applySpecToForm = (spec: WorkflowSpec) => {
+    setName(spec.metadata.name || "");
+    setKind(spec.extractor.kind || "greenhouse");
+    setUrl(spec.extractor.url || "");
+    setIdentifier(spec.extractor.url || "");
+
+    if (spec.schedule?.cadence) setCadence(spec.schedule.cadence);
+    if (spec.schedule?.cron) {
+      setCadenceCron(spec.schedule.cron);
+      const parsed = cronToClock(spec.schedule.cron);
+      if (parsed) {
+        setClockState(parsed);
+        setAdvCadenceType("clock");
+        setSimpleCadenceType("clock");
+      } else {
+        setAdvCadenceType("cron");
+        setSimpleCadenceType("presets");
+      }
+    } else {
+      setSimpleCadenceType("presets");
+      setAdvCadenceType("clock");
+    }
+
+    if (spec.retention?.days !== undefined) setRetentionDays(spec.retention.days);
+    if (spec.retention?.policy) setRetentionPolicy(spec.retention.policy);
+
+    if (spec.filters?.role_types) setSelectedRoleTypes(spec.filters.role_types);
+    if (spec.filters?.include_keywords) setIncludeKeywords(spec.filters.include_keywords.join(", "));
+    if (spec.filters?.exclude_keywords) setExcludeKeywords(spec.filters.exclude_keywords.join(", "));
+    if (spec.filters?.locations) setLocations(spec.filters.locations.join(", "));
+
+    if (spec.extractor.job_container) setSelectorItem(spec.extractor.job_container);
+    if (spec.extractor.title_selector) setSelectorTitle(spec.extractor.title_selector);
+    if (spec.extractor.url_selector) setSelectorLink(spec.extractor.url_selector);
+    if (spec.extractor.location_selector) setSelectorLocation(spec.extractor.location_selector);
+    if (spec.extractor.salary_selector) setSelectorSalary(spec.extractor.salary_selector);
+
+    const pats: string[] = spec.extractor.url_patterns || (spec.extractor.url_pattern ? [spec.extractor.url_pattern] : []);
+    setUrlPatterns(pats.join(", "));
+    const excPats: string[] = spec.extractor.exclude_url_patterns || [];
+    setExcludeUrlPatterns(excPats.join(", "));
+  };
+
+  const handleImportYamlText = (text: string) => {
+    const validation = validateWorkflowYaml(text);
+    if (!validation.isValid || !validation.parsedSpec) {
+      const errorDetails = validation.errors
+        .map((e) => (e.line ? `Line ${e.line}, Col ${e.col}: ${e.message}` : e.message))
+        .join("\n");
+      notifyError(
+        `YAML could not be imported due to parsing issues or invalid parameters:\n${errorDetails}`,
+        "YAML IMPORT ERROR",
+        6000
+      );
+      return;
+    }
+    applySpecToForm(validation.parsedSpec);
+    setYamlText(text);
+    setModalMode("advanced");
+    setEditorMode("yaml");
+    notifySuccess("Workflow specification imported and validated successfully", "YAML IMPORTED");
+  };
+
+  const handleImportYamlFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (text) {
+        handleImportYamlText(text);
+      }
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+    reader.readAsText(file);
+  };
+
   const handleSwitchToYaml = () => {
+    const incGlobs = urlPatterns
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const excGlobs = excludeUrlPatterns
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
     const spec: WorkflowSpec = {
       version: 2,
       metadata: {
@@ -300,6 +457,8 @@ export function AddSourceModal({
         url_selector: kind === "selector" ? selectorLink : undefined,
         location_selector: kind === "selector" ? selectorLocation : undefined,
         salary_selector: kind === "selector" ? selectorSalary : undefined,
+        url_patterns: incGlobs.length > 0 ? incGlobs : undefined,
+        exclude_url_patterns: excGlobs.length > 0 ? excGlobs : undefined,
       },
       schedule: {
         cadence,
@@ -339,23 +498,7 @@ export function AddSourceModal({
       return;
     }
 
-    const spec = validation.parsedSpec;
-    setName(spec.metadata.name);
-    setKind(spec.extractor.kind);
-    setUrl(spec.extractor.url);
-    setIdentifier(spec.extractor.url);
-
-    if (spec.schedule?.cadence) setCadence(spec.schedule.cadence);
-    if (spec.schedule?.cron) setCadenceCron(spec.schedule.cron);
-
-    if (spec.retention?.days !== undefined) setRetentionDays(spec.retention.days);
-    if (spec.retention?.policy) setRetentionPolicy(spec.retention.policy);
-
-    if (spec.filters?.role_types) setSelectedRoleTypes(spec.filters.role_types);
-    if (spec.filters?.include_keywords) setIncludeKeywords(spec.filters.include_keywords.join(", "));
-    if (spec.filters?.exclude_keywords) setExcludeKeywords(spec.filters.exclude_keywords.join(", "));
-    if (spec.filters?.locations) setLocations(spec.filters.locations.join(", "));
-
+    applySpecToForm(validation.parsedSpec);
     setEditorMode("form");
   };
 
@@ -424,6 +567,9 @@ export function AddSourceModal({
             ...(spec.extractor.url_selector ? { link: spec.extractor.url_selector } : {}),
             ...(spec.extractor.location_selector ? { location: spec.extractor.location_selector } : {}),
             ...(spec.extractor.salary_selector ? { salary: spec.extractor.salary_selector } : {}),
+            ...(spec.extractor.url_patterns ? { url_patterns: spec.extractor.url_patterns } : {}),
+            ...(spec.extractor.url_pattern ? { url_pattern: spec.extractor.url_pattern } : {}),
+            ...(spec.extractor.exclude_url_patterns ? { exclude_url_patterns: spec.extractor.exclude_url_patterns } : {}),
           },
           cadence: spec.schedule?.cadence || "daily",
           cadence_cron: spec.schedule?.cron || null,
@@ -519,36 +665,55 @@ export function AddSourceModal({
       width={modalWidth}
     >
       <div className="flex flex-col gap-4 font-mono text-xs pr-1">
-        {/* Top Header: Simple vs Advanced Mode Switcher & YAML Validation */}
+        {/* Top Header: Simple vs Advanced Mode Switcher & YAML Import / Validation */}
         <div className="flex items-center justify-between border-b border-[var(--color-ink)] pb-2 select-none">
-          <div className="flex items-center gap-1 border border-[var(--color-ink)] p-0.5 bg-[var(--color-paper-2)]/30">
-            <Tooltip content="Simple Mode: 2-field rapid setup with automated ATS detection and defaults">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 border border-[var(--color-ink)] p-0.5 bg-[var(--color-paper-2)]/30">
+              <Tooltip content="Simple Mode: Rapid setup with automated ATS detection and defaults">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalMode("simple");
+                    setEditorMode("form");
+                  }}
+                  className={`px-2.5 py-0.5 text-xs font-mono font-bold uppercase cursor-pointer ${
+                    modalMode === "simple"
+                      ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
+                      : "text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
+                  }`}
+                >
+                  [ SIMPLE ]
+                </button>
+              </Tooltip>
+              <Tooltip content="Advanced Mode: custom selectors, clock/cron schedule, keywords, and YAML spec">
+                <button
+                  type="button"
+                  onClick={() => setModalMode("advanced")}
+                  className={`px-2.5 py-0.5 text-xs font-mono font-bold uppercase cursor-pointer ${
+                    modalMode === "advanced"
+                      ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
+                      : "text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
+                  }`}
+                >
+                  [ ADVANCED ]
+                </button>
+              </Tooltip>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".yaml,.yml"
+              className="hidden"
+              onChange={handleImportYamlFile}
+            />
+            <Tooltip content="Import workflow specification from .yaml file">
               <button
                 type="button"
-                onClick={() => {
-                  setModalMode("simple");
-                  setEditorMode("form");
-                }}
-                className={`px-2.5 py-0.5 text-xs font-mono font-bold uppercase cursor-pointer ${
-                  modalMode === "simple"
-                    ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
-                    : "text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-                }`}
+                onClick={() => fileInputRef.current?.click()}
+                className="px-2 py-0.5 text-xs font-mono font-bold uppercase cursor-pointer border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[var(--color-ink)]"
               >
-                [ SIMPLE ]
-              </button>
-            </Tooltip>
-            <Tooltip content="Advanced Mode: custom selectors, clock/cron schedule, keywords, and YAML spec">
-              <button
-                type="button"
-                onClick={() => setModalMode("advanced")}
-                className={`px-2.5 py-0.5 text-xs font-mono font-bold uppercase cursor-pointer ${
-                  modalMode === "advanced"
-                    ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
-                    : "text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-                }`}
-              >
-                [ ADVANCED ]
+                [ IMPORT YAML ]
               </button>
             </Tooltip>
           </div>
@@ -602,6 +767,7 @@ export function AddSourceModal({
           )}
         </div>
 
+
         {/* MODE 1: SIMPLE MODE (2 inputs, streamlined, zero flavor text) */}
         {modalMode === "simple" && (
           <div className="flex flex-col gap-4 py-1">
@@ -641,7 +807,7 @@ export function AddSourceModal({
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-3">
               <Field label="COMPANY / WORKFLOW NAME">
                 <Input
                   value={name}
@@ -650,13 +816,80 @@ export function AddSourceModal({
                 />
               </Field>
 
-              <Field label="EXECUTION CADENCE">
-                <Select
-                  value={cadence}
-                  onChange={(e) => setCadence(e.target.value as SourceCadence)}
-                  options={SIMPLE_CADENCE_OPTIONS}
-                />
-              </Field>
+              {/* Execution Cadence: PRESETS or CLOCK (mutually exclusive) */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-bold uppercase text-[var(--color-ink)]">
+                    EXECUTION CADENCE
+                  </span>
+                  <div className="flex gap-1 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSimpleCadenceType("presets");
+                        if (cadence === "cron") setCadence("daily");
+                      }}
+                      className={`px-2 py-0.5 border cursor-pointer font-bold ${
+                        simpleCadenceType === "presets"
+                          ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
+                          : "border-[var(--color-ink)] text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
+                      }`}
+                    >
+                      PRESETS
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSimpleCadenceType("clock");
+                        setCadence("cron");
+                        const dailyCron = clockToCron(
+                          clockState.hour12,
+                          clockState.minute,
+                          clockState.ampm,
+                          "daily"
+                        );
+                        setCadenceCron(dailyCron);
+                      }}
+                      className={`px-2 py-0.5 border cursor-pointer font-bold ${
+                        simpleCadenceType === "clock"
+                          ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
+                          : "border-[var(--color-ink)] text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
+                      }`}
+                    >
+                      CLOCK
+                    </button>
+                  </div>
+                </div>
+
+                {simpleCadenceType === "presets" ? (
+                  <Select
+                    value={cadence === "cron" ? "daily" : cadence}
+                    onChange={(e) => setCadence(e.target.value as SourceCadence)}
+                    options={SIMPLE_CADENCE_OPTIONS}
+                  />
+                ) : (
+                  <div className="p-3 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/20 flex flex-col items-center">
+                    <ClockPicker
+                      value={{ ...clockState, cadence: "daily" }}
+                      onChange={(st, cron) => {
+                        setClockState({ ...st, cadence: "daily" });
+                        setCadenceCron(cron);
+                        setCadence("cron");
+                      }}
+                      hideCadenceOptions={true}
+                      is24h={is24h}
+                    />
+                    <div className="mt-2 text-[10px] font-mono text-[var(--color-ink-mute)]">
+                      RUNS EVERY DAY AT{" "}
+                      <strong className="text-[var(--color-ink)]">
+                        {is24h
+                          ? `${String((clockState.hour12 % 12) + (clockState.ampm === "PM" ? 12 : 0)).padStart(2, "0")}:${String(clockState.minute).padStart(2, "0")}`
+                          : `${String(clockState.hour12).padStart(2, "0")}:${String(clockState.minute).padStart(2, "0")} ${clockState.ampm}`}
+                      </strong>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <Rule />
@@ -774,9 +1007,30 @@ export function AddSourceModal({
                     />
                   </Field>
                 </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[var(--color-ink)]/20">
+                  <Field label="INCLUDE URL GLOBS (MATCH)">
+                    <Input
+                      variant="mono"
+                      value={urlPatterns}
+                      onChange={(e) => setUrlPatterns(e.target.value)}
+                      placeholder="e.g. */careers/*, example/link/*"
+                      className="text-xs"
+                    />
+                  </Field>
+                  <Field label="EXCLUDE URL GLOBS (DISCARD)">
+                    <Input
+                      variant="mono"
+                      value={excludeUrlPatterns}
+                      onChange={(e) => setExcludeUrlPatterns(e.target.value)}
+                      placeholder="e.g. */archive/*, */login*"
+                      className="text-xs"
+                    />
+                  </Field>
+                </div>
               </div>
 
-              {/* Execution Schedule */}
+              {/* Execution Schedule: CLOCK SCHEDULE or CUSTOM CRON */}
               <div className="flex flex-col gap-2 p-2.5 border border-[var(--color-ink)] bg-[var(--color-paper)]">
                 <div className="flex justify-between items-center border-b border-[var(--color-ink)]/30 pb-1">
                   <span className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
@@ -785,38 +1039,34 @@ export function AddSourceModal({
                   <div className="flex gap-1 text-[10px]">
                     <button
                       type="button"
-                      onClick={() => setScheduleSubTab("presets")}
-                      className={`px-2 py-0.5 border cursor-pointer ${
-                        scheduleSubTab === "presets"
-                          ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold"
+                      onClick={() => {
+                        setAdvCadenceType("clock");
+                        setCadence("cron");
+                        const cronStr = clockToCron(
+                          clockState.hour12,
+                          clockState.minute,
+                          clockState.ampm,
+                          clockState.cadence
+                        );
+                        setCadenceCron(cronStr);
+                      }}
+                      className={`px-2 py-0.5 border cursor-pointer font-bold ${
+                        advCadenceType === "clock"
+                          ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
                           : "border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
                       }`}
                     >
-                      PRESETS
+                      CLOCK SCHEDULE
                     </button>
                     <button
                       type="button"
                       onClick={() => {
-                        setScheduleSubTab("clock");
+                        setAdvCadenceType("cron");
                         setCadence("cron");
                       }}
-                      className={`px-2 py-0.5 border cursor-pointer ${
-                        scheduleSubTab === "clock"
-                          ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold"
-                          : "border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-                      }`}
-                    >
-                      CLOCK
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setScheduleSubTab("cron");
-                        setCadence("cron");
-                      }}
-                      className={`px-2 py-0.5 border cursor-pointer ${
-                        scheduleSubTab === "cron"
-                          ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold"
+                      className={`px-2 py-0.5 border cursor-pointer font-bold ${
+                        advCadenceType === "cron"
+                          ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
                           : "border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
                       }`}
                     >
@@ -825,38 +1075,31 @@ export function AddSourceModal({
                   </div>
                 </div>
 
-                {scheduleSubTab === "presets" && (
-                  <Field label="EXECUTION CADENCE">
-                    <Select
-                      value={cadence}
-                      onChange={(e) => setCadence(e.target.value as SourceCadence)}
-                      options={CADENCE_OPTIONS}
-                    />
-                  </Field>
-                )}
-
-                {scheduleSubTab === "clock" && (
+                {advCadenceType === "clock" ? (
                   <div className="py-1 flex flex-col items-center">
                     <ClockPicker
                       value={clockState}
                       onChange={(st, cron) => {
                         setClockState(st);
                         setCadenceCron(cron);
+                        setCadence("cron");
                       }}
+                      is24h={is24h}
                     />
                     <div className="mt-1 text-[10px] font-mono text-[var(--color-ink-mute)]">
                       CRON: <strong className="text-[var(--color-ink)]">{cadenceCron}</strong>
                     </div>
                   </div>
-                )}
-
-                {scheduleSubTab === "cron" && (
+                ) : (
                   <div className="flex flex-col gap-1.5">
                     <Field label="CRON [TOKIO 6-FIELD]">
                       <Input
                         variant="mono"
                         value={cadenceCron}
-                        onChange={(e) => setCadenceCron(e.target.value)}
+                        onChange={(e) => {
+                          setCadenceCron(e.target.value);
+                          setCadence("cron");
+                        }}
                         placeholder="0 0 12 * * *"
                         className="text-xs"
                       />

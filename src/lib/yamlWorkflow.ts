@@ -25,6 +25,9 @@ export interface WorkflowExtractor {
   experience_regex?: string;
   clearance_regex?: string;
   sponsorship_regex?: string;
+  url_pattern?: string;
+  url_patterns?: string[];
+  exclude_url_patterns?: string[];
 }
 
 export interface WorkflowSchedule {
@@ -225,6 +228,13 @@ export function workflowSpecToYaml(spec: WorkflowSpec): string {
   if (spec.extractor.url_selector) lines.push(`  url_selector: "${spec.extractor.url_selector}"`);
   if (spec.extractor.location_selector) lines.push(`  location_selector: "${spec.extractor.location_selector}"`);
   if (spec.extractor.salary_selector) lines.push(`  salary_selector: "${spec.extractor.salary_selector}"`);
+  if (spec.extractor.url_pattern) lines.push(`  url_pattern: "${spec.extractor.url_pattern}"`);
+  if (spec.extractor.url_patterns && spec.extractor.url_patterns.length > 0) {
+    lines.push(`  url_patterns: [${spec.extractor.url_patterns.map((p) => `"${p}"`).join(", ")}]`);
+  }
+  if (spec.extractor.exclude_url_patterns && spec.extractor.exclude_url_patterns.length > 0) {
+    lines.push(`  exclude_url_patterns: [${spec.extractor.exclude_url_patterns.map((p) => `"${p}"`).join(", ")}]`);
+  }
 
   lines.push("schedule:");
   lines.push(`  cadence: ${spec.schedule?.cadence ?? "global"}`);
@@ -275,6 +285,9 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
       url_selector: config.url_selector as string | undefined,
       location_selector: config.location_selector as string | undefined,
       salary_selector: config.salary_selector as string | undefined,
+      url_pattern: config.url_pattern as string | undefined,
+      url_patterns: config.url_patterns as string[] | undefined,
+      exclude_url_patterns: config.exclude_url_patterns as string[] | undefined,
     },
     schedule: {
       cadence: source.cadence,
@@ -314,6 +327,9 @@ export function workflowSpecToCreateInput(spec: WorkflowSpec): CreateSourceInput
   if (spec.extractor.url_selector) configObj.url_selector = spec.extractor.url_selector;
   if (spec.extractor.location_selector) configObj.location_selector = spec.extractor.location_selector;
   if (spec.extractor.salary_selector) configObj.salary_selector = spec.extractor.salary_selector;
+  if (spec.extractor.url_pattern) configObj.url_pattern = spec.extractor.url_pattern;
+  if (spec.extractor.url_patterns) configObj.url_patterns = spec.extractor.url_patterns;
+  if (spec.extractor.exclude_url_patterns) configObj.exclude_url_patterns = spec.extractor.exclude_url_patterns;
 
   const filtersObj: Record<string, unknown> = {};
   if (spec.filters?.role_types) filtersObj.role_types = spec.filters.role_types;

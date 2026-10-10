@@ -152,4 +152,139 @@ describe("Scraper Ergonomics, Dual-Mode & Workflow Inspector", () => {
       expect(coords.left).toBe(450); // 400 + 50
     });
   });
+
+  describe("Modal Cadence Exclusivity & Time Selection", () => {
+    it("simple mode clock cadence generates locked daily cron", async () => {
+      const { clockToCron } = await import("../lib/cronClock");
+      // 09:30 AM Daily
+      const cronStr = clockToCron(9, 30, "AM", "daily");
+      expect(cronStr).toBe("0 30 9 * * *");
+
+      // 04:15 PM Daily -> 16:15
+      const cronStrPm = clockToCron(4, 15, "PM", "daily");
+      expect(cronStrPm).toBe("0 15 16 * * *");
+    });
+
+    it("advanced mode clock cadence generates distinct day expressions", async () => {
+      const { clockToCron } = await import("../lib/cronClock");
+      // Weekdays at 10:00 AM
+      expect(clockToCron(10, 0, "AM", "weekdays")).toBe("0 0 10 * * 1-5");
+      // Weekends at 08:00 AM
+      expect(clockToCron(8, 0, "AM", "weekends")).toBe("0 0 8 * * 6,7");
+      // Hourly at :45
+      expect(clockToCron(1, 45, "AM", "hourly")).toBe("0 45 * * * *");
+    });
+
+    it("converts cron expressions back to clock schedule state", async () => {
+      const { cronToClock } = await import("../lib/cronClock");
+      const state = cronToClock("0 45 16 * * 1-5");
+      expect(state).not.toBeNull();
+      expect(state?.hour12).toBe(4);
+      expect(state?.minute).toBe(45);
+      expect(state?.ampm).toBe("PM");
+      expect(state?.cadence).toBe("weekdays");
+    });
+  });
+
+  describe("URL Pattern Globs & YAML Import Ergonomics", () => {
+    it("assembles url_patterns and exclude_url_patterns in config", () => {
+      const assembleConfig = (
+        url: string,
+        urlPatterns: string,
+        excludeUrlPatterns: string
+      ) => {
+        const config: Record<string, unknown> = { url };
+        const incGlobs = urlPatterns
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (incGlobs.length > 0) {
+          config.url_patterns = incGlobs;
+          if (incGlobs.length === 1) config.url_pattern = incGlobs[0];
+        }
+        const excGlobs = excludeUrlPatterns
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (excGlobs.length > 0) {
+          config.exclude_url_patterns = excGlobs;
+        }
+        return config;
+      };
+
+      const cfgSingle = assembleConfig(
+        "https://example.com/careers",
+        "*/careers/*",
+        "*/archive/*"
+      );
+      expect(cfgSingle.url_pattern).toBe("*/careers/*");
+      expect(cfgSingle.url_patterns).toEqual(["*/careers/*"]);
+      expect(cfgSingle.exclude_url_patterns).toEqual(["*/archive/*"]);
+
+      const cfgMulti = assembleConfig(
+        "https://example.com/careers",
+        "*/careers/*, example/link/*",
+        "*/archive/*, */login*"
+      );
+      expect(cfgMulti.url_patterns).toEqual(["*/careers/*", "example/link/*"]);
+      expect(cfgMulti.exclude_url_patterns).toEqual(["*/archive/*", "*/login*"]);
+    });
+
+    it("validates and imports workflow YAML specifications with URL globs", async () => {
+      const { validateWorkflowYaml } = await import("../lib/yamlWorkflow");
+      const yamlContent = `
+version: 2
+metadata:
+  name: "Acme Power Scraper"
+  company: "Acme Corp"
+  enabled: true
+extractor:
+  kind: "selector"
+  url: "https://acme.com/jobs"
+  job_container: ".job-listing"
+  title_selector: ".title"
+  url_selector: "a.apply"
+  url_patterns:
+    - "https://acme.com/jobs/*"
+    - "example/link/*"
+  exclude_url_patterns:
+    - "*/archive/*"
+schedule:
+  cadence: "daily"
+  cron: "0 0 9 * * *"
+retention:
+  days: 60
+  policy: "untracked_only"
+`;
+      const res = validateWorkflowYaml(yamlContent);
+      expect(res.isValid).toBe(true);
+      expect(res.parsedSpec).not.toBeNull();
+      expect(res.parsedSpec?.metadata.name).toBe("Acme Power Scraper");
+      expect(res.parsedSpec?.extractor.url_patterns).toEqual([
+        "https://acme.com/jobs/*",
+        "example/link/*",
+      ]);
+      expect(res.parsedSpec?.extractor.exclude_url_patterns).toEqual([
+        "*/archive/*",
+      ]);
+      expect(res.parsedSpec?.retention?.days).toBe(60);
+    });
+
+    it("rejects unparseable YAML and returns structured line diagnostics", async () => {
+      const { validateWorkflowYaml } = await import("../lib/yamlWorkflow");
+      const brokenYaml = `
+version: 2
+metadata:
+  name: "Broken"
+  company: [unclosed list
+extractor:
+  kind: "greenhouse"
+`;
+      const res = validateWorkflowYaml(brokenYaml);
+      expect(res.isValid).toBe(false);
+      expect(res.errors.length).toBeGreaterThan(0);
+      expect(res.errors[0].line).toBeDefined();
+    });
+  });
 });
+

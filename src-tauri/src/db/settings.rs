@@ -10,6 +10,8 @@ pub struct Settings {
     pub system_locale: String,
     pub system_timezone: String,
     pub system_week_start: String,
+    pub system_time_format: String,
+    pub system_date_format: String,
     pub ui_theme: String,
     pub ui_reduce_motion: bool,
     pub scraper_enabled: bool,
@@ -30,6 +32,8 @@ impl Default for Settings {
             system_locale: "en-US".to_string(),
             system_timezone: "UTC".to_string(),
             system_week_start: "sunday".to_string(),
+            system_time_format: "12h".to_string(),
+            system_date_format: "MM/DD/YYYY".to_string(),
             ui_theme: "paper".to_string(),
             ui_reduce_motion: false,
             scraper_enabled: true,
@@ -52,6 +56,8 @@ impl SettingsRepo {
     const KEY_LOCALE: &'static str = "system.locale";
     const KEY_TIMEZONE: &'static str = "system.timezone";
     const KEY_WEEK_START: &'static str = "system.week_start";
+    const KEY_TIME_FORMAT: &'static str = "system.time_format";
+    const KEY_DATE_FORMAT: &'static str = "system.date_format";
     const KEY_UI_THEME: &'static str = "ui.theme";
     const KEY_UI_REDUCE_MOTION: &'static str = "ui.reduce_motion";
     const KEY_SCRAPER_ENABLED: &'static str = "scraper.enabled";
@@ -78,6 +84,14 @@ impl SettingsRepo {
             (
                 Self::KEY_WEEK_START,
                 serde_json::to_string(&defaults.system_week_start)?,
+            ),
+            (
+                Self::KEY_TIME_FORMAT,
+                serde_json::to_string(&defaults.system_time_format)?,
+            ),
+            (
+                Self::KEY_DATE_FORMAT,
+                serde_json::to_string(&defaults.system_date_format)?,
             ),
             (
                 Self::KEY_UI_THEME,
@@ -196,6 +210,12 @@ impl SettingsRepo {
         if let Some(v) = Self::get_value::<String>(pool, Self::KEY_WEEK_START).await? {
             settings.system_week_start = v;
         }
+        if let Some(v) = Self::get_value::<String>(pool, Self::KEY_TIME_FORMAT).await? {
+            settings.system_time_format = v;
+        }
+        if let Some(v) = Self::get_value::<String>(pool, Self::KEY_DATE_FORMAT).await? {
+            settings.system_date_format = v;
+        }
         if let Some(v) = Self::get_value::<String>(pool, Self::KEY_UI_THEME).await? {
             settings.ui_theme = v;
         }
@@ -247,6 +267,8 @@ impl SettingsRepo {
             Self::KEY_LOCALE,
             Self::KEY_TIMEZONE,
             Self::KEY_WEEK_START,
+            Self::KEY_TIME_FORMAT,
+            Self::KEY_DATE_FORMAT,
             Self::KEY_UI_THEME,
             Self::KEY_UI_REDUCE_MOTION,
             Self::KEY_SCRAPER_ENABLED,
@@ -295,10 +317,13 @@ mod tests {
         assert_eq!(fetched.system_locale, "fr-FR");
         assert_eq!(fetched.scraper_cron, "0 0 12 * * *");
         assert_eq!(fetched.ui_theme, "paper");
+        assert_eq!(fetched.system_time_format, "12h");
+        assert_eq!(fetched.system_date_format, "MM/DD/YYYY");
 
         // Ensure subsequent defaults call does NOT overwrite existing values
         let second_defaults = Settings {
             system_locale: "de-DE".to_string(),
+            system_time_format: "24h".to_string(),
             ..Default::default()
         };
         SettingsRepo::ensure_defaults(&pool, &second_defaults)
@@ -307,6 +332,7 @@ mod tests {
 
         let fetched_again = SettingsRepo::get_all(&pool).await.unwrap();
         assert_eq!(fetched_again.system_locale, "fr-FR");
+        assert_eq!(fetched_again.system_time_format, "12h");
     }
 
     #[tokio::test]
@@ -322,6 +348,18 @@ mod tests {
                 .unwrap();
 
         assert_eq!(updated.ui_theme, "obsidian");
+
+        let updated_time =
+            SettingsRepo::update_setting(&pool, "system.time_format", serde_json::json!("24h"))
+                .await
+                .unwrap();
+        assert_eq!(updated_time.system_time_format, "24h");
+
+        let updated_date =
+            SettingsRepo::update_setting(&pool, "system.date_format", serde_json::json!("DD/MM/YYYY"))
+                .await
+                .unwrap();
+        assert_eq!(updated_date.system_date_format, "DD/MM/YYYY");
 
         let err =
             SettingsRepo::update_setting(&pool, "invalid.key", serde_json::json!("foo")).await;
