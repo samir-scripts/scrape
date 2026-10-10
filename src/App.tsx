@@ -12,10 +12,21 @@ import { DiscoveredView } from "./components/views/discovered/DiscoveredView";
 import { TrackedView } from "./components/views/tracked/TrackedView";
 import { MetricsView } from "./components/views/metrics/MetricsView";
 import { SettingsView } from "./components/views/settings/SettingsView";
+import { FilterPanel } from "./components/filters/FilterPanel";
+import { matchesJob } from "./lib/filter";
 
 export default function App() {
   const queryClient = useQueryClient();
-  const { view, pushUndo, popUndo } = useUIStore();
+  const {
+    view,
+    pushUndo,
+    popUndo,
+    filterSpec,
+    setFilterSpec,
+    resetFilterSpec,
+    isFilterPanelOpen,
+    setFilterPanelOpen,
+  } = useUIStore();
 
   // 1. Subscribe to backend events on mount
   useEffect(() => {
@@ -158,22 +169,26 @@ export default function App() {
     }
   };
 
-  // 9. Separate discovered vs tracked jobs
+  // 9. Separate discovered vs tracked jobs with active filter spec applied
+  const filteredAllJobs = useMemo(() => {
+    return allJobs.filter((j) => matchesJob(j, filterSpec));
+  }, [allJobs, filterSpec]);
+
   const discoveredJobs = useMemo(() => {
-    return allJobs.filter(
+    return filteredAllJobs.filter(
       (j) => j.status === "scraped" || j.status === "viewed"
     );
-  }, [allJobs]);
+  }, [filteredAllJobs]);
 
   const trackedJobs = useMemo(() => {
-    return allJobs.filter(
+    return filteredAllJobs.filter(
       (j) =>
         j.status === "applied" ||
         j.status === "interviewing" ||
         j.status === "offer" ||
         j.status === "rejected"
     );
-  }, [allJobs]);
+  }, [filteredAllJobs]);
 
   const nextRunText = useMemo(() => {
     if (!schedulerStatus?.enabled) return "PAUSED";
@@ -324,6 +339,15 @@ export default function App() {
           }
         />
       )}
+
+      {/* Slide-out Global Filter Panel */}
+      <FilterPanel
+        isOpen={isFilterPanelOpen}
+        onClose={() => setFilterPanelOpen(false)}
+        filterSpec={filterSpec}
+        onUpdateFilter={setFilterSpec}
+        onResetFilters={resetFilterSpec}
+      />
     </Shell>
   );
 }

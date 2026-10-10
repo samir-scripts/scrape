@@ -54,6 +54,74 @@ impl SourceKind {
     }
 }
 
+/// Tri-state boolean used for optional qualification attributes (Sponsorship, Clearance, New Grad).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS, Default)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(feature = "sqlx", sqlx(rename_all = "snake_case"))]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum TriState {
+    Yes,
+    No,
+    #[default]
+    Unknown,
+}
+
+/// Physical workplace arrangement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS, Default)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(feature = "sqlx", sqlx(rename_all = "snake_case"))]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum WorkplaceType {
+    Remote,
+    Hybrid,
+    Onsite,
+    #[default]
+    Unknown,
+}
+
+/// Time unit interval for compensation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS, Default)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(feature = "sqlx", sqlx(rename_all = "snake_case"))]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum SalaryInterval {
+    #[default]
+    Year,
+    Month,
+    Week,
+    Day,
+    Hour,
+}
+
+/// Origin of extracted compensation data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS, Default)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(feature = "sqlx", sqlx(rename_all = "snake_case"))]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum SalarySource {
+    #[default]
+    Structured,
+    Text,
+}
+
+/// Security clearance level.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(feature = "sqlx", sqlx(rename_all = "snake_case"))]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ClearanceLevel {
+    PublicTrust,
+    Confidential,
+    Secret,
+    TopSecret,
+    TsSci,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

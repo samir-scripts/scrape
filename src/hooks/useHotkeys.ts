@@ -64,6 +64,15 @@ export function useHotkeys(options: HotkeyOptions = {}) {
         return;
       }
 
+      // Filter Drawer toggle: F
+      if (e.key === "f" || e.key === "F") {
+        if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          useUIStore.getState().toggleFilterPanel();
+          return;
+        }
+      }
+
       // Column shift in Tracked Kanban: Shift + Left / Right
       if (e.shiftKey && e.key === "ArrowLeft") {
         e.preventDefault();

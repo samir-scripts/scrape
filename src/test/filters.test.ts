@@ -1,0 +1,225 @@
+import { describe, it, expect } from "vitest";
+import type { Job } from "../bindings/Job";
+import type { JobFilter } from "../bindings/JobFilter";
+import {
+  matchesJob,
+  formatSalary,
+  formatExperience,
+  triStateToLabel,
+  countActiveFilters,
+} from "../lib/filter";
+
+const createMockJob = (overrides: Partial<Job> = {}): Job => ({
+  id: "job-1",
+  dedupe_key: "greenhouse:test:1",
+  source_id: "src-1",
+  external_id: "1",
+  title: "Senior Software Engineer",
+  company: "Acme Corp",
+  role_type: "full_time",
+  location: "San Francisco, CA",
+  url: "https://example.com/jobs/1",
+  date_posted: "2026-10-01T00:00:00Z",
+  date_added: "2026-10-09T00:00:00Z",
+  last_seen_at: "2026-10-09T00:00:00Z",
+  status: "scraped",
+  status_changed_at: "2026-10-09T00:00:00Z",
+  notes: null,
+  salary_min: 150000,
+  salary_max: 200000,
+  salary_currency: "USD",
+  salary_interval: "year",
+  salary_raw: "$150,000 - $200,000",
+  salary_source: "structured",
+  workplace_type: "hybrid",
+  sponsorship: "yes",
+  sponsorship_evidence: "We sponsor H1B visas.",
+  clearance: "no",
+  clearance_level: null,
+  clearance_evidence: "No clearance required.",
+  experience_min: 5,
+  experience_max: 8,
+  experience_raw: "5-8 years",
+  is_new_grad: "no",
+  experience_evidence: "Minimum 5 years in Rust.",
+  description_text: "Job description text...",
+  enrichment_version: 1,
+  locations: [
+    {
+      raw: "San Francisco, CA, US",
+      city: "San Francisco",
+      region_code: "CA",
+      country_code: "US",
+      is_remote: false,
+    },
+  ],
+  ...overrides,
+});
+
+describe("Job Filtering - matchesJob", () => {
+  it("matches job within salary range overlap", () => {
+    const job = createMockJob({ salary_min: 120000, salary_max: 180000 });
+
+    // Filter [140k, 200k] overlaps [120k, 180k]
+    expect(matchesJob(job, { salary_min: 140000, salary_max: 200000 })).toBe(true);
+
+    // Filter [190k, 250k] does NOT overlap [120k, 180k]
+    expect(matchesJob(job, { salary_min: 190000, salary_max: 250000 })).toBe(false);
+
+    // Filter [50k, 100k] does NOT overlap [120k, 180k]
+    expect(matchesJob(job, { salary_min: 50000, salary_max: 100000 })).toBe(false);
+  });
+
+  it("handles jobs with unknown salary based on salary_include_unknown toggle", () => {
+    const job = createMockJob({ salary_min: null, salary_max: null });
+
+    // When include_unknown is true (default), matches
+    expect(
+      matchesJob(job, { salary_min: 100000, salary_include_unknown: true })
+    ).toBe(true);
+
+    // When include_unknown is false, rejects
+    expect(
+      matchesJob(job, { salary_min: 100000, salary_include_unknown: false })
+    ).toBe(false);
+  });
+
+  it("matches job within experience (YOE) bounds", () => {
+    const job = createMockJob({ experience_min: 3, experience_max: 6 });
+
+    // Filter max YOE 5 overlaps [3, 6]
+    expect(matchesJob(job, { experience_min: 0, experience_max: 5 })).toBe(true);
+
+    // Filter min YOE 7 does NOT overlap [3, 6]
+    expect(matchesJob(job, { experience_min: 7, experience_max: 10 })).toBe(false);
+
+    // Filter max YOE 2 does NOT overlap [3, 6]
+    expect(matchesJob(job, { experience_min: 0, experience_max: 2 })).toBe(false);
+  });
+
+  it("handles New Grad tri-state filter", () => {
+    const newGradJob = createMockJob({ is_new_grad: "yes" });
+    const seniorJob = createMockJob({ is_new_grad: "no" });
+
+    // "any" allows both
+    expect(matchesJob(newGradJob, { new_grad: "any" })).toBe(true);
+    expect(matchesJob(seniorJob, { new_grad: "any" })).toBe(true);
+
+    // "only" permits only new grad jobs
+    expect(matchesJob(newGradJob, { new_grad: "only" })).toBe(true);
+    expect(matchesJob(seniorJob, { new_grad: "only" })).toBe(false);
+
+    // "exclude" rejects new grad jobs
+    expect(matchesJob(newGradJob, { new_grad: "exclude" })).toBe(false);
+    expect(matchesJob(seniorJob, { new_grad: "exclude" })).toBe(true);
+  });
+
+  it("filters by visa sponsorship and clearance requirements", () => {
+    const job = createMockJob({
+      sponsorship: "yes",
+      clearance: "no",
+    });
+
+    // Sponsorship filter includes "yes"
+    expect(matchesJob(job, { sponsorship: ["yes"] })).toBe(true);
+    // Sponsorship filter only wants "no"
+    expect(matchesJob(job, { sponsorship: ["no"] })).toBe(false);
+
+    // Clearance filter includes "no"
+    expect(matchesJob(job, { clearance: ["no", "unknown"] })).toBe(true);
+    // Clearance filter requires "yes"
+    expect(matchesJob(job, { clearance: ["yes"] })).toBe(false);
+  });
+
+  it("filters by workplace type and geography", () => {
+    const job = createMockJob({
+      workplace_type: "hybrid",
+      locations: [
+        {
+          raw: "Toronto, ON, CA",
+          city: "Toronto",
+          region_code: "ON",
+          country_code: "CA",
+          is_remote: false,
+        },
+      ],
+    });
+
+    // Workplace type
+    expect(matchesJob(job, { remote: "hybrid" })).toBe(true);
+    expect(matchesJob(job, { remote: "remote" })).toBe(false);
+
+    // Country match
+    expect(matchesJob(job, { countries: ["CA"] })).toBe(true);
+    expect(matchesJob(job, { countries: ["US", "GB"] })).toBe(false);
+
+    // Region match
+    expect(matchesJob(job, { regions: ["ON"] })).toBe(true);
+    expect(matchesJob(job, { regions: ["CA", "NY"] })).toBe(false);
+  });
+});
+
+describe("Formatting Helpers", () => {
+  it("formats salary values cleanly", () => {
+    const job1 = createMockJob({
+      salary_min: 120000,
+      salary_max: 160000,
+      salary_currency: "USD",
+    });
+    expect(formatSalary(job1)).toBe("$120K - $160K");
+
+    const job2 = createMockJob({
+      salary_min: 150000,
+      salary_max: 150000,
+      salary_currency: "USD",
+    });
+    expect(formatSalary(job2)).toBe("$150K");
+
+    const job3 = createMockJob({
+      salary_min: 80000,
+      salary_max: null,
+      salary_currency: "CAD",
+    });
+    expect(formatSalary(job3)).toBe("FROM CAD 80K");
+
+    const job4 = createMockJob({
+      salary_min: null,
+      salary_max: null,
+      salary_raw: "Competitive",
+    });
+    expect(formatSalary(job4)).toBe("Competitive");
+  });
+
+  it("formats experience values cleanly", () => {
+    const job1 = createMockJob({ experience_min: 3, experience_max: 5 });
+    expect(formatExperience(job1)).toBe("3-5 YOE");
+
+    const job2 = createMockJob({ experience_min: 7, experience_max: null });
+    expect(formatExperience(job2)).toBe("7+ YOE");
+
+    const job3 = createMockJob({
+      experience_min: null,
+      experience_max: null,
+      experience_raw: null,
+    });
+    expect(formatExperience(job3)).toBe("—");
+  });
+
+  it("formats TriState values to user-facing labels", () => {
+    expect(triStateToLabel("yes")).toBe("Yes");
+    expect(triStateToLabel("no")).toBe("No");
+    expect(triStateToLabel("unknown")).toBe("N/A");
+  });
+
+  it("accurately counts active non-default filter dimensions", () => {
+    const filter1: Partial<JobFilter> = {};
+    expect(countActiveFilters(filter1)).toBe(0);
+
+    const filter2: Partial<JobFilter> = {
+      salary_min: 100000,
+      new_grad: "only",
+      sponsorship: ["yes"],
+    };
+    expect(countActiveFilters(filter2)).toBe(3);
+  });
+});

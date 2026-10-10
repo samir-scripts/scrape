@@ -19,6 +19,7 @@ thiserror = "2"
 tracing = "0.1"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros", "derive"] }
 ts-rs = { version = "10", features = ["serde-json-impl", "no-serde-warnings"] }
+regex = "1"
 
 [profile.release]
 codegen-units = 1

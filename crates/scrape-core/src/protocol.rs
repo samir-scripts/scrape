@@ -1,4 +1,7 @@
-use crate::{RoleType, SourceKind};
+use crate::enrich::{
+    ClassifiedClearance, ClassifiedSponsorship, ExperienceClassification, ParsedLocation, Salary,
+};
+use crate::{RoleType, SourceKind, TriState, WorkplaceType};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -94,6 +97,22 @@ pub enum WorkerEvent {
         url: String,
         #[serde(default)]
         date_posted: Option<String>,
+        #[serde(default)]
+        salary: Option<Salary>,
+        #[serde(default)]
+        locations: Vec<ParsedLocation>,
+        #[serde(default)]
+        workplace_type: WorkplaceType,
+        #[serde(default)]
+        sponsorship: Option<ClassifiedSponsorship>,
+        #[serde(default)]
+        clearance: Option<ClassifiedClearance>,
+        #[serde(default)]
+        experience: Option<ExperienceClassification>,
+        #[serde(default)]
+        is_new_grad: TriState,
+        #[serde(default)]
+        description_text: Option<String>,
     },
     Progress {
         source_id: String,
@@ -169,6 +188,14 @@ mod tests {
             location: "Remote".to_string(),
             url: "https://stripe.com/jobs/5012345".to_string(),
             date_posted: Some("2026-10-01T00:00:00Z".to_string()),
+            salary: None,
+            locations: Vec::new(),
+            workplace_type: WorkplaceType::Remote,
+            sponsorship: None,
+            clearance: None,
+            experience: None,
+            is_new_grad: TriState::Unknown,
+            description_text: None,
         };
 
         let serialized = serde_json::to_string(&job).unwrap();

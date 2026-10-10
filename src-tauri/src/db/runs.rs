@@ -37,6 +37,26 @@ pub struct ScrapeRun {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum LogLevel {
+    Info,
+    Warn,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export)]
+pub struct ScrapeLogEntry {
+    pub id: String,
+    pub run_id: String,
+    pub timestamp: String,
+    pub level: LogLevel,
+    pub source_id: Option<String>,
+    pub message: String,
+}
+
 pub struct RunsRepo;
 
 impl RunsRepo {
@@ -170,6 +190,73 @@ impl RunsRepo {
         }
 
         Ok(runs)
+    }
+
+    pub async fn add_log(
+        pool: &SqlitePool,
+        run_id: &str,
+        level: LogLevel,
+        source_id: Option<&str>,
+        message: &str,
+    ) -> Result<()> {
+        let id = Uuid::now_v7().to_string();
+        let timestamp = now_iso();
+        let level_str = match level {
+            LogLevel::Info => "info",
+            LogLevel::Warn => "warn",
+            LogLevel::Error => "error",
+        };
+
+        sqlx::query(
+            r#"
+            INSERT INTO scrape_logs (id, run_id, timestamp, level, source_id, message)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "#,
+        )
+        .bind(&id)
+        .bind(run_id)
+        .bind(&timestamp)
+        .bind(level_str)
+        .bind(source_id)
+        .bind(message)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn get_logs(pool: &SqlitePool, run_id: &str) -> Result<Vec<ScrapeLogEntry>> {
+        use sqlx::Row;
+        let rows = sqlx::query(
+            r#"
+            SELECT id, run_id, timestamp, level, source_id, message
+            FROM scrape_logs
+            WHERE run_id = ?
+            ORDER BY timestamp ASC
+            "#,
+        )
+        .bind(run_id)
+        .fetch_all(pool)
+        .await?;
+
+        let mut entries = Vec::new();
+        for r in rows {
+            let level_str: String = r.get("level");
+            let level = match level_str.as_str() {
+                "warn" => LogLevel::Warn,
+                "error" => LogLevel::Error,
+                _ => LogLevel::Info,
+            };
+            entries.push(ScrapeLogEntry {
+                id: r.get("id"),
+                run_id: r.get("run_id"),
+                timestamp: r.get("timestamp"),
+                level,
+                source_id: r.get("source_id"),
+                message: r.get("message"),
+            });
+        }
+        Ok(entries)
     }
 }
 

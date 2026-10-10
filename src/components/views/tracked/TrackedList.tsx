@@ -10,6 +10,11 @@ import {
 } from "../../ui/Table";
 import { Tag } from "../../ui/Tag";
 import { EmptyState } from "../../ui/EmptyState";
+import {
+  formatSalary,
+  formatExperience,
+  triStateToLabel,
+} from "../../../lib/filter";
 
 interface TrackedListProps {
   jobs: Job[];
@@ -18,16 +23,18 @@ interface TrackedListProps {
   onOpenUrl: (url: string) => void;
 }
 
+type SortField = "company" | "title" | "status" | "salary" | "date_added";
+
 export function TrackedList({
   jobs,
   selectedJobId,
   onSelectJob,
   onOpenUrl,
 }: TrackedListProps) {
-  const [sortField, setSortField] = useState<"company" | "title" | "status" | "date_added">("date_added");
+  const [sortField, setSortField] = useState<SortField>("date_added");
   const [sortAsc, setSortAsc] = useState(false);
 
-  const handleSort = (field: "company" | "title" | "status" | "date_added") => {
+  const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortAsc(!sortAsc);
     } else {
@@ -44,6 +51,10 @@ export function TrackedList({
       cmp = a.title.localeCompare(b.title);
     } else if (sortField === "status") {
       cmp = a.status.localeCompare(b.status);
+    } else if (sortField === "salary") {
+      const aSal = a.salary_min ?? a.salary_max ?? -1;
+      const bSal = b.salary_min ?? b.salary_max ?? -1;
+      cmp = aSal - bSal;
     } else {
       cmp = a.date_added.localeCompare(b.date_added);
     }
@@ -75,7 +86,14 @@ export function TrackedList({
             <TableHeader onClick={() => handleSort("status")} className="cursor-pointer">
               STAGE {sortField === "status" ? (sortAsc ? "▲" : "▼") : ""}
             </TableHeader>
+            <TableHeader onClick={() => handleSort("salary")} className="cursor-pointer">
+              SALARY {sortField === "salary" ? (sortAsc ? "▲" : "▼") : ""}
+            </TableHeader>
             <TableHeader>LOCATION</TableHeader>
+            <TableHeader>YOE</TableHeader>
+            <TableHeader>NEW GRAD</TableHeader>
+            <TableHeader>SPONSORSHIP</TableHeader>
+            <TableHeader>CLEARANCE</TableHeader>
             <TableHeader onClick={() => handleSort("date_added")} className="cursor-pointer">
               ADDED {sortField === "date_added" ? (sortAsc ? "▲" : "▼") : ""}
             </TableHeader>
@@ -99,10 +117,25 @@ export function TrackedList({
                 <TableCell>
                   <Tag status={job.status} />
                 </TableCell>
-                <TableCell className="text-[var(--color-ink-mute)]">
+                <TableCell className="font-mono text-xs whitespace-nowrap">
+                  {formatSalary(job)}
+                </TableCell>
+                <TableCell className="text-[var(--color-ink-mute)] whitespace-nowrap">
                   {job.location || "REMOTE"}
                 </TableCell>
-                <TableCell className="text-[var(--color-ink-mute)]">
+                <TableCell className="font-mono text-xs whitespace-nowrap">
+                  {formatExperience(job)}
+                </TableCell>
+                <TableCell className="font-mono text-xs">
+                  {triStateToLabel(job.is_new_grad)}
+                </TableCell>
+                <TableCell className="font-mono text-xs">
+                  {triStateToLabel(job.sponsorship)}
+                </TableCell>
+                <TableCell className="font-mono text-xs">
+                  {triStateToLabel(job.clearance)}
+                </TableCell>
+                <TableCell className="text-[var(--color-ink-mute)] whitespace-nowrap">
                   {job.date_added.slice(0, 10)}
                 </TableCell>
                 <TableCell>

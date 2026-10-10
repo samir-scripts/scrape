@@ -1,10 +1,10 @@
 use crate::db::jobs::{JobsRepo, ScrapedJob};
-use crate::db::runs::{RunStatus, RunsRepo, ScrapeRun, TriggerType};
+use crate::db::runs::{LogLevel, RunStatus, RunsRepo, ScrapeRun, TriggerType};
 use crate::db::settings::SettingsRepo;
 use crate::db::sources::SourcesRepo;
 use crate::error::{AppError, Result};
 use scrape_core::{
-    RoleType, WorkerConfig, WorkerEvent, WorkerFilters, WorkerLimits, WorkerSource,
+    RoleType, TriState, WorkerConfig, WorkerEvent, WorkerFilters, WorkerLimits, WorkerSource,
     PROTOCOL_VERSION,
 };
 use sqlx::SqlitePool;
@@ -153,26 +153,60 @@ impl ScrapeRunner {
         match run_result {
             Ok(Ok((total_found, total_new, source_statuses))) => {
                 // Update source statuses
-                for (src_id, (status, err_msg)) in source_statuses {
+                for (src_id, (status, err_msg)) in &source_statuses {
                     let _ = SourcesRepo::set_last_result(
                         &self.pool,
-                        &src_id,
-                        &status,
+                        src_id,
+                        status,
                         err_msg.as_deref(),
                     )
                     .await;
                 }
 
-                let final_status = RunStatus::Success;
+                let has_errors = source_statuses.values().any(|(s, _)| s == "error");
+                let all_failed = !source_statuses.is_empty()
+                    && source_statuses.values().all(|(s, _)| s == "error");
+                let final_status = if all_failed {
+                    RunStatus::Failed
+                } else if has_errors {
+                    RunStatus::Partial
+                } else {
+                    RunStatus::Success
+                };
+
+                let err_summary = if has_errors {
+                    Some("One or more sources encountered errors during scrape")
+                } else {
+                    None
+                };
+
                 let finished = RunsRepo::finish(
                     &self.pool,
                     &run.id,
                     final_status,
                     total_found,
                     total_new,
-                    None,
+                    err_summary,
                 )
                 .await?;
+
+                let _ = RunsRepo::add_log(
+                    &self.pool,
+                    &run.id,
+                    if final_status == RunStatus::Failed {
+                        LogLevel::Error
+                    } else if final_status == RunStatus::Partial {
+                        LogLevel::Warn
+                    } else {
+                        LogLevel::Info
+                    },
+                    None,
+                    &format!(
+                        "Run finished: {:?}. Found {} postings, {} new.",
+                        final_status, total_found, total_new
+                    ),
+                )
+                .await;
 
                 let _ = app.emit("scrape://finished", &finished);
                 let _ = app.emit("jobs://changed", ());
@@ -236,7 +270,7 @@ impl ScrapeRunner {
     async fn execute_sidecar(
         &self,
         app: &AppHandle,
-        _run_id: &str,
+        run_id: &str,
         config: WorkerConfig,
     ) -> Result<(i64, i64, HashMap<String, (String, Option<String>)>)> {
         let (mut rx, mut child) = app
@@ -246,6 +280,15 @@ impl ScrapeRunner {
             .args(["--stdin"])
             .spawn()
             .map_err(|e| AppError::Internal(format!("Failed to spawn sidecar: {}", e)))?;
+
+        let _ = RunsRepo::add_log(
+            &self.pool,
+            run_id,
+            LogLevel::Info,
+            None,
+            &format!("Sidecar worker spawned. Scraping {} sources.", config.sources.len()),
+        )
+        .await;
 
         let config_bytes = serde_json::to_vec(&config)?;
         child
@@ -278,6 +321,14 @@ impl ScrapeRunner {
                                     location,
                                     url,
                                     date_posted,
+                                    salary,
+                                    locations,
+                                    workplace_type,
+                                    sponsorship,
+                                    clearance,
+                                    experience,
+                                    is_new_grad,
+                                    description_text,
                                 } => {
                                     let dedupe_key = format!("{}:{}", source_id, external_id);
                                     let loc_opt = if location.is_empty() {
@@ -285,6 +336,39 @@ impl ScrapeRunner {
                                     } else {
                                         Some(location)
                                     };
+
+                                    let (salary_min, salary_max, salary_currency, salary_interval, salary_raw, salary_source) =
+                                        if let Some(s) = salary {
+                                            (
+                                                s.min,
+                                                s.max,
+                                                Some(s.currency),
+                                                Some(s.interval),
+                                                Some(s.raw),
+                                                Some(s.source),
+                                            )
+                                        } else {
+                                            (None, None, None, None, None, None)
+                                        };
+
+                                    let (sponsorship_val, sponsorship_evidence) = if let Some(sp) = sponsorship {
+                                        (sp.value, sp.evidence)
+                                    } else {
+                                        (TriState::Unknown, None)
+                                    };
+
+                                    let (clearance_val, clearance_level, clearance_evidence) = if let Some(cl) = clearance {
+                                        (cl.value, cl.level, cl.evidence)
+                                    } else {
+                                        (TriState::Unknown, None, None)
+                                    };
+
+                                    let (experience_min, experience_max, experience_raw, experience_evidence) =
+                                        if let Some(exp) = experience {
+                                            (exp.min_years, exp.max_years, exp.raw, exp.evidence)
+                                        } else {
+                                            (None, None, None, None)
+                                        };
 
                                     job_buffer.push(ScrapedJob {
                                         dedupe_key,
@@ -296,6 +380,25 @@ impl ScrapeRunner {
                                         location: loc_opt,
                                         url,
                                         date_posted,
+                                        salary_min,
+                                        salary_max,
+                                        salary_currency,
+                                        salary_interval,
+                                        salary_raw,
+                                        salary_source,
+                                        workplace_type,
+                                        sponsorship: sponsorship_val,
+                                        sponsorship_evidence,
+                                        clearance: clearance_val,
+                                        clearance_level,
+                                        clearance_evidence,
+                                        experience_min,
+                                        experience_max,
+                                        experience_raw,
+                                        is_new_grad,
+                                        experience_evidence,
+                                        description_text,
+                                        locations,
                                     });
                                     total_found += 1;
 
@@ -318,10 +421,18 @@ impl ScrapeRunner {
                                     source_statuses
                                         .entry(source_id.clone())
                                         .or_insert_with(|| ("success".to_string(), None));
+                                    let _ = RunsRepo::add_log(
+                                        &self.pool,
+                                        run_id,
+                                        LogLevel::Info,
+                                        Some(&source_id),
+                                        &format!("Fetched {} postings, matched {}", fetched, matched),
+                                    )
+                                    .await;
                                     let _ = app.emit(
                                         "scrape://progress",
                                         serde_json::json!({
-                                            "source_id": source_id,
+                                             "source_id": source_id,
                                             "fetched": fetched,
                                             "matched": matched,
                                         }),
@@ -336,6 +447,14 @@ impl ScrapeRunner {
                                         source_id.clone(),
                                         ("error".to_string(), Some(message.clone())),
                                     );
+                                    let _ = RunsRepo::add_log(
+                                        &self.pool,
+                                        run_id,
+                                        LogLevel::Error,
+                                        Some(&source_id),
+                                        &message,
+                                    )
+                                    .await;
                                     let _ = app.emit(
                                         "scrape://progress",
                                         serde_json::json!({
@@ -352,13 +471,46 @@ impl ScrapeRunner {
                 }
                 CommandEvent::Stderr(bytes) => {
                     let text = String::from_utf8_lossy(&bytes);
-                    tracing::info!("[sidecar] {}", text.trim());
+                    let line = text.trim();
+                    if !line.is_empty() {
+                        tracing::info!("[sidecar] {}", line);
+                        if line.contains("ERROR") || line.contains("error") {
+                            let _ = RunsRepo::add_log(
+                                &self.pool,
+                                run_id,
+                                LogLevel::Warn,
+                                None,
+                                line,
+                            )
+                            .await;
+                        }
+                    }
                 }
                 CommandEvent::Error(err) => {
                     tracing::error!("[sidecar error] {}", err);
+                    let _ = RunsRepo::add_log(
+                        &self.pool,
+                        run_id,
+                        LogLevel::Error,
+                        None,
+                        &format!("Sidecar process error: {}", err),
+                    )
+                    .await;
                 }
                 CommandEvent::Terminated(status) => {
                     tracing::info!("[sidecar exit] status: {:?}", status.code);
+                    if let Some(code) = status.code {
+                        if code != 0 {
+                            let _ = RunsRepo::add_log(
+                                &self.pool,
+                                run_id,
+                                LogLevel::Error,
+                                None,
+                                &format!("Sidecar exited with non-zero status code: {}", code),
+                            )
+                            .await;
+                        }
+                    }
                     break;
                 }
                 _ => {}

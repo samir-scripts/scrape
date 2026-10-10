@@ -1,6 +1,9 @@
 use crate::client::{ClientError, HttpClient};
 use chrono::{DateTime, SecondsFormat};
-use scrape_core::{RoleType, WorkerEvent, WorkerSource};
+use scrape_core::enrich::{
+    classify_clearance, classify_sponsorship, extract_experience, location as loc_enrich, Salary,
+};
+use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource, WorkplaceType};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -12,12 +15,39 @@ struct LeverPosting {
     #[serde(rename = "createdAt")]
     created_at: Option<i64>,
     categories: Option<LeverCategories>,
+    #[serde(rename = "salaryRange")]
+    salary_range: Option<LeverSalaryRange>,
+    #[serde(rename = "salaryDescriptionPlain")]
+    salary_description_plain: Option<String>,
+    #[serde(rename = "workplaceType")]
+    workplace_type: Option<String>,
+    #[serde(rename = "descriptionPlain")]
+    description_plain: Option<String>,
+    #[serde(rename = "additionalPlain")]
+    additional_plain: Option<String>,
+    lists: Option<Vec<LeverList>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LeverList {
+    text: Option<String>,
+    content: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LeverSalaryRange {
+    min: Option<f64>,
+    max: Option<f64>,
+    currency: Option<String>,
+    interval: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct LeverCategories {
     location: Option<String>,
     commitment: Option<String>,
+    #[serde(rename = "allLocations")]
+    all_locations: Option<Vec<String>>,
 }
 
 pub async fn scrape_lever(
@@ -39,11 +69,117 @@ pub async fn scrape_lever(
             .and_then(|c| c.commitment.as_deref());
         let role_type = RoleType::infer(&posting.text, commitment);
 
-        let location = posting
-            .categories
+        // Build combined location string
+        let mut loc_strings = Vec::new();
+        if let Some(cat) = &posting.categories {
+            if let Some(loc) = &cat.location {
+                if !loc.trim().is_empty() {
+                    loc_strings.push(loc.clone());
+                }
+            }
+            if let Some(all) = &cat.all_locations {
+                for l in all {
+                    if !loc_strings.contains(l) && !l.trim().is_empty() {
+                        loc_strings.push(l.clone());
+                    }
+                }
+            }
+        }
+        let location_str = if loc_strings.is_empty() {
+            String::new()
+        } else {
+            loc_strings.join("; ")
+        };
+        let locations = loc_enrich::parse(&location_str);
+
+        // Workplace type
+        let workplace_type = match posting.workplace_type.as_deref() {
+            Some("remote") => WorkplaceType::Remote,
+            Some("hybrid") => WorkplaceType::Hybrid,
+            Some("on-site") => WorkplaceType::Onsite,
+            _ => {
+                if locations.iter().any(|l| l.is_remote)
+                    || location_str.to_lowercase().contains("remote")
+                {
+                    WorkplaceType::Remote
+                } else if location_str.to_lowercase().contains("hybrid") {
+                    WorkplaceType::Hybrid
+                } else if !location_str.is_empty() {
+                    WorkplaceType::Onsite
+                } else {
+                    WorkplaceType::Unknown
+                }
+            }
+        };
+
+        // Combine description texts
+        let mut desc_parts = Vec::new();
+        if let Some(dp) = &posting.description_plain {
+            if !dp.trim().is_empty() {
+                desc_parts.push(dp.clone());
+            }
+        }
+        if let Some(lists) = &posting.lists {
+            for l in lists {
+                if let Some(t) = &l.text {
+                    desc_parts.push(t.clone());
+                }
+                if let Some(c) = &l.content {
+                    desc_parts.push(c.clone());
+                }
+            }
+        }
+        if let Some(ap) = &posting.additional_plain {
+            if !ap.trim().is_empty() {
+                desc_parts.push(ap.clone());
+            }
+        }
+        let full_description = desc_parts.join("\n\n");
+        let desc_text = if full_description.is_empty() {
+            None
+        } else {
+            Some(full_description.chars().take(32768).collect::<String>())
+        };
+
+        // Salary
+        let mut salary = None;
+        if let Some(sr) = &posting.salary_range {
+            salary = Salary::from_structured(
+                sr.min,
+                sr.max,
+                sr.currency.as_deref(),
+                sr.interval.as_deref(),
+                posting.salary_description_plain.as_deref(),
+            );
+        }
+        if salary.is_none() {
+            if let Some(desc) = &posting.salary_description_plain {
+                salary = Salary::from_text(desc);
+            }
+        }
+        if salary.is_none() {
+            if let Some(text) = &desc_text {
+                salary = Salary::from_text(text);
+            }
+        }
+
+        // Eligibility and experience
+        let text_for_enrich = desc_text.as_deref().unwrap_or("");
+        let sponsorship = if !text_for_enrich.is_empty() {
+            Some(classify_sponsorship(text_for_enrich))
+        } else {
+            None
+        };
+        let clearance = if !text_for_enrich.is_empty() {
+            Some(classify_clearance(text_for_enrich))
+        } else {
+            None
+        };
+        let experience = Some(extract_experience(&posting.text, text_for_enrich));
+        let is_new_grad = experience
             .as_ref()
-            .and_then(|c| c.location.clone())
-            .unwrap_or_default();
+            .map(|e| e.is_new_grad)
+            .unwrap_or(TriState::Unknown);
 
         let date_posted = posting.created_at.and_then(|ms| {
             DateTime::from_timestamp_millis(ms)
@@ -56,9 +192,17 @@ pub async fn scrape_lever(
             title: posting.text,
             company: source.name.clone(),
             role_type,
-            location,
+            location: location_str,
             url: posting.hosted_url,
             date_posted,
+            salary,
+            locations,
+            workplace_type,
+            sponsorship,
+            clearance,
+            experience,
+            is_new_grad,
+            description_text: desc_text,
         });
     }
 

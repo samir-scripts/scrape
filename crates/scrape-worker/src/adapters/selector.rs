@@ -1,5 +1,9 @@
 use crate::client::{ClientError, HttpClient};
-use scrape_core::{RoleType, WorkerEvent, WorkerSource};
+use scrape_core::enrich::{
+    classify_clearance, classify_sponsorship, extract_experience, location as loc_enrich,
+    to_plain_text, Salary,
+};
+use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource, WorkplaceType};
 use scraper::{Html, Selector};
 use url::Url;
 
@@ -38,6 +42,8 @@ pub fn extract_jobs_with_selectors(
         .unwrap_or("a");
 
     let loc_sel_str = source.config.get("location").and_then(|v| v.as_str());
+    let sal_sel_str = source.config.get("salary").and_then(|v| v.as_str());
+    let desc_sel_str = source.config.get("description").and_then(|v| v.as_str());
 
     let item_sel = Selector::parse(item_sel_str)
         .map_err(|e| ClientError::HttpStatus(reqwest::StatusCode::BAD_REQUEST, e.to_string()))?;
@@ -46,6 +52,8 @@ pub fn extract_jobs_with_selectors(
     let link_sel = Selector::parse(link_sel_str)
         .map_err(|e| ClientError::HttpStatus(reqwest::StatusCode::BAD_REQUEST, e.to_string()))?;
     let loc_sel = loc_sel_str.and_then(|s| Selector::parse(s).ok());
+    let sal_sel = sal_sel_str.and_then(|s| Selector::parse(s).ok());
+    let desc_sel = desc_sel_str.and_then(|s| Selector::parse(s).ok());
 
     let document = Html::parse_document(html_text);
     let mut events = Vec::new();
@@ -90,6 +98,55 @@ pub fn extract_jobs_with_selectors(
 
         let role_type = RoleType::infer(&title, None);
 
+        let salary_text = sal_sel.as_ref().and_then(|s| {
+            item.select(s)
+                .next()
+                .map(|el| el.text().collect::<Vec<_>>().join(" ").trim().to_string())
+        });
+
+        let desc_text = desc_sel.as_ref().and_then(|s| {
+            item.select(s)
+                .next()
+                .map(|el| to_plain_text(&el.html(), 32768))
+        });
+
+        let mut salary = salary_text.as_deref().and_then(Salary::from_text);
+        if salary.is_none() {
+            if let Some(text) = &desc_text {
+                salary = Salary::from_text(text);
+            }
+        }
+
+        let locations = loc_enrich::parse(&location);
+        let workplace_type = if locations.iter().any(|l| l.is_remote)
+            || location.to_lowercase().contains("remote")
+        {
+            WorkplaceType::Remote
+        } else if location.to_lowercase().contains("hybrid") {
+            WorkplaceType::Hybrid
+        } else if !location.is_empty() {
+            WorkplaceType::Onsite
+        } else {
+            WorkplaceType::Unknown
+        };
+
+        let text_for_enrich = desc_text.as_deref().unwrap_or("");
+        let sponsorship = if !text_for_enrich.is_empty() {
+            Some(classify_sponsorship(text_for_enrich))
+        } else {
+            None
+        };
+        let clearance = if !text_for_enrich.is_empty() {
+            Some(classify_clearance(text_for_enrich))
+        } else {
+            None
+        };
+        let experience = Some(extract_experience(&title, text_for_enrich));
+        let is_new_grad = experience
+            .as_ref()
+            .map(|e| e.is_new_grad)
+            .unwrap_or(TriState::Unknown);
+
         events.push(WorkerEvent::Job {
             source_id: source.id.clone(),
             external_id: job_url.clone(),
@@ -99,6 +156,14 @@ pub fn extract_jobs_with_selectors(
             location,
             url: job_url,
             date_posted: None,
+            salary,
+            locations,
+            workplace_type,
+            sponsorship,
+            clearance,
+            experience,
+            is_new_grad,
+            description_text: desc_text,
         });
     }
 

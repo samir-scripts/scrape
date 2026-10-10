@@ -3,6 +3,11 @@ import type { JobStatus } from "../../../bindings/JobStatus";
 import { Button } from "../../ui/Button";
 import { Tag } from "../../ui/Tag";
 import { Rule } from "../../ui/Rule";
+import {
+  formatSalary,
+  formatExperience,
+  triStateToLabel,
+} from "../../../lib/filter";
 
 interface JobMetaPanelProps {
   job: Job | null;
@@ -37,8 +42,11 @@ export function JobMetaPanel({
     }
   };
 
+  const salDisplay = formatSalary(job);
+  const expDisplay = formatExperience(job);
+
   return (
-    <div className="flex flex-col gap-5 w-full text-xs font-mono select-none">
+    <div className="flex flex-col gap-4 w-full text-xs font-mono select-none overflow-y-auto">
       {/* Header */}
       <div className="font-bold uppercase tracking-wider text-[var(--color-ink)] pb-1 border-b border-[var(--color-ink)]">
         STATUS & METADATA
@@ -46,29 +54,29 @@ export function JobMetaPanel({
 
       {/* Boxed Metadata Table */}
       <div className="border border-[var(--color-ink)] bg-[var(--color-paper)]">
-        <div className="flex justify-between items-center px-3 py-2 border-b border-[var(--color-ink)]">
+        <div className="flex justify-between items-center px-3 py-1.5 border-b border-[var(--color-ink)]">
           <span className="text-[var(--color-ink-mute)]">STATUS</span>
           <Tag status={job.status} />
         </div>
-        <div className="flex justify-between items-center px-3 py-2 border-b border-[var(--color-ink)]">
+        <div className="flex justify-between items-center px-3 py-1.5 border-b border-[var(--color-ink)]">
           <span className="text-[var(--color-ink-mute)]">ROLE TYPE</span>
           <span className="font-bold text-[var(--color-ink)]">
             {job.role_type.toUpperCase()}
           </span>
         </div>
-        <div className="flex justify-between items-center px-3 py-2 border-b border-[var(--color-ink)]">
+        <div className="flex justify-between items-center px-3 py-1.5 border-b border-[var(--color-ink)]">
           <span className="text-[var(--color-ink-mute)]">POSTED</span>
           <span className="text-[var(--color-ink)]">
             {formatDate(job.date_posted)}
           </span>
         </div>
-        <div className="flex justify-between items-center px-3 py-2 border-b border-[var(--color-ink)]">
+        <div className="flex justify-between items-center px-3 py-1.5 border-b border-[var(--color-ink)]">
           <span className="text-[var(--color-ink-mute)]">ADDED</span>
           <span className="text-[var(--color-ink)]">
             {formatDate(job.date_added)}
           </span>
         </div>
-        <div className="flex justify-between items-center px-3 py-2">
+        <div className="flex justify-between items-center px-3 py-1.5">
           <span className="text-[var(--color-ink-mute)]">LAST SEEN</span>
           <span className="text-[var(--color-ink)]">
             {formatDate(job.last_seen_at)}
@@ -78,8 +86,119 @@ export function JobMetaPanel({
 
       <Rule />
 
-      {/* Triage Actions */}
+      {/* Compensation & Workplace */}
       <div className="flex flex-col gap-2">
+        <span className="text-[11px] font-bold text-[var(--color-ink-mute)] uppercase tracking-wider">
+          COMPENSATION & GEOGRAPHY
+        </span>
+        <div className="border border-[var(--color-ink)] bg-[var(--color-paper)] divide-y divide-[var(--color-ink)]">
+          <div className="flex justify-between items-center px-3 py-1.5">
+            <span className="text-[var(--color-ink-mute)]">SALARY</span>
+            <span className="font-bold text-[var(--color-ink)]">
+              {salDisplay}
+            </span>
+          </div>
+          <div className="flex justify-between items-center px-3 py-1.5">
+            <span className="text-[var(--color-ink-mute)]">WORKPLACE</span>
+            <span className="font-bold uppercase text-[var(--color-ink)]">
+              {job.workplace_type}
+            </span>
+          </div>
+          {job.locations && job.locations.length > 0 && (
+            <div className="px-3 py-1.5 flex flex-col gap-1">
+              <span className="text-[10px] text-[var(--color-ink-mute)] uppercase">
+                LOCATIONS ({job.locations.length})
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {job.locations.map((loc, idx) => (
+                  <span
+                    key={idx}
+                    className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper-2)] text-[10px]"
+                  >
+                    {[loc.city, loc.region_code, loc.country_code].filter(Boolean).join(", ") || loc.raw}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <Rule />
+
+      {/* Eligibility & Experience */}
+      <div className="flex flex-col gap-2">
+        <span className="text-[11px] font-bold text-[var(--color-ink-mute)] uppercase tracking-wider">
+          REQUIREMENTS & CLEARANCE
+        </span>
+        <div className="border border-[var(--color-ink)] bg-[var(--color-paper)] divide-y divide-[var(--color-ink)]">
+          <div className="flex justify-between items-center px-3 py-1.5">
+            <span className="text-[var(--color-ink-mute)]">EXPERIENCE</span>
+            <span className="font-bold text-[var(--color-ink)]">
+              {expDisplay}
+            </span>
+          </div>
+          <div className="flex justify-between items-center px-3 py-1.5">
+            <span className="text-[var(--color-ink-mute)]">NEW GRAD</span>
+            <span className="font-bold text-[var(--color-ink)]">
+              {triStateToLabel(job.is_new_grad)}
+            </span>
+          </div>
+          <div className="flex justify-between items-center px-3 py-1.5">
+            <span className="text-[var(--color-ink-mute)]">SPONSORSHIP</span>
+            <span className="font-bold text-[var(--color-ink)]">
+              {triStateToLabel(job.sponsorship)}
+            </span>
+          </div>
+          <div className="flex justify-between items-center px-3 py-1.5">
+            <span className="text-[var(--color-ink-mute)]">CLEARANCE</span>
+            <span className="font-bold text-[var(--color-ink)]">
+              {triStateToLabel(job.clearance)}
+              {job.clearance_level && ` (${job.clearance_level})`}
+            </span>
+          </div>
+        </div>
+
+        {/* Evidence Snippets */}
+        {(job.experience_evidence ||
+          job.sponsorship_evidence ||
+          job.clearance_evidence) && (
+          <div className="flex flex-col gap-1.5 mt-1">
+            <span className="text-[10px] font-bold text-[var(--color-ink-mute)] uppercase tracking-wider">
+              EVIDENCE QUOTES
+            </span>
+            {job.experience_evidence && (
+              <div className="p-2 border border-dashed border-[var(--color-ink)]/60 bg-[var(--color-paper-2)]/30 text-[10px] italic leading-tight">
+                <span className="font-bold not-italic text-[9px] block text-[var(--color-ink-mute)]">
+                  EXP QUOTE:
+                </span>
+                "{job.experience_evidence}"
+              </div>
+            )}
+            {job.sponsorship_evidence && (
+              <div className="p-2 border border-dashed border-[var(--color-ink)]/60 bg-[var(--color-paper-2)]/30 text-[10px] italic leading-tight">
+                <span className="font-bold not-italic text-[9px] block text-[var(--color-ink-mute)]">
+                  SPONSORSHIP QUOTE:
+                </span>
+                "{job.sponsorship_evidence}"
+              </div>
+            )}
+            {job.clearance_evidence && (
+              <div className="p-2 border border-dashed border-[var(--color-ink)]/60 bg-[var(--color-paper-2)]/30 text-[10px] italic leading-tight">
+                <span className="font-bold not-italic text-[9px] block text-[var(--color-ink-mute)]">
+                  CLEARANCE QUOTE:
+                </span>
+                "{job.clearance_evidence}"
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <Rule />
+
+      {/* Triage Actions */}
+      <div className="flex flex-col gap-2 pb-2">
         <span className="text-[11px] font-bold text-[var(--color-ink-mute)] uppercase tracking-wider">
           TRIAGE ACTIONS
         </span>
@@ -116,7 +235,7 @@ export function JobMetaPanel({
         <Button
           variant="ghost"
           onClick={() => onOpenUrl(job.url)}
-          className="w-full justify-between mt-2"
+          className="w-full justify-between mt-1"
           shortcut="↵"
         >
           OPEN IN BROWSER

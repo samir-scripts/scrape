@@ -155,31 +155,16 @@ async fn execute_worker(
 
                 for event in events {
                     if let WorkerEvent::Job {
-                        source_id,
-                        external_id,
-                        title,
-                        company,
+                        ref title,
+                        ref location,
                         role_type,
-                        location,
-                        url,
-                        date_posted,
+                        ..
                     } = event
                     {
-                        if matcher.matches(&title, &location, role_type) {
+                        if matcher.matches(title, location, role_type) {
                             matched_count += 1;
                             total_emitted += 1;
-
-                            let job_event = WorkerEvent::Job {
-                                source_id,
-                                external_id,
-                                title,
-                                company,
-                                role_type,
-                                location,
-                                url,
-                                date_posted,
-                            };
-                            emit_event(&job_event)?;
+                            emit_event(&event)?;
 
                             if dry_run && total_emitted >= max_dry_run_jobs {
                                 break;

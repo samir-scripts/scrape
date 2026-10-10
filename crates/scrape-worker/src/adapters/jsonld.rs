@@ -1,5 +1,9 @@
 use crate::client::{ClientError, HttpClient};
-use scrape_core::{RoleType, WorkerEvent, WorkerSource};
+use scrape_core::enrich::{
+    classify_clearance, classify_sponsorship, extract_experience, location as loc_enrich,
+    to_plain_text, Salary,
+};
+use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource, WorkplaceType};
 use scraper::{Html, Selector};
 use serde_json::Value;
 use std::collections::HashSet;
@@ -141,6 +145,73 @@ fn parse_job_posting_map(
         .and_then(|dp| dp.as_str())
         .map(|s| s.to_string());
 
+    let desc_text = map
+        .get("description")
+        .and_then(|v| v.as_str())
+        .map(|html| to_plain_text(html, 32768));
+
+    let salary = extract_salary(map, desc_text.as_deref());
+    let locations = loc_enrich::parse(&location);
+
+    let is_telecommute = map
+        .get("jobLocationType")
+        .and_then(|v| v.as_str())
+        .map(|s| s.eq_ignore_ascii_case("TELECOMMUTE"))
+        .unwrap_or(false);
+
+    let workplace_type = if is_telecommute
+        || locations.iter().any(|l| l.is_remote)
+        || location.to_lowercase().contains("remote")
+    {
+        WorkplaceType::Remote
+    } else if location.to_lowercase().contains("hybrid") {
+        WorkplaceType::Hybrid
+    } else if !location.is_empty() {
+        WorkplaceType::Onsite
+    } else {
+        WorkplaceType::Unknown
+    };
+
+    let text_for_enrich = desc_text.as_deref().unwrap_or("");
+
+    // Clearance: check explicit requirement first
+    let clearance = if let Some(req) = map
+        .get("securityClearanceRequirement")
+        .and_then(|v| v.as_str())
+    {
+        let mut clr = classify_clearance(req);
+        if clr.value == TriState::Unknown && !text_for_enrich.is_empty() {
+            clr = classify_clearance(text_for_enrich);
+        }
+        Some(clr)
+    } else if !text_for_enrich.is_empty() {
+        Some(classify_clearance(text_for_enrich))
+    } else {
+        None
+    };
+
+    // Sponsorship: check explicit eligibility first
+    let sponsorship = if let Some(req) = map
+        .get("eligibilityToWorkRequirement")
+        .and_then(|v| v.as_str())
+    {
+        let mut spon = classify_sponsorship(req);
+        if spon.value == TriState::Unknown && !text_for_enrich.is_empty() {
+            spon = classify_sponsorship(text_for_enrich);
+        }
+        Some(spon)
+    } else if !text_for_enrich.is_empty() {
+        Some(classify_sponsorship(text_for_enrich))
+    } else {
+        None
+    };
+
+    let experience = Some(extract_experience(&title, text_for_enrich));
+    let is_new_grad = experience
+        .as_ref()
+        .map(|e| e.is_new_grad)
+        .unwrap_or(TriState::Unknown);
+
     Some(WorkerEvent::Job {
         source_id: source.id.clone(),
         external_id,
@@ -150,7 +221,51 @@ fn parse_job_posting_map(
         location,
         url: job_url,
         date_posted,
+        salary,
+        locations,
+        workplace_type,
+        sponsorship,
+        clearance,
+        experience,
+        is_new_grad,
+        description_text: desc_text,
     })
+}
+
+fn extract_salary(
+    map: &serde_json::Map<String, Value>,
+    desc_text: Option<&str>,
+) -> Option<Salary> {
+    if let Some(base_salary) = map.get("baseSalary") {
+        if let Some(s) = base_salary.as_str() {
+            if let Some(sal) = Salary::from_text(s) {
+                return Some(sal);
+            }
+        }
+        if let Some(sal_obj) = base_salary.as_object() {
+            let currency = sal_obj.get("currency").and_then(|v| v.as_str());
+            let value = sal_obj.get("value");
+            if let Some(val_num) = value.and_then(|v| v.as_f64()) {
+                return Salary::from_structured(
+                    Some(val_num),
+                    Some(val_num),
+                    currency,
+                    Some("year"),
+                    None,
+                );
+            }
+            if let Some(val_obj) = value.and_then(|v| v.as_object()) {
+                let min = val_obj.get("minValue").and_then(|v| v.as_f64());
+                let max = val_obj.get("maxValue").and_then(|v| v.as_f64());
+                let unit = val_obj.get("unitText").and_then(|v| v.as_str());
+                return Salary::from_structured(min, max, currency, unit, None);
+            }
+        }
+    }
+    if let Some(text) = desc_text {
+        return Salary::from_text(text);
+    }
+    None
 }
 
 fn extract_location(loc_val: Option<&Value>) -> String {

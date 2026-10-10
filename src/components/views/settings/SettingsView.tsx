@@ -3,6 +3,7 @@ import { useUIStore, type SettingsCategory } from "../../../lib/store";
 import { ScheduleSettings } from "./ScheduleSettings";
 import { SourcesSettings } from "./SourcesSettings";
 import { FiltersSettings } from "./FiltersSettings";
+import { LogsSettings } from "./LogsSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { SystemSettings } from "./SystemSettings";
 
@@ -14,7 +15,8 @@ interface SettingsViewProps {
 const CATEGORIES: { id: SettingsCategory; label: string; desc: string }[] = [
   { id: "schedule", label: "SCHEDULE", desc: "TIMERS & CRON" },
   { id: "sources", label: "SOURCES", desc: "TARGET BOARDS" },
-  { id: "filters", label: "FILTERS", desc: "KEYWORDS & LOCATIONS" },
+  { id: "filters", label: "SCRAPER", desc: "INGEST PRE-FILTERS" },
+  { id: "logs", label: "LOGS", desc: "EXECUTION AUDIT" },
   { id: "appearance", label: "APPEARANCE", desc: "THEMES & DITHER" },
   { id: "system", label: "SYSTEM", desc: "OS & EXPORTS" },
 ];
@@ -80,6 +82,7 @@ export function SettingsView({
             onUpdateSetting={onUpdateSetting}
           />
         )}
+        {settingsCategory === "logs" && <LogsSettings />}
         {settingsCategory === "appearance" && (
           <AppearanceSettings
             settings={settings}

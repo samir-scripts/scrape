@@ -25,6 +25,22 @@ pub async fn list_scrape_runs(
 }
 
 #[tauri::command]
+pub async fn get_scrape_run(
+    state: State<'_, AppState>,
+    run_id: String,
+) -> Result<ScrapeRun> {
+    RunsRepo::get(&state.db, &run_id).await
+}
+
+#[tauri::command]
+pub async fn get_scrape_logs(
+    state: State<'_, AppState>,
+    run_id: String,
+) -> Result<Vec<crate::db::runs::ScrapeLogEntry>> {
+    RunsRepo::get_logs(&state.db, &run_id).await
+}
+
+#[tauri::command]
 pub async fn validate_cron(
     state: State<'_, AppState>,
     expr: String,

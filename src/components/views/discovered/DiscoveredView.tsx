@@ -9,6 +9,7 @@ import { EmptyState } from "../../ui/EmptyState";
 import { JobDetail } from "./JobDetail";
 import { JobMetaPanel } from "./JobMetaPanel";
 import { useHotkeys } from "../../../hooks/useHotkeys";
+import { formatExperience, formatSalary } from "../../../lib/filter";
 
 interface DiscoveredViewProps {
   jobs: Job[];
@@ -129,6 +130,8 @@ export function DiscoveredView({
           <div className="flex flex-col w-full divide-y-0">
             {filteredJobs.map((job) => {
               const isSelected = job.id === selectedJobId;
+              const expText = formatExperience(job);
+              const salText = formatSalary(job);
 
               return (
                 <ListRow
@@ -136,7 +139,7 @@ export function DiscoveredView({
                   selected={isSelected}
                   onClick={() => setSelectedJobId(job.id)}
                 >
-                  <div className="flex flex-col gap-0.5 pr-1">
+                  <div className="flex flex-col gap-1 pr-1">
                     <div className="flex items-center justify-between gap-1">
                       <span className="font-bold truncate max-w-[190px]">
                         {job.title}
@@ -153,6 +156,40 @@ export function DiscoveredView({
                       <span className="truncate max-w-[100px] text-right">
                         {job.location || "REMOTE"}
                       </span>
+                    </div>
+
+                    {/* Enrichment Badges Row */}
+                    <div className="flex items-center flex-wrap gap-1 text-[9px] font-mono mt-0.5">
+                      {salText !== "—" && (
+                        <span className="px-1 border border-current opacity-90 font-bold">
+                          {salText}
+                        </span>
+                      )}
+                      {expText !== "—" && (
+                        <span className="px-1 border border-current opacity-80">
+                          {expText}
+                        </span>
+                      )}
+                      {job.is_new_grad === "yes" && (
+                        <span className="px-1 bg-[var(--color-ink)] text-[var(--color-paper)] font-bold">
+                          GRAD
+                        </span>
+                      )}
+                      {job.sponsorship === "yes" && (
+                        <span className="px-1 border border-current opacity-70">
+                          SPON:Y
+                        </span>
+                      )}
+                      {job.sponsorship === "no" && (
+                        <span className="px-1 border border-current opacity-50">
+                          SPON:N
+                        </span>
+                      )}
+                      {job.clearance === "yes" && (
+                        <span className="px-1 border border-[var(--color-cherry)] text-[var(--color-cherry)] font-bold">
+                          CLR:REQ
+                        </span>
+                      )}
                     </div>
                   </div>
                 </ListRow>

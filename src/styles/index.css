@@ -57,6 +57,37 @@
     outline: 1px solid var(--color-ink);
     outline-offset: 2px;
   }
+
+  /* Brutalist Theme-Synchronized Scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-ink-mute) var(--color-paper-2);
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--color-paper-2);
+    border-left: 1px solid var(--color-ink);
+    border-top: 1px solid var(--color-ink);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-ink-mute);
+    border-radius: 0 !important;
+    border: 1px solid var(--color-ink);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-ink);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: var(--color-paper-2);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

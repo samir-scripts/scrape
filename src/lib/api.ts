@@ -9,9 +9,11 @@ import type { ScrapeRun } from "../bindings/ScrapeRun";
 import type { CronValidationResult } from "../bindings/CronValidationResult";
 import type { SchedulerStatus } from "../bindings/SchedulerStatus";
 import type { WorkerEvent } from "../bindings/WorkerEvent";
-
-import type { JobSort } from "../bindings/JobSort";
-import type { RoleType } from "../bindings/RoleType";
+import type { JobFilter } from "../bindings/JobFilter";
+import type { FilterImpactPreview } from "../bindings/FilterImpactPreview";
+import type { LocationOptions } from "../bindings/LocationOptions";
+import type { ParsedLocation } from "../bindings/ParsedLocation";
+import type { ScrapeLogEntry } from "../bindings/ScrapeLogEntry";
 
 export interface DetectResult {
   kind: string;
@@ -19,15 +21,7 @@ export interface DetectResult {
   name: string;
 }
 
-export interface ApiJobFilter {
-  statuses?: JobStatus[] | null;
-  role_types?: RoleType[] | null;
-  search?: string | null;
-  source_id?: string | null;
-  sort?: JobSort | null;
-  limit?: number | bigint | null;
-  offset?: number | bigint | null;
-}
+export type ApiJobFilter = Partial<JobFilter>;
 
 export const DEFAULT_SETTINGS: Settings = {
   system_locale: "en-US",
@@ -184,4 +178,33 @@ export const api = {
 
   testSource: (id: string) =>
     invoke<WorkerEvent[]>("test_source", { id }),
+
+  getJobLocations: (jobId: string): Promise<ParsedLocation[]> => {
+    if (!isTauri()) return Promise.resolve([]);
+    return invoke<ParsedLocation[]>("get_job_locations", { jobId });
+  },
+
+  reclassifyJobs: (): Promise<number> => {
+    if (!isTauri()) return Promise.resolve(0);
+    return invoke<number>("reclassify_jobs");
+  },
+
+  previewFilterImpact: (spec: JobFilter): Promise<FilterImpactPreview> => {
+    if (!isTauri()) return Promise.resolve({ kept: BigInt(0), total: BigInt(0) });
+    return invoke<FilterImpactPreview>("preview_filter_impact", { spec });
+  },
+
+  listLocationOptions: (): Promise<LocationOptions> => {
+    if (!isTauri()) return Promise.resolve({ countries: [], regions: [] });
+    return invoke<LocationOptions>("list_location_options");
+  },
+
+  getScrapeRun: (runId: string): Promise<ScrapeRun> => {
+    return invoke<ScrapeRun>("get_scrape_run", { runId });
+  },
+
+  getScrapeLogs: (runId: string): Promise<ScrapeLogEntry[]> => {
+    if (!isTauri()) return Promise.resolve([]);
+    return invoke<ScrapeLogEntry[]>("get_scrape_logs", { runId });
+  },
 };

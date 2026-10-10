@@ -98,10 +98,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::jobs::list_jobs,
             commands::jobs::get_job,
+            commands::jobs::get_job_locations,
             commands::jobs::update_job_status,
             commands::jobs::bulk_update_job_status,
             commands::jobs::update_job_notes,
             commands::jobs::get_job_status_events,
+            commands::jobs::reclassify_jobs,
+            commands::jobs::preview_filter_impact,
+            commands::jobs::list_location_options,
             commands::settings::get_settings,
             commands::settings::update_setting,
             commands::sources::list_sources,
@@ -111,6 +115,8 @@ pub fn run() {
             commands::sources::delete_source,
             commands::scrape::run_scrape_now,
             commands::scrape::list_scrape_runs,
+            commands::scrape::get_scrape_run,
+            commands::scrape::get_scrape_logs,
             commands::scrape::validate_cron,
             commands::scrape::get_scheduler_status,
             commands::scrape::set_scheduler_paused,
@@ -131,6 +137,16 @@ mod bindings_test {
         scrape_core::RoleType::export().unwrap();
         scrape_core::JobStatus::export().unwrap();
         scrape_core::SourceKind::export().unwrap();
+        scrape_core::TriState::export().unwrap();
+        scrape_core::WorkplaceType::export().unwrap();
+        scrape_core::SalaryInterval::export().unwrap();
+        scrape_core::SalarySource::export().unwrap();
+        scrape_core::ClearanceLevel::export().unwrap();
+        scrape_core::enrich::Salary::export().unwrap();
+        scrape_core::enrich::ParsedLocation::export().unwrap();
+        scrape_core::enrich::ClassifiedSponsorship::export().unwrap();
+        scrape_core::enrich::ClassifiedClearance::export().unwrap();
+        scrape_core::enrich::ExperienceClassification::export().unwrap();
         scrape_core::WorkerConfig::export().unwrap();
         scrape_core::WorkerSource::export().unwrap();
         scrape_core::WorkerFilters::export().unwrap();
@@ -144,6 +160,8 @@ mod bindings_test {
         db::jobs::JobStatusEvent::export().unwrap();
         db::jobs::ScrapedJob::export().unwrap();
         db::jobs::UpsertStats::export().unwrap();
+        db::jobs::FilterImpactPreview::export().unwrap();
+        db::jobs::LocationOptions::export().unwrap();
         db::settings::Settings::export().unwrap();
         db::sources::Source::export().unwrap();
         db::sources::CreateSourceInput::export().unwrap();
@@ -151,6 +169,8 @@ mod bindings_test {
         db::runs::ScrapeRun::export().unwrap();
         db::runs::TriggerType::export().unwrap();
         db::runs::RunStatus::export().unwrap();
+        db::runs::LogLevel::export().unwrap();
+        db::runs::ScrapeLogEntry::export().unwrap();
         services::scheduler::CronValidationResult::export().unwrap();
         services::scheduler::SchedulerStatus::export().unwrap();
     }

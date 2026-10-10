@@ -2,10 +2,13 @@ import { create } from "zustand";
 import type { JobStatus } from "../bindings/JobStatus";
 import type { NavTabId } from "./constants";
 
+import type { JobFilter } from "../bindings/JobFilter";
+
 export type SettingsCategory =
   | "schedule"
   | "sources"
   | "filters"
+  | "logs"
   | "appearance"
   | "system";
 
@@ -13,6 +16,24 @@ export interface UndoItem {
   jobId: string;
   previousStatus: JobStatus;
 }
+
+export const DEFAULT_FILTER_SPEC: Partial<JobFilter> = {
+  salary_min: null,
+  salary_max: null,
+  salary_currency: null,
+  salary_include_unknown: true,
+  experience_min: null,
+  experience_max: null,
+  experience_include_unknown: true,
+  new_grad: "any",
+  sponsorship: null,
+  clearance: null,
+  countries: null,
+  regions: null,
+  remote: null,
+  location_include_unknown: true,
+  role_types: null,
+};
 
 interface UIState {
   // Navigation
@@ -29,6 +50,14 @@ interface UIState {
   selectedJobIds: string[];
   toggleJobSelection: (id: string) => void;
   clearJobSelection: () => void;
+
+  // Filter Panel state
+  isFilterPanelOpen: boolean;
+  setFilterPanelOpen: (open: boolean) => void;
+  toggleFilterPanel: () => void;
+  filterSpec: Partial<JobFilter>;
+  setFilterSpec: (updater: Partial<JobFilter> | ((prev: Partial<JobFilter>) => Partial<JobFilter>)) => void;
+  resetFilterSpec: () => void;
 
   // Tracked View state
   trackedViewMode: "kanban" | "list";
@@ -99,6 +128,21 @@ export const useUIStore = create<UIState>((set, get) => ({
       };
     }),
   clearJobSelection: () => set({ selectedJobIds: [] }),
+
+  isFilterPanelOpen: false,
+  setFilterPanelOpen: (open) => set({ isFilterPanelOpen: open }),
+  toggleFilterPanel: () =>
+    set((state) => ({ isFilterPanelOpen: !state.isFilterPanelOpen })),
+
+  filterSpec: { ...DEFAULT_FILTER_SPEC },
+  setFilterSpec: (updater) =>
+    set((state) => ({
+      filterSpec:
+        typeof updater === "function"
+          ? updater(state.filterSpec)
+          : { ...state.filterSpec, ...updater },
+    })),
+  resetFilterSpec: () => set({ filterSpec: { ...DEFAULT_FILTER_SPEC } }),
 
   trackedViewMode:
     (getStored("scrape:trackedMode") as "kanban" | "list") || "kanban",

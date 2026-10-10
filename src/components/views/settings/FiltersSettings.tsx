@@ -5,6 +5,7 @@ import { Input } from "../../ui/Input";
 import { Rule } from "../../ui/Rule";
 import { Toggle } from "../../ui/Toggle";
 import { ROLE_TYPES, ROLE_TYPE_LABELS } from "../../../lib/constants";
+import { api } from "../../../lib/api";
 
 interface FiltersSettingsProps {
   settings: Settings;
@@ -251,6 +252,43 @@ export function FiltersSettings({
               </span>
             ))
           )}
+        </div>
+      </div>
+
+      <Rule />
+
+      {/* Advanced Ingest Controls & Reclassification */}
+      <div className="flex flex-col gap-3 font-mono text-xs">
+        <label className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
+          ADVANCED INGESTION & DATA RECLASSIFICATION
+        </label>
+        <p className="text-[11px] text-[var(--color-ink-mute)]">
+          RE-EXTRACT ENRICHED SALARY, VISA SPONSORSHIP, SECURITY CLEARANCE, AND YOE ON ALL HISTORIC DATABASE POSTINGS.
+        </p>
+
+        <div className="p-4 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 flex items-center justify-between">
+          <div>
+            <div className="font-bold text-xs uppercase text-[var(--color-ink)]">
+              RECLASSIFY HISTORIC POSTINGS
+            </div>
+            <div className="text-[10px] text-[var(--color-ink-mute)] uppercase">
+              RUNS NATURAL LANGUAGE ENRICHMENT ENGINE ON EXISTING DESCRIPTIONS
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const count = await api.reclassifyJobs();
+                alert(`Reclassified ${count} job postings.`);
+              } catch (e) {
+                console.error("Reclassify failed:", e);
+              }
+            }}
+            className="px-3 py-1.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-90 font-mono text-xs font-bold uppercase cursor-pointer"
+          >
+            [RECLASSIFY JOBS]
+          </button>
         </div>
       </div>
     </div>
