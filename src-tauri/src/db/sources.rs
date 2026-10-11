@@ -204,7 +204,10 @@ impl SourcesRepo {
             _ => "global".to_string(),
         };
         let cadence_cron = input.cadence_cron.or(existing.cadence_cron);
-        let retention_days = input.retention_days.unwrap_or(existing.retention_days).max(0);
+        let retention_days = input
+            .retention_days
+            .unwrap_or(existing.retention_days)
+            .max(0);
         let retention_policy = input.retention_policy.unwrap_or(existing.retention_policy);
         let filters = input.filters.unwrap_or(existing.filters);
         let filters_str = serde_json::to_string(&filters)?;
@@ -326,7 +329,7 @@ impl SourcesRepo {
     pub fn default_sample_workflow_input() -> CreateSourceInput {
         CreateSourceInput {
             kind: SourceKind::Greenhouse,
-            name: "Cloudflare — Software Engineering Internships".to_string(),
+            name: "Cloudflare — Software Engineering & Internships".to_string(),
             identifier: "cloudflare".to_string(),
             config: Some(serde_json::json!({
                 "url": "https://boards.greenhouse.io/cloudflare"
@@ -337,10 +340,10 @@ impl SourcesRepo {
             retention_days: Some(45),
             retention_policy: Some("untracked_only".to_string()),
             filters: Some(serde_json::json!({
-                "role_types": ["internship"],
-                "include_keywords": ["Software", "Engineer", "Intern"],
-                "exclude_keywords": ["MBA", "Sales", "Marketing"],
-                "locations": ["Remote", "San Francisco, CA", "Austin, TX"]
+                "role_types": ["internship", "full_time"],
+                "include_keywords": ["Software", "Engineer", "Developer", "Systems", "Intern"],
+                "exclude_keywords": ["Recruiter", "Account Executive", "Sales Representative"],
+                "locations": ["Remote", "San Francisco", "Austin"]
             })),
         }
     }
@@ -356,7 +359,10 @@ impl SourcesRepo {
 
         let input = Self::default_sample_workflow_input();
         let source = Self::create(pool, input).await?;
-        tracing::info!("Seeded sample Software Engineering Internships workflow: {}", source.id);
+        tracing::info!(
+            "Seeded sample Software Engineering Internships workflow: {}",
+            source.id
+        );
         Ok(Some(source))
     }
 }
@@ -440,7 +446,10 @@ mod tests {
         let after_run = SourcesRepo::get(&pool, &created.id).await.unwrap();
         assert_eq!(after_run.last_status, Some("ok".to_string()));
         assert_eq!(after_run.last_run_duration_ms, Some(1420));
-        assert_eq!(after_run.next_run_at.as_deref(), Some("2026-10-10T12:00:00Z"));
+        assert_eq!(
+            after_run.next_run_at.as_deref(),
+            Some("2026-10-10T12:00:00Z")
+        );
         assert!(after_run.last_run_at.is_some());
 
         SourcesRepo::delete(&pool, &created.id).await.unwrap();
@@ -457,7 +466,10 @@ mod tests {
             .unwrap();
         assert!(seeded.is_some());
         let sample = seeded.unwrap();
-        assert_eq!(sample.name, "Cloudflare — Software Engineering Internships");
+        assert_eq!(
+            sample.name,
+            "Cloudflare — Software Engineering & Internships"
+        );
         assert_eq!(sample.identifier, "cloudflare");
         assert_eq!(sample.kind, SourceKind::Greenhouse);
         assert_eq!(sample.cadence, SourceCadence::Daily);

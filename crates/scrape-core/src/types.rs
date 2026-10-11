@@ -182,7 +182,10 @@ mod tests {
             serde_json::to_string(&SourceCadence::Every12h).unwrap(),
             "\"every_12h\""
         );
-        assert_eq!(SourceCadence::Every12h.default_cron(), Some("0 0 */12 * * *"));
+        assert_eq!(
+            SourceCadence::Every12h.default_cron(),
+            Some("0 0 */12 * * *")
+        );
         assert_eq!(SourceCadence::Global.default_cron(), None);
     }
 }

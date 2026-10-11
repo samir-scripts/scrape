@@ -101,7 +101,10 @@ mod tests {
         assert_eq!(RoleType::from_hint("Temporary"), Some(RoleType::Contract));
         assert_eq!(RoleType::from_hint("Contractor"), Some(RoleType::Contract));
         assert_eq!(RoleType::from_hint("Seasonal"), Some(RoleType::Seasonal));
-        assert_eq!(RoleType::from_hint("Seasonal / Temp"), Some(RoleType::Seasonal));
+        assert_eq!(
+            RoleType::from_hint("Seasonal / Temp"),
+            Some(RoleType::Seasonal)
+        );
         assert_eq!(RoleType::from_hint("Hybrid"), None);
         assert_eq!(RoleType::from_hint(""), None);
     }

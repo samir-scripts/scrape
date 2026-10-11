@@ -295,7 +295,8 @@ fn test_jsonld_enrichment() {
         config: serde_json::Value::Null,
     };
 
-    let events = extract_job_postings_from_html(html, "https://defense.example.com/careers", &source);
+    let events =
+        extract_job_postings_from_html(html, "https://defense.example.com/careers", &source);
     assert_eq!(events.len(), 1);
 
     if let WorkerEvent::Job {
@@ -325,10 +326,14 @@ fn test_jsonld_enrichment() {
         assert_eq!(locations[0].city.as_deref(), Some("Washington"));
         assert_eq!(locations[0].region_code.as_deref(), Some("US-DC"));
 
-        let clr = clearance.as_ref().expect("Clearance requirement should be extracted");
+        let clr = clearance
+            .as_ref()
+            .expect("Clearance requirement should be extracted");
         assert_eq!(clr.value, TriState::Yes);
 
-        let spon = sponsorship.as_ref().expect("Sponsorship requirement should be extracted");
+        let spon = sponsorship
+            .as_ref()
+            .expect("Sponsorship requirement should be extracted");
         assert_eq!(spon.value, TriState::No);
 
         let exp = experience.as_ref().expect("Experience should be extracted");
@@ -339,4 +344,3 @@ fn test_jsonld_enrichment() {
         panic!("Expected WorkerEvent::Job");
     }
 }
-

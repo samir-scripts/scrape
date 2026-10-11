@@ -28,6 +28,46 @@ impl Drop for RunLockGuard {
     }
 }
 
+pub fn resolve_worker_filters(
+    source_filters: &serde_json::Value,
+    global_filters: WorkerFilters,
+) -> WorkerFilters {
+    if !source_filters.is_object() {
+        return global_filters;
+    }
+
+    let include_keywords = source_filters
+        .get("include_keywords")
+        .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
+        .filter(|v| !v.is_empty())
+        .unwrap_or(global_filters.include_keywords);
+
+    let exclude_keywords = source_filters
+        .get("exclude_keywords")
+        .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
+        .filter(|v| !v.is_empty())
+        .unwrap_or(global_filters.exclude_keywords);
+
+    let locations = source_filters
+        .get("locations")
+        .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
+        .filter(|v| !v.is_empty())
+        .unwrap_or(global_filters.locations);
+
+    let role_types = source_filters
+        .get("role_types")
+        .and_then(|v| serde_json::from_value::<Vec<RoleType>>(v.clone()).ok())
+        .filter(|v| !v.is_empty())
+        .unwrap_or(global_filters.role_types);
+
+    WorkerFilters {
+        include_keywords,
+        exclude_keywords,
+        locations,
+        role_types,
+    }
+}
+
 #[derive(Clone)]
 pub struct ScrapeRunner {
     pool: SqlitePool,
@@ -304,12 +344,33 @@ impl ScrapeRunner {
         }
     }
 
-    pub async fn trigger_single_source(&self, app: &AppHandle, source_id: &str) -> Result<ScrapeRun> {
+    pub async fn trigger_single_source(
+        &self,
+        app: &AppHandle,
+        source_id: &str,
+    ) -> Result<ScrapeRun> {
         let _guard = self.try_acquire_lock()?;
 
         let source = SourcesRepo::get(&self.pool, source_id).await?;
-        let run = RunsRepo::start_with_source(&self.pool, TriggerType::SingleSource, Some(source_id)).await?;
-        let _ = app.emit("scrape://started", serde_json::json!({ "run_id": run.id, "source_id": source_id }));
+        let run =
+            RunsRepo::start_with_source(&self.pool, TriggerType::SingleSource, Some(source_id))
+                .await?;
+        let _ = app.emit(
+            "scrape://started",
+            serde_json::json!({ "run_id": run.id, "source_id": source_id }),
+        );
+
+        self.log_event(
+            app,
+            &run.id,
+            LogLevel::Info,
+            Some(source_id),
+            &format!(
+                "Scrape workflow initiated: {} ({:?})",
+                source.name, source.kind
+            ),
+        )
+        .await;
 
         let include_keywords: Vec<String> =
             SettingsRepo::get_value(&self.pool, "filters.include_keywords")
@@ -334,6 +395,14 @@ impl ScrapeRunner {
             .flatten()
             .unwrap_or_default();
 
+        let global_filters = WorkerFilters {
+            include_keywords,
+            exclude_keywords,
+            locations,
+            role_types,
+        };
+        let filters = resolve_worker_filters(&source.filters, global_filters);
+
         let config = WorkerConfig {
             version: PROTOCOL_VERSION,
             sources: vec![WorkerSource {
@@ -343,12 +412,7 @@ impl ScrapeRunner {
                 identifier: source.identifier.clone(),
                 config: source.config.clone(),
             }],
-            filters: WorkerFilters {
-                include_keywords,
-                exclude_keywords,
-                locations,
-                role_types,
-            },
+            filters,
             limits: WorkerLimits::default(),
         };
 
@@ -404,6 +468,23 @@ impl ScrapeRunner {
                     err_msg.as_deref(),
                 )
                 .await?;
+
+                self.log_event(
+                    app,
+                    &run.id,
+                    LogLevel::Info,
+                    Some(source_id),
+                    &format!(
+                        "Workflow run completed in {:.2}s with status: {}",
+                        duration_ms as f64 / 1000.0,
+                        if final_status == RunStatus::Success {
+                            "SUCCESS"
+                        } else {
+                            "FAILED"
+                        }
+                    ),
+                )
+                .await;
 
                 if final_status == RunStatus::Failed {
                     let _ = crate::db::notifications::NotificationRepo::create(
@@ -483,18 +564,14 @@ impl ScrapeRunner {
                     next_run.as_deref(),
                 )
                 .await;
-                let finished = RunsRepo::finish(
-                    &self.pool,
-                    &run.id,
-                    RunStatus::Failed,
-                    0,
-                    0,
-                    Some(err_str),
-                )
-                .await?;
+                let finished =
+                    RunsRepo::finish(&self.pool, &run.id, RunStatus::Failed, 0, 0, Some(err_str))
+                        .await?;
                 let _ = app.emit("scrape://finished", &finished);
                 let _ = app.emit("sources://changed", ());
-                Err(AppError::Internal("Single source scrape timed out".to_string()))
+                Err(AppError::Internal(
+                    "Single source scrape timed out".to_string(),
+                ))
             }
         }
     }
@@ -513,12 +590,21 @@ impl ScrapeRunner {
             .spawn()
             .map_err(|e| AppError::Internal(format!("Failed to spawn sidecar: {}", e)))?;
 
+        let single_source_id = if config.sources.len() == 1 {
+            Some(config.sources[0].id.as_str())
+        } else {
+            None
+        };
+
         self.log_event(
             app,
             run_id,
             LogLevel::Info,
-            None,
-            &format!("Sidecar worker spawned. Scraping {} sources.", config.sources.len()),
+            single_source_id,
+            &format!(
+                "Sidecar worker spawned. Scraping {} sources.",
+                config.sources.len()
+            ),
         )
         .await;
 
@@ -572,38 +658,50 @@ impl ScrapeRunner {
                                         Some(location)
                                     };
 
-                                    let (salary_min, salary_max, salary_currency, salary_interval, salary_raw, salary_source) =
-                                        if let Some(s) = salary {
-                                            (
-                                                s.min,
-                                                s.max,
-                                                Some(s.currency),
-                                                Some(s.interval),
-                                                Some(s.raw),
-                                                Some(s.source),
-                                            )
-                                        } else {
-                                            (None, None, None, None, None, None)
-                                        };
-
-                                    let (sponsorship_val, sponsorship_evidence) = if let Some(sp) = sponsorship {
-                                        (sp.value, sp.evidence)
+                                    let (
+                                        salary_min,
+                                        salary_max,
+                                        salary_currency,
+                                        salary_interval,
+                                        salary_raw,
+                                        salary_source,
+                                    ) = if let Some(s) = salary {
+                                        (
+                                            s.min,
+                                            s.max,
+                                            Some(s.currency),
+                                            Some(s.interval),
+                                            Some(s.raw),
+                                            Some(s.source),
+                                        )
                                     } else {
-                                        (TriState::Unknown, None)
+                                        (None, None, None, None, None, None)
                                     };
 
-                                    let (clearance_val, clearance_level, clearance_evidence) = if let Some(cl) = clearance {
-                                        (cl.value, cl.level, cl.evidence)
-                                    } else {
-                                        (TriState::Unknown, None, None)
-                                    };
-
-                                    let (experience_min, experience_max, experience_raw, experience_evidence) =
-                                        if let Some(exp) = experience {
-                                            (exp.min_years, exp.max_years, exp.raw, exp.evidence)
+                                    let (sponsorship_val, sponsorship_evidence) =
+                                        if let Some(sp) = sponsorship {
+                                            (sp.value, sp.evidence)
                                         } else {
-                                            (None, None, None, None)
+                                            (TriState::Unknown, None)
                                         };
+
+                                    let (clearance_val, clearance_level, clearance_evidence) =
+                                        if let Some(cl) = clearance {
+                                            (cl.value, cl.level, cl.evidence)
+                                        } else {
+                                            (TriState::Unknown, None, None)
+                                        };
+
+                                    let (
+                                        experience_min,
+                                        experience_max,
+                                        experience_raw,
+                                        experience_evidence,
+                                    ) = if let Some(exp) = experience {
+                                        (exp.min_years, exp.max_years, exp.raw, exp.evidence)
+                                    } else {
+                                        (None, None, None, None)
+                                    };
 
                                     job_buffer.push(ScrapedJob {
                                         dedupe_key,
@@ -656,14 +754,31 @@ impl ScrapeRunner {
                                     source_statuses
                                         .entry(source_id.clone())
                                         .or_insert_with(|| ("success".to_string(), None));
-                                    self.log_event(
-                                        app,
-                                        run_id,
-                                        LogLevel::Info,
-                                        Some(&source_id),
-                                        &format!("Fetched {} postings, matched {}", fetched, matched),
-                                    )
-                                    .await;
+                                    if fetched > 0 && matched == 0 {
+                                        self.log_event(
+                                            app,
+                                            run_id,
+                                            LogLevel::Warn,
+                                            Some(&source_id),
+                                            &format!(
+                                                "Fetched {} postings from remote board, but 0 matched workflow filters (check keywords, role types, and locations)",
+                                                fetched
+                                            ),
+                                        )
+                                        .await;
+                                    } else {
+                                        self.log_event(
+                                            app,
+                                            run_id,
+                                            LogLevel::Info,
+                                            Some(&source_id),
+                                            &format!(
+                                                "Fetched {} postings, matched {} jobs",
+                                                fetched, matched
+                                            ),
+                                        )
+                                        .await;
+                                    }
                                     let _ = app.emit(
                                         "scrape://progress",
                                         serde_json::json!({
@@ -710,14 +825,8 @@ impl ScrapeRunner {
                     if !line.is_empty() {
                         tracing::info!("[sidecar] {}", line);
                         if line.contains("ERROR") || line.contains("error") {
-                            self.log_event(
-                                app,
-                                run_id,
-                                LogLevel::Warn,
-                                None,
-                                line,
-                            )
-                            .await;
+                            self.log_event(app, run_id, LogLevel::Warn, single_source_id, line)
+                                .await;
                         }
                     }
                 }
@@ -728,7 +837,7 @@ impl ScrapeRunner {
                         app,
                         run_id,
                         LogLevel::Error,
-                        None,
+                        single_source_id,
                         &format!("Sidecar process error: {}", err),
                     )
                     .await;
@@ -742,7 +851,7 @@ impl ScrapeRunner {
                                 app,
                                 run_id,
                                 LogLevel::Error,
-                                None,
+                                single_source_id,
                                 &format!("Sidecar exited with non-zero status code: {}", code),
                             )
                             .await;
@@ -759,18 +868,18 @@ impl ScrapeRunner {
             if code != 0 {
                 let fatal_msg = format!("Sidecar process exited with non-zero exit code: {}", code);
                 for src in &config.sources {
-                    source_statuses.entry(src.id.clone()).or_insert_with(|| {
-                        ("error".to_string(), Some(fatal_msg.clone()))
-                    });
+                    source_statuses
+                        .entry(src.id.clone())
+                        .or_insert_with(|| ("error".to_string(), Some(fatal_msg.clone())));
                 }
             }
         }
         if let Some(ref err) = sidecar_err {
             let fatal_msg = format!("Sidecar process error: {}", err);
             for src in &config.sources {
-                source_statuses.entry(src.id.clone()).or_insert_with(|| {
-                    ("error".to_string(), Some(fatal_msg.clone()))
-                });
+                source_statuses
+                    .entry(src.id.clone())
+                    .or_insert_with(|| ("error".to_string(), Some(fatal_msg.clone())));
             }
         }
 
@@ -779,7 +888,10 @@ impl ScrapeRunner {
             source_statuses.entry(src.id.clone()).or_insert_with(|| {
                 (
                     "error".to_string(),
-                    Some("Worker terminated unexpectedly without reporting status for this workflow".to_string()),
+                    Some(
+                        "Worker terminated unexpectedly without reporting status for this workflow"
+                            .to_string(),
+                    ),
                 )
             });
         }
@@ -790,6 +902,18 @@ impl ScrapeRunner {
             total_new += stats.inserted as i64;
             job_buffer.clear();
         }
+
+        self.log_event(
+            app,
+            run_id,
+            LogLevel::Info,
+            single_source_id,
+            &format!(
+                "Execution finished: committed {} new jobs (found {} total)",
+                total_new, total_found
+            ),
+        )
+        .await;
 
         // Task 5 in DAG: Post-run retention pruning for participating sources
         for src_id in source_statuses.keys() {
@@ -846,5 +970,51 @@ mod tests {
 
         let third = runner.try_acquire_lock();
         assert!(third.is_ok());
+    }
+
+    #[test]
+    fn test_resolve_worker_filters_with_overrides() {
+        let global = WorkerFilters {
+            include_keywords: vec!["GlobalKW".to_string()],
+            exclude_keywords: vec!["GlobalExclude".to_string()],
+            locations: vec!["GlobalLoc".to_string()],
+            role_types: vec![RoleType::FullTime],
+        };
+
+        let source_filters = serde_json::json!({
+            "include_keywords": ["CustomKW", "Rust"],
+            "role_types": ["internship"]
+        });
+
+        let resolved = resolve_worker_filters(&source_filters, global);
+        assert_eq!(
+            resolved.include_keywords,
+            vec!["CustomKW".to_string(), "Rust".to_string()]
+        );
+        assert_eq!(resolved.role_types, vec![RoleType::Internship]);
+        // Fallback to global for omitted fields
+        assert_eq!(resolved.exclude_keywords, vec!["GlobalExclude".to_string()]);
+        assert_eq!(resolved.locations, vec!["GlobalLoc".to_string()]);
+    }
+
+    #[test]
+    fn test_resolve_worker_filters_fallback() {
+        let global = WorkerFilters {
+            include_keywords: vec!["Engineer".to_string()],
+            exclude_keywords: vec!["Manager".to_string()],
+            locations: vec!["Remote".to_string()],
+            role_types: vec![RoleType::FullTime],
+        };
+
+        let null_filters = serde_json::Value::Null;
+        let resolved = resolve_worker_filters(&null_filters, global.clone());
+        assert_eq!(resolved.include_keywords, global.include_keywords);
+        assert_eq!(resolved.exclude_keywords, global.exclude_keywords);
+        assert_eq!(resolved.locations, global.locations);
+        assert_eq!(resolved.role_types, global.role_types);
+
+        let empty_filters = serde_json::json!({});
+        let resolved_empty = resolve_worker_filters(&empty_filters, global.clone());
+        assert_eq!(resolved_empty.include_keywords, global.include_keywords);
     }
 }

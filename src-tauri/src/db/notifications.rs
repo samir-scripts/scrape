@@ -27,15 +27,24 @@ impl NotificationKind {
         }
     }
 
-    pub fn from_str(s: &str) -> Self {
-        match s {
+    pub fn from_db_str(s: &str) -> Self {
+        use std::str::FromStr;
+        Self::from_str(s).unwrap_or(Self::System)
+    }
+}
+
+impl std::str::FromStr for NotificationKind {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(match s {
             "update" => Self::Update,
             "news" => Self::News,
             "system" => Self::System,
             "scraper" => Self::Scraper,
             "error" => Self::Error,
             _ => Self::System,
-        }
+        })
     }
 }
 
@@ -65,7 +74,10 @@ pub struct CreateNotificationInput {
 pub struct NotificationRepo;
 
 impl NotificationRepo {
-    pub async fn create(pool: &SqlitePool, input: CreateNotificationInput) -> Result<AppNotification> {
+    pub async fn create(
+        pool: &SqlitePool,
+        input: CreateNotificationInput,
+    ) -> Result<AppNotification> {
         let id = Uuid::new_v4().to_string();
         let now = now_iso();
         let kind_str = input.kind.as_str();
@@ -118,7 +130,7 @@ impl NotificationRepo {
                 let read_int: i64 = r.get("read");
                 AppNotification {
                     id: r.get("id"),
-                    kind: NotificationKind::from_str(&kind_str),
+                    kind: NotificationKind::from_db_str(&kind_str),
                     title: r.get("title"),
                     message: r.get("message"),
                     action_label: r.get("action_label"),
@@ -218,6 +230,9 @@ mod tests {
 
         assert_eq!(n_err.kind, NotificationKind::Error);
         assert_eq!(n_err.kind.as_str(), "error");
-        assert_eq!(NotificationKind::from_str("error"), NotificationKind::Error);
+        assert_eq!(
+            NotificationKind::from_db_str("error"),
+            NotificationKind::Error
+        );
     }
 }

@@ -26,7 +26,11 @@ pub fn to_plain_text(html: &str, max_bytes: usize) -> String {
                     in_script_or_style = true;
                 } else if lower == "/script" || lower == "/style" {
                     in_script_or_style = false;
-                } else if matches!(lower.as_str(), "br" | "br/" | "/p" | "/li" | "/div" | "/h1" | "/h2" | "/h3") && !out.ends_with('\n') {
+                } else if matches!(
+                    lower.as_str(),
+                    "br" | "br/" | "/p" | "/li" | "/div" | "/h1" | "/h2" | "/h3"
+                ) && !out.ends_with('\n')
+                {
                     out.push('\n');
                 }
             } else {

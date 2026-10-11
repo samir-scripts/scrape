@@ -1,4 +1,6 @@
-use crate::db::notifications::{AppNotification, CreateNotificationInput, NotificationKind, NotificationRepo};
+use crate::db::notifications::{
+    AppNotification, CreateNotificationInput, NotificationKind, NotificationRepo,
+};
 use crate::db::settings::SettingsRepo;
 use crate::error::Result;
 use crate::state::AppState;
@@ -84,9 +86,9 @@ pub async fn check_app_update(
                     CreateNotificationInput {
                         kind: NotificationKind::Update,
                         title: format!("SCRAPE UPDATE AVAILABLE (v{})", latest_version),
-                        message: release_notes
-                            .clone()
-                            .unwrap_or_else(|| format!("Version v{} is available for download.", latest_version)),
+                        message: release_notes.clone().unwrap_or_else(|| {
+                            format!("Version v{} is available for download.", latest_version)
+                        }),
                         action_label: Some("INSTALL UPDATE".to_string()),
                         action_payload: Some(latest_version.clone()),
                     },
@@ -136,7 +138,11 @@ pub async fn check_app_update(
 pub async fn install_app_update(app: AppHandle) -> Result<()> {
     match app.updater() {
         Ok(updater) => {
-            if let Some(update) = updater.check().await.map_err(|e| crate::error::AppError::Internal(e.to_string()))? {
+            if let Some(update) = updater
+                .check()
+                .await
+                .map_err(|e| crate::error::AppError::Internal(e.to_string()))?
+            {
                 update
                     .download_and_install(|_chunk, _total| {}, || {})
                     .await

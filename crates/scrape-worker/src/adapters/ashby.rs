@@ -137,7 +137,9 @@ fn parse_ashby_jobs(
                 None
             }
         } else {
-            job.description_html.as_ref().map(|dh| to_plain_text(dh, 32768))
+            job.description_html
+                .as_ref()
+                .map(|dh| to_plain_text(dh, 32768))
         };
 
         // Compensation
@@ -297,7 +299,9 @@ mod tests {
             assert_eq!(locations[0].city.as_deref(), Some("San Francisco"));
             assert_eq!(locations[1].city.as_deref(), Some("Seattle"));
 
-            let spon = sponsorship.as_ref().expect("Sponsorship should be extracted");
+            let spon = sponsorship
+                .as_ref()
+                .expect("Sponsorship should be extracted");
             assert_eq!(spon.value, TriState::No);
 
             let clr = clearance.as_ref().expect("Clearance should be extracted");

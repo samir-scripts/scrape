@@ -21,9 +21,8 @@ static TITLE_NEW_GRAD_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(?:new\s+grad(?:uate)?|university\s+grad(?:uate)?|campus\s+hire|early\s+career|class\s+of\s+202[4-7]|intern\s+to\s+hire|rotational\s+program|entry\s+level|associate\s+engineer|associate\s+developer)\b").unwrap()
 });
 
-static TITLE_SENIOR_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\b(?:senior|sr\.?|lead)\b").unwrap()
-});
+static TITLE_SENIOR_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\b(?:senior|sr\.?|lead)\b").unwrap());
 
 static TITLE_STAFF_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(?:staff|principal|distinguished|architect|director)\b").unwrap()
@@ -52,7 +51,10 @@ static YOE_EXACT_RE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 static YOE_ZERO_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\b(?:0|no)\s*(?:years?|yrs?)(?:\s+of)?\s*experience\b|\bno\s+experience\s+required\b").unwrap()
+    Regex::new(
+        r"(?i)\b(?:0|no)\s*(?:years?|yrs?)(?:\s+of)?\s*experience\b|\bno\s+experience\s+required\b",
+    )
+    .unwrap()
 });
 
 // False positive guards in sentence context
@@ -97,7 +99,9 @@ pub fn extract_experience(title: &str, text: &str) -> ExperienceClassification {
         }
 
         // Check for false positive rejectors on the sentence
-        if FALSE_POSITIVE_COMPANY_RE.is_match(sentence) || FALSE_POSITIVE_ROADMAP_RE.is_match(sentence) {
+        if FALSE_POSITIVE_COMPANY_RE.is_match(sentence)
+            || FALSE_POSITIVE_ROADMAP_RE.is_match(sentence)
+        {
             continue;
         }
 
@@ -433,7 +437,8 @@ mod tests {
 
     #[test]
     fn test_multi_tier_lowest_threshold() {
-        let text = "Requires a BS with 5+ years of experience, or an MS with 3+ years of experience.";
+        let text =
+            "Requires a BS with 5+ years of experience, or an MS with 3+ years of experience.";
         let res = extract_experience("Backend Engineer", text);
         // Should pick the lowest threshold (3)
         assert_eq!(res.min_years, Some(3));

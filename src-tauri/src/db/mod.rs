@@ -85,18 +85,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_all_migrations_apply_cleanly_up_to_version_7() {
-        let pool = init_memory_db().await.expect("Failed to initialize in-memory DB");
-
-        let count_row = sqlx::query("SELECT COUNT(*) as cnt, MAX(version) as max_v FROM _sqlx_migrations")
-            .fetch_one(&pool)
+        let pool = init_memory_db()
             .await
-            .expect("Failed to query _sqlx_migrations");
+            .expect("Failed to initialize in-memory DB");
+
+        let count_row =
+            sqlx::query("SELECT COUNT(*) as cnt, MAX(version) as max_v FROM _sqlx_migrations")
+                .fetch_one(&pool)
+                .await
+                .expect("Failed to query _sqlx_migrations");
 
         let cnt: i64 = count_row.get("cnt");
         let max_v: i64 = count_row.get("max_v");
 
         assert_eq!(cnt, 7, "Expected exactly 7 migrations to be applied");
-        assert_eq!(max_v, 7, "Expected migration version 7 to be highest version");
+        assert_eq!(
+            max_v, 7,
+            "Expected migration version 7 to be highest version"
+        );
 
         // Verify that app_notifications allows 'error'
         let insert_res = sqlx::query(
@@ -105,12 +111,17 @@ mod tests {
         .execute(&pool)
         .await;
 
-        assert!(insert_res.is_ok(), "Inserting 'error' notification kind must succeed on migrated DB");
+        assert!(
+            insert_res.is_ok(),
+            "Inserting 'error' notification kind must succeed on migrated DB"
+        );
     }
 
     #[tokio::test]
     async fn test_migration_recovery_on_version_mismatch() {
-        let pool = init_memory_db().await.expect("Failed to initialize in-memory DB");
+        let pool = init_memory_db()
+            .await
+            .expect("Failed to initialize in-memory DB");
 
         // Corrupt the checksum for migration version 6 to simulate a version mismatch
         let corrupt_checksum = vec![0xDE, 0xAD, 0xBE, 0xEF];
@@ -122,7 +133,10 @@ mod tests {
 
         // Verifying standard migrator throws VersionMismatch(6)
         let raw_migrator = sqlx::migrate!("./migrations");
-        let err = raw_migrator.run(&pool).await.expect_err("Raw migrator should have failed with VersionMismatch");
+        let err = raw_migrator
+            .run(&pool)
+            .await
+            .expect_err("Raw migrator should have failed with VersionMismatch");
         match err {
             sqlx::migrate::MigrateError::VersionMismatch(v) => {
                 assert_eq!(v, 6, "Expected version mismatch on version 6");
@@ -132,10 +146,17 @@ mod tests {
 
         // Now run our resilient run_migrations healing function
         let heal_res = run_migrations(&pool).await;
-        assert!(heal_res.is_ok(), "run_migrations must heal the version mismatch and succeed: {:?}", heal_res);
+        assert!(
+            heal_res.is_ok(),
+            "run_migrations must heal the version mismatch and succeed: {:?}",
+            heal_res
+        );
 
         // Verify that subsequent migration execution succeeds directly
         let second_run = raw_migrator.run(&pool).await;
-        assert!(second_run.is_ok(), "Subsequent migration run after healing must succeed");
+        assert!(
+            second_run.is_ok(),
+            "Subsequent migration run after healing must succeed"
+        );
     }
 }

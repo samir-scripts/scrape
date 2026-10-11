@@ -10,6 +10,17 @@ interface ScrapeProgressPayload {
   error?: string;
 }
 
+interface ScrapeStartedPayload {
+  run_id?: string;
+  source_id?: string;
+}
+
+interface ScrapeSourceFinishedPayload {
+  source_id?: string;
+  run?: unknown;
+  duration_ms?: number;
+}
+
 export async function setupAppEventListeners(
   queryClient: QueryClient
 ): Promise<() => void> {
@@ -32,8 +43,11 @@ export async function setupAppEventListeners(
   });
   unlisteners.push(unlistenSettings);
 
-  const unlistenStarted = await listen("scrape://started", () => {
+  const unlistenStarted = await listen<ScrapeStartedPayload>("scrape://started", (event) => {
     useUIStore.getState().setScanning(true, "STARTING SCRAPE RUN...");
+    if (event.payload?.source_id) {
+      useUIStore.getState().setSourceRunning(event.payload.source_id, true);
+    }
     queryClient.invalidateQueries({ queryKey: ["scrape_runs"] });
     queryClient.invalidateQueries({ queryKey: ["scheduler_status"] });
   });
@@ -48,6 +62,7 @@ export async function setupAppEventListeners(
           .getState()
           .setScanning(true, `ERROR ON SOURCE: ${p.error.slice(0, 30)}`);
       } else if (p.source_id) {
+        useUIStore.getState().setSourceRunning(p.source_id, true);
         useUIStore
           .getState()
           .setScanning(
@@ -59,8 +74,21 @@ export async function setupAppEventListeners(
   );
   unlisteners.push(unlistenProgress);
 
+  const unlistenSourceFinished = await listen<ScrapeSourceFinishedPayload>(
+    "scrape://source_finished",
+    (event) => {
+      if (event.payload?.source_id) {
+        useUIStore.getState().setSourceRunning(event.payload.source_id, false);
+      }
+      queryClient.invalidateQueries({ queryKey: ["sources"] });
+      queryClient.invalidateQueries({ queryKey: ["scrape_runs"] });
+    }
+  );
+  unlisteners.push(unlistenSourceFinished);
+
   const unlistenFinished = await listen("scrape://finished", () => {
     useUIStore.getState().setScanning(false, "");
+    useUIStore.getState().clearRunningSources();
     queryClient.invalidateQueries({ queryKey: ["scrape_runs"] });
     queryClient.invalidateQueries({ queryKey: ["sources"] });
     queryClient.invalidateQueries({ queryKey: ["jobs"] });

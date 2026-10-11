@@ -81,7 +81,10 @@ fn parse_greenhouse_jobs(
             WorkplaceType::Unknown
         };
 
-        let desc_text = job.content.as_deref().map(|html| to_plain_text(html, 32768));
+        let desc_text = job
+            .content
+            .as_deref()
+            .map(|html| to_plain_text(html, 32768));
 
         let mut salary = None;
         if let Some(ranges) = &job.pay_input_ranges {
@@ -209,12 +212,16 @@ mod tests {
             ..
         } = &events[0]
         {
-            let sal = salary.as_ref().expect("Salary should be extracted from pay_input_ranges");
+            let sal = salary
+                .as_ref()
+                .expect("Salary should be extracted from pay_input_ranges");
             assert_eq!(sal.min, Some(160000));
             assert_eq!(sal.max, Some(210000));
             assert_eq!(sal.currency, "USD");
 
-            let spon = sponsorship.as_ref().expect("Sponsorship should be extracted");
+            let spon = sponsorship
+                .as_ref()
+                .expect("Sponsorship should be extracted");
             assert_eq!(spon.value, TriState::No);
 
             let clr = clearance.as_ref().expect("Clearance should be extracted");
