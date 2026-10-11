@@ -6,8 +6,6 @@ describe("useUIStore state transitions", () => {
     // Reset store state between tests
     useUIStore.setState({
       view: "discovered",
-      roleTypeFilter: null,
-      searchQuery: "",
       selectedJobId: null,
       selectedJobIds: [],
       trackedViewMode: "kanban",
@@ -18,6 +16,7 @@ describe("useUIStore state transitions", () => {
       scanStatusText: "",
       undoStack: [],
     });
+    useUIStore.getState().resetFilterSpec();
   });
 
   it("handles view navigation and localStorage persistence", () => {
@@ -38,17 +37,14 @@ describe("useUIStore state transitions", () => {
   });
 
   it("manages single selection and filter changes", () => {
-    const { setSelectedJobId, setRoleTypeFilter, setSearchQuery } =
-      useUIStore.getState();
+    const { setSelectedJobId, setFilterSpec } = useUIStore.getState();
 
     setSelectedJobId("job-123");
     expect(useUIStore.getState().selectedJobId).toBe("job-123");
 
-    setRoleTypeFilter("full_time");
-    expect(useUIStore.getState().roleTypeFilter).toBe("full_time");
-
-    setSearchQuery("Staff Engineer");
-    expect(useUIStore.getState().searchQuery).toBe("Staff Engineer");
+    setFilterSpec({ role_types: ["full_time"], search: "Staff Engineer" });
+    expect(useUIStore.getState().filterSpec.role_types).toEqual(["full_time"]);
+    expect(useUIStore.getState().filterSpec.search).toBe("Staff Engineer");
   });
 
   it("manages multi-selection and clearing", () => {

@@ -29,26 +29,12 @@ export function DiscoveredView({
   onToggleFavorite,
 }: DiscoveredViewProps) {
   const {
-    searchQuery,
+    filterSpec,
     selectedJobId,
     setSelectedJobId,
   } = useUIStore();
 
-  // Filter jobs based on search query
-  const filteredJobs = useMemo(() => {
-    return jobs.filter((j) => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesTitle = j.title.toLowerCase().includes(q);
-        const matchesCompany = j.company.toLowerCase().includes(q);
-        const matchesLocation = j.location?.toLowerCase().includes(q) ?? false;
-        if (!matchesTitle && !matchesCompany && !matchesLocation) {
-          return false;
-        }
-      }
-      return true;
-    });
-  }, [jobs, searchQuery]);
+  const filteredJobs = jobs;
 
   // Keep selection valid or pick the first job
   useEffect(() => {
@@ -123,7 +109,7 @@ export function DiscoveredView({
             <EmptyState
               title="NO POSTINGS FOUND"
               description={
-                searchQuery
+                filterSpec.search
                   ? "TRY CLEARING FILTERS OR SEARCH TERMS."
                   : "ALL DISCOVERED JOBS HAVE BEEN TRIAGED."
               }

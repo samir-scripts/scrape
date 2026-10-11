@@ -286,3 +286,78 @@ describe("Formatting Helpers", () => {
     expect(sel4).toBeNull();
   });
 });
+
+describe("Anchored Filter Dropdown Coordinate & Viewport Geometry", () => {
+  it("calculates anchored position directly below trigger button", async () => {
+    const { calculateFilterDropdownCoordinates } = await import(
+      "../components/filters/FilterPanel"
+    );
+
+    // Trigger button located at x: 140, y: 36, height: 28 (bottom: 64)
+    const triggerRect = {
+      top: 36,
+      bottom: 64,
+      left: 140,
+      right: 230,
+      width: 90,
+    };
+
+    const coords = calculateFilterDropdownCoordinates(
+      triggerRect,
+      1280,
+      800,
+      420,
+      4
+    );
+
+    // top = bottom + gap = 64 + 4 = 68
+    expect(coords.top).toBe(68);
+    // left aligns with triggerRect.left
+    expect(coords.left).toBe(140);
+    expect(coords.width).toBe(420);
+    // maxHeight = 800 - 68 - 16 = 716
+    expect(coords.maxHeight).toBe(716);
+  });
+
+  it("clamps left edge when button is near right viewport boundary", async () => {
+    const { calculateFilterDropdownCoordinates } = await import(
+      "../components/filters/FilterPanel"
+    );
+
+    // Button near right edge: left 950 on 1024px screen
+    // Panel width 420px. maxLeft = 1024 - 420 - 12 = 592
+    const triggerRect = {
+      top: 36,
+      bottom: 64,
+      left: 950,
+      right: 1010,
+      width: 60,
+    };
+
+    const coords = calculateFilterDropdownCoordinates(
+      triggerRect,
+      1024,
+      768,
+      420,
+      4
+    );
+
+    expect(coords.left).toBe(592);
+    // Dropdown right boundary: 592 + 420 = 1012 (12px padding from viewport edge)
+    expect(coords.left + coords.width).toBe(1012);
+  });
+
+  it("provides safe fallback geometry when trigger element is unmeasured", async () => {
+    const { calculateFilterDropdownCoordinates } = await import(
+      "../components/filters/FilterPanel"
+    );
+
+    const coords = calculateFilterDropdownCoordinates(null, 1024, 768);
+
+    expect(coords.top).toBe(48);
+    expect(coords.left).toBe(12);
+    expect(coords.width).toBe(420);
+    expect(coords.maxHeight).toBe(704);
+  });
+});
+

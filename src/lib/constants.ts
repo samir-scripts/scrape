@@ -97,3 +97,78 @@ export const NAV_TABS = [
 ] as const;
 
 export type NavTabId = (typeof NAV_TABS)[number]["id"];
+
+export type FontFamilyId =
+  | "default"
+  | "inter"
+  | "jetbrains"
+  | "geist"
+  | "fira_code"
+  | "ibm_plex";
+
+export interface FontFamilyOption {
+  id: FontFamilyId;
+  label: string;
+  name: string;
+  category: "readable" | "monospace";
+  description: string;
+  fontFamily: string;
+  previewText: string;
+}
+
+export const FONT_OPTIONS: FontFamilyOption[] = [
+  {
+    id: "default",
+    label: "DEFAULT",
+    name: "SF Mono / System",
+    category: "monospace",
+    description: "Classic NieR brutalist monospace typography.",
+    fontFamily: '"SF Mono", Menlo, Monaco, Consolas, monospace',
+    previewText: "STATUS: SCRAPED // 127.0.0.1 // [APPLY]",
+  },
+  {
+    id: "inter",
+    label: "INTER",
+    name: "Inter (Readable Sans)",
+    category: "readable",
+    description: "Highly legible sans-serif designed for supreme readability and zero eye fatigue.",
+    fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    previewText: "Senior Distributed Systems Engineer · Fully Remote",
+  },
+  {
+    id: "jetbrains",
+    label: "JETBRAINS MONO",
+    name: "JetBrains Mono",
+    category: "monospace",
+    description: "Developer favorite with open counters and distinct code glyphs.",
+    fontFamily: '"JetBrains Mono", "SF Mono", monospace',
+    previewText: "fn triage_postings(queue: &mut Vec<Job>) -> Result<()>",
+  },
+  {
+    id: "geist",
+    label: "GEIST MONO",
+    name: "Geist Mono",
+    category: "monospace",
+    description: "Modern minimalist developer typography by Vercel.",
+    fontFamily: '"Geist Mono", "SF Mono", monospace',
+    previewText: "export const RETENTION_TTL = 90_DAYS;",
+  },
+  {
+    id: "fira_code",
+    label: "FIRA CODE",
+    name: "Fira Code",
+    category: "monospace",
+    description: "Iconic programming font with high-clarity punctuation.",
+    fontFamily: '"Fira Code", Menlo, monospace',
+    previewText: "match status { JobStatus::Offer => 100% }",
+  },
+  {
+    id: "ibm_plex",
+    label: "IBM PLEX MONO",
+    name: "IBM Plex Mono",
+    category: "monospace",
+    description: "Engineered grotesque monospace blending mechanical rigor with human warmth.",
+    fontFamily: '"IBM Plex Mono", Menlo, monospace',
+    previewText: "SYSTEM_CADENCE: 0 0 9 * * 1-5 [ACTIVE]",
+  },
+];

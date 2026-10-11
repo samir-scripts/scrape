@@ -90,6 +90,8 @@ describe("Domain models & types", () => {
       system_date_format: "MM/DD/YYYY",
       ui_theme: "paper",
       ui_reduce_motion: false,
+      ui_tooltips_enabled: true,
+      ui_font_family: "default",
       scraper_enabled: true,
       scraper_cron: "0 0 */6 * * *",
       scraper_run_on_startup: false,
@@ -102,6 +104,8 @@ describe("Domain models & types", () => {
       app_launch_at_login: false,
     };
     expect(settings.ui_theme).toBe("paper");
+    expect(settings.ui_tooltips_enabled).toBe(true);
+    expect(settings.ui_font_family).toBe("default");
     expect(settings.scraper_enabled).toBe(true);
   });
 
@@ -110,6 +114,12 @@ describe("Domain models & types", () => {
 
     const updatedTheme = await api.updateSetting("ui.theme", "obsidian");
     expect(updatedTheme.ui_theme).toBe("obsidian");
+
+    const updatedTooltips = await api.updateSetting("ui.tooltips_enabled", false);
+    expect(updatedTooltips.ui_tooltips_enabled).toBe(false);
+
+    const updatedFont = await api.updateSetting("ui.font_family", "jetbrains");
+    expect(updatedFont.ui_font_family).toBe("jetbrains");
 
     const updatedTime = await api.updateSetting("system.time_format", "24h");
     expect(updatedTime.system_time_format).toBe("24h");

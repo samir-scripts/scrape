@@ -34,6 +34,8 @@ export const DEFAULT_SETTINGS: Settings = {
   system_date_format: "MM/DD/YYYY",
   ui_theme: "paper",
   ui_reduce_motion: false,
+  ui_tooltips_enabled: true,
+  ui_font_family: "default",
   scraper_enabled: true,
   scraper_cron: "0 0 */6 * * *",
   scraper_run_on_startup: false,

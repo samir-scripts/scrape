@@ -14,6 +14,8 @@ pub struct Settings {
     pub system_date_format: String,
     pub ui_theme: String,
     pub ui_reduce_motion: bool,
+    pub ui_tooltips_enabled: bool,
+    pub ui_font_family: String,
     pub scraper_enabled: bool,
     pub scraper_cron: String,
     pub scraper_run_on_startup: bool,
@@ -36,6 +38,8 @@ impl Default for Settings {
             system_date_format: "MM/DD/YYYY".to_string(),
             ui_theme: "paper".to_string(),
             ui_reduce_motion: false,
+            ui_tooltips_enabled: true,
+            ui_font_family: "default".to_string(),
             scraper_enabled: true,
             scraper_cron: "0 0 */6 * * *".to_string(),
             scraper_run_on_startup: false,
@@ -60,6 +64,8 @@ impl SettingsRepo {
     const KEY_DATE_FORMAT: &'static str = "system.date_format";
     const KEY_UI_THEME: &'static str = "ui.theme";
     const KEY_UI_REDUCE_MOTION: &'static str = "ui.reduce_motion";
+    const KEY_UI_TOOLTIPS_ENABLED: &'static str = "ui.tooltips_enabled";
+    const KEY_UI_FONT_FAMILY: &'static str = "ui.font_family";
     const KEY_SCRAPER_ENABLED: &'static str = "scraper.enabled";
     const KEY_SCRAPER_CRON: &'static str = "scraper.cron";
     const KEY_SCRAPER_RUN_ON_STARTUP: &'static str = "scraper.run_on_startup";
@@ -100,6 +106,14 @@ impl SettingsRepo {
             (
                 Self::KEY_UI_REDUCE_MOTION,
                 serde_json::to_string(&defaults.ui_reduce_motion)?,
+            ),
+            (
+                Self::KEY_UI_TOOLTIPS_ENABLED,
+                serde_json::to_string(&defaults.ui_tooltips_enabled)?,
+            ),
+            (
+                Self::KEY_UI_FONT_FAMILY,
+                serde_json::to_string(&defaults.ui_font_family)?,
             ),
             (
                 Self::KEY_SCRAPER_ENABLED,
@@ -199,60 +213,115 @@ impl SettingsRepo {
     }
 
     pub async fn get_all(pool: &SqlitePool) -> Result<Settings> {
+        use sqlx::Row;
+        let rows = sqlx::query("SELECT key, value FROM app_settings")
+            .fetch_all(pool)
+            .await?;
+
         let mut settings = Settings::default();
 
-        if let Some(v) = Self::get_value::<String>(pool, Self::KEY_LOCALE).await? {
-            settings.system_locale = v;
-        }
-        if let Some(v) = Self::get_value::<String>(pool, Self::KEY_TIMEZONE).await? {
-            settings.system_timezone = v;
-        }
-        if let Some(v) = Self::get_value::<String>(pool, Self::KEY_WEEK_START).await? {
-            settings.system_week_start = v;
-        }
-        if let Some(v) = Self::get_value::<String>(pool, Self::KEY_TIME_FORMAT).await? {
-            settings.system_time_format = v;
-        }
-        if let Some(v) = Self::get_value::<String>(pool, Self::KEY_DATE_FORMAT).await? {
-            settings.system_date_format = v;
-        }
-        if let Some(v) = Self::get_value::<String>(pool, Self::KEY_UI_THEME).await? {
-            settings.ui_theme = v;
-        }
-        if let Some(v) = Self::get_value::<bool>(pool, Self::KEY_UI_REDUCE_MOTION).await? {
-            settings.ui_reduce_motion = v;
-        }
-        if let Some(v) = Self::get_value::<bool>(pool, Self::KEY_SCRAPER_ENABLED).await? {
-            settings.scraper_enabled = v;
-        }
-        if let Some(v) = Self::get_value::<String>(pool, Self::KEY_SCRAPER_CRON).await? {
-            settings.scraper_cron = v;
-        }
-        if let Some(v) = Self::get_value::<bool>(pool, Self::KEY_SCRAPER_RUN_ON_STARTUP).await? {
-            settings.scraper_run_on_startup = v;
-        }
-        if let Some(v) = Self::get_value::<Vec<String>>(pool, Self::KEY_FILTERS_INCLUDE).await? {
-            settings.filters_include_keywords = v;
-        }
-        if let Some(v) = Self::get_value::<Vec<String>>(pool, Self::KEY_FILTERS_EXCLUDE).await? {
-            settings.filters_exclude_keywords = v;
-        }
-        if let Some(v) = Self::get_value::<Vec<String>>(pool, Self::KEY_FILTERS_LOCATIONS).await? {
-            settings.filters_locations = v;
-        }
-        if let Some(v) =
-            Self::get_value::<Vec<RoleType>>(pool, Self::KEY_FILTERS_ROLE_TYPES).await?
-        {
-            settings.filters_role_types = v;
-        }
-        if let Some(v) = Self::get_value::<bool>(pool, Self::KEY_NOTIFICATIONS_ENABLED).await? {
-            settings.notifications_enabled = v;
-        }
-        if let Some(v) = Self::get_value::<bool>(pool, Self::KEY_APP_START_HIDDEN).await? {
-            settings.app_start_hidden = v;
-        }
-        if let Some(v) = Self::get_value::<bool>(pool, Self::KEY_APP_LAUNCH_AT_LOGIN).await? {
-            settings.app_launch_at_login = v;
+        for r in rows {
+            let key: String = r.get("key");
+            let val_str: String = r.get("value");
+
+            match key.as_str() {
+                Self::KEY_LOCALE => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.system_locale = v;
+                    }
+                }
+                Self::KEY_TIMEZONE => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.system_timezone = v;
+                    }
+                }
+                Self::KEY_WEEK_START => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.system_week_start = v;
+                    }
+                }
+                Self::KEY_TIME_FORMAT => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.system_time_format = v;
+                    }
+                }
+                Self::KEY_DATE_FORMAT => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.system_date_format = v;
+                    }
+                }
+                Self::KEY_UI_THEME => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.ui_theme = v;
+                    }
+                }
+                Self::KEY_UI_REDUCE_MOTION => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.ui_reduce_motion = v;
+                    }
+                }
+                Self::KEY_UI_TOOLTIPS_ENABLED => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.ui_tooltips_enabled = v;
+                    }
+                }
+                Self::KEY_UI_FONT_FAMILY => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.ui_font_family = v;
+                    }
+                }
+                Self::KEY_SCRAPER_ENABLED => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.scraper_enabled = v;
+                    }
+                }
+                Self::KEY_SCRAPER_CRON => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.scraper_cron = v;
+                    }
+                }
+                Self::KEY_SCRAPER_RUN_ON_STARTUP => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.scraper_run_on_startup = v;
+                    }
+                }
+                Self::KEY_FILTERS_INCLUDE => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.filters_include_keywords = v;
+                    }
+                }
+                Self::KEY_FILTERS_EXCLUDE => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.filters_exclude_keywords = v;
+                    }
+                }
+                Self::KEY_FILTERS_LOCATIONS => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.filters_locations = v;
+                    }
+                }
+                Self::KEY_FILTERS_ROLE_TYPES => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.filters_role_types = v;
+                    }
+                }
+                Self::KEY_NOTIFICATIONS_ENABLED => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.notifications_enabled = v;
+                    }
+                }
+                Self::KEY_APP_START_HIDDEN => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.app_start_hidden = v;
+                    }
+                }
+                Self::KEY_APP_LAUNCH_AT_LOGIN => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.app_launch_at_login = v;
+                    }
+                }
+                _ => {}
+            }
         }
 
         Ok(settings)
@@ -271,6 +340,8 @@ impl SettingsRepo {
             Self::KEY_DATE_FORMAT,
             Self::KEY_UI_THEME,
             Self::KEY_UI_REDUCE_MOTION,
+            Self::KEY_UI_TOOLTIPS_ENABLED,
+            Self::KEY_UI_FONT_FAMILY,
             Self::KEY_SCRAPER_ENABLED,
             Self::KEY_SCRAPER_CRON,
             Self::KEY_SCRAPER_RUN_ON_STARTUP,
@@ -317,6 +388,8 @@ mod tests {
         assert_eq!(fetched.system_locale, "fr-FR");
         assert_eq!(fetched.scraper_cron, "0 0 12 * * *");
         assert_eq!(fetched.ui_theme, "paper");
+        assert_eq!(fetched.ui_tooltips_enabled, true);
+        assert_eq!(fetched.ui_font_family, "default");
         assert_eq!(fetched.system_time_format, "12h");
         assert_eq!(fetched.system_date_format, "MM/DD/YYYY");
 
@@ -348,6 +421,18 @@ mod tests {
                 .unwrap();
 
         assert_eq!(updated.ui_theme, "obsidian");
+
+        let updated_tooltips =
+            SettingsRepo::update_setting(&pool, "ui.tooltips_enabled", serde_json::json!(false))
+                .await
+                .unwrap();
+        assert_eq!(updated_tooltips.ui_tooltips_enabled, false);
+
+        let updated_font =
+            SettingsRepo::update_setting(&pool, "ui.font_family", serde_json::json!("jetbrains"))
+                .await
+                .unwrap();
+        assert_eq!(updated_font.ui_font_family, "jetbrains");
 
         let updated_time =
             SettingsRepo::update_setting(&pool, "system.time_format", serde_json::json!("24h"))

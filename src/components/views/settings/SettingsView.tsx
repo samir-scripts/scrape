@@ -2,6 +2,7 @@ import type { Settings } from "../../../bindings/Settings";
 import { useUIStore, type SettingsCategory } from "../../../lib/store";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { SystemSettings } from "./SystemSettings";
+import { Tooltip } from "../../ui/Tooltip";
 
 interface SettingsViewProps {
   settings: Settings;
@@ -12,6 +13,11 @@ const CATEGORIES: { id: SettingsCategory; label: string }[] = [
   { id: "appearance", label: "APPEARANCE" },
   { id: "system", label: "SYSTEM" },
 ];
+
+const CATEGORY_TOOLTIPS: Record<SettingsCategory, string> = {
+  appearance: "Theme, motion, dither patterns, and interface tooltips",
+  system: "Locale, timezone, time formats, and data export",
+};
 
 export function SettingsView({
   settings,
@@ -34,22 +40,28 @@ export function SettingsView({
             const isActive = settingsCategory === cat.id;
 
             return (
-              <button
+              <Tooltip
                 key={cat.id}
-                onClick={() => setSettingsCategory(cat.id)}
-                className={`px-4 py-2.5 flex items-center justify-between text-xs font-mono uppercase tracking-wider cursor-pointer border-b border-[var(--color-ink)]/20 transition-none ${
-                  isActive
-                    ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold"
-                    : "text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-                }`}
+                content={CATEGORY_TOOLTIPS[cat.id]}
+                position="bottom"
+                className="w-full block"
               >
-                <span>{cat.label}</span>
-                {isActive && (
-                  <span className="text-[10px] text-[var(--color-paper)]">
-                    ▸
-                  </span>
-                )}
-              </button>
+                <button
+                  onClick={() => setSettingsCategory(cat.id)}
+                  className={`w-full px-4 py-2.5 flex items-center justify-between text-xs font-mono uppercase tracking-wider cursor-pointer border-b border-[var(--color-ink)]/20 transition-none ${
+                    isActive
+                      ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold"
+                      : "text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
+                  }`}
+                >
+                  <span>{cat.label}</span>
+                  {isActive && (
+                    <span className="text-[10px] text-[var(--color-paper)]">
+                      ▸
+                    </span>
+                  )}
+                </button>
+              </Tooltip>
             );
           })}
         </nav>

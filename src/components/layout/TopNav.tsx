@@ -1,11 +1,20 @@
 import { useUIStore } from "../../lib/store";
 import { NAV_TABS, type NavTabId } from "../../lib/constants";
+import { Tooltip } from "../ui/Tooltip";
 
 interface TopNavProps {
   discoveredCount?: number;
   trackedCount?: number;
   nextRunText?: string;
 }
+
+const TAB_TOOLTIPS: Record<NavTabId, string> = {
+  discovered: "Unprocessed postings intake queue",
+  tracked: "Application pipeline & Kanban board",
+  metrics: "Analytics, conversions, and salary benchmarks",
+  scraper: "Autonomous workflows, runners, and telemetry",
+  settings: "System preferences, appearance, and global options",
+};
 
 export function TopNav({
   discoveredCount = 0,
@@ -30,17 +39,23 @@ export function TopNav({
               }
 
               return (
-                <button
+                <Tooltip
                   key={tab.id}
-                  onClick={() => setView(tab.id as NavTabId)}
-                  className={`px-3 my-1.5 flex items-center justify-center font-mono text-xs font-bold tracking-wider transition-none cursor-pointer border ${
-                    isActive
-                      ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
-                      : "bg-transparent text-[var(--color-ink-mute)] border-transparent hover:text-[var(--color-ink)] hover:border-[var(--color-ink)]"
-                  }`}
+                  content={TAB_TOOLTIPS[tab.id as NavTabId]}
+                  position="bottom"
+                  className="flex items-stretch"
                 >
-                  {label}
-                </button>
+                  <button
+                    onClick={() => setView(tab.id as NavTabId)}
+                    className={`px-3 my-1.5 flex items-center justify-center font-mono text-xs font-bold tracking-wider transition-none cursor-pointer border ${
+                      isActive
+                        ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
+                        : "bg-transparent text-[var(--color-ink-mute)] border-transparent hover:text-[var(--color-ink)] hover:border-[var(--color-ink)]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                </Tooltip>
               );
             })}
           </nav>

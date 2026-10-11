@@ -1,5 +1,6 @@
 import type { JobFilter } from "../../bindings/JobFilter";
 import { ROLE_TYPE_LABELS } from "../../lib/constants";
+import { toHourlyRate } from "../../lib/salary";
 
 export interface FilterChipsProps {
   filter: Partial<JobFilter>;
@@ -10,16 +11,50 @@ export interface FilterChipsProps {
 export function FilterChips({ filter, onUpdate, onClearAll }: FilterChipsProps) {
   const chips: { id: string; label: string; onRemove: () => void }[] = [];
 
-  // Salary
-  if (filter.salary_min != null || filter.salary_max != null) {
-    const minText = filter.salary_min != null ? `$${(filter.salary_min / 1000).toFixed(0)}K` : "$0";
-    const maxText = filter.salary_max != null ? `$${(filter.salary_max / 1000).toFixed(0)}K` : "500K+";
+  // Contains (Keywords / Text)
+  if (filter.search && filter.search.trim()) {
     chips.push({
-      id: "salary",
-      label: `SALARY: ${minText} - ${maxText}`,
-      onRemove: () =>
-        onUpdate((prev) => ({ ...prev, salary_min: null, salary_max: null })),
+      id: "search",
+      label: `CONTAINS: "${filter.search.trim().toUpperCase()}"`,
+      onRemove: () => onUpdate((prev) => ({ ...prev, search: null })),
     });
+  }
+
+  // Salary / Compensation
+  if (filter.salary_min != null || filter.salary_max != null || filter.salary_interval) {
+    if (filter.salary_interval === "hour") {
+      const minHr = filter.salary_min != null
+        ? `$${toHourlyRate(filter.salary_min)}`
+        : "$0";
+      const maxHr = filter.salary_max != null
+        ? `$${toHourlyRate(filter.salary_max)}`
+        : "250+";
+      chips.push({
+        id: "salary",
+        label: `RATE: ${minHr} - ${maxHr}/HR`,
+        onRemove: () =>
+          onUpdate((prev) => ({
+            ...prev,
+            salary_min: null,
+            salary_max: null,
+            salary_interval: null,
+          })),
+      });
+    } else if (filter.salary_min != null || filter.salary_max != null) {
+      const minText = filter.salary_min != null ? `$${(filter.salary_min / 1000).toFixed(0)}K` : "$0";
+      const maxText = filter.salary_max != null ? `$${(filter.salary_max / 1000).toFixed(0)}K` : "500K+";
+      chips.push({
+        id: "salary",
+        label: `SALARY: ${minText} - ${maxText}`,
+        onRemove: () =>
+          onUpdate((prev) => ({
+            ...prev,
+            salary_min: null,
+            salary_max: null,
+            salary_interval: null,
+          })),
+      });
+    }
   }
 
   // Experience (YOE)

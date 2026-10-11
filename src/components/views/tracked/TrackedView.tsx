@@ -37,25 +37,10 @@ export function TrackedView({
     setSelectedJobId,
     drawerJobId,
     setDrawerJobId,
-    searchQuery,
   } = useUIStore();
 
   const preferredRowRef = useRef<number>(0);
-
-  const filteredJobs = useMemo(() => {
-    return jobs.filter((j) => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesTitle = j.title.toLowerCase().includes(q);
-        const matchesCompany = j.company.toLowerCase().includes(q);
-        const matchesLocation = j.location?.toLowerCase().includes(q) ?? false;
-        if (!matchesTitle && !matchesCompany && !matchesLocation) {
-          return false;
-        }
-      }
-      return true;
-    });
-  }, [jobs, searchQuery]);
+  const filteredJobs = jobs;
 
   // Keep selection valid within TrackedView or pick the first tracked job
   useEffect(() => {

@@ -107,6 +107,7 @@ pub struct JobFilter {
     pub salary_max: Option<i64>,
     pub salary_currency: Option<String>,
     pub salary_include_unknown: Option<bool>,
+    pub salary_interval: Option<SalaryInterval>,
 
     // Experience bounds
     #[ts(type = "number | null")]
@@ -439,9 +440,9 @@ impl JobsRepo {
             conditions.push("favorited = 1".to_string());
         }
 
-        // Search term
+        // Search term (searches title, company, location, and description_text)
         if filter.search.is_some() {
-            conditions.push("(title LIKE ? OR company LIKE ? OR location LIKE ?)".to_string());
+            conditions.push("(title LIKE ? OR company LIKE ? OR location LIKE ? OR description_text LIKE ?)".to_string());
         }
 
         // Salary range overlap: [lo, hi] overlaps if salary_max >= lo AND salary_min <= hi
@@ -481,6 +482,15 @@ impl JobsRepo {
                     ));
                 }
             }
+        }
+
+        // Salary interval (e.g. "hour" or "year")
+        if let Some(interval) = &filter.salary_interval {
+            let interval_str = match serde_json::to_value(interval)? {
+                serde_json::Value::String(s) => s,
+                _ => unreachable!(),
+            };
+            conditions.push(format!("salary_interval = '{}'", interval_str));
         }
 
         // Experience (YOE) bounds: [min_yoe, max_yoe]
@@ -655,6 +665,7 @@ impl JobsRepo {
             count_query = count_query
                 .bind(term.clone())
                 .bind(term.clone())
+                .bind(term.clone())
                 .bind(term);
         }
 
@@ -699,6 +710,7 @@ impl JobsRepo {
         if let Some(search) = &filter.search {
             let term = format!("%{}%", search.trim());
             data_query = data_query
+                .bind(term.clone())
                 .bind(term.clone())
                 .bind(term.clone())
                 .bind(term);

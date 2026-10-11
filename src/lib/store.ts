@@ -21,10 +21,12 @@ export interface UndoItem {
 }
 
 export const DEFAULT_FILTER_SPEC: Partial<JobFilter> = {
+  search: null,
   favorited_only: null,
   salary_min: null,
   salary_max: null,
   salary_currency: null,
+  salary_interval: null,
   salary_include_unknown: true,
   experience_min: null,
   experience_max: null,
@@ -45,10 +47,6 @@ interface UIState {
   setView: (view: NavTabId) => void;
 
   // Discovered View state
-  roleTypeFilter: string | null;
-  setRoleTypeFilter: (filter: string | null) => void;
-  searchQuery: string;
-  setSearchQuery: (query: string) => void;
   selectedJobId: string | null;
   setSelectedJobId: (id: string | null) => void;
   selectedJobIds: string[];
@@ -78,6 +76,10 @@ interface UIState {
   // Settings View state
   settingsCategory: SettingsCategory;
   setSettingsCategory: (cat: SettingsCategory) => void;
+
+  // Global Tooltips Visibility
+  tooltipsEnabled: boolean;
+  setTooltipsEnabled: (enabled: boolean) => void;
 
   // Global Scrape Status
   isScanning: boolean;
@@ -117,12 +119,6 @@ export const useUIStore = create<UIState>((set, get) => ({
     setStored("scrape:view", view);
     set({ view });
   },
-
-  roleTypeFilter: null,
-  setRoleTypeFilter: (roleTypeFilter) => set({ roleTypeFilter }),
-
-  searchQuery: "",
-  setSearchQuery: (searchQuery) => set({ searchQuery }),
 
   selectedJobId: null,
   setSelectedJobId: (selectedJobId) => set({ selectedJobId }),
@@ -183,6 +179,12 @@ export const useUIStore = create<UIState>((set, get) => ({
   setSettingsCategory: (settingsCategory) => {
     setStored("scrape:settingsCategory", settingsCategory);
     set({ settingsCategory });
+  },
+
+  tooltipsEnabled: getStored("scrape:tooltipsEnabled") !== "false",
+  setTooltipsEnabled: (tooltipsEnabled) => {
+    setStored("scrape:tooltipsEnabled", String(tooltipsEnabled));
+    set({ tooltipsEnabled });
   },
 
   isScanning: false,

@@ -2,14 +2,13 @@ import { useUIStore } from "../../lib/store";
 import { KeyHint } from "../ui/KeyHint";
 import { FilterChips } from "../filters/FilterChips";
 import { countActiveFilters } from "../../lib/filter";
+import { Tooltip } from "../ui/Tooltip";
 
 export function SubNav() {
   const {
     view,
     trackedViewMode,
     setTrackedViewMode,
-    searchQuery,
-    setSearchQuery,
     filterSpec,
     setFilterSpec,
     resetFilterSpec,
@@ -28,69 +27,77 @@ export function SubNav() {
 
           {view === "tracked" && (
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => setTrackedViewMode("kanban")}
-                className={`px-2.5 py-0.5 uppercase tracking-wider text-xs cursor-pointer border ${
-                  trackedViewMode === "kanban"
-                    ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold border-[var(--color-ink)]"
-                    : "text-[var(--color-ink-mute)] border-transparent hover:text-[var(--color-ink)]"
-                }`}
-              >
-                [■] KANBAN
-              </button>
-              <button
-                onClick={() => setTrackedViewMode("list")}
-                className={`px-2.5 py-0.5 uppercase tracking-wider text-xs cursor-pointer border ${
-                  trackedViewMode === "list"
-                    ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold border-[var(--color-ink)]"
-                    : "text-[var(--color-ink-mute)] border-transparent hover:text-[var(--color-ink)]"
-                }`}
-              >
-                [≡] LIST
-              </button>
+              <Tooltip content="Switch to pipeline Kanban board view" position="bottom">
+                <button
+                  onClick={() => setTrackedViewMode("kanban")}
+                  className={`px-2.5 py-0.5 uppercase tracking-wider text-xs cursor-pointer border ${
+                    trackedViewMode === "kanban"
+                      ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold border-[var(--color-ink)]"
+                      : "text-[var(--color-ink-mute)] border-transparent hover:text-[var(--color-ink)]"
+                  }`}
+                >
+                  [■] KANBAN
+                </button>
+              </Tooltip>
+              <Tooltip content="Switch to structured application table view" position="bottom">
+                <button
+                  onClick={() => setTrackedViewMode("list")}
+                  className={`px-2.5 py-0.5 uppercase tracking-wider text-xs cursor-pointer border ${
+                    trackedViewMode === "list"
+                      ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold border-[var(--color-ink)]"
+                      : "text-[var(--color-ink-mute)] border-transparent hover:text-[var(--color-ink)]"
+                  }`}
+                >
+                  [≡] LIST
+                </button>
+              </Tooltip>
             </div>
           )}
 
-          {/* Filter Drawer Toggle Button */}
+          {/* Filter Dropdown Toggle Button */}
           {showFilters && (
-            <button
-              onClick={toggleFilterPanel}
-              className={`flex items-center gap-1.5 px-2.5 py-0.5 border text-xs font-mono font-bold uppercase tracking-wider cursor-pointer ${
-                isFilterPanelOpen || activeCount > 0
-                  ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
-                  : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-              }`}
-            >
-              <span>FILTERS {activeCount > 0 ? `(${activeCount})` : ""}</span>
-              <KeyHint
-                keys="F"
-                className={`text-[9px] ${
+            <Tooltip content="Toggle query-level criteria dropdown [F]" position="bottom">
+              <button
+                id="subnav-filters-trigger"
+                onClick={toggleFilterPanel}
+                className={`flex items-center gap-1.5 px-2.5 py-0.5 border text-xs font-mono font-bold uppercase tracking-wider cursor-pointer ${
                   isFilterPanelOpen || activeCount > 0
-                    ? "border-[var(--color-paper)] text-[var(--color-paper)]"
-                    : ""
+                    ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
+                    : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
                 }`}
-              />
-            </button>
+              >
+                <span>FILTERS {activeCount > 0 ? `(${activeCount})` : ""}</span>
+                <KeyHint
+                  keys="F"
+                  className={`text-[9px] ${
+                    isFilterPanelOpen || activeCount > 0
+                      ? "border-[var(--color-paper)] text-[var(--color-paper)]"
+                      : ""
+                  }`}
+                />
+              </button>
+            </Tooltip>
           )}
 
           {/* Quick Favorites Toggle */}
           {showFilters && (
-            <button
-              onClick={() =>
-                setFilterSpec((prev) => ({
-                  ...prev,
-                  favorited_only: prev.favorited_only ? null : true,
-                }))
-              }
-              className={`flex items-center gap-1.5 px-2.5 py-0.5 border text-xs font-mono font-bold uppercase tracking-wider cursor-pointer ${
-                filterSpec.favorited_only
-                  ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
-                  : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-              }`}
-              title="Filter by favorited postings"
-            >
-              <span>{filterSpec.favorited_only ? "★ FAVORITES" : "☆ FAVORITES"}</span>
-            </button>
+            <Tooltip content="Filter by favorited postings" position="bottom">
+              <button
+                onClick={() =>
+                  setFilterSpec((prev) => ({
+                    ...prev,
+                    favorited_only: prev.favorited_only ? null : true,
+                  }))
+                }
+                className={`flex items-center gap-1.5 px-2.5 py-0.5 border text-xs font-mono font-bold uppercase tracking-wider cursor-pointer ${
+                  filterSpec.favorited_only
+                    ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
+                    : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
+                }`}
+              >
+                <span>{filterSpec.favorited_only ? "★ FAVORITES" : "☆ FAVORITES"}</span>
+              </button>
+            </Tooltip>
           )}
 
           {view === "settings" && (
@@ -114,13 +121,20 @@ export function SubNav() {
                 id="global-search-input"
                 type="text"
                 placeholder="SEARCH (TITLE, CO, LOC)..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={filterSpec.search || ""}
+                onChange={(e) =>
+                  setFilterSpec((prev) => ({
+                    ...prev,
+                    search: e.target.value.trim() ? e.target.value : null,
+                  }))
+                }
                 className="w-48 px-2 py-0.5 text-xs font-mono uppercase bg-[var(--color-paper)] text-[var(--color-ink)] border border-[var(--color-ink)] placeholder-[var(--color-ink-mute)] focus:outline-none focus:ring-1 focus:ring-[var(--color-ink)]"
               />
-              {searchQuery ? (
+              {filterSpec.search ? (
                 <button
-                  onClick={() => setSearchQuery("")}
+                  onClick={() =>
+                    setFilterSpec((prev) => ({ ...prev, search: null }))
+                  }
                   className="absolute right-1 text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] px-1 cursor-pointer"
                 >
                   ×

@@ -45,7 +45,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [logFilter, setLogFilter] = useState<"all" | "errors">("all");
 
-  const { setView, setSearchQuery } = useUIStore();
+  const { setView, setFilterSpec } = useUIStore();
 
   const fetchSources = () => {
     api.listSources().then(setSources).catch(() => {});
@@ -151,7 +151,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   };
 
   const handleViewInInbox = (companyName: string) => {
-    setSearchQuery(companyName);
+    setFilterSpec((prev) => ({ ...prev, search: companyName }));
     setView("discovered");
   };
 

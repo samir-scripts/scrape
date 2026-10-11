@@ -71,7 +71,16 @@ export default function App() {
     queryFn: api.getSchedulerStatus,
   });
 
-  // 3. Sync UI theme and motion with settings
+  // 3. Sync UI theme, motion, tooltips, and font with settings
+  useEffect(() => {
+    try {
+      const cachedFont = localStorage.getItem("scrape:font_family");
+      if (cachedFont) {
+        document.documentElement.setAttribute("data-font", cachedFont);
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     if (settings) {
       document.documentElement.setAttribute(
@@ -82,6 +91,13 @@ export default function App() {
         "data-reduce-motion",
         settings.ui_reduce_motion ? "true" : "false"
       );
+      document.documentElement.setAttribute(
+        "data-font",
+        settings.ui_font_family || "default"
+      );
+      if (typeof settings.ui_tooltips_enabled === "boolean") {
+        useUIStore.getState().setTooltipsEnabled(settings.ui_tooltips_enabled);
+      }
     }
   }, [settings]);
 

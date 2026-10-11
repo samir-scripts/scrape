@@ -1,19 +1,22 @@
 import type { Job } from "../bindings/Job";
 import type { JobFilter } from "../bindings/JobFilter";
 import type { TriState } from "../bindings/TriState";
+import { toHourlyRate } from "./salary";
 
 /**
  * Checks whether a job satisfies the given filter specification.
  * Directly mirrors the SQLite WHERE clauses in `src-tauri/src/db/jobs.rs`.
  */
 export function matchesJob(job: Job, filter: Partial<JobFilter>): boolean {
-  // 1. Search text
+  // 1. Search text / Contains
   if (filter.search && filter.search.trim()) {
     const q = filter.search.trim().toLowerCase();
     const titleMatch = job.title.toLowerCase().includes(q);
     const companyMatch = job.company.toLowerCase().includes(q);
     const locMatch = job.location?.toLowerCase().includes(q) ?? false;
-    if (!titleMatch && !companyMatch && !locMatch) {
+    const descMatch = job.description_text?.toLowerCase().includes(q) ?? false;
+    const notesMatch = job.notes?.toLowerCase().includes(q) ?? false;
+    if (!titleMatch && !companyMatch && !locMatch && !descMatch && !notesMatch) {
       return false;
     }
   }
@@ -68,6 +71,13 @@ export function matchesJob(job: Job, filter: Partial<JobFilter>): boolean {
       job.salary_currency &&
       job.salary_currency.toUpperCase() !== filter.salary_currency.toUpperCase()
     ) {
+      return false;
+    }
+  }
+
+  // 6b. Salary interval (e.g. "hour" or "year")
+  if (filter.salary_interval) {
+    if (job.salary_interval !== filter.salary_interval) {
       return false;
     }
   }
@@ -187,6 +197,20 @@ export function formatSalary(job: Job): string {
 
   const curr = job.salary_currency === "USD" || !job.salary_currency ? "$" : `${job.salary_currency} `;
 
+  // If job is specifically hourly, format as $/HR
+  if (job.salary_interval === "hour") {
+    const minHr = toHourlyRate(job.salary_min);
+    const maxHr = toHourlyRate(job.salary_max);
+
+    if (minHr != null && maxHr != null) {
+      if (minHr === maxHr) return `${curr}${minHr}/HR`;
+      return `${curr}${minHr} - ${curr}${maxHr}/HR`;
+    }
+    if (minHr != null) return `FROM ${curr}${minHr}/HR`;
+    if (maxHr != null) return `UP TO ${curr}${maxHr}/HR`;
+    return job.salary_raw || "—";
+  }
+
   const fmtNum = (n: number) => {
     if (n >= 1000) {
       const k = n / 1000;
@@ -244,8 +268,10 @@ export function formatExperience(job: Job): string {
  */
 export function countActiveFilters(filter: Partial<JobFilter>): number {
   let count = 0;
+  if (filter.search && filter.search.trim()) count++;
   if (filter.favorited_only) count++;
   if (filter.salary_min != null || filter.salary_max != null) count++;
+  if (filter.salary_interval) count++;
   if (filter.experience_min != null || filter.experience_max != null) count++;
   if (filter.new_grad && filter.new_grad !== "any") count++;
   if (filter.sponsorship && filter.sponsorship.length > 0) count++;
