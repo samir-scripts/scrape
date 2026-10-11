@@ -18,6 +18,8 @@ import { notifyError, notifySuccess } from "../../../lib/toast";
 import {
   validateWorkflowYaml,
   workflowSpecToYaml,
+  SAMPLE_SWE_INTERNSHIP_YAML,
+  SAMPLE_SWE_INTERNSHIP_SPEC,
   type WorkflowSpec,
 } from "../../../lib/yamlWorkflow";
 import {
@@ -359,7 +361,19 @@ export function AddSourceModal({
     setName(spec.metadata.name || "");
     setKind(spec.extractor.kind || "greenhouse");
     setUrl(spec.extractor.url || "");
-    setIdentifier(spec.extractor.url || "");
+
+    let id = spec.extractor.url || "";
+    if (spec.extractor.kind === "greenhouse") {
+      const match = spec.extractor.url?.match(/boards\.greenhouse\.io\/([^/?#]+)/i);
+      if (match) id = match[1];
+    } else if (spec.extractor.kind === "lever") {
+      const match = spec.extractor.url?.match(/jobs\.lever\.co\/([^/?#]+)/i);
+      if (match) id = match[1];
+    } else if (spec.extractor.kind === "ashby") {
+      const match = spec.extractor.url?.match(/jobs\.ashbyhq\.com\/([^/?#]+)/i);
+      if (match) id = match[1];
+    }
+    setIdentifier(id);
 
     if (spec.schedule?.cadence) setCadence(spec.schedule.cadence);
     if (spec.schedule?.cron) {
@@ -430,6 +444,15 @@ export function AddSourceModal({
       if (fileInputRef.current) fileInputRef.current.value = "";
     };
     reader.readAsText(file);
+  };
+
+  const handleLoadSampleSweWorkflow = () => {
+    applySpecToForm(SAMPLE_SWE_INTERNSHIP_SPEC);
+    setYamlText(SAMPLE_SWE_INTERNSHIP_YAML);
+    notifySuccess(
+      "Loaded Software Engineering Internships sample workflow specification",
+      "SAMPLE WORKFLOW LOADED"
+    );
   };
 
   const handleSwitchToYaml = () => {
@@ -714,6 +737,16 @@ export function AddSourceModal({
                 className="px-2 py-0.5 text-xs font-mono font-bold uppercase cursor-pointer border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[var(--color-ink)]"
               >
                 [ IMPORT YAML ]
+              </button>
+            </Tooltip>
+
+            <Tooltip content="Populate modal with the Software Engineering Internships sample specification">
+              <button
+                type="button"
+                onClick={handleLoadSampleSweWorkflow}
+                className="px-2 py-0.5 text-xs font-mono font-bold uppercase cursor-pointer border border-[var(--color-signal)] bg-transparent text-[var(--color-signal)] hover:bg-[var(--color-signal)] hover:text-white"
+              >
+                [ SAMPLE SWE ]
               </button>
             </Tooltip>
           </div>

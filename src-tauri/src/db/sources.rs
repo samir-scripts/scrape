@@ -322,6 +322,43 @@ impl SourcesRepo {
         }
         Ok(sources)
     }
+
+    pub fn default_sample_workflow_input() -> CreateSourceInput {
+        CreateSourceInput {
+            kind: SourceKind::Greenhouse,
+            name: "Cloudflare — Software Engineering Internships".to_string(),
+            identifier: "cloudflare".to_string(),
+            config: Some(serde_json::json!({
+                "url": "https://boards.greenhouse.io/cloudflare"
+            })),
+            enabled: Some(true),
+            cadence: Some(SourceCadence::Daily),
+            cadence_cron: Some("0 0 9 * * *".to_string()),
+            retention_days: Some(45),
+            retention_policy: Some("untracked_only".to_string()),
+            filters: Some(serde_json::json!({
+                "role_types": ["internship"],
+                "include_keywords": ["Software", "Engineer", "Intern"],
+                "exclude_keywords": ["MBA", "Sales", "Marketing"],
+                "locations": ["Remote", "San Francisco, CA", "Austin, TX"]
+            })),
+        }
+    }
+
+    pub async fn seed_default_sample_if_empty(pool: &SqlitePool) -> Result<Option<Source>> {
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM sources")
+            .fetch_one(pool)
+            .await?;
+
+        if count.0 > 0 {
+            return Ok(None);
+        }
+
+        let input = Self::default_sample_workflow_input();
+        let source = Self::create(pool, input).await?;
+        tracing::info!("Seeded sample Software Engineering Internships workflow: {}", source.id);
+        Ok(Some(source))
+    }
 }
 
 #[cfg(test)]
@@ -408,5 +445,32 @@ mod tests {
 
         SourcesRepo::delete(&pool, &created.id).await.unwrap();
         assert!(SourcesRepo::get(&pool, &created.id).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_seed_default_sample_workflow() {
+        let pool = init_memory_db().await.unwrap();
+
+        // 1. Initially empty: seeding should insert sample SWE workflow
+        let seeded = SourcesRepo::seed_default_sample_if_empty(&pool)
+            .await
+            .unwrap();
+        assert!(seeded.is_some());
+        let sample = seeded.unwrap();
+        assert_eq!(sample.name, "Cloudflare — Software Engineering Internships");
+        assert_eq!(sample.identifier, "cloudflare");
+        assert_eq!(sample.kind, SourceKind::Greenhouse);
+        assert_eq!(sample.cadence, SourceCadence::Daily);
+        assert_eq!(sample.retention_days, 45);
+        assert_eq!(sample.filters["role_types"][0], "internship");
+
+        // 2. Second invocation should be a no-op since sources exist
+        let second = SourcesRepo::seed_default_sample_if_empty(&pool)
+            .await
+            .unwrap();
+        assert!(second.is_none());
+
+        let all = SourcesRepo::list(&pool).await.unwrap();
+        assert_eq!(all.len(), 1);
     }
 }

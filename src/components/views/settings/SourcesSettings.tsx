@@ -150,6 +150,19 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
     }
   };
 
+  const handleSeedSampleWorkflow = async () => {
+    try {
+      await api.seedSampleWorkflow();
+      notifySuccess(
+        "Seeded Cloudflare Software Engineering Internships workflow.",
+        "SAMPLE WORKFLOW SEEDED"
+      );
+      fetchSources();
+    } catch (err) {
+      console.error("Failed to seed sample workflow:", err);
+    }
+  };
+
   const handleViewInInbox = (companyName: string) => {
     setFilterSpec((prev) => ({ ...prev, search: companyName }));
     setView("discovered");
@@ -211,6 +224,15 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <Tooltip content="Seed or restore the sample Software Engineering Internships workflow">
+            <Button
+              variant="default"
+              onClick={handleSeedSampleWorkflow}
+            >
+              + SAMPLE SWE
+            </Button>
+          </Tooltip>
+
           <Tooltip content="Prune untracked postings past retention TTL. Favorited and tracked jobs are strictly protected.">
             <Button
               variant="default"
@@ -293,7 +315,25 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
       <Rule />
 
       {/* Workflows Table */}
-      {filteredSources.length === 0 ? (
+      {sources.length === 0 ? (
+        <div className="p-8 border border-dashed border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 flex flex-col items-center justify-center text-center gap-3">
+          <span className="text-2xl text-[var(--color-ink)]">■</span>
+          <div className="flex flex-col gap-1 max-w-md">
+            <span className="font-bold text-sm uppercase tracking-wider text-[var(--color-ink)]">
+              NO WORKFLOWS IN REGISTRY
+            </span>
+            <span className="text-xs text-[var(--color-ink-mute)]">
+              The application ships with a pre-configured Software Engineering Internships workflow for Cloudflare so you can immediately see autonomous scraping in action.
+            </span>
+          </div>
+          <Button
+            variant="inverted"
+            onClick={handleSeedSampleWorkflow}
+          >
+            LOAD SAMPLE SWE INTERNSHIP WORKFLOW
+          </Button>
+        </div>
+      ) : filteredSources.length === 0 ? (
         <div className="p-8 border border-dashed border-[var(--color-ink-mute)] text-center text-xs font-mono text-[var(--color-ink-mute)]">
           NO MATCHING WORKFLOWS FOUND. CLICK &quot;+ ADD WORKFLOW&quot; TO CONFIGURE A TARGET.
         </div>

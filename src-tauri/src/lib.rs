@@ -38,7 +38,8 @@ pub fn run() {
             tauri::async_runtime::block_on(async {
                 services::system::SystemService::initialize_system_defaults(&pool)
                     .await
-                    .expect("Failed to initialize system defaults")
+                    .expect("Failed to initialize system defaults");
+                let _ = db::sources::SourcesRepo::seed_default_sample_if_empty(&pool).await;
             });
 
             let runner = services::runner::ScrapeRunner::new(pool.clone());
@@ -118,6 +119,7 @@ pub fn run() {
             commands::sources::create_source,
             commands::sources::update_source,
             commands::sources::delete_source,
+            commands::sources::seed_sample_workflow,
             commands::scrape::run_scrape_now,
             commands::scrape::run_source_now,
             commands::scrape::list_scrape_runs,

@@ -59,6 +59,56 @@ export interface WorkflowSpec {
   retention?: WorkflowRetention;
 }
 
+export const SAMPLE_SWE_INTERNSHIP_YAML = `version: 2
+metadata:
+  name: "Cloudflare — Software Engineering Internships"
+  company: "Cloudflare"
+  enabled: true
+extractor:
+  kind: greenhouse
+  url: "https://boards.greenhouse.io/cloudflare"
+schedule:
+  cadence: daily
+  time: "09:00"
+  cron: "0 0 9 * * *"
+filters:
+  role_types: [internship]
+  include_keywords: ["Software", "Engineer", "Intern"]
+  exclude_keywords: ["MBA", "Sales", "Marketing"]
+  locations: ["Remote", "San Francisco, CA", "Austin, TX"]
+retention:
+  days: 45
+  policy: untracked_only
+`;
+
+export const SAMPLE_SWE_INTERNSHIP_SPEC: WorkflowSpec = {
+  version: 2,
+  metadata: {
+    name: "Cloudflare — Software Engineering Internships",
+    company: "Cloudflare",
+    enabled: true,
+  },
+  extractor: {
+    kind: "greenhouse",
+    url: "https://boards.greenhouse.io/cloudflare",
+  },
+  schedule: {
+    cadence: "daily",
+    time: "09:00",
+    cron: "0 0 9 * * *",
+  },
+  filters: {
+    role_types: ["internship"],
+    include_keywords: ["Software", "Engineer", "Intern"],
+    exclude_keywords: ["MBA", "Sales", "Marketing"],
+    locations: ["Remote", "San Francisco, CA", "Austin, TX"],
+  },
+  retention: {
+    days: 45,
+    policy: "untracked_only",
+  },
+};
+
 export interface YamlValidationError {
   line?: number;
   col?: number;

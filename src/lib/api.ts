@@ -84,6 +84,33 @@ let devNotifications: AppNotification[] = [
   },
 ];
 
+export const SAMPLE_SWE_SOURCE: Source = {
+  id: "sample-swe-internships-1",
+  kind: "greenhouse",
+  name: "Cloudflare — Software Engineering Internships",
+  identifier: "cloudflare",
+  config: { url: "https://boards.greenhouse.io/cloudflare" },
+  enabled: true,
+  last_run_at: null,
+  last_status: null,
+  last_error: null,
+  created_at: new Date().toISOString(),
+  cadence: "daily",
+  cadence_cron: "0 0 9 * * *",
+  next_run_at: null,
+  last_run_duration_ms: null,
+  retention_days: BigInt(45),
+  retention_policy: "untracked_only",
+  filters: {
+    role_types: ["internship"],
+    include_keywords: ["Software", "Engineer", "Intern"],
+    exclude_keywords: ["MBA", "Sales", "Marketing"],
+    locations: ["Remote", "San Francisco, CA", "Austin, TX"],
+  },
+};
+
+let devSources: Source[] = [{ ...SAMPLE_SWE_SOURCE }];
+
 export const api = {
   // Jobs
   listJobs: (filter?: ApiJobFilter): Promise<Page<Job>> => {
@@ -149,12 +176,28 @@ export const api = {
 
   // Sources
   listSources: (): Promise<Source[]> => {
-    if (!isTauri()) return Promise.resolve([]);
+    if (!isTauri()) return Promise.resolve([...devSources]);
     return invoke<Source[]>("list_sources");
   },
 
-  getSource: (id: string) =>
-    invoke<Source>("get_source", { id }),
+  getSource: (id: string): Promise<Source> => {
+    if (!isTauri()) {
+      const found = devSources.find((s) => s.id === id);
+      return found ? Promise.resolve(found) : Promise.reject(new Error(`Source ${id} not found`));
+    }
+    return invoke<Source>("get_source", { id });
+  },
+
+  seedSampleWorkflow: (): Promise<Source> => {
+    if (!isTauri()) {
+      const existing = devSources.find((s) => s.identifier === "cloudflare" && s.kind === "greenhouse");
+      if (existing) return Promise.resolve(existing);
+      const newSource = { ...SAMPLE_SWE_SOURCE, id: `sample-${Date.now()}` };
+      devSources.push(newSource);
+      return Promise.resolve(newSource);
+    }
+    return invoke<Source>("seed_sample_workflow");
+  },
 
   createSource: (input: {
     kind: string;
@@ -167,8 +210,31 @@ export const api = {
     retention_days?: bigint | number | null;
     retention_policy?: string | null;
     filters?: unknown;
-  }) =>
-    invoke<Source>("create_source", {
+  }) => {
+    if (!isTauri()) {
+      const newSource: Source = {
+        id: `source-${Date.now()}`,
+        kind: input.kind as any,
+        name: input.name,
+        identifier: input.identifier,
+        config: (input.config || {}) as any,
+        enabled: input.enabled ?? true,
+        last_run_at: null,
+        last_status: null,
+        last_error: null,
+        created_at: new Date().toISOString(),
+        cadence: input.cadence || "global",
+        cadence_cron: input.cadence_cron || null,
+        next_run_at: null,
+        last_run_duration_ms: null,
+        retention_days: BigInt(input.retention_days ?? 30),
+        retention_policy: input.retention_policy || "untracked_only",
+        filters: (input.filters || {}) as any,
+      };
+      devSources.push(newSource);
+      return Promise.resolve(newSource);
+    }
+    return invoke<Source>("create_source", {
       input: {
         config: null,
         enabled: true,
@@ -179,7 +245,8 @@ export const api = {
         filters: {},
         ...input,
       },
-    }),
+    });
+  },
 
   updateSource: (input: {
     id: string;
@@ -192,8 +259,25 @@ export const api = {
     retention_days?: bigint | number | null;
     retention_policy?: string | null;
     filters?: unknown;
-  }) =>
-    invoke<Source>("update_source", {
+  }) => {
+    if (!isTauri()) {
+      const idx = devSources.findIndex((s) => s.id === input.id);
+      if (idx >= 0) {
+        devSources[idx] = {
+          ...devSources[idx],
+          ...(input.name !== undefined && input.name !== null ? { name: input.name } : {}),
+          ...(input.identifier !== undefined && input.identifier !== null ? { identifier: input.identifier } : {}),
+          ...(input.enabled !== undefined && input.enabled !== null ? { enabled: input.enabled } : {}),
+          ...(input.cadence !== undefined && input.cadence !== null ? { cadence: input.cadence } : {}),
+          ...(input.cadence_cron !== undefined ? { cadence_cron: input.cadence_cron } : {}),
+          ...(input.retention_days !== undefined && input.retention_days !== null ? { retention_days: BigInt(input.retention_days) } : {}),
+          ...(input.retention_policy !== undefined && input.retention_policy !== null ? { retention_policy: input.retention_policy } : {}),
+        };
+        return Promise.resolve(devSources[idx]);
+      }
+      return Promise.reject(new Error(`Source ${input.id} not found`));
+    }
+    return invoke<Source>("update_source", {
       input: {
         name: null,
         identifier: null,
@@ -206,25 +290,66 @@ export const api = {
         filters: null,
         ...input,
       },
-    }),
+    });
+  },
 
-  deleteSource: (id: string) =>
-    invoke<void>("delete_source", { id }),
+  deleteSource: (id: string) => {
+    if (!isTauri()) {
+      devSources = devSources.filter((s) => s.id !== id);
+      return Promise.resolve();
+    }
+    return invoke<void>("delete_source", { id });
+  },
 
   // Scraping & Scheduler
   runScrapeNow: () =>
     invoke<ScrapeRun>("run_scrape_now"),
 
-  runSourceNow: (id: string) =>
-    invoke<ScrapeRun>("run_source_now", { id }),
+  runSourceNow: (id: string): Promise<ScrapeRun> => {
+    if (!isTauri()) {
+      const now = new Date().toISOString();
+      const target = devSources.find((s) => s.id === id);
+      if (target) {
+        target.last_run_at = now;
+        target.last_status = "ok";
+        target.last_run_duration_ms = BigInt(840);
+      }
+      return Promise.resolve({
+        id: `mock-run-${Date.now()}`,
+        trigger: "single_source",
+        status: "success",
+        started_at: now,
+        finished_at: now,
+        jobs_found: BigInt(8),
+        jobs_new: BigInt(2),
+        error: null,
+        source_id: id,
+      });
+    }
+    return invoke<ScrapeRun>("run_source_now", { id });
+  },
 
   listScrapeRuns: (limit?: number) => {
     if (!isTauri()) return Promise.resolve([]);
     return invoke<ScrapeRun[]>("list_scrape_runs", { limit });
   },
 
-  listSourceRuns: (sourceId: string, limit?: number) => {
-    if (!isTauri()) return Promise.resolve([]);
+  listSourceRuns: (sourceId: string, limit?: number): Promise<ScrapeRun[]> => {
+    if (!isTauri()) {
+      return Promise.resolve([
+        {
+          id: `mock-run-1`,
+          trigger: "single_source",
+          status: "success",
+          started_at: new Date(Date.now() - 3600000).toISOString(),
+          finished_at: new Date(Date.now() - 3590000).toISOString(),
+          jobs_found: BigInt(8),
+          jobs_new: BigInt(2),
+          error: null,
+          source_id: sourceId,
+        },
+      ]);
+    }
     return invoke<ScrapeRun[]>("list_source_runs", { sourceId, limit });
   },
 
