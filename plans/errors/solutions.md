@@ -26,6 +26,9 @@
 18. [Cross-View Selection Orphan & Asymmetric Hotkey Listener Churn in Kanban Navigation](#18-cross-view-selection-orphan--asymmetric-hotkey-listener-churn-in-kanban-navigation)
 19. [Global Hotkeys Lifecycle Severance & View Unmount Void in Root Navigation](#19-global-hotkeys-lifecycle-severance--view-unmount-void-in-root-navigation)
 20. [Modal Window Escape Trapping & Dialog Event Dissociation](#20-modal-window-escape-trapping--dialog-event-dissociation)
+21. [SQLx SQLite Text Column NULL Coercion in Option Decoding](#21-sqlx-sqlite-text-column-null-coercion-in-option-decoding)
+23. [Vite / esbuild JSX Transformation Error in `.test.ts` Test Files](#23-vite--esbuild-jsx-transformation-error-in-testts-test-files)
+24. [SQLx Migration Checksum VersionMismatch & Non-Unwinding macOS Startup Panic](#24-sqlx-migration-checksum-versionmismatch--non-unwinding-macos-startup-panic)
 
 ---
 
@@ -398,6 +401,30 @@
   Vite's `esbuild` preprocessor only parses JSX/TSX syntax when the file extension is `.tsx` or `.jsx`. When testing UI components with JSX syntax inside a `.test.ts` file, `esbuild` interprets angle brackets `<Component>` as TypeScript generics rather than JSX elements, throwing a syntax parse failure.
 - **Solution & Rule:**
   Either name test files containing JSX `.test.tsx`, or test component coordinate geometry, mathematical projections, and state machines in pure TypeScript `.test.ts` files without DOM/JSX dependencies.
+
+---
+
+### 24. SQLx Migration Checksum VersionMismatch & Non-Unwinding macOS Startup Panic
+
+- **Phase:** Phase 3.10 (Workflow Hardening & Notification Error Storage)
+- **Error Signature:**
+  ```text
+  thread 'main' panicked at src-tauri/src/lib.rs:35:22:
+  Failed to initialize database: Migration(VersionMismatch(6))
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  thread caused non-unwinding panic. aborting.
+  ```
+- **Root Cause:**
+  1. **Migration Immutability Violation:** When adding the new `'error'` variant to the `app_notifications` `kind` column, `0006_notifications.sql` was modified in place (`CHECK (kind IN ('update', 'news', 'system', 'scraper', 'error'))`).
+  2. **Checksum Verification Mismatch in `_sqlx_migrations`:** SQLx computes a SHA-384 checksum for every migration file and records it in `_sqlx_migrations` upon execution. On existing installations where migration 6 had already run, SQLx compared the hash of the modified `0006_notifications.sql` against the stored checksum in `_sqlx_migrations`, detected the divergence, and threw `sqlx::migrate::MigrateError::VersionMismatch(6)`.
+  3. **Non-Unwinding FFI Panic:** Because `db::init_db` was invoked inside Tauri's `did_finish_launching` callback (an `extern "C"` Objective-C runtime delegate on macOS), the panic crossed an FFI boundary that cannot unwind, causing macOS to immediately abort the process with a non-unwinding panic.
+  4. **Test Gap:** In-memory SQLite tests (`init_memory_db()`) created a fresh database on every run, meaning `_sqlx_migrations` was always populated from scratch and never encountered an existing DB with prior migration checksums.
+- **Solution & Rule:**
+  1. **Revert Mutated Migrations:** Revert `0006_notifications.sql` back to its pristine bytes so its SHA-384 checksum matches prior database records.
+  2. **Sequential Schema Evolution via New Migration:** Create `0007_notification_error_kind.sql` using SQLite's table recreation pattern (`CREATE TABLE app_notifications_new`, `INSERT INTO app_notifications_new SELECT ...`, `DROP TABLE app_notifications`, `ALTER TABLE app_notifications_new RENAME TO app_notifications`). Never alter an existing committed migration file.
+  3. **Resilient Startup & Self-Healing Migration Runner:** In `src-tauri/src/db/mod.rs`, wrap `sqlx::migrate!()` in `run_migrations(&pool)`. If `MigrateError::VersionMismatch(v)` is encountered during local development, dynamically locate `v` in `migrator.iter()`, synchronize `_sqlx_migrations.checksum = target_mig.checksum`, and retry execution, preventing unhandled aborts.
+  4. **Regression Tests:** Added `test_all_migrations_apply_cleanly_up_to_version_7` and `test_migration_recovery_on_version_mismatch` in `src-tauri/src/db/mod.rs` to guarantee both clean execution of all 7 migrations and recovery when `_sqlx_migrations` contains a mismatched checksum.
+
 
 
 
