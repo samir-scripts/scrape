@@ -18,8 +18,7 @@ import { notifyError, notifySuccess } from "../../../lib/toast";
 import {
   validateWorkflowYaml,
   workflowSpecToYaml,
-  SAMPLE_SWE_INTERNSHIP_YAML,
-  SAMPLE_SWE_INTERNSHIP_SPEC,
+  canonicalizeAtsUrl,
   type WorkflowSpec,
 } from "../../../lib/yamlWorkflow";
 import {
@@ -164,15 +163,15 @@ export function AddSourceModal({
       setName(initialSource.name);
       setKind(initialSource.kind);
       setIdentifier(initialSource.identifier);
-      setUrl(initialSource.identifier);
+      const cfg = (initialSource.config as Record<string, unknown>) || {};
+      const initialUrl = (cfg.url as string) || canonicalizeAtsUrl(initialSource.kind, initialSource.identifier);
+      setUrl(initialUrl);
       setCadence(initialSource.cadence || "daily");
       setCadenceCron(initialSource.cadence_cron || "0 0 12 * * *");
       setRetentionDays(Number(initialSource.retention_days ?? 30));
       setRetentionPolicy(
         (initialSource.retention_policy as "untracked_only" | "all") || "untracked_only"
       );
-
-      const cfg = (initialSource.config as Record<string, unknown>) || {};
       const sel = (cfg.selectors as Record<string, string>) || {};
       setSelectorItem(sel.item || (cfg.item as string) || ".job-row");
       setSelectorTitle(sel.title || (cfg.title as string) || ".title");
@@ -446,15 +445,6 @@ export function AddSourceModal({
     reader.readAsText(file);
   };
 
-  const handleLoadSampleSweWorkflow = () => {
-    applySpecToForm(SAMPLE_SWE_INTERNSHIP_SPEC);
-    setYamlText(SAMPLE_SWE_INTERNSHIP_YAML);
-    notifySuccess(
-      "Loaded Software Engineering Internships sample workflow specification",
-      "SAMPLE WORKFLOW LOADED"
-    );
-  };
-
   const handleSwitchToYaml = () => {
     const incGlobs = urlPatterns
       .split(",")
@@ -474,7 +464,7 @@ export function AddSourceModal({
       },
       extractor: {
         kind,
-        url: url || identifier || "https://example.com/careers",
+        url: canonicalizeAtsUrl(kind, url || identifier) || "https://example.com/careers",
         job_container: kind === "selector" ? selectorItem : undefined,
         title_selector: kind === "selector" ? selectorTitle : undefined,
         url_selector: kind === "selector" ? selectorLink : undefined,
@@ -509,20 +499,47 @@ export function AddSourceModal({
     setEditorMode("yaml");
   };
 
-  const handleSwitchToForm = () => {
-    const validation = validateWorkflowYaml(yamlText);
-    if (!validation.isValid || !validation.parsedSpec) {
-      const errs = validation.errors.map((e) => e.message).join("\n");
-      notifyError(
-        `Cannot switch to Form view due to YAML parsing issues:\n${errs}`,
-        "YAML SYNTAX ERROR",
-        5000
-      );
+  const handleSwitchToForm = (forceDiscard = false) => {
+    if (forceDiscard) {
+      setEditorMode("form");
       return;
     }
 
-    applySpecToForm(validation.parsedSpec);
-    setEditorMode("form");
+    const validation = validateWorkflowYaml(yamlText);
+    if (validation.parsedSpec) {
+      applySpecToForm(validation.parsedSpec);
+      setEditorMode("form");
+      if (!validation.isValid) {
+        const errs = validation.errors.map((e) => e.message).join("\n");
+        notifyError(
+          `Switched to Form view with warnings:\n${errs}`,
+          "SPECIFICATION WARNING",
+          5000
+        );
+        api.createNotification({
+          kind: "error",
+          title: "PARSE / SPECIFICATION ISSUE",
+          message: `Specification has parameter warnings:\n${errs}`,
+          action_label: "VIEW WORKFLOW",
+          action_payload: name || null,
+        }).catch(() => {});
+      }
+      return;
+    }
+
+    const errs = validation.errors.map((e) => e.message).join("\n");
+    notifyError(
+      `Cannot parse YAML syntax:\n${errs}\nClick 'DISCARD & RETURN TO FORM' to abort changes.`,
+      "YAML SYNTAX ERROR",
+      6000
+    );
+    api.createNotification({
+      kind: "error",
+      title: "PARSE / SPECIFICATION ISSUE",
+      message: `Cannot parse YAML syntax:\n${errs}`,
+      action_label: "VIEW WORKFLOW",
+      action_payload: name || null,
+    }).catch(() => {});
   };
 
   const handleDetect = async (targetUrl?: string) => {
@@ -730,23 +747,27 @@ export function AddSourceModal({
               className="hidden"
               onChange={handleImportYamlFile}
             />
-            <Tooltip content="Import workflow specification from .yaml file">
+            <Tooltip content="Import workflow specification (.yaml)">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="px-2 py-0.5 text-xs font-mono font-bold uppercase cursor-pointer border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[var(--color-ink)]"
+                aria-label="Import YAML"
+                className="p-1 text-xs font-mono font-bold uppercase cursor-pointer border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] text-[var(--color-ink)] flex items-center justify-center transition-colors"
               >
-                [ IMPORT YAML ]
-              </button>
-            </Tooltip>
-
-            <Tooltip content="Populate modal with the Software Engineering Internships sample specification">
-              <button
-                type="button"
-                onClick={handleLoadSampleSweWorkflow}
-                className="px-2 py-0.5 text-xs font-mono font-bold uppercase cursor-pointer border border-[var(--color-signal)] bg-transparent text-[var(--color-signal)] hover:bg-[var(--color-signal)] hover:text-white"
-              >
-                [ SAMPLE SWE ]
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="square"
+                  strokeLinejoin="miter"
+                >
+                  <path d="M2 11v3h12v-3" />
+                  <path d="M8 2v8" />
+                  <path d="M4 6l4-4 4 4" />
+                </svg>
               </button>
             </Tooltip>
           </div>
@@ -956,13 +977,22 @@ export function AddSourceModal({
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center text-[10px] text-[var(--color-ink-mute)]">
               <span>DECLARATIVE WORKFLOW SPECIFICATION (V2):</span>
-              <button
-                type="button"
-                onClick={() => navigator.clipboard.writeText(yamlText)}
-                className="px-2 py-0.5 border border-[var(--color-ink)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] cursor-pointer"
-              >
-                COPY YAML
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleSwitchToForm(true)}
+                  className="px-2 py-0.5 border border-[var(--color-cherry)] text-[var(--color-cherry)] hover:bg-[var(--color-cherry)] hover:text-white cursor-pointer font-bold"
+                >
+                  DISCARD & RETURN TO FORM
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(yamlText)}
+                  className="px-2 py-0.5 border border-[var(--color-ink)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] cursor-pointer"
+                >
+                  COPY YAML
+                </button>
+              </div>
             </div>
             <textarea
               value={yamlText}

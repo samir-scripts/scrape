@@ -2,6 +2,7 @@ import { useUIStore } from "../../lib/store";
 import { NAV_TABS, type NavTabId } from "../../lib/constants";
 import { Tooltip } from "../ui/Tooltip";
 import { NotificationBell } from "../notifications/NotificationBell";
+import { api } from "../../lib/api";
 
 interface TopNavProps {
   discoveredCount?: number;
@@ -77,6 +78,31 @@ export function TopNav({
           )}
 
           <div className="h-4 w-px bg-[var(--color-ink-mute)]/30" />
+
+          {/* External Terminal Console Launcher */}
+          <Tooltip content="Open Live System Console in Terminal.app">
+            <button
+              onClick={() => api.openTerminalConsole()}
+              className="p-1 border border-transparent hover:border-[var(--color-ink)] hover:bg-[var(--color-paper-2)] text-[var(--color-ink)] cursor-pointer flex items-center justify-center transition-none"
+              aria-label="Open Terminal Console"
+              id="terminal-console-btn"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="square"
+                strokeLinejoin="miter"
+              >
+                <rect x="1.5" y="2.5" width="13" height="11" />
+                <path d="M4.5 6l2.5 2-2.5 2" />
+                <line x1="8.5" y1="10" x2="11.5" y2="10" />
+              </svg>
+            </button>
+          </Tooltip>
 
           <NotificationBell />
         </div>

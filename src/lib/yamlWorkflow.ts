@@ -197,13 +197,17 @@ export function validateWorkflowYaml(yamlContent: string): YamlValidationResult 
     if (!json.extractor.url || typeof json.extractor.url !== "string" || !json.extractor.url.trim()) {
       errors.push({ message: "extractor.url must be a valid non-empty URL string" });
     } else {
-      try {
-        const u = new URL(json.extractor.url);
-        if (u.protocol !== "http:" && u.protocol !== "https:") {
-          errors.push({ message: "extractor.url must start with http:// or https://" });
+      const isAtsKind = ["greenhouse", "lever", "ashby"].includes(json.extractor.kind);
+      const isPlainSlug = isAtsKind && /^[a-zA-Z0-9_\-\.]+$/.test(json.extractor.url.trim());
+      if (!isPlainSlug) {
+        try {
+          const u = new URL(json.extractor.url);
+          if (u.protocol !== "http:" && u.protocol !== "https:") {
+            errors.push({ message: "extractor.url must start with http:// or https://" });
+          }
+        } catch {
+          errors.push({ message: "extractor.url is not a valid URL" });
         }
-      } catch {
-        errors.push({ message: "extractor.url is not a valid URL" });
       }
     }
   }
@@ -399,4 +403,16 @@ export function workflowSpecToCreateInput(spec: WorkflowSpec): CreateSourceInput
     retention_policy: spec.retention?.policy ?? "untracked_only",
     filters: filtersObj as unknown as CreateSourceInput["filters"],
   };
+}
+
+export function canonicalizeAtsUrl(kind: string, urlOrSlug: string): string {
+  const trimmed = (urlOrSlug || "").trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+  if (kind === "greenhouse") return `https://boards.greenhouse.io/${trimmed}`;
+  if (kind === "lever") return `https://jobs.lever.co/${trimmed}`;
+  if (kind === "ashby") return `https://jobs.ashbyhq.com/${trimmed}`;
+  return trimmed;
 }

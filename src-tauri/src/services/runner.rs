@@ -60,6 +60,23 @@ impl ScrapeRunner {
         })
     }
 
+    async fn log_event(
+        &self,
+        app: &AppHandle,
+        run_id: &str,
+        level: LogLevel,
+        source_id: Option<&str>,
+        message: &str,
+    ) {
+        let level_str = match level {
+            LogLevel::Info => "info",
+            LogLevel::Warn => "warn",
+            LogLevel::Error => "error",
+        };
+        let _ = RunsRepo::add_log(&self.pool, run_id, level, source_id, message).await;
+        crate::services::system::SystemService::append_log(app, level_str, source_id, message);
+    }
+
     pub async fn trigger(&self, app: &AppHandle, trigger: TriggerType) -> Result<ScrapeRun> {
         // 1. Overlap guard
         let _guard = self.try_acquire_lock()?;
@@ -190,8 +207,8 @@ impl ScrapeRunner {
                 )
                 .await?;
 
-                let _ = RunsRepo::add_log(
-                    &self.pool,
+                self.log_event(
+                    app,
                     &run.id,
                     if final_status == RunStatus::Failed {
                         LogLevel::Error
@@ -207,6 +224,26 @@ impl ScrapeRunner {
                     ),
                 )
                 .await;
+
+                if final_status == RunStatus::Failed || final_status == RunStatus::Partial {
+                    let _ = crate::db::notifications::NotificationRepo::create(
+                        &self.pool,
+                        crate::db::notifications::CreateNotificationInput {
+                            kind: crate::db::notifications::NotificationKind::Error,
+                            title: if final_status == RunStatus::Failed {
+                                "SCRAPE RUN FAILED".to_string()
+                            } else {
+                                "SCRAPE RUN PARTIAL FAILURE".to_string()
+                            },
+                            message: err_summary
+                                .unwrap_or("One or more workflows encountered fatal scrape errors")
+                                .to_string(),
+                            action_label: Some("VIEW RUN".to_string()),
+                            action_payload: Some(run.id.clone()),
+                        },
+                    )
+                    .await;
+                }
 
                 let _ = app.emit("scrape://finished", &finished);
                 let _ = app.emit("jobs://changed", ());
@@ -335,7 +372,12 @@ impl ScrapeRunner {
                 let (status, err_msg) = source_statuses
                     .get(source_id)
                     .cloned()
-                    .unwrap_or_else(|| ("ok".to_string(), None));
+                    .unwrap_or_else(|| {
+                        (
+                            "error".to_string(),
+                            Some("Worker process terminated without reporting status for this workflow".to_string()),
+                        )
+                    });
 
                 let _ = SourcesRepo::set_run_result(
                     &self.pool,
@@ -362,6 +404,22 @@ impl ScrapeRunner {
                     err_msg.as_deref(),
                 )
                 .await?;
+
+                if final_status == RunStatus::Failed {
+                    let _ = crate::db::notifications::NotificationRepo::create(
+                        &self.pool,
+                        crate::db::notifications::CreateNotificationInput {
+                            kind: crate::db::notifications::NotificationKind::Error,
+                            title: format!("WORKFLOW FAILED: {}", source.name),
+                            message: err_msg
+                                .clone()
+                                .unwrap_or_else(|| "Execution terminated with errors".to_string()),
+                            action_label: Some("INSPECT WORKFLOW".to_string()),
+                            action_payload: Some(source.id.clone()),
+                        },
+                    )
+                    .await;
+                }
 
                 let _ = app.emit("scrape://finished", &finished);
                 let _ = app.emit(
@@ -455,8 +513,8 @@ impl ScrapeRunner {
             .spawn()
             .map_err(|e| AppError::Internal(format!("Failed to spawn sidecar: {}", e)))?;
 
-        let _ = RunsRepo::add_log(
-            &self.pool,
+        self.log_event(
+            app,
             run_id,
             LogLevel::Info,
             None,
@@ -474,6 +532,9 @@ impl ScrapeRunner {
         let mut total_found = 0i64;
         let mut total_new = 0i64;
         let mut source_statuses: HashMap<String, (String, Option<String>)> = HashMap::new();
+
+        let mut termination_code: Option<i32> = None;
+        let mut sidecar_err: Option<String> = None;
 
         while let Some(event) = rx.recv().await {
             match event {
@@ -595,8 +656,8 @@ impl ScrapeRunner {
                                     source_statuses
                                         .entry(source_id.clone())
                                         .or_insert_with(|| ("success".to_string(), None));
-                                    let _ = RunsRepo::add_log(
-                                        &self.pool,
+                                    self.log_event(
+                                        app,
                                         run_id,
                                         LogLevel::Info,
                                         Some(&source_id),
@@ -621,8 +682,8 @@ impl ScrapeRunner {
                                         source_id.clone(),
                                         ("error".to_string(), Some(message.clone())),
                                     );
-                                    let _ = RunsRepo::add_log(
-                                        &self.pool,
+                                    self.log_event(
+                                        app,
                                         run_id,
                                         LogLevel::Error,
                                         Some(&source_id),
@@ -649,8 +710,8 @@ impl ScrapeRunner {
                     if !line.is_empty() {
                         tracing::info!("[sidecar] {}", line);
                         if line.contains("ERROR") || line.contains("error") {
-                            let _ = RunsRepo::add_log(
-                                &self.pool,
+                            self.log_event(
+                                app,
                                 run_id,
                                 LogLevel::Warn,
                                 None,
@@ -662,8 +723,9 @@ impl ScrapeRunner {
                 }
                 CommandEvent::Error(err) => {
                     tracing::error!("[sidecar error] {}", err);
-                    let _ = RunsRepo::add_log(
-                        &self.pool,
+                    sidecar_err = Some(err.to_string());
+                    self.log_event(
+                        app,
                         run_id,
                         LogLevel::Error,
                         None,
@@ -673,10 +735,11 @@ impl ScrapeRunner {
                 }
                 CommandEvent::Terminated(status) => {
                     tracing::info!("[sidecar exit] status: {:?}", status.code);
+                    termination_code = status.code;
                     if let Some(code) = status.code {
                         if code != 0 {
-                            let _ = RunsRepo::add_log(
-                                &self.pool,
+                            self.log_event(
+                                app,
                                 run_id,
                                 LogLevel::Error,
                                 None,
@@ -689,6 +752,36 @@ impl ScrapeRunner {
                 }
                 _ => {}
             }
+        }
+
+        // If the sidecar crashed or exited with an error code, ensure all sources are marked failed
+        if let Some(code) = termination_code {
+            if code != 0 {
+                let fatal_msg = format!("Sidecar process exited with non-zero exit code: {}", code);
+                for src in &config.sources {
+                    source_statuses.entry(src.id.clone()).or_insert_with(|| {
+                        ("error".to_string(), Some(fatal_msg.clone()))
+                    });
+                }
+            }
+        }
+        if let Some(ref err) = sidecar_err {
+            let fatal_msg = format!("Sidecar process error: {}", err);
+            for src in &config.sources {
+                source_statuses.entry(src.id.clone()).or_insert_with(|| {
+                    ("error".to_string(), Some(fatal_msg.clone()))
+                });
+            }
+        }
+
+        // Ensure every configured source has a recorded status
+        for src in &config.sources {
+            source_statuses.entry(src.id.clone()).or_insert_with(|| {
+                (
+                    "error".to_string(),
+                    Some("Worker terminated unexpectedly without reporting status for this workflow".to_string()),
+                )
+            });
         }
 
         // Flush remaining buffered jobs

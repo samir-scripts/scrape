@@ -4,6 +4,7 @@ import {
   workflowSpecToYaml,
   workflowSpecToCreateInput,
   sourceToWorkflowSpec,
+  canonicalizeAtsUrl,
   type WorkflowSpec,
 } from "../lib/yamlWorkflow";
 import type { Source } from "../bindings/Source";
@@ -185,5 +186,54 @@ retention:
     expect(serialized).toContain('name: "Ramp"');
     expect(serialized).toContain("kind: ashby");
     expect(serialized).toContain("days: 60");
+  });
+
+  describe("ATS Slug Canonicalization & Validation", () => {
+    it("canonicalizes simple company slugs into full ATS URLs", () => {
+      expect(canonicalizeAtsUrl("greenhouse", "stripe")).toBe("https://boards.greenhouse.io/stripe");
+      expect(canonicalizeAtsUrl("lever", "figma")).toBe("https://jobs.lever.co/figma");
+      expect(canonicalizeAtsUrl("ashby", "ramp")).toBe("https://jobs.ashbyhq.com/ramp");
+      expect(canonicalizeAtsUrl("greenhouse", "https://boards.greenhouse.io/stripe")).toBe("https://boards.greenhouse.io/stripe");
+      expect(canonicalizeAtsUrl("selector", "https://acme.org/jobs")).toBe("https://acme.org/jobs");
+      expect(canonicalizeAtsUrl("selector", "invalid-slug")).toBe("invalid-slug");
+    });
+
+    it("accepts valid ATS company slugs directly in extractor.url for greenhouse, lever, and ashby", () => {
+      const greenhouseSlugYaml = `
+version: 2
+metadata:
+  name: "Stripe"
+extractor:
+  kind: greenhouse
+  url: stripe
+`;
+      const ghResult = validateWorkflowYaml(greenhouseSlugYaml);
+      expect(ghResult.isValid).toBe(true);
+      expect(ghResult.parsedSpec?.extractor.url).toBe("stripe");
+
+      const leverSlugYaml = `
+version: 2
+metadata:
+  name: "Figma"
+extractor:
+  kind: lever
+  url: figma
+`;
+      const leverResult = validateWorkflowYaml(leverSlugYaml);
+      expect(leverResult.isValid).toBe(true);
+      expect(leverResult.parsedSpec?.extractor.url).toBe("figma");
+
+      const ashbySlugYaml = `
+version: 2
+metadata:
+  name: "Ramp"
+extractor:
+  kind: ashby
+  url: ramp
+`;
+      const ashbyResult = validateWorkflowYaml(ashbySlugYaml);
+      expect(ashbyResult.isValid).toBe(true);
+      expect(ashbyResult.parsedSpec?.extractor.url).toBe("ramp");
+    });
   });
 });

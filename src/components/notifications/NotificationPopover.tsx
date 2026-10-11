@@ -15,7 +15,7 @@ interface NotificationPopoverProps {
   anchorEl: HTMLElement | null;
 }
 
-const KIND_CONFIG: Record<
+export const KIND_CONFIG: Record<
   NotificationKind,
   { label: string; bg: string; text: string; border: string }
 > = {
@@ -42,6 +42,12 @@ const KIND_CONFIG: Record<
     bg: "var(--color-lime)",
     text: "var(--color-ink)",
     border: "var(--color-ink)",
+  },
+  error: {
+    label: "ERROR",
+    bg: "var(--color-cherry)",
+    text: "#FFFFFF",
+    border: "var(--color-cherry)",
   },
 };
 

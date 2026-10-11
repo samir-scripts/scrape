@@ -133,6 +133,7 @@ pub fn run() {
             commands::scrape::test_source,
             commands::scrape::test_source_transient,
             commands::metrics::get_metrics,
+            commands::notifications::create_notification,
             commands::notifications::list_notifications,
             commands::notifications::mark_notification_read,
             commands::notifications::mark_all_notifications_read,
@@ -140,6 +141,7 @@ pub fn run() {
             commands::notifications::count_unread_notifications,
             commands::notifications::check_app_update,
             commands::notifications::install_app_update,
+            commands::scrape::open_terminal_console,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

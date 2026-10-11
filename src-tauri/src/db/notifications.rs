@@ -13,6 +13,7 @@ pub enum NotificationKind {
     News,
     System,
     Scraper,
+    Error,
 }
 
 impl NotificationKind {
@@ -22,6 +23,7 @@ impl NotificationKind {
             Self::News => "news",
             Self::System => "system",
             Self::Scraper => "scraper",
+            Self::Error => "error",
         }
     }
 
@@ -31,6 +33,7 @@ impl NotificationKind {
             "news" => Self::News,
             "system" => Self::System,
             "scraper" => Self::Scraper,
+            "error" => Self::Error,
             _ => Self::System,
         }
     }
@@ -198,5 +201,23 @@ mod tests {
         NotificationRepo::clear_all(&pool).await.unwrap();
         let list_empty = NotificationRepo::list(&pool, 10).await.unwrap();
         assert_eq!(list_empty.len(), 0);
+
+        // Test Error notification creation
+        let n_err = NotificationRepo::create(
+            &pool,
+            CreateNotificationInput {
+                kind: NotificationKind::Error,
+                title: "WORKFLOW PARSE ERROR".to_string(),
+                message: "Invalid YAML parameter on line 12".to_string(),
+                action_label: Some("INSPECT".to_string()),
+                action_payload: Some("source-1".to_string()),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(n_err.kind, NotificationKind::Error);
+        assert_eq!(n_err.kind.as_str(), "error");
+        assert_eq!(NotificationKind::from_str("error"), NotificationKind::Error);
     }
 }

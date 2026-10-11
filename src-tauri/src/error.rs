@@ -21,6 +21,9 @@ pub enum AppError {
     #[error("Validation error: {0}")]
     Validation(String),
 
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
     #[error("Internal error: {0}")]
     Internal(String),
 }
@@ -39,6 +42,7 @@ impl Serialize for AppError {
             AppError::Json(_) => "json",
             AppError::NotFound(_) => "not_found",
             AppError::Validation(_) => "validation",
+            AppError::Io(_) => "io",
             AppError::Internal(_) => "internal",
         };
         state.serialize_field("kind", kind)?;
