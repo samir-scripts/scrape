@@ -183,3 +183,9 @@ pub async fn test_source(
     };
     execute_dry_run_worker(&app, worker_source).await
 }
+
+#[tauri::command]
+pub async fn open_terminal_console(app: AppHandle) -> Result<()> {
+    crate::services::system::SystemService::launch_terminal_console(&app)
+}
+

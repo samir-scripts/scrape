@@ -224,15 +224,6 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <Tooltip content="Seed or restore the sample Software Engineering Internships workflow">
-            <Button
-              variant="default"
-              onClick={handleSeedSampleWorkflow}
-            >
-              + SAMPLE SWE
-            </Button>
-          </Tooltip>
-
           <Tooltip content="Prune untracked postings past retention TTL. Favorited and tracked jobs are strictly protected.">
             <Button
               variant="default"

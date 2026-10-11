@@ -4,6 +4,7 @@ interface ToggleProps {
   label?: string;
   description?: string;
   disabled?: boolean;
+  size?: "default" | "sm";
   className?: string;
 }
 
@@ -13,8 +14,11 @@ export function Toggle({
   label,
   description,
   disabled = false,
+  size = "default",
   className = "",
 }: ToggleProps) {
+  const isSm = size === "sm";
+
   return (
     <div
       role="switch"
@@ -28,19 +32,32 @@ export function Toggle({
           onChange(!checked);
         }
       }}
-      className={`inline-flex items-start gap-2.5 cursor-pointer select-none focus:outline-none ${
+      className={`inline-flex items-center gap-2.5 cursor-pointer select-none focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-ink)] ${
         disabled ? "opacity-50 cursor-not-allowed" : ""
       } ${className}`}
     >
+      {/* Brutalist Mechanical Track */}
       <div
-        className={`w-4 h-4 mt-0.5 border border-[var(--color-ink)] flex items-center justify-center font-mono text-xs leading-none shrink-0 ${
+        className={`${
+          isSm ? "w-7 h-3.5" : "w-8 h-4"
+        } relative border border-[var(--color-ink)] transition-colors duration-150 shrink-0 ${
           checked
-            ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
-            : "bg-transparent text-transparent"
+            ? "bg-[var(--color-ink)]"
+            : "bg-[var(--color-paper-2)] hover:bg-[var(--color-paper-2)]/80"
         }`}
       >
-        {checked ? "■" : "□"}
+        {/* Brutalist Sharp Square Thumb / Slider */}
+        <div
+          className={`${
+            isSm ? "w-2 h-2 top-[2px] left-[2px]" : "w-2.5 h-2.5 top-[2px] left-[2px]"
+          } absolute transition-transform duration-150 ease-out ${
+            checked
+              ? `${isSm ? "translate-x-3" : "translate-x-3.5"} bg-[var(--color-paper)]`
+              : "translate-x-0 bg-[var(--color-ink)]"
+          }`}
+        />
       </div>
+
       {(label || description) && (
         <div className="flex flex-col">
           {label && (

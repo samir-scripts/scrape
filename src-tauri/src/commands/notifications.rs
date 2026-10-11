@@ -19,6 +19,14 @@ pub struct UpdateCheckResult {
 }
 
 #[tauri::command]
+pub async fn create_notification(
+    state: State<'_, AppState>,
+    input: CreateNotificationInput,
+) -> Result<AppNotification> {
+    NotificationRepo::create(&state.db, input).await
+}
+
+#[tauri::command]
 pub async fn list_notifications(
     state: State<'_, AppState>,
     limit: Option<i64>,

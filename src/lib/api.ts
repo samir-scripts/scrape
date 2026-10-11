@@ -18,6 +18,7 @@ import type { ParsedLocation } from "../bindings/ParsedLocation";
 import type { ScrapeLogEntry } from "../bindings/ScrapeLogEntry";
 import type { Metrics } from "../bindings/Metrics";
 import type { AppNotification } from "../bindings/AppNotification";
+import type { CreateNotificationInput } from "../bindings/CreateNotificationInput";
 import type { UpdateCheckResult } from "../bindings/UpdateCheckResult";
 
 export interface DetectResult {
@@ -432,7 +433,24 @@ export const api = {
     return invoke<Metrics>("get_metrics", { granularity, periods });
   },
 
-  // Notifications & Updater
+  createNotification: (input: CreateNotificationInput): Promise<AppNotification> => {
+    if (!isTauri()) {
+      const newNotif: AppNotification = {
+        id: `notif-${Date.now()}`,
+        kind: input.kind,
+        title: input.title,
+        message: input.message,
+        action_label: input.action_label || null,
+        action_payload: input.action_payload || null,
+        read: false,
+        created_at: new Date().toISOString(),
+      };
+      devNotifications.unshift(newNotif);
+      return Promise.resolve(newNotif);
+    }
+    return invoke<AppNotification>("create_notification", { input });
+  },
+
   listNotifications: (limit?: number): Promise<AppNotification[]> => {
     if (!isTauri()) {
       return Promise.resolve(limit ? devNotifications.slice(0, limit) : [...devNotifications]);
@@ -490,5 +508,13 @@ export const api = {
       return Promise.resolve();
     }
     return invoke<void>("install_app_update");
+  },
+
+  openTerminalConsole: (): Promise<void> => {
+    if (!isTauri()) {
+      console.log("[Dev] openTerminalConsole invoked");
+      return Promise.resolve();
+    }
+    return invoke<void>("open_terminal_console");
   },
 };

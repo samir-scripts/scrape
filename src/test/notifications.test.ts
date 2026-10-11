@@ -196,6 +196,46 @@ describe("Notifications & Updater Suite", () => {
     it("invokes install app update without throwing", async () => {
       await expect(api.installAppUpdate()).resolves.toBeUndefined();
     });
+
+    it("creates an error notification and retrieves it from notifications list", async () => {
+      const created = await api.createNotification({
+        kind: "error",
+        title: "PARSE / SPECIFICATION ISSUE",
+        message: "Invalid YAML syntax: bad indentation at line 4",
+        action_label: "VIEW WORKFLOW",
+        action_payload: "Stripe",
+      });
+
+      expect(created.id).toBeTruthy();
+      expect(created.kind).toBe("error");
+      expect(created.title).toBe("PARSE / SPECIFICATION ISSUE");
+      expect(created.message).toContain("bad indentation");
+      expect(created.action_label).toBe("VIEW WORKFLOW");
+      expect(created.action_payload).toBe("Stripe");
+      expect(created.read).toBe(false);
+
+      const list = await api.listNotifications();
+      const found = list.find((n) => n.id === created.id);
+      expect(found).toBeDefined();
+      expect(found?.kind).toBe("error");
+    });
+
+    it("invokes openTerminalConsole in development without throwing", async () => {
+      await expect(api.openTerminalConsole()).resolves.toBeUndefined();
+    });
+  });
+
+  describe("Notification Kinds & Badge Styling Configuration", () => {
+    it("configures error notifications with cherry brutalist accent", async () => {
+      const { KIND_CONFIG } = await import(
+        "../components/notifications/NotificationPopover"
+      );
+      expect(KIND_CONFIG.error).toBeDefined();
+      expect(KIND_CONFIG.error.label).toBe("ERROR");
+      expect(KIND_CONFIG.error.bg).toBe("var(--color-cherry)");
+      expect(KIND_CONFIG.error.text).toBe("#FFFFFF");
+      expect(KIND_CONFIG.error.border).toBe("var(--color-cherry)");
+    });
   });
 
   describe("Settings Update Channel & Automation Defaults", () => {
