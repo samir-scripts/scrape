@@ -161,7 +161,9 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
     try {
       setRunningSourceId(source.id);
       setInspectedSource(source);
-      await api.runSourceNow(source.id);
+      const runPromise = api.runSourceNow(source.id);
+      await refreshInspectedRunsAndLogs(source.id);
+      await runPromise;
     } catch (e) {
       console.error("Run single source error:", e);
     } finally {
@@ -210,8 +212,9 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
     }
   };
 
-  const handleViewInInbox = (companyName: string) => {
-    setFilterSpec((prev) => ({ ...prev, search: companyName }));
+  const handleViewInInbox = (source: Source) => {
+    const company = source.name.split(" — ")[0].split(" - ")[0].trim() || source.identifier;
+    setFilterSpec((prev) => ({ ...prev, search: company, statuses: ["scraped", "viewed"] }));
     setView("discovered");
   };
 
@@ -569,7 +572,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                 {runningSourceId === inspectedSource.id ? "RUNNING WORKFLOW…" : "RUN WORKFLOW NOW"}
               </button>
               <button
-                onClick={() => handleViewInInbox(inspectedSource.name)}
+                onClick={() => handleViewInInbox(inspectedSource)}
                 className="px-2.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[10px] uppercase font-bold cursor-pointer"
               >
                 VIEW JOBS IN INBOX →
@@ -648,6 +651,8 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                               className={`px-1 py-0.2 text-[9px] uppercase font-bold border ${
                                 r.status === "success"
                                   ? "bg-[var(--color-lime)] text-[var(--color-ink)] border-[var(--color-ink)]"
+                                  : r.status === "running"
+                                  ? "bg-[var(--color-paper-2)] text-[var(--color-ink)] border-[var(--color-ink)] animate-pulse"
                                   : "bg-[var(--color-cherry)] text-white border-[var(--color-cherry)]"
                               }`}
                             >
@@ -658,7 +663,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                             </span>
                           </div>
                           <span className="text-[10px]">
-                            +{Number(r.jobs_new)}
+                            {r.status === "running" ? "RUNNING…" : `+${Number(r.jobs_new)}`}
                           </span>
                         </div>
                         {r.error && (
@@ -676,9 +681,16 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
             {/* Right 8 Cols: Terminal Execution Log Viewer */}
             <div className="col-span-8 flex flex-col gap-1.5 border border-[var(--color-ink)] bg-[var(--color-paper)] p-2">
               <div className="flex items-center justify-between border-b border-[var(--color-ink)]/30 pb-1">
-                <span className="font-bold text-[10px] uppercase tracking-wider text-[var(--color-ink)]">
-                  TERMINAL LOG STREAM {selectedRun ? `· RUN ${selectedRun.id.slice(0, 8)}` : ""}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-[10px] uppercase tracking-wider text-[var(--color-ink)]">
+                    TERMINAL LOG STREAM {selectedRun ? `· RUN ${selectedRun.id.slice(0, 8)}` : ""}
+                  </span>
+                  {selectedRun?.status === "running" && (
+                    <span className="px-1.5 py-0.2 text-[9px] bg-[var(--color-paper-2)] text-[var(--color-ink)] border border-[var(--color-ink)] animate-pulse font-mono font-bold">
+                      EXECUTING…
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] text-[var(--color-ink-mute)] font-mono uppercase">
                     FILTER:

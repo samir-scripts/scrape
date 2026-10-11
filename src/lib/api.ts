@@ -110,47 +110,372 @@ export const SAMPLE_SWE_SOURCE: Source = {
   },
 };
 
-let devSources: Source[] = [{ ...SAMPLE_SWE_SOURCE }];
+let devSources: Source[] = (() => {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const saved = localStorage.getItem("scrape:dev_sources");
+      if (saved) return JSON.parse(saved);
+    }
+  } catch {}
+  return [{ ...SAMPLE_SWE_SOURCE }];
+})();
+
+function saveDevSources() {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("scrape:dev_sources", JSON.stringify(devSources));
+    }
+  } catch {}
+}
+
+let devJobs: Job[] = (() => {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const saved = localStorage.getItem("scrape:dev_jobs");
+      if (saved) return JSON.parse(saved);
+    }
+  } catch {}
+  return [];
+})();
+
+function saveDevJobs() {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("scrape:dev_jobs", JSON.stringify(devJobs));
+    }
+  } catch {}
+}
+
+let devSourceRuns: ScrapeRun[] = (() => {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const saved = localStorage.getItem("scrape:dev_runs");
+      if (saved) return JSON.parse(saved);
+    }
+  } catch {}
+  return [];
+})();
+
+function saveDevSourceRuns() {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("scrape:dev_runs", JSON.stringify(devSourceRuns));
+    }
+  } catch {}
+}
+
+let devLogs: Record<string, ScrapeLogEntry[]> = (() => {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const saved = localStorage.getItem("scrape:dev_logs");
+      if (saved) return JSON.parse(saved);
+    }
+  } catch {}
+  return {};
+})();
+
+function saveDevLogs() {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("scrape:dev_logs", JSON.stringify(devLogs));
+    }
+  } catch {}
+}
+
+const executionDelayStep = () => {
+  if (typeof process !== "undefined" && process.env?.NODE_ENV === "test") {
+    return 15;
+  }
+  return 500;
+};
+
+export function __resetDevData() {
+  devSources = [{ ...SAMPLE_SWE_SOURCE }];
+  devJobs = [];
+  devSourceRuns = [];
+  devLogs = {};
+  saveDevSources();
+  saveDevJobs();
+  saveDevSourceRuns();
+  saveDevLogs();
+}
+
+export function generateScrapedJobsForSource(source: Source): Job[] {
+  const now = new Date().toISOString();
+  const sourceName = source.name || "Target Company";
+  const company =
+    sourceName.split(" — ")[0].split(" - ")[0].trim() ||
+    source.identifier ||
+    "Cloudflare";
+  const isCloudflare = company.toLowerCase().includes("cloudflare");
+
+  const sampleRoles = isCloudflare
+    ? [
+        {
+          title: "Software Engineering Intern - Systems & Core Infrastructure",
+          location: "San Francisco, CA",
+          salary_min: 50,
+          salary_max: 60,
+          role_type: "internship" as const,
+        },
+        {
+          title: "Systems Engineering Intern - Edge & Networking Protocols",
+          location: "Austin, TX",
+          salary_min: 48,
+          salary_max: 55,
+          role_type: "internship" as const,
+        },
+        {
+          title: "Security Engineering Intern - Product Security & Cryptography",
+          location: "Remote",
+          salary_min: 52,
+          salary_max: 58,
+          role_type: "internship" as const,
+        },
+        {
+          title: "Distributed Systems Engineer Intern - Global CDN & Data Platform",
+          location: "San Francisco, CA",
+          salary_min: 55,
+          salary_max: 65,
+          role_type: "internship" as const,
+        },
+      ]
+    : [
+        {
+          title: `${company} Software Engineer - Backend Systems`,
+          location: "San Francisco, CA",
+          salary_min: 145000,
+          salary_max: 185000,
+          role_type: ((source.filters as any)?.role_types?.[0] as any) || "full_time",
+        },
+        {
+          title: `Infrastructure Engineer - Platform & Reliability`,
+          location: "Remote",
+          salary_min: 155000,
+          salary_max: 195000,
+          role_type: ((source.filters as any)?.role_types?.[0] as any) || "full_time",
+        },
+        {
+          title: `Full Stack Engineer - Product Experience`,
+          location: "New York, NY",
+          salary_min: 140000,
+          salary_max: 175000,
+          role_type: ((source.filters as any)?.role_types?.[0] as any) || "full_time",
+        },
+        {
+          title: `Systems Engineer Intern - Distributed Data`,
+          location: "Remote",
+          salary_min: 45,
+          salary_max: 55,
+          role_type: "internship" as const,
+        },
+      ];
+
+  const prefix = source.identifier || "src";
+  return sampleRoles.map((role, idx) => {
+    const jobId = `dev-job-${prefix}-${Date.now()}-${idx}`;
+    const dedupeKey = `${prefix}:${Date.now()}:${idx}`;
+    const url =
+      typeof (source.config as any)?.url === "string" && (source.config as any).url.startsWith("http")
+        ? `${(source.config as any).url.replace(/\/$/, "")}/jobs/${1000 + idx}`
+        : `https://boards.greenhouse.io/${prefix}/jobs/${1000 + idx}`;
+
+    const isHourly = role.salary_min < 1000;
+    const salaryRaw = isHourly
+      ? `$${role.salary_min} - $${role.salary_max} / hr`
+      : `$${role.salary_min.toLocaleString()} - $${role.salary_max.toLocaleString()}`;
+
+    return {
+      id: jobId,
+      dedupe_key: dedupeKey,
+      source_id: source.id,
+      external_id: `ext-${Date.now()}-${idx}`,
+      title: role.title,
+      company,
+      role_type: role.role_type,
+      location: role.location,
+      url,
+      date_posted: now,
+      date_added: now,
+      last_seen_at: now,
+      status: "scraped",
+      status_changed_at: now,
+      notes: null,
+      favorited: false,
+      favorited_at: null,
+      salary_min: role.salary_min,
+      salary_max: role.salary_max,
+      salary_currency: "USD",
+      salary_interval: isHourly ? "hour" : "year",
+      salary_raw: salaryRaw,
+      salary_source: "structured",
+      workplace_type: role.location.toLowerCase().includes("remote") ? "remote" : "hybrid",
+      sponsorship: "yes",
+      sponsorship_evidence: "Sponsorship eligible for qualified candidates",
+      clearance: "no",
+      clearance_level: null,
+      clearance_evidence: null,
+      experience_min: role.role_type === "internship" ? 0 : 2,
+      experience_max: role.role_type === "internship" ? 1 : 5,
+      experience_raw: role.role_type === "internship" ? "Currently enrolled student" : "2+ years",
+      is_new_grad: role.role_type === "internship" ? "yes" : "no",
+      experience_evidence: null,
+      description_text: `Autonomous scrape ingestion from ${source.name}. Role matches filter policy.`,
+      enrichment_version: 1,
+      locations: [
+        {
+          raw: role.location,
+          city: role.location.split(",")[0].trim(),
+          region_code: role.location.includes(",") ? role.location.split(",")[1].trim() : null,
+          country_code: "US",
+          is_remote: role.location.toLowerCase().includes("remote"),
+        },
+      ],
+    };
+  });
+}
 
 export const api = {
   // Jobs
   listJobs: (filter?: ApiJobFilter): Promise<Page<Job>> => {
     if (!isTauri()) {
+      let items = [...devJobs];
+      if (filter) {
+        if (filter.statuses && filter.statuses.length > 0) {
+          items = items.filter((j) => filter.statuses!.includes(j.status));
+        }
+        if (filter.role_types && filter.role_types.length > 0) {
+          items = items.filter((j) => filter.role_types!.includes(j.role_type));
+        }
+        if (filter.source_id) {
+          items = items.filter((j) => j.source_id === filter.source_id);
+        }
+        if (filter.favorited_only) {
+          items = items.filter((j) => j.favorited);
+        }
+        if (filter.search && filter.search.trim()) {
+          const q = filter.search.toLowerCase().trim();
+          items = items.filter(
+            (j) =>
+              j.title.toLowerCase().includes(q) ||
+              j.company.toLowerCase().includes(q) ||
+              (j.location && j.location.toLowerCase().includes(q)) ||
+              (j.description_text && j.description_text.toLowerCase().includes(q))
+          );
+        }
+      }
+      const total = items.length;
+      const offset = Number(filter?.offset || 0);
+      const limit = Number(filter?.limit || 2000);
+      const paged = items.slice(offset, offset + limit);
       return Promise.resolve({
-        items: [],
-        total: BigInt(0),
-        limit: BigInt(2000),
-        offset: BigInt(0),
+        items: paged,
+        total: BigInt(total),
+        limit: BigInt(limit),
+        offset: BigInt(offset),
       });
     }
     return invoke<Page<Job>>("list_jobs", { filter: filter || null });
   },
 
-  getJob: (id: string) =>
-    invoke<Job>("get_job", { id }),
+  getJob: (id: string): Promise<Job> => {
+    if (!isTauri()) {
+      const found = devJobs.find((j) => j.id === id);
+      return found ? Promise.resolve({ ...found }) : Promise.reject(new Error(`Job ${id} not found`));
+    }
+    return invoke<Job>("get_job", { id });
+  },
 
-  updateJobStatus: (id: string, status: JobStatus) =>
-    invoke<Job>("update_job_status", { id, status }),
+  updateJobStatus: (id: string, status: JobStatus): Promise<Job> => {
+    if (!isTauri()) {
+      const found = devJobs.find((j) => j.id === id);
+      if (found) {
+        found.status = status;
+        found.status_changed_at = new Date().toISOString();
+        saveDevJobs();
+        return Promise.resolve({ ...found });
+      }
+      return Promise.reject(new Error(`Job ${id} not found`));
+    }
+    return invoke<Job>("update_job_status", { id, status });
+  },
 
-  bulkUpdateJobStatus: (ids: string[], status: JobStatus) =>
-    invoke<number>("bulk_update_job_status", { ids, status }),
+  bulkUpdateJobStatus: (ids: string[], status: JobStatus): Promise<number> => {
+    if (!isTauri()) {
+      let count = 0;
+      const now = new Date().toISOString();
+      for (const id of ids) {
+        const found = devJobs.find((j) => j.id === id);
+        if (found) {
+          found.status = status;
+          found.status_changed_at = now;
+          count++;
+        }
+      }
+      if (count > 0) saveDevJobs();
+      return Promise.resolve(count);
+    }
+    return invoke<number>("bulk_update_job_status", { ids, status });
+  },
 
-  updateJobNotes: (id: string, notes?: string) =>
-    invoke<Job>("update_job_notes", { id, notes: notes || null }),
+  updateJobNotes: (id: string, notes?: string): Promise<Job> => {
+    if (!isTauri()) {
+      const found = devJobs.find((j) => j.id === id);
+      if (found) {
+        found.notes = notes || null;
+        saveDevJobs();
+        return Promise.resolve({ ...found });
+      }
+      return Promise.reject(new Error(`Job ${id} not found`));
+    }
+    return invoke<Job>("update_job_notes", { id, notes: notes || null });
+  },
 
   getJobStatusEvents: (jobId: string) => {
     if (!isTauri()) return Promise.resolve([]);
     return invoke<JobStatusEvent[]>("get_job_status_events", { jobId });
   },
 
-  toggleJobFavorite: (id: string): Promise<Job> =>
-    invoke<Job>("toggle_job_favorite", { id }),
+  toggleJobFavorite: (id: string): Promise<Job> => {
+    if (!isTauri()) {
+      const found = devJobs.find((j) => j.id === id);
+      if (found) {
+        found.favorited = !found.favorited;
+        found.favorited_at = found.favorited ? new Date().toISOString() : null;
+        saveDevJobs();
+        return Promise.resolve({ ...found });
+      }
+      return Promise.reject(new Error(`Job ${id} not found`));
+    }
+    return invoke<Job>("toggle_job_favorite", { id });
+  },
 
-  setJobFavorite: (id: string, favorited: boolean): Promise<Job> =>
-    invoke<Job>("set_job_favorite", { id, favorited }),
+  setJobFavorite: (id: string, favorited: boolean): Promise<Job> => {
+    if (!isTauri()) {
+      const found = devJobs.find((j) => j.id === id);
+      if (found) {
+        found.favorited = favorited;
+        found.favorited_at = favorited ? new Date().toISOString() : null;
+        saveDevJobs();
+        return Promise.resolve({ ...found });
+      }
+      return Promise.reject(new Error(`Job ${id} not found`));
+    }
+    return invoke<Job>("set_job_favorite", { id, favorited });
+  },
 
   cleanupExpiredJobs: (sourceId?: string): Promise<number> => {
-    if (!isTauri()) return Promise.resolve(0);
+    if (!isTauri()) {
+      const prevLength = devJobs.length;
+      devJobs = devJobs.filter((j) => {
+        if (sourceId && j.source_id !== sourceId) return true;
+        if (j.favorited || j.status !== "scraped") return true;
+        return false;
+      });
+      const pruned = prevLength - devJobs.length;
+      if (pruned > 0) saveDevJobs();
+      return Promise.resolve(pruned);
+    }
     return invoke<number>("cleanup_expired_jobs", { sourceId: sourceId || null });
   },
 
@@ -303,53 +628,186 @@ export const api = {
   },
 
   // Scraping & Scheduler
-  runScrapeNow: () =>
-    invoke<ScrapeRun>("run_scrape_now"),
-
-  runSourceNow: (id: string): Promise<ScrapeRun> => {
+  runScrapeNow: async (): Promise<ScrapeRun> => {
     if (!isTauri()) {
-      const now = new Date().toISOString();
-      const target = devSources.find((s) => s.id === id);
+      const enabled = devSources.filter((s) => s.enabled);
+      const target = enabled[0] || devSources[0];
       if (target) {
-        target.last_run_at = now;
-        target.last_status = "ok";
-        target.last_run_duration_ms = BigInt(840);
+        return api.runSourceNow(target.id);
       }
       return Promise.resolve({
         id: `mock-run-${Date.now()}`,
-        trigger: "single_source",
+        trigger: "manual",
         status: "success",
-        started_at: now,
-        finished_at: now,
-        jobs_found: BigInt(8),
-        jobs_new: BigInt(2),
+        started_at: new Date().toISOString(),
+        finished_at: new Date().toISOString(),
+        jobs_found: BigInt(0),
+        jobs_new: BigInt(0),
+        error: null,
+        source_id: null,
+      });
+    }
+    return invoke<ScrapeRun>("run_scrape_now");
+  },
+
+  runSourceNow: async (id: string): Promise<ScrapeRun> => {
+    if (!isTauri()) {
+      const target = devSources.find((s) => s.id === id);
+      const runId = `mock-run-${Date.now()}`;
+      const startedAt = new Date().toISOString();
+      const delayMs = executionDelayStep();
+
+      const shouldFail =
+        target?.identifier.includes("fail") ||
+        target?.name.toLowerCase().includes("fail") ||
+        target?.kind === ("unknown" as any);
+
+      const runRecord: ScrapeRun = {
+        id: runId,
+        trigger: "single_source",
+        status: "running" as any,
+        started_at: startedAt,
+        finished_at: null,
+        jobs_found: BigInt(0),
+        jobs_new: BigInt(0),
         error: null,
         source_id: id,
+      };
+      devSourceRuns.unshift(runRecord);
+
+      const sourceName = target ? target.name : id;
+      const sourceKind = target ? target.kind : "greenhouse";
+      devLogs[runId] = [
+        {
+          id: `log-${Date.now()}-1`,
+          run_id: runId,
+          timestamp: new Date().toISOString(),
+          level: "info",
+          source_id: id,
+          message: `Scrape workflow initiated: ${sourceName} (${sourceKind})`,
+        },
+      ];
+      saveDevSourceRuns();
+      saveDevLogs();
+
+      await new Promise((r) => setTimeout(r, delayMs));
+
+      if (shouldFail) {
+        devLogs[runId].push({
+          id: `log-${Date.now()}-2`,
+          run_id: runId,
+          timestamp: new Date().toISOString(),
+          level: "warn",
+          source_id: id,
+          message: `Sidecar worker warning: Slow response from endpoint (>3000ms)`,
+        });
+        await new Promise((r) => setTimeout(r, delayMs));
+
+        const finishedAt = new Date().toISOString();
+        const errMsg = "Network timeout connecting to careers endpoint (HTTP 504 Gateway Timeout)";
+        devLogs[runId].push({
+          id: `log-${Date.now()}-3`,
+          run_id: runId,
+          timestamp: finishedAt,
+          level: "error",
+          source_id: id,
+          message: `Failed to extract postings: ${errMsg}`,
+        });
+        devLogs[runId].push({
+          id: `log-${Date.now()}-4`,
+          run_id: runId,
+          timestamp: finishedAt,
+          level: "error",
+          source_id: id,
+          message: `Workflow run failed with exit code 1. 0 postings committed.`,
+        });
+
+        runRecord.status = "failed";
+        runRecord.finished_at = finishedAt;
+        runRecord.error = errMsg;
+
+        if (target) {
+          target.last_run_at = finishedAt;
+          target.last_status = "error";
+          target.last_error = errMsg;
+          target.last_run_duration_ms = BigInt(delayMs * 2);
+          saveDevSources();
+        }
+
+        saveDevSourceRuns();
+        saveDevLogs();
+        return runRecord;
+      }
+
+      devLogs[runId].push({
+        id: `log-${Date.now()}-2`,
+        run_id: runId,
+        timestamp: new Date().toISOString(),
+        level: "info",
+        source_id: id,
+        message: `Sidecar worker spawned. Fetching listings from configured endpoint...`,
       });
+      saveDevLogs();
+
+      await new Promise((r) => setTimeout(r, delayMs));
+
+      const newJobs = target
+        ? generateScrapedJobsForSource(target)
+        : generateScrapedJobsForSource({ ...SAMPLE_SWE_SOURCE, id, name: "Target Workflow" });
+
+      devJobs.unshift(...newJobs);
+      saveDevJobs();
+
+      devLogs[runId].push({
+        id: `log-${Date.now()}-3`,
+        run_id: runId,
+        timestamp: new Date().toISOString(),
+        level: "info",
+        source_id: id,
+        message: `Extracted 8 postings from source. Policy engine matched ${newJobs.length} postings against criteria.`,
+      });
+
+      const finishedAt = new Date().toISOString();
+      const durationMs = delayMs * 2;
+
+      devLogs[runId].push({
+        id: `log-${Date.now()}-4`,
+        run_id: runId,
+        timestamp: finishedAt,
+        level: "info",
+        source_id: id,
+        message: `Workflow run completed in ${(durationMs / 1000).toFixed(2)}s with status: SUCCESS. Committed ${newJobs.length} new postings to Discovered inbox.`,
+      });
+
+      runRecord.status = "success";
+      runRecord.finished_at = finishedAt;
+      runRecord.jobs_found = BigInt(8);
+      runRecord.jobs_new = BigInt(newJobs.length);
+
+      if (target) {
+        target.last_run_at = finishedAt;
+        target.last_status = "ok";
+        target.last_error = null;
+        target.last_run_duration_ms = BigInt(durationMs);
+        saveDevSources();
+      }
+
+      saveDevSourceRuns();
+      saveDevLogs();
+      return runRecord;
     }
     return invoke<ScrapeRun>("run_source_now", { id });
   },
 
-  listScrapeRuns: (limit?: number) => {
-    if (!isTauri()) return Promise.resolve([]);
+  listScrapeRuns: (limit?: number): Promise<ScrapeRun[]> => {
+    if (!isTauri()) return Promise.resolve(devSourceRuns.slice(0, limit ?? 50));
     return invoke<ScrapeRun[]>("list_scrape_runs", { limit });
   },
 
   listSourceRuns: (sourceId: string, limit?: number): Promise<ScrapeRun[]> => {
     if (!isTauri()) {
-      return Promise.resolve([
-        {
-          id: `mock-run-1`,
-          trigger: "single_source",
-          status: "success",
-          started_at: new Date(Date.now() - 3600000).toISOString(),
-          finished_at: new Date(Date.now() - 3590000).toISOString(),
-          jobs_found: BigInt(8),
-          jobs_new: BigInt(2),
-          error: null,
-          source_id: sourceId,
-        },
-      ]);
+      const runs = devSourceRuns.filter((r) => r.source_id === sourceId);
+      return Promise.resolve(runs.slice(0, limit ?? 10));
     }
     return invoke<ScrapeRun[]>("list_source_runs", { sourceId, limit });
   },
@@ -376,11 +834,85 @@ export const api = {
   detectSource: (url: string) =>
     invoke<DetectResult>("detect_source", { url }),
 
-  testSource: (id: string) =>
-    invoke<WorkerEvent[]>("test_source", { id }),
+  testSource: (id: string): Promise<WorkerEvent[]> => {
+    if (!isTauri()) {
+      const source = devSources.find((s) => s.id === id);
+      const jobs = source ? generateScrapedJobsForSource(source) : [];
+      const events: WorkerEvent[] = jobs.map((j) => ({
+        type: "job",
+        source_id: id,
+        external_id: j.external_id || "ext-1",
+        title: j.title,
+        company: j.company,
+        role_type: j.role_type,
+        location: j.location || "Remote",
+        url: j.url,
+        date_posted: j.date_posted,
+        salary: j.salary_min
+          ? {
+              min: j.salary_min,
+              max: j.salary_max,
+              currency: j.salary_currency || "USD",
+              interval: j.salary_interval || "hour",
+              raw: j.salary_raw || "",
+              source: "structured",
+            }
+          : null,
+        description_text: j.description_text,
+        locations: j.locations,
+        workplace_type: j.workplace_type,
+        sponsorship: null,
+        clearance: null,
+        experience: null,
+        is_new_grad: j.is_new_grad,
+      }));
+      return Promise.resolve(events);
+    }
+    return invoke<WorkerEvent[]>("test_source", { id });
+  },
 
-  testSourceTransient: (input: TransientSourceInput) =>
-    invoke<WorkerEvent[]>("test_source_transient", { input }),
+  testSourceTransient: (input: TransientSourceInput): Promise<WorkerEvent[]> => {
+    if (!isTauri()) {
+      const dummySource: Source = {
+        ...SAMPLE_SWE_SOURCE,
+        name: input.name,
+        identifier: input.identifier,
+        kind: input.kind as any,
+        config: input.config as any,
+      };
+      const jobs = generateScrapedJobsForSource(dummySource);
+      const events: WorkerEvent[] = jobs.map((j) => ({
+        type: "job",
+        source_id: "transient",
+        external_id: j.external_id || "ext-1",
+        title: j.title,
+        company: j.company,
+        role_type: j.role_type,
+        location: j.location || "Remote",
+        url: j.url,
+        date_posted: j.date_posted,
+        salary: j.salary_min
+          ? {
+              min: j.salary_min,
+              max: j.salary_max,
+              currency: j.salary_currency || "USD",
+              interval: j.salary_interval || "hour",
+              raw: j.salary_raw || "",
+              source: "structured",
+            }
+          : null,
+        description_text: j.description_text,
+        locations: j.locations,
+        workplace_type: j.workplace_type,
+        sponsorship: null,
+        clearance: null,
+        experience: null,
+        is_new_grad: j.is_new_grad,
+      }));
+      return Promise.resolve(events);
+    }
+    return invoke<WorkerEvent[]>("test_source_transient", { input });
+  },
 
   getJobLocations: (jobId: string): Promise<ParsedLocation[]> => {
     if (!isTauri()) return Promise.resolve([]);
@@ -403,31 +935,48 @@ export const api = {
   },
 
   getScrapeRun: (runId: string): Promise<ScrapeRun> => {
+    if (!isTauri()) {
+      const found = devSourceRuns.find((r) => r.id === runId);
+      return found ? Promise.resolve({ ...found }) : Promise.reject(new Error(`Run ${runId} not found`));
+    }
     return invoke<ScrapeRun>("get_scrape_run", { runId });
   },
 
   getScrapeLogs: (runId: string): Promise<ScrapeLogEntry[]> => {
-    if (!isTauri()) return Promise.resolve([]);
+    if (!isTauri()) {
+      return Promise.resolve(devLogs[runId] ? [...devLogs[runId]] : []);
+    }
     return invoke<ScrapeLogEntry[]>("get_scrape_logs", { runId });
   },
 
   getMetrics: (granularity: "week" | "month" = "week", periods: number = 12): Promise<Metrics> => {
     if (!isTauri()) {
+      const scraped = devJobs.filter((j) => j.status === "scraped" || j.status === "viewed").length;
+      const applied = devJobs.filter((j) => j.status === "applied").length;
+      const interviewing = devJobs.filter((j) => j.status === "interviewing").length;
+      const offers = devJobs.filter((j) => j.status === "offer").length;
+      const favorited = devJobs.filter((j) => j.favorited).length;
+      const totalTracked = applied + interviewing + offers;
+      const responseRate = totalTracked > 0 ? ((interviewing + offers) / totalTracked) * 100 : 0;
+      const salaries = devJobs.filter((j) => j.salary_min != null).map((j) => j.salary_min!);
+      const median_salary = salaries.length > 0 ? 155000 : null;
+      const avg_salary = salaries.length > 0 ? 160000 : null;
+
       return Promise.resolve({
         totals: {
-          scraped: 0,
-          applied: 0,
-          interviewing: 0,
-          offers: 0,
-          favorited: 0,
-          response_rate: 0,
-          median_salary: null,
-          avg_salary: null,
+          scraped,
+          applied,
+          interviewing,
+          offers,
+          favorited,
+          response_rate: responseRate,
+          median_salary,
+          avg_salary,
         },
         series: [],
         by_role_type: [],
         salary_distribution: [],
-        streak: { current: 0, longest: 0, last_applied_on: null },
+        streak: { current: applied > 0 ? 1 : 0, longest: applied > 0 ? 1 : 0, last_applied_on: null },
       });
     }
     return invoke<Metrics>("get_metrics", { granularity, periods });
