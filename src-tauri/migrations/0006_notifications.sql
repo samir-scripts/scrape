@@ -1,7 +1,7 @@
 -- Migration 0006: App notifications storage
 CREATE TABLE IF NOT EXISTS app_notifications (
     id TEXT PRIMARY KEY,
-    kind TEXT NOT NULL CHECK (kind IN ('update', 'news', 'system', 'scraper', 'error')),
+    kind TEXT NOT NULL CHECK (kind IN ('update', 'news', 'system', 'scraper')),
     title TEXT NOT NULL,
     message TEXT NOT NULL,
     action_label TEXT,
