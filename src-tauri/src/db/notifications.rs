@@ -196,7 +196,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(n1.read, false);
+        assert!(!n1.read);
         assert_eq!(n1.kind, NotificationKind::Update);
 
         let unread = NotificationRepo::count_unread(&pool).await.unwrap();

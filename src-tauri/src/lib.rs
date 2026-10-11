@@ -227,7 +227,7 @@ mod bindings_test {
         // Verify default system settings initialized
         let settings = db::settings::SettingsRepo::get_all(&pool).await.unwrap();
         assert_eq!(settings.app_update_channel, "stable");
-        assert_eq!(settings.app_auto_update, true);
+        assert!(settings.app_auto_update);
 
         // Verify sample SWE workflow seeded
         let sources = db::sources::SourcesRepo::list(&pool).await.unwrap();

@@ -427,7 +427,7 @@ mod tests {
         assert_eq!(fetched.system_locale, "fr-FR");
         assert_eq!(fetched.scraper_cron, "0 0 12 * * *");
         assert_eq!(fetched.ui_theme, "paper");
-        assert_eq!(fetched.ui_tooltips_enabled, true);
+        assert!(fetched.ui_tooltips_enabled);
         assert_eq!(fetched.ui_font_family, "default");
         assert_eq!(fetched.system_time_format, "12h");
         assert_eq!(fetched.system_date_format, "MM/DD/YYYY");
@@ -465,7 +465,7 @@ mod tests {
             SettingsRepo::update_setting(&pool, "ui.tooltips_enabled", serde_json::json!(false))
                 .await
                 .unwrap();
-        assert_eq!(updated_tooltips.ui_tooltips_enabled, false);
+        assert!(!updated_tooltips.ui_tooltips_enabled);
 
         let updated_font =
             SettingsRepo::update_setting(&pool, "ui.font_family", serde_json::json!("jetbrains"))

@@ -5,10 +5,12 @@
 //! exported to TypeScript always agree.
 
 pub mod enrich;
+pub mod filter;
 pub mod protocol;
 mod role;
 mod types;
 
+pub use filter::{FilterExpr, FilterField, FilterOp, JobFilterContext};
 pub use protocol::{
     WorkerConfig, WorkerEvent, WorkerFilters, WorkerLimits, WorkerSource, WorkerStats,
     PROTOCOL_VERSION,

@@ -58,6 +58,111 @@ pub struct WorkerFilters {
     pub locations: Vec<String>,
     #[serde(default)]
     pub role_types: Vec<RoleType>,
+    #[serde(default)]
+    pub query: Option<String>,
+    #[serde(default)]
+    pub policy: Option<serde_json::Value>,
+}
+
+impl WorkerFilters {
+    pub fn to_expr(&self) -> Result<crate::filter::FilterExpr, String> {
+        use crate::filter::{FilterExpr, FilterField, FilterOp};
+        let mut and_clauses = Vec::new();
+
+        // 1. If explicit SQL-like query string is present, parse it
+        if let Some(ref q) = self.query {
+            let trimmed = q.trim();
+            if !trimmed.is_empty() {
+                and_clauses.push(FilterExpr::parse_query(trimmed)?);
+            }
+        }
+
+        // 2. If explicit structured policy object is present, parse it
+        if let Some(ref pol) = self.policy {
+            if !pol.is_null() {
+                and_clauses.push(FilterExpr::parse_structured_policy(pol)?);
+            }
+        }
+
+        // 3. Legacy keyword / location / role_type compilation
+        if !self.include_keywords.is_empty() {
+            let includes: Vec<FilterExpr> = self
+                .include_keywords
+                .iter()
+                .map(|k| {
+                    FilterExpr::Or(vec![
+                        FilterExpr::FieldMatch {
+                            field: FilterField::Title,
+                            op: FilterOp::Like,
+                            value: format!("%{}%", k),
+                        },
+                        FilterExpr::FieldMatch {
+                            field: FilterField::Location,
+                            op: FilterOp::Like,
+                            value: format!("%{}%", k),
+                        },
+                    ])
+                })
+                .collect();
+            and_clauses.push(FilterExpr::Or(includes));
+        }
+
+        if !self.exclude_keywords.is_empty() {
+            let excludes: Vec<FilterExpr> = self
+                .exclude_keywords
+                .iter()
+                .map(|k| {
+                    FilterExpr::Or(vec![
+                        FilterExpr::FieldMatch {
+                            field: FilterField::Title,
+                            op: FilterOp::Like,
+                            value: format!("%{}%", k),
+                        },
+                        FilterExpr::FieldMatch {
+                            field: FilterField::Location,
+                            op: FilterOp::Like,
+                            value: format!("%{}%", k),
+                        },
+                    ])
+                })
+                .collect();
+            and_clauses.push(FilterExpr::Not(Box::new(FilterExpr::Or(excludes))));
+        }
+
+        if !self.locations.is_empty() {
+            let locs: Vec<FilterExpr> = self
+                .locations
+                .iter()
+                .map(|loc| FilterExpr::FieldMatch {
+                    field: FilterField::Location,
+                    op: FilterOp::Like,
+                    value: format!("%{}%", loc),
+                })
+                .collect();
+            and_clauses.push(FilterExpr::Or(locs));
+        }
+
+        if !self.role_types.is_empty() {
+            let roles: Vec<String> = self
+                .role_types
+                .iter()
+                .map(|rt| format!("{:?}", rt).to_lowercase())
+                .collect();
+            and_clauses.push(FilterExpr::FieldIn {
+                field: FilterField::RoleType,
+                values: roles,
+                negated: false,
+            });
+        }
+
+        if and_clauses.is_empty() {
+            Ok(FilterExpr::AlwaysTrue)
+        } else if and_clauses.len() == 1 {
+            Ok(and_clauses.remove(0))
+        } else {
+            Ok(FilterExpr::And(and_clauses))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
