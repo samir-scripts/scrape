@@ -226,7 +226,14 @@ mod tests {
 
     #[test]
     fn test_salary_structured() {
-        let s = Salary::from_structured(Some(120000.0), Some(160000.0), Some("USD"), Some("year"), None).unwrap();
+        let s = Salary::from_structured(
+            Some(120000.0),
+            Some(160000.0),
+            Some("USD"),
+            Some("year"),
+            None,
+        )
+        .unwrap();
         assert_eq!(s.min, Some(120000));
         assert_eq!(s.max, Some(160000));
         assert_eq!(s.currency, "USD");
@@ -235,7 +242,8 @@ mod tests {
 
     #[test]
     fn test_salary_structured_hourly() {
-        let s = Salary::from_structured(Some(50.0), Some(75.0), Some("USD"), Some("hour"), None).unwrap();
+        let s = Salary::from_structured(Some(50.0), Some(75.0), Some("USD"), Some("hour"), None)
+            .unwrap();
         assert_eq!(s.min, Some(104000));
         assert_eq!(s.max, Some(156000));
         assert_eq!(s.interval, SalaryInterval::Hour);
@@ -244,16 +252,25 @@ mod tests {
     #[test]
     fn test_salary_from_text_ranges() {
         let test_cases = vec![
-            ("Base salary range: $120,000 - $150,000 per year.", 120000, 150000),
+            (
+                "Base salary range: $120,000 - $150,000 per year.",
+                120000,
+                150000,
+            ),
             ("Expected compensation: $120k - $150k.", 120000, 150000),
             ("Salary: $140k – 180k /yr", 140000, 180000),
-            ("The pay range is USD 130,000 to 175,000 annually.", 130000, 175000),
+            (
+                "The pay range is USD 130,000 to 175,000 annually.",
+                130000,
+                175000,
+            ),
             ("Salary range: $100,000–$130,000.", 100000, 130000),
             ("Base compensation: $90k to $120k / year", 90000, 120000),
         ];
 
         for (text, expected_min, expected_max) in test_cases {
-            let res = Salary::from_text(text).unwrap_or_else(|| panic!("Failed to parse: {}", text));
+            let res =
+                Salary::from_text(text).unwrap_or_else(|| panic!("Failed to parse: {}", text));
             assert_eq!(res.min, Some(expected_min), "Failed min on: {}", text);
             assert_eq!(res.max, Some(expected_max), "Failed max on: {}", text);
         }
@@ -261,7 +278,8 @@ mod tests {
 
     #[test]
     fn test_salary_from_text_hourly() {
-        let s = Salary::from_text("Hourly rate: $60 - $85 per hour depending on experience.").unwrap();
+        let s =
+            Salary::from_text("Hourly rate: $60 - $85 per hour depending on experience.").unwrap();
         assert_eq!(s.min, Some(124800));
         assert_eq!(s.max, Some(176800));
         assert_eq!(s.interval, SalaryInterval::Hour);

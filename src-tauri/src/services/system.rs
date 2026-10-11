@@ -60,8 +60,18 @@ impl SystemService {
         let path = Self::get_log_file_path(app);
         let now = scrape_core::now_iso();
         let src_tag = source_id.map(|s| format!(" [{}]", s)).unwrap_or_default();
-        let line = format!("[{}] [{:>5}]{} {}\n", now, level.to_uppercase(), src_tag, message);
-        if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let line = format!(
+            "[{}] [{:>5}]{} {}\n",
+            now,
+            level.to_uppercase(),
+            src_tag,
+            message
+        );
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
             let _ = file.write_all(line.as_bytes());
         }
     }
@@ -108,7 +118,12 @@ tail -f -n 100 "{}"
                 .arg("Terminal")
                 .arg(&script_path)
                 .spawn()
-                .map_err(|e| crate::error::AppError::Internal(format!("Failed to launch Terminal.app: {}", e)))?;
+                .map_err(|e| {
+                    crate::error::AppError::Internal(format!(
+                        "Failed to launch Terminal.app: {}",
+                        e
+                    ))
+                })?;
         }
 
         #[cfg(target_os = "linux")]
@@ -128,7 +143,14 @@ tail -f -n 100 "{}"
         #[cfg(target_os = "windows")]
         {
             let _ = std::process::Command::new("cmd")
-                .args(["/C", "start", "powershell", "-NoExit", "-Command", &format!("Get-Content -Path '{}' -Wait -Tail 100", log_path_str)])
+                .args([
+                    "/C",
+                    "start",
+                    "powershell",
+                    "-NoExit",
+                    "-Command",
+                    &format!("Get-Content -Path '{}' -Wait -Tail 100", log_path_str),
+                ])
                 .spawn();
         }
 

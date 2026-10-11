@@ -308,7 +308,9 @@ mod tests {
             assert_eq!(locations[0].city.as_deref(), Some("New York"));
             assert_eq!(locations[1].city.as_deref(), Some("Toronto"));
 
-            let spon = sponsorship.as_ref().expect("Sponsorship should be extracted");
+            let spon = sponsorship
+                .as_ref()
+                .expect("Sponsorship should be extracted");
             assert_eq!(spon.value, TriState::Yes);
 
             let exp = experience.as_ref().expect("Experience should be extracted");

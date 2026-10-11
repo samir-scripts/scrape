@@ -411,7 +411,12 @@ impl JobsRepo {
             if !statuses.is_empty() {
                 let status_strs: Vec<String> = statuses
                     .iter()
-                    .map(|s| serde_json::to_string(s).unwrap().trim_matches('"').to_string())
+                    .map(|s| {
+                        serde_json::to_string(s)
+                            .unwrap()
+                            .trim_matches('"')
+                            .to_string()
+                    })
                     .collect();
                 let placeholders = vec!["?"; status_strs.len()].join(",");
                 conditions.push(format!("status IN ({})", placeholders));
@@ -423,7 +428,12 @@ impl JobsRepo {
             if !role_types.is_empty() {
                 let role_strs: Vec<String> = role_types
                     .iter()
-                    .map(|r| serde_json::to_string(r).unwrap().trim_matches('"').to_string())
+                    .map(|r| {
+                        serde_json::to_string(r)
+                            .unwrap()
+                            .trim_matches('"')
+                            .to_string()
+                    })
                     .collect();
                 let placeholders = vec!["?"; role_strs.len()].join(",");
                 conditions.push(format!("role_type IN ({})", placeholders));
@@ -442,7 +452,10 @@ impl JobsRepo {
 
         // Search term (searches title, company, location, and description_text)
         if filter.search.is_some() {
-            conditions.push("(title LIKE ? OR company LIKE ? OR location LIKE ? OR description_text LIKE ?)".to_string());
+            conditions.push(
+                "(title LIKE ? OR company LIKE ? OR location LIKE ? OR description_text LIKE ?)"
+                    .to_string(),
+            );
         }
 
         // Salary range overlap: [lo, hi] overlaps if salary_max >= lo AND salary_min <= hi
@@ -533,7 +546,12 @@ impl JobsRepo {
             if !spon_list.is_empty() && spon_list.len() < 3 {
                 let spon_strs: Vec<String> = spon_list
                     .iter()
-                    .map(|s| serde_json::to_string(s).unwrap().trim_matches('"').to_string())
+                    .map(|s| {
+                        serde_json::to_string(s)
+                            .unwrap()
+                            .trim_matches('"')
+                            .to_string()
+                    })
                     .collect();
                 let joined = spon_strs
                     .iter()
@@ -549,7 +567,12 @@ impl JobsRepo {
             if !clr_list.is_empty() && clr_list.len() < 3 {
                 let clr_strs: Vec<String> = clr_list
                     .iter()
-                    .map(|s| serde_json::to_string(s).unwrap().trim_matches('"').to_string())
+                    .map(|s| {
+                        serde_json::to_string(s)
+                            .unwrap()
+                            .trim_matches('"')
+                            .to_string()
+                    })
                     .collect();
                 let joined = clr_strs
                     .iter()
@@ -580,8 +603,16 @@ impl JobsRepo {
         }
 
         // Countries and Regions geo matching
-        let has_countries = filter.countries.as_ref().map(|c| !c.is_empty()).unwrap_or(false);
-        let has_regions = filter.regions.as_ref().map(|r| !r.is_empty()).unwrap_or(false);
+        let has_countries = filter
+            .countries
+            .as_ref()
+            .map(|c| !c.is_empty())
+            .unwrap_or(false);
+        let has_regions = filter
+            .regions
+            .as_ref()
+            .map(|r| !r.is_empty())
+            .unwrap_or(false);
 
         if has_countries || has_regions {
             let mut geo_sub = Vec::new();
@@ -600,7 +631,9 @@ impl JobsRepo {
                     let mut region_conditions = Vec::new();
                     for r in r_list {
                         let clean = r.replace('\'', "''");
-                        region_conditions.push(format!("jl.region_code = '{clean}' OR jl.region_code LIKE '%-{clean}'"));
+                        region_conditions.push(format!(
+                            "jl.region_code = '{clean}' OR jl.region_code LIKE '%-{clean}'"
+                        ));
                     }
                     geo_sub.push(format!("({})", region_conditions.join(" OR ")));
                 }
@@ -995,22 +1028,18 @@ impl JobsRepo {
                 _ => unreachable!(),
             };
 
-            let salary_int_str = job
-                .salary_interval
-                .map(|si| match si {
-                    SalaryInterval::Year => "year",
-                    SalaryInterval::Month => "month",
-                    SalaryInterval::Week => "week",
-                    SalaryInterval::Day => "day",
-                    SalaryInterval::Hour => "hour",
-                });
+            let salary_int_str = job.salary_interval.map(|si| match si {
+                SalaryInterval::Year => "year",
+                SalaryInterval::Month => "month",
+                SalaryInterval::Week => "week",
+                SalaryInterval::Day => "day",
+                SalaryInterval::Hour => "hour",
+            });
 
-            let salary_src_str = job
-                .salary_source
-                .map(|ss| match ss {
-                    SalarySource::Structured => "structured",
-                    SalarySource::Text => "text",
-                });
+            let salary_src_str = job.salary_source.map(|ss| match ss {
+                SalarySource::Structured => "structured",
+                SalarySource::Text => "text",
+            });
 
             let workplace_str = match job.workplace_type {
                 WorkplaceType::Remote => "remote",
@@ -1031,15 +1060,13 @@ impl JobsRepo {
                 TriState::Unknown => "unknown",
             };
 
-            let clr_lvl_str = job
-                .clearance_level
-                .map(|cl| match cl {
-                    ClearanceLevel::PublicTrust => "public_trust",
-                    ClearanceLevel::Confidential => "confidential",
-                    ClearanceLevel::Secret => "secret",
-                    ClearanceLevel::TopSecret => "top_secret",
-                    ClearanceLevel::TsSci => "ts_sci",
-                });
+            let clr_lvl_str = job.clearance_level.map(|cl| match cl {
+                ClearanceLevel::PublicTrust => "public_trust",
+                ClearanceLevel::Confidential => "confidential",
+                ClearanceLevel::Secret => "secret",
+                ClearanceLevel::TopSecret => "top_secret",
+                ClearanceLevel::TsSci => "ts_sci",
+            });
 
             let new_grad_str = match job.is_new_grad {
                 TriState::Yes => "yes",
@@ -1433,7 +1460,9 @@ mod tests {
                 experience_raw: Some("5+ years".to_string()),
                 is_new_grad: TriState::No,
                 experience_evidence: Some("5+ years experience required".to_string()),
-                description_text: Some("5+ years experience required. No visa sponsorship.".to_string()),
+                description_text: Some(
+                    "5+ years experience required. No visa sponsorship.".to_string(),
+                ),
                 locations: vec![ParsedLocation {
                     raw: "San Francisco, CA".to_string(),
                     city: Some("San Francisco".to_string()),
@@ -1641,7 +1670,9 @@ mod tests {
             }],
         };
 
-        let result = JobsRepo::upsert_scraped(&pool, &[initial_job]).await.unwrap();
+        let result = JobsRepo::upsert_scraped(&pool, &[initial_job])
+            .await
+            .unwrap();
         assert_eq!(result.inserted, 1);
 
         // Fetch inserted job
@@ -1652,8 +1683,12 @@ mod tests {
         assert_eq!(jobs.items[0].notes, None);
 
         // 2. User triages job: moves to 'Applied' and adds custom notes
-        JobsRepo::update_status(&pool, &job_id, JobStatus::Applied).await.unwrap();
-        JobsRepo::update_notes(&pool, &job_id, Some("Referred by Jane Doe")).await.unwrap();
+        JobsRepo::update_status(&pool, &job_id, JobStatus::Applied)
+            .await
+            .unwrap();
+        JobsRepo::update_notes(&pool, &job_id, Some("Referred by Jane Doe"))
+            .await
+            .unwrap();
 
         // Verify user triage is recorded
         let triaged_job = JobsRepo::get(&pool, &job_id).await.unwrap();
@@ -1698,14 +1733,19 @@ mod tests {
             }],
         };
 
-        let result2 = JobsRepo::upsert_scraped(&pool, &[updated_job]).await.unwrap();
+        let result2 = JobsRepo::upsert_scraped(&pool, &[updated_job])
+            .await
+            .unwrap();
         assert_eq!(result2.inserted, 0);
         assert_eq!(result2.updated, 1);
 
         // 4. Assert user state is strictly PRESERVED, while enrichment data is UPDATED
         let after_rescrape = JobsRepo::get(&pool, &job_id).await.unwrap();
         assert_eq!(after_rescrape.status, JobStatus::Applied); // Preserved!
-        assert_eq!(after_rescrape.notes.as_deref(), Some("Referred by Jane Doe")); // Preserved!
+        assert_eq!(
+            after_rescrape.notes.as_deref(),
+            Some("Referred by Jane Doe")
+        ); // Preserved!
         assert_eq!(after_rescrape.salary_min, Some(210_000)); // Updated!
         assert_eq!(after_rescrape.salary_max, Some(275_000)); // Updated!
         assert_eq!(after_rescrape.workplace_type, WorkplaceType::Hybrid); // Updated!
@@ -1715,7 +1755,10 @@ mod tests {
         // Assert job_locations child table replaced old locations without orphans
         assert_eq!(after_rescrape.locations.len(), 1);
         assert_eq!(after_rescrape.locations[0].city.as_deref(), Some("Seattle"));
-        assert_eq!(after_rescrape.locations[0].region_code.as_deref(), Some("US-WA"));
+        assert_eq!(
+            after_rescrape.locations[0].region_code.as_deref(),
+            Some("US-WA")
+        );
     }
 
     #[tokio::test]
@@ -1977,7 +2020,9 @@ mod tests {
             }],
         };
 
-        JobsRepo::upsert_scraped(&pool, &[job_ca, job_on]).await.unwrap();
+        JobsRepo::upsert_scraped(&pool, &[job_ca, job_on])
+            .await
+            .unwrap();
 
         // 1. Filter by country US
         let us_filter = JobFilter {
@@ -2134,20 +2179,33 @@ mod tests {
             locations: vec![],
         };
 
-        JobsRepo::upsert_scraped(&pool, &[job_a, job_b]).await.unwrap();
+        JobsRepo::upsert_scraped(&pool, &[job_a, job_b])
+            .await
+            .unwrap();
 
         let list = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
         assert_eq!(list.total, 2);
-        let id_a = list.items.iter().find(|j| j.company == "Alpha").unwrap().id.clone();
+        let id_a = list
+            .items
+            .iter()
+            .find(|j| j.company == "Alpha")
+            .unwrap()
+            .id
+            .clone();
 
         // Favorite Alpha only
         JobsRepo::set_favorite(&pool, &id_a, true).await.unwrap();
 
         // Filter favorited only
-        let fav_res = JobsRepo::list(&pool, JobFilter {
-            favorited_only: Some(true),
-            ..Default::default()
-        }).await.unwrap();
+        let fav_res = JobsRepo::list(
+            &pool,
+            JobFilter {
+                favorited_only: Some(true),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
 
         assert_eq!(fav_res.total, 1);
         assert_eq!(fav_res.items[0].company, "Alpha");
@@ -2242,9 +2300,21 @@ mod tests {
         assert_eq!(pruned, 1);
 
         // Verify remaining jobs
-        assert!(JobsRepo::get(&pool, "j1").await.is_err(), "Job 1 should be deleted");
-        assert!(JobsRepo::get(&pool, "j2").await.is_ok(), "Job 2 (favorited) must be preserved");
-        assert!(JobsRepo::get(&pool, "j3").await.is_ok(), "Job 3 (notes) must be preserved");
-        assert!(JobsRepo::get(&pool, "j4").await.is_ok(), "Job 4 (applied) must be preserved");
+        assert!(
+            JobsRepo::get(&pool, "j1").await.is_err(),
+            "Job 1 should be deleted"
+        );
+        assert!(
+            JobsRepo::get(&pool, "j2").await.is_ok(),
+            "Job 2 (favorited) must be preserved"
+        );
+        assert!(
+            JobsRepo::get(&pool, "j3").await.is_ok(),
+            "Job 3 (notes) must be preserved"
+        );
+        assert!(
+            JobsRepo::get(&pool, "j4").await.is_ok(),
+            "Job 4 (applied) must be preserved"
+        );
     }
 }

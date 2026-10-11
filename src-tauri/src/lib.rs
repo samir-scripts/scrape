@@ -210,11 +210,16 @@ mod bindings_test {
 
     #[tokio::test]
     async fn test_cold_application_startup_from_disk_path() {
-        let temp_dir = std::env::temp_dir().join(format!("scrape_boot_cold_{}", uuid::Uuid::new_v4()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("scrape_boot_cold_{}", uuid::Uuid::new_v4()));
         let db_path = temp_dir.join("scrape_data.db");
 
         let res = bootstrap_database_and_services(&db_path).await;
-        assert!(res.is_ok(), "Cold startup must succeed on fresh disk path: {:?}", res.err());
+        assert!(
+            res.is_ok(),
+            "Cold startup must succeed on fresh disk path: {:?}",
+            res.err()
+        );
 
         let (pool, _runner) = res.unwrap();
         assert!(db_path.exists(), "Database file must exist on disk");
@@ -226,7 +231,10 @@ mod bindings_test {
 
         // Verify sample SWE workflow seeded
         let sources = db::sources::SourcesRepo::list(&pool).await.unwrap();
-        assert!(!sources.is_empty(), "Initial bootstrap must seed sample workflow");
+        assert!(
+            !sources.is_empty(),
+            "Initial bootstrap must seed sample workflow"
+        );
 
         pool.close().await;
         let _ = std::fs::remove_dir_all(&temp_dir);
@@ -234,25 +242,46 @@ mod bindings_test {
 
     #[tokio::test]
     async fn test_warm_application_startup_restart_on_existing_db() {
-        let temp_dir = std::env::temp_dir().join(format!("scrape_boot_warm_{}", uuid::Uuid::new_v4()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("scrape_boot_warm_{}", uuid::Uuid::new_v4()));
         let db_path = temp_dir.join("scrape_data.db");
 
         // First boot
         let (pool1, _runner1) = bootstrap_database_and_services(&db_path).await.unwrap();
-        db::settings::SettingsRepo::set_value(&pool1, "appearance.font_family", serde_json::json!("ia_writer_duo")).await.unwrap();
+        db::settings::SettingsRepo::set_value(
+            &pool1,
+            "appearance.font_family",
+            serde_json::json!("ia_writer_duo"),
+        )
+        .await
+        .unwrap();
         let sources_count1 = db::sources::SourcesRepo::list(&pool1).await.unwrap().len();
         pool1.close().await;
 
         // Second boot (restart)
         let res2 = bootstrap_database_and_services(&db_path).await;
-        assert!(res2.is_ok(), "Warm restart must succeed on existing database: {:?}", res2.err());
+        assert!(
+            res2.is_ok(),
+            "Warm restart must succeed on existing database: {:?}",
+            res2.err()
+        );
 
         let (pool2, _runner2) = res2.unwrap();
-        let font: Option<String> = db::settings::SettingsRepo::get_value(&pool2, "appearance.font_family").await.unwrap();
-        assert_eq!(font, Some("ia_writer_duo".to_string()), "Custom settings must persist across restarts");
+        let font: Option<String> =
+            db::settings::SettingsRepo::get_value(&pool2, "appearance.font_family")
+                .await
+                .unwrap();
+        assert_eq!(
+            font,
+            Some("ia_writer_duo".to_string()),
+            "Custom settings must persist across restarts"
+        );
 
         let sources_count2 = db::sources::SourcesRepo::list(&pool2).await.unwrap().len();
-        assert_eq!(sources_count1, sources_count2, "Sources must not be duplicated on warm restart");
+        assert_eq!(
+            sources_count1, sources_count2,
+            "Sources must not be duplicated on warm restart"
+        );
 
         pool2.close().await;
         let _ = std::fs::remove_dir_all(&temp_dir);
@@ -260,7 +289,8 @@ mod bindings_test {
 
     #[tokio::test]
     async fn test_app_startup_recovers_from_corrupted_migration_checksum() {
-        let temp_dir = std::env::temp_dir().join(format!("scrape_boot_corrupt_{}", uuid::Uuid::new_v4()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("scrape_boot_corrupt_{}", uuid::Uuid::new_v4()));
         let db_path = temp_dir.join("scrape_data.db");
 
         let (pool1, _runner1) = bootstrap_database_and_services(&db_path).await.unwrap();
@@ -273,7 +303,11 @@ mod bindings_test {
 
         // Reboot: must heal and succeed
         let res2 = bootstrap_database_and_services(&db_path).await;
-        assert!(res2.is_ok(), "Startup must heal corrupted migration checksum and boot cleanly: {:?}", res2.err());
+        assert!(
+            res2.is_ok(),
+            "Startup must heal corrupted migration checksum and boot cleanly: {:?}",
+            res2.err()
+        );
 
         let (pool2, _runner2) = res2.unwrap();
         pool2.close().await;

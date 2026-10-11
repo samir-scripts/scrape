@@ -15,6 +15,7 @@ import { Rule } from "../../ui/Rule";
 import { Tooltip } from "../../ui/Tooltip";
 import { AddSourceModal } from "./AddSourceModal";
 import { notifySuccess, notifyInfo } from "../../../lib/toast";
+import { getWorkflowStatus } from "../../../lib/status";
 
 type FilterTab = "all" | "ats" | "custom" | "errors";
 
@@ -43,9 +44,9 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [runLogs, setRunLogs] = useState<ScrapeLogEntry[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
-  const [logFilter, setLogFilter] = useState<"all" | "errors">("all");
+  const [logFilter, setLogFilter] = useState<"all" | "successes" | "errors">("all");
 
-  const { setView, setFilterSpec } = useUIStore();
+  const { setView, setFilterSpec, runningSourceIds } = useUIStore();
 
   const fetchSources = () => {
     api.listSources().then(setSources).catch(() => {});
@@ -112,14 +113,12 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   const handleRunSourceNow = async (source: Source) => {
     try {
       setRunningSourceId(source.id);
+      setInspectedSource(source);
       await api.runSourceNow(source.id);
       fetchSources();
-      if (inspectedSource?.id === source.id) {
-        api.listSourceRuns(source.id, 10).then((runs) => {
-          setSourceRuns(runs);
-          if (runs[0]) setSelectedRunId(runs[0].id);
-        }).catch(() => {});
-      }
+      const runs = await api.listSourceRuns(source.id, 10).catch(() => []);
+      setSourceRuns(runs);
+      if (runs[0]) setSelectedRunId(runs[0].id);
     } catch (e) {
       console.error("Run single source error:", e);
     } finally {
@@ -199,13 +198,29 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
     return { all: sources.length, ats, custom, errors };
   }, [sources]);
 
-  // Filter logs based on level toggle
+  // Filter logs based on level toggle / dropdown
   const displayedLogs = useMemo(() => {
+    const scopedLogs = inspectedSource
+      ? runLogs.filter((l) => !l.source_id || l.source_id === inspectedSource.id)
+      : runLogs;
+
     if (logFilter === "errors") {
-      return runLogs.filter((l) => l.level === "error" || l.level === "warn");
+      return scopedLogs.filter((l) => l.level === "error" || l.level === "warn");
     }
-    return runLogs;
-  }, [runLogs, logFilter]);
+    if (logFilter === "successes") {
+      return scopedLogs.filter((l) => l.level === "info");
+    }
+    return scopedLogs;
+  }, [runLogs, logFilter, inspectedSource]);
+
+  const logCounts = useMemo(() => {
+    const scopedLogs = inspectedSource
+      ? runLogs.filter((l) => !l.source_id || l.source_id === inspectedSource.id)
+      : runLogs;
+    const errors = scopedLogs.filter((l) => l.level === "error" || l.level === "warn").length;
+    const successes = scopedLogs.filter((l) => l.level === "info").length;
+    return { all: scopedLogs.length, successes, errors };
+  }, [runLogs, inspectedSource]);
 
   const selectedRun = useMemo(() => {
     return sourceRuns.find((r) => r.id === selectedRunId) || null;
@@ -363,9 +378,10 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           </TableHead>
           <TableBody>
             {filteredSources.map((s) => {
-              const isRunning = runningSourceId === s.id;
+              const isRunning = runningSourceId === s.id || runningSourceIds.includes(s.id);
               const isTesting = testingSourceId === s.id;
               const isInspected = inspectedSource?.id === s.id;
+              const statusVisual = getWorkflowStatus(s, isRunning);
 
               return (
                 <TableRow
@@ -407,22 +423,12 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       : `${s.retention_days}D (${s.retention_policy === "untracked_only" ? "SAFE" : "ALL"})`}
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`text-xs ${
-                          isRunning
-                            ? "text-[var(--color-signal)] animate-pulse"
-                            : s.last_status === "ok" || s.last_status === "success"
-                            ? "text-[var(--color-lime)]"
-                            : s.last_status === "error"
-                            ? "text-[var(--color-cherry)]"
-                            : "text-[var(--color-ink-mute)]"
-                        }`}
-                      >
-                        ■
+                    <div className="flex items-center gap-1.5" data-testid={`status-${s.id}`}>
+                      <span className={`text-xs ${statusVisual.bulletClass}`}>
+                        {statusVisual.bulletGlyph}
                       </span>
-                      <span className="text-[10px] font-mono uppercase font-bold text-[var(--color-ink)]">
-                        {isRunning ? "RUNNING" : s.last_status || "UNTESTED"}
+                      <span className={`text-[10px] font-mono uppercase font-bold ${statusVisual.colorClass}`}>
+                        {statusVisual.label}
                       </span>
                     </div>
                   </TableCell>
@@ -625,27 +631,20 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                 <span className="font-bold text-[10px] uppercase tracking-wider text-[var(--color-ink)]">
                   TERMINAL LOG STREAM {selectedRun ? `· RUN ${selectedRun.id.slice(0, 8)}` : ""}
                 </span>
-                <div className="flex gap-1 text-[10px]">
-                  <button
-                    onClick={() => setLogFilter("all")}
-                    className={`px-2 py-0.5 border cursor-pointer ${
-                      logFilter === "all"
-                        ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)] font-bold"
-                        : "border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-                    }`}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-[var(--color-ink-mute)] font-mono uppercase">
+                    FILTER:
+                  </span>
+                  <select
+                    value={logFilter}
+                    onChange={(e) => setLogFilter(e.target.value as "all" | "successes" | "errors")}
+                    aria-label="Filter execution logs"
+                    className="px-2 py-0.5 text-[10px] font-mono uppercase font-bold border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] focus:outline-none cursor-pointer"
                   >
-                    ALL LOGS
-                  </button>
-                  <button
-                    onClick={() => setLogFilter("errors")}
-                    className={`px-2 py-0.5 border cursor-pointer ${
-                      logFilter === "errors"
-                        ? "bg-[var(--color-cherry)] text-white border-[var(--color-cherry)] font-bold"
-                        : "border-[var(--color-cherry)] text-[var(--color-cherry)] hover:bg-[var(--color-cherry)]/10"
-                    }`}
-                  >
-                    ERRORS ONLY
-                  </button>
+                    <option value="all">ALL LOGS ({logCounts.all})</option>
+                    <option value="successes">SUCCESSES ({logCounts.successes})</option>
+                    <option value="errors">ERRORS ({logCounts.errors})</option>
+                  </select>
                 </div>
               </div>
 

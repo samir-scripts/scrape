@@ -43,12 +43,12 @@ pub async fn delete_source(app: AppHandle, state: State<'_, AppState>, id: Strin
 }
 
 #[tauri::command]
-pub async fn seed_sample_workflow(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<Source> {
+pub async fn seed_sample_workflow(app: AppHandle, state: State<'_, AppState>) -> Result<Source> {
     let list = SourcesRepo::list(&state.db).await?;
-    if let Some(existing) = list.into_iter().find(|s| s.identifier == "cloudflare" && s.kind == scrape_core::SourceKind::Greenhouse) {
+    if let Some(existing) = list
+        .into_iter()
+        .find(|s| s.identifier == "cloudflare" && s.kind == scrape_core::SourceKind::Greenhouse)
+    {
         return Ok(existing);
     }
     let input = SourcesRepo::default_sample_workflow_input();

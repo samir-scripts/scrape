@@ -112,10 +112,18 @@ impl SchedulerService {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             loop {
                 interval.tick().await;
-                if let Ok(due_sources) = crate::db::sources::SourcesRepo::get_due_sources(&ticker_pool).await {
+                if let Ok(due_sources) =
+                    crate::db::sources::SourcesRepo::get_due_sources(&ticker_pool).await
+                {
                     for source in due_sources {
-                        tracing::info!("Custom cadence trigger for source {} ({})", source.name, source.id);
-                        let _ = ticker_runner.trigger_single_source(&ticker_app, &source.id).await;
+                        tracing::info!(
+                            "Custom cadence trigger for source {} ({})",
+                            source.name,
+                            source.id
+                        );
+                        let _ = ticker_runner
+                            .trigger_single_source(&ticker_app, &source.id)
+                            .await;
                     }
                 }
             }
@@ -241,7 +249,10 @@ pub fn calculate_next_run(cron_expr: &str, tz_str: &str) -> Option<String> {
         .map(|dt| dt.to_rfc3339_opts(SecondsFormat::Millis, true))
 }
 
-pub fn calculate_next_run_for_source(source: &crate::db::sources::Source, tz_str: &str) -> Option<String> {
+pub fn calculate_next_run_for_source(
+    source: &crate::db::sources::Source,
+    tz_str: &str,
+) -> Option<String> {
     use scrape_core::SourceCadence;
     let cron_str = match source.cadence {
         SourceCadence::Global | SourceCadence::Manual => return None,
@@ -274,7 +285,11 @@ mod tests {
             "0 30 * * * *",        // Hourly
         ] {
             let res = validate_cron_expression(expr, "UTC");
-            assert!(res.ok, "Expected expr '{}' to be valid, got error: {:?}", expr, res.error);
+            assert!(
+                res.ok,
+                "Expected expr '{}' to be valid, got error: {:?}",
+                expr, res.error
+            );
         }
     }
 

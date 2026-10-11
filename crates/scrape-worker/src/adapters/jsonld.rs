@@ -232,10 +232,7 @@ fn parse_job_posting_map(
     })
 }
 
-fn extract_salary(
-    map: &serde_json::Map<String, Value>,
-    desc_text: Option<&str>,
-) -> Option<Salary> {
+fn extract_salary(map: &serde_json::Map<String, Value>, desc_text: Option<&str>) -> Option<Salary> {
     if let Some(base_salary) = map.get("baseSalary") {
         if let Some(s) = base_salary.as_str() {
             if let Some(sal) = Salary::from_text(s) {

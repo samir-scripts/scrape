@@ -216,9 +216,10 @@ impl RunsRepo {
             r#"
             SELECT id, trigger, status, started_at, finished_at, jobs_found, jobs_new, error, source_id
             FROM scrape_runs
-            WHERE source_id = ?
+            WHERE source_id = ?1
+               OR id IN (SELECT DISTINCT run_id FROM scrape_logs WHERE source_id = ?1)
             ORDER BY started_at DESC
-            LIMIT ?
+            LIMIT ?2
             "#,
         )
         .bind(source_id)
@@ -382,12 +383,16 @@ mod tests {
         assert_eq!(finished.jobs_found, 15);
         assert_eq!(finished.jobs_new, 3);
 
-        let source_runs = RunsRepo::list_by_source(&pool, source_id, 10).await.unwrap();
+        let source_runs = RunsRepo::list_by_source(&pool, source_id, 10)
+            .await
+            .unwrap();
         assert_eq!(source_runs.len(), 1);
         assert_eq!(source_runs[0].id, run.id);
         assert_eq!(source_runs[0].trigger, TriggerType::SingleSource);
 
-        let other_runs = RunsRepo::list_by_source(&pool, "non-existent-source", 10).await.unwrap();
+        let other_runs = RunsRepo::list_by_source(&pool, "non-existent-source", 10)
+            .await
+            .unwrap();
         assert!(other_runs.is_empty());
     }
 
@@ -459,5 +464,40 @@ mod tests {
         // 4. Verify querying an unknown or separate run ID returns empty
         let empty_logs = RunsRepo::get_logs(&pool, "non-existent-run").await.unwrap();
         assert!(empty_logs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_list_by_source_includes_global_runs_with_logs() {
+        let pool = init_memory_db().await.unwrap();
+
+        // Global run has source_id: None on scrape_runs
+        let global_run = RunsRepo::start(&pool, TriggerType::Manual).await.unwrap();
+        let _ = RunsRepo::finish(&pool, &global_run.id, RunStatus::Success, 50, 10, None)
+            .await
+            .unwrap();
+
+        // Record a log entry under this global run for a specific source
+        RunsRepo::add_log(
+            &pool,
+            &global_run.id,
+            LogLevel::Info,
+            Some("workflow-source-xyz"),
+            "Scraped 50 jobs for workflow-source-xyz",
+        )
+        .await
+        .unwrap();
+
+        // Querying runs for workflow-source-xyz should return the global run
+        let runs = RunsRepo::list_by_source(&pool, "workflow-source-xyz", 10)
+            .await
+            .unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].id, global_run.id);
+
+        // Querying an unrelated source with no logs returns empty
+        let empty = RunsRepo::list_by_source(&pool, "unrelated-source", 10)
+            .await
+            .unwrap();
+        assert!(empty.is_empty());
     }
 }

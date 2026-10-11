@@ -93,6 +93,11 @@ interface UIState {
   scanStatusText: string;
   setScanning: (scanning: boolean, text?: string) => void;
 
+  // Active Running Sources
+  runningSourceIds: string[];
+  setSourceRunning: (sourceId: string, isRunning: boolean) => void;
+  clearRunningSources: () => void;
+
   // Undo history for status transitions
   undoStack: UndoItem[];
   pushUndo: (item: UndoItem) => void;
@@ -205,6 +210,17 @@ export const useUIStore = create<UIState>((set, get) => ({
   scanStatusText: "",
   setScanning: (isScanning, scanStatusText = "") =>
     set({ isScanning, scanStatusText }),
+
+  runningSourceIds: [],
+  setSourceRunning: (sourceId, isRunning) =>
+    set((state) => ({
+      runningSourceIds: isRunning
+        ? state.runningSourceIds.includes(sourceId)
+          ? state.runningSourceIds
+          : [...state.runningSourceIds, sourceId]
+        : state.runningSourceIds.filter((id) => id !== sourceId),
+    })),
+  clearRunningSources: () => set({ runningSourceIds: [] }),
 
   undoStack: [],
   pushUndo: (item) =>

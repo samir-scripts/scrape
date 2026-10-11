@@ -99,7 +99,7 @@ impl MetricsRepo {
         let applied: i64 = sqlx::query_scalar(
             "SELECT COUNT(DISTINCT id) FROM jobs
              WHERE status IN ('applied', 'interviewing', 'offer', 'rejected')
-                OR id IN (SELECT job_id FROM job_status_events WHERE to_status = 'applied')"
+                OR id IN (SELECT job_id FROM job_status_events WHERE to_status = 'applied')",
         )
         .fetch_one(pool)
         .await?;
@@ -107,7 +107,7 @@ impl MetricsRepo {
         let interviewing: i64 = sqlx::query_scalar(
             "SELECT COUNT(DISTINCT id) FROM jobs
              WHERE status IN ('interviewing', 'offer')
-                OR id IN (SELECT job_id FROM job_status_events WHERE to_status = 'interviewing')"
+                OR id IN (SELECT job_id FROM job_status_events WHERE to_status = 'interviewing')",
         )
         .fetch_one(pool)
         .await?;
@@ -115,7 +115,7 @@ impl MetricsRepo {
         let offers: i64 = sqlx::query_scalar(
             "SELECT COUNT(DISTINCT id) FROM jobs
              WHERE status = 'offer'
-                OR id IN (SELECT job_id FROM job_status_events WHERE to_status = 'offer')"
+                OR id IN (SELECT job_id FROM job_status_events WHERE to_status = 'offer')",
         )
         .fetch_one(pool)
         .await?;
@@ -142,7 +142,7 @@ impl MetricsRepo {
         // 2. Salary calculations
         let salary_rows: Vec<(Option<i64>, Option<i64>)> = sqlx::query_as(
             "SELECT salary_min, salary_max FROM jobs
-             WHERE salary_min IS NOT NULL OR salary_max IS NOT NULL"
+             WHERE salary_min IS NOT NULL OR salary_max IS NOT NULL",
         )
         .fetch_all(pool)
         .await?;
@@ -217,7 +217,7 @@ impl MetricsRepo {
              FROM jobs
              WHERE status IN ('applied', 'interviewing', 'offer', 'rejected')
                 OR id IN (SELECT job_id FROM job_status_events WHERE to_status = 'applied')
-             GROUP BY role_type"
+             GROUP BY role_type",
         )
         .fetch_all(pool)
         .await?;
@@ -236,7 +236,10 @@ impl MetricsRepo {
         let by_role_type = all_roles
             .into_iter()
             .map(|rt| {
-                let key = serde_json::to_string(&rt).unwrap().trim_matches('"').to_string();
+                let key = serde_json::to_string(&rt)
+                    .unwrap()
+                    .trim_matches('"')
+                    .to_string();
                 let count = role_counts.remove(&key).unwrap_or(0);
                 RoleTypeMetric {
                     role_type: rt,
@@ -400,7 +403,10 @@ fn calculate_streak(dates: &[NaiveDate], today: NaiveDate) -> MetricsStreak {
     }
 
     let date_set: BTreeSet<NaiveDate> = dates.iter().copied().collect();
-    let last_applied_on = date_set.iter().max().map(|d| d.format("%Y-%m-%d").to_string());
+    let last_applied_on = date_set
+        .iter()
+        .max()
+        .map(|d| d.format("%Y-%m-%d").to_string());
 
     // Calculate longest streak
     let mut longest = 0i64;
@@ -550,9 +556,27 @@ mod tests {
         let pool = init_memory_db().await.unwrap();
 
         let jobs = vec![
-            mock_scraped_job("j1", "Junior Dev", "Startup", RoleType::FullTime, Some((80_000, 90_000))),
-            mock_scraped_job("j2", "Mid Dev", "MidCorp", RoleType::FullTime, Some((120_000, 140_000))),
-            mock_scraped_job("j3", "Staff Dev", "BigTech", RoleType::FullTime, Some((210_000, 250_000))),
+            mock_scraped_job(
+                "j1",
+                "Junior Dev",
+                "Startup",
+                RoleType::FullTime,
+                Some((80_000, 90_000)),
+            ),
+            mock_scraped_job(
+                "j2",
+                "Mid Dev",
+                "MidCorp",
+                RoleType::FullTime,
+                Some((120_000, 140_000)),
+            ),
+            mock_scraped_job(
+                "j3",
+                "Staff Dev",
+                "BigTech",
+                RoleType::FullTime,
+                Some((210_000, 250_000)),
+            ),
         ];
 
         JobsRepo::upsert_scraped(&pool, &jobs).await.unwrap();
@@ -591,12 +615,20 @@ mod tests {
         let id2 = &stored_jobs.items[1].id;
 
         // Transition job 1: Scraped -> Applied -> Interviewing -> Offer
-        JobsRepo::update_status(&pool, id1, JobStatus::Applied).await.unwrap();
-        JobsRepo::update_status(&pool, id1, JobStatus::Interviewing).await.unwrap();
-        JobsRepo::update_status(&pool, id1, JobStatus::Offer).await.unwrap();
+        JobsRepo::update_status(&pool, id1, JobStatus::Applied)
+            .await
+            .unwrap();
+        JobsRepo::update_status(&pool, id1, JobStatus::Interviewing)
+            .await
+            .unwrap();
+        JobsRepo::update_status(&pool, id1, JobStatus::Offer)
+            .await
+            .unwrap();
 
         // Transition job 2: Scraped -> Applied
-        JobsRepo::update_status(&pool, id2, JobStatus::Applied).await.unwrap();
+        JobsRepo::update_status(&pool, id2, JobStatus::Applied)
+            .await
+            .unwrap();
 
         let metrics = MetricsRepo::get_metrics(&pool, "week", 12).await.unwrap();
         assert_eq!(metrics.totals.scraped, 2);
@@ -607,8 +639,16 @@ mod tests {
         assert_eq!(metrics.totals.response_rate, 0.5);
 
         // Job 1 should count once for its role type
-        let ft = metrics.by_role_type.iter().find(|r| r.role_type == RoleType::FullTime).unwrap();
-        let ct = metrics.by_role_type.iter().find(|r| r.role_type == RoleType::Contract).unwrap();
+        let ft = metrics
+            .by_role_type
+            .iter()
+            .find(|r| r.role_type == RoleType::FullTime)
+            .unwrap();
+        let ct = metrics
+            .by_role_type
+            .iter()
+            .find(|r| r.role_type == RoleType::Contract)
+            .unwrap();
         assert_eq!(ft.count + ct.count, 2);
     }
 }

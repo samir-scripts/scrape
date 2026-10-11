@@ -25,10 +25,7 @@ pub async fn list_scrape_runs(
 }
 
 #[tauri::command]
-pub async fn get_scrape_run(
-    state: State<'_, AppState>,
-    run_id: String,
-) -> Result<ScrapeRun> {
+pub async fn get_scrape_run(state: State<'_, AppState>, run_id: String) -> Result<ScrapeRun> {
     RunsRepo::get(&state.db, &run_id).await
 }
 
@@ -188,4 +185,3 @@ pub async fn test_source(
 pub async fn open_terminal_console(app: AppHandle) -> Result<()> {
     crate::services::system::SystemService::launch_terminal_console(&app)
 }
-

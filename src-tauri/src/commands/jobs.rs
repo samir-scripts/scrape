@@ -83,8 +83,7 @@ pub async fn preview_filter_impact(
 }
 
 #[tauri::command]
-pub async fn list_location_options(state: State<'_, AppState>,
-) -> Result<LocationOptions> {
+pub async fn list_location_options(state: State<'_, AppState>) -> Result<LocationOptions> {
     JobsRepo::list_location_options(&state.db).await
 }
 

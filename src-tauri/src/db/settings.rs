@@ -479,10 +479,13 @@ mod tests {
                 .unwrap();
         assert_eq!(updated_time.system_time_format, "24h");
 
-        let updated_date =
-            SettingsRepo::update_setting(&pool, "system.date_format", serde_json::json!("DD/MM/YYYY"))
-                .await
-                .unwrap();
+        let updated_date = SettingsRepo::update_setting(
+            &pool,
+            "system.date_format",
+            serde_json::json!("DD/MM/YYYY"),
+        )
+        .await
+        .unwrap();
         assert_eq!(updated_date.system_date_format, "DD/MM/YYYY");
 
         let err =

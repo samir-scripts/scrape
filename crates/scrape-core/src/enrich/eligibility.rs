@@ -49,7 +49,9 @@ fn split_sentences(text: &str) -> Vec<&str> {
         } else if c == '.' {
             let followed_by_space = i + 1 >= len || chars[i + 1].1.is_whitespace();
             let is_abbreviation = i >= 2 && chars[i - 2].1 == '.' && chars[i - 1].1.is_alphabetic();
-            let prev_is_single_letter = i >= 1 && chars[i - 1].1.is_alphabetic() && (i == 1 || !chars[i - 2].1.is_alphabetic());
+            let prev_is_single_letter = i >= 1
+                && chars[i - 1].1.is_alphabetic()
+                && (i == 1 || !chars[i - 2].1.is_alphabetic());
             followed_by_space && !is_abbreviation && !prev_is_single_letter
         } else {
             false
@@ -79,7 +81,11 @@ pub fn classify_sponsorship(text: &str) -> ClassifiedSponsorship {
 
     // Rule 1: "No" beats "Yes" in the same posting
     for sentence in &sentences {
-        if sentence.to_lowercase().contains("will you require") || sentence.to_lowercase().contains("do you now or in the future") {
+        if sentence.to_lowercase().contains("will you require")
+            || sentence
+                .to_lowercase()
+                .contains("do you now or in the future")
+        {
             continue; // Ignore application questionnaire prompt
         }
         if SPONSORSHIP_NO_RE.is_match(sentence) {
