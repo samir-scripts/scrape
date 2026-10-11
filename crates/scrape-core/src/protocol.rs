@@ -143,11 +143,26 @@ impl WorkerFilters {
         }
 
         if !self.role_types.is_empty() {
-            let roles: Vec<String> = self
-                .role_types
-                .iter()
-                .map(|rt| format!("{:?}", rt).to_lowercase())
-                .collect();
+            let mut roles = Vec::new();
+            for rt in &self.role_types {
+                match rt {
+                    RoleType::FullTime => {
+                        roles.push("full_time".to_string());
+                        roles.push("fulltime".to_string());
+                    }
+                    RoleType::PartTime => {
+                        roles.push("part_time".to_string());
+                        roles.push("parttime".to_string());
+                    }
+                    RoleType::Internship => {
+                        roles.push("internship".to_string());
+                        roles.push("intern".to_string());
+                    }
+                    RoleType::Contract => roles.push("contract".to_string()),
+                    RoleType::Seasonal => roles.push("seasonal".to_string()),
+                    RoleType::Unknown => roles.push("unknown".to_string()),
+                }
+            }
             and_clauses.push(FilterExpr::FieldIn {
                 field: FilterField::RoleType,
                 values: roles,

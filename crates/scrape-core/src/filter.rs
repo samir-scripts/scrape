@@ -76,7 +76,14 @@ impl<'a> JobFilterContext<'a> {
             FilterField::Location => self.location.to_string(),
             FilterField::Description => self.description.to_string(),
             FilterField::Company => self.company.to_string(),
-            FilterField::RoleType => format!("{:?}", self.role_type).to_lowercase(),
+            FilterField::RoleType => match self.role_type {
+                RoleType::FullTime => "full_time".to_string(),
+                RoleType::PartTime => "part_time".to_string(),
+                RoleType::Internship => "internship".to_string(),
+                RoleType::Contract => "contract".to_string(),
+                RoleType::Seasonal => "seasonal".to_string(),
+                RoleType::Unknown => "unknown".to_string(),
+            },
         }
     }
 }

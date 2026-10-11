@@ -4,6 +4,7 @@ import type { ScrapeRun } from "../bindings/ScrapeRun";
 import type { TriggerType } from "../bindings/TriggerType";
 import type { SourceCadence } from "../bindings/SourceCadence";
 import type { WorkerEvent } from "../bindings/WorkerEvent";
+import type { Job } from "../bindings/Job";
 
 describe("Custom Scrape Jobs: YAML Specification", () => {
   it("converts a standard ATS source to YAML spec", () => {
@@ -291,5 +292,76 @@ describe("Custom Scrape Jobs: Single-Source Run Isolation", () => {
     const errors = events.filter((e): e is Extract<WorkerEvent, { type: "error" }> => e.type === "error");
     expect(errors).toHaveLength(1);
     expect(errors[0].message).toBe("Failed to parse salary field");
+  });
+});
+
+describe("Discovered Inbox Pipeline & Partitioning", () => {
+  it("partitions newly scraped jobs into Discovered view and preserves Tracked stages", () => {
+    const scrapedJob = {
+      id: "j-1",
+      dedupe_key: "src-cf:1",
+      source_id: "src-cf",
+      external_id: "1",
+      title: "Software Engineering Intern",
+      company: "Cloudflare",
+      role_type: "internship" as const,
+      location: "San Francisco, CA",
+      url: "https://boards.greenhouse.io/cloudflare/jobs/1",
+      date_posted: "2026-10-10",
+      date_added: "2026-10-10T00:00:00Z",
+      last_seen_at: "2026-10-10T00:00:00Z",
+      status: "scraped" as const,
+      status_changed_at: "2026-10-10T00:00:00Z",
+      notes: null,
+      favorited: false,
+      favorited_at: null,
+      salary_min: null,
+      salary_max: null,
+      salary_currency: null,
+      salary_interval: null,
+      salary_raw: null,
+      salary_source: null,
+      workplace_type: "hybrid" as const,
+      sponsorship: "yes" as const,
+      sponsorship_evidence: null,
+      clearance: "no" as const,
+      clearance_level: null,
+      clearance_evidence: null,
+      experience_min: 0,
+      experience_max: 1,
+      experience_raw: null,
+      is_new_grad: "yes" as const,
+      experience_evidence: null,
+      description_text: "Intern program",
+      enrichment_version: 1,
+      locations: [],
+    };
+
+    const viewedJob = { ...scrapedJob, id: "j-2", status: "viewed" as const };
+    const appliedJob = { ...scrapedJob, id: "j-3", status: "applied" as const };
+    const interviewingJob = { ...scrapedJob, id: "j-4", status: "interviewing" as const };
+    const ignoredJob = { ...scrapedJob, id: "j-5", status: "ignored" as const };
+
+    const allJobs: Job[] = [scrapedJob, viewedJob, appliedJob, interviewingJob, ignoredJob];
+
+    // Discovered logic matching src/App.tsx
+    const discovered = allJobs.filter((j) => j.status === "scraped" || j.status === "viewed");
+    expect(discovered).toHaveLength(2);
+    expect(discovered.map((j) => j.id)).toEqual(["j-1", "j-2"]);
+
+    // Tracked logic matching src/App.tsx
+    const tracked = allJobs.filter(
+      (j) =>
+        j.status === "applied" ||
+        j.status === "interviewing" ||
+        j.status === "offer" ||
+        j.status === "rejected"
+    );
+    expect(tracked).toHaveLength(2);
+    expect(tracked.map((j) => j.id)).toEqual(["j-3", "j-4"]);
+
+    // Ignored jobs are excluded from both
+    expect(discovered.some((j) => j.id === "j-5")).toBe(false);
+    expect(tracked.some((j) => j.id === "j-5")).toBe(false);
   });
 });

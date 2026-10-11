@@ -341,9 +341,10 @@ impl SourcesRepo {
             retention_policy: Some("untracked_only".to_string()),
             filters: Some(serde_json::json!({
                 "role_types": ["internship", "full_time"],
+                "query": "title LIKE '%Engineer%' OR title LIKE '%Developer%' OR title LIKE '%Intern%'",
                 "include_keywords": ["Software", "Engineer", "Developer", "Systems", "Intern"],
                 "exclude_keywords": ["Recruiter", "Account Executive", "Sales Representative"],
-                "locations": ["Remote", "San Francisco", "Austin"]
+                "locations": ["Remote", "San Francisco", "Austin", "London", "Lisbon"]
             })),
         }
     }

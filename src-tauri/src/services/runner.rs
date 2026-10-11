@@ -1242,4 +1242,253 @@ mod tests {
         assert_eq!(source_runs[0].status, RunStatus::Failed);
         assert_eq!(source_runs[0].error.as_deref(), Some(err_msg));
     }
+
+    #[tokio::test]
+    async fn test_scraped_jobs_creation_in_discovered_pipeline() {
+        use crate::db::jobs::{JobFilter, JobsRepo, ScrapedJob};
+        use crate::db::sources::{CreateSourceInput, SourcesRepo};
+        use scrape_core::{JobStatus, WorkplaceType};
+
+        let pool = crate::db::init_memory_db().await.unwrap();
+
+        // 1. Seed sample workflow source
+        let source = SourcesRepo::create(
+            &pool,
+            CreateSourceInput {
+                kind: scrape_core::SourceKind::Greenhouse,
+                name: "Cloudflare — Software Engineering & Internships".to_string(),
+                identifier: "cloudflare".to_string(),
+                config: Some(serde_json::json!({
+                    "url": "https://boards.greenhouse.io/cloudflare"
+                })),
+                enabled: Some(true),
+                cadence: Some(scrape_core::SourceCadence::Daily),
+                cadence_cron: Some("0 0 9 * * *".to_string()),
+                retention_days: Some(45),
+                retention_policy: Some("untracked_only".to_string()),
+                filters: Some(serde_json::json!({
+                    "role_types": ["internship", "full_time"],
+                    "query": "title LIKE '%Engineer%' OR title LIKE '%Intern%'",
+                    "locations": ["Remote", "San Francisco", "Austin"]
+                })),
+            },
+        )
+        .await
+        .unwrap();
+
+        // 2. Start a single-source execution run
+        let run = RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&source.id))
+            .await
+            .unwrap();
+
+        // 3. Emulate sidecar emitting scraped postings matching the workflow
+        let batch = vec![
+            ScrapedJob {
+                dedupe_key: format!("{}:job-101", source.id),
+                source_id: Some(source.id.clone()),
+                external_id: Some("job-101".to_string()),
+                title: "Software Engineering Intern".to_string(),
+                company: "Cloudflare".to_string(),
+                role_type: RoleType::Internship,
+                location: Some("San Francisco, CA".to_string()),
+                url: "https://boards.greenhouse.io/cloudflare/jobs/101".to_string(),
+                date_posted: Some("2026-10-10".to_string()),
+                salary_min: None,
+                salary_max: None,
+                salary_currency: None,
+                salary_interval: None,
+                salary_raw: None,
+                salary_source: None,
+                workplace_type: WorkplaceType::Hybrid,
+                sponsorship: TriState::Yes,
+                sponsorship_evidence: Some("Sponsorship available".to_string()),
+                clearance: TriState::No,
+                clearance_level: None,
+                clearance_evidence: None,
+                experience_min: Some(0),
+                experience_max: Some(1),
+                experience_raw: Some("0-1 years".to_string()),
+                is_new_grad: TriState::Yes,
+                experience_evidence: None,
+                description_text: Some("Join our summer intern program".to_string()),
+                locations: vec![],
+            },
+            ScrapedJob {
+                dedupe_key: format!("{}:job-102", source.id),
+                source_id: Some(source.id.clone()),
+                external_id: Some("job-102".to_string()),
+                title: "Systems Engineer".to_string(),
+                company: "Cloudflare".to_string(),
+                role_type: RoleType::FullTime,
+                location: Some("Austin, TX".to_string()),
+                url: "https://boards.greenhouse.io/cloudflare/jobs/102".to_string(),
+                date_posted: Some("2026-10-11".to_string()),
+                salary_min: Some(140000),
+                salary_max: Some(180000),
+                salary_currency: Some("USD".to_string()),
+                salary_interval: Some(scrape_core::SalaryInterval::Year),
+                salary_raw: Some("$140k - $180k".to_string()),
+                salary_source: Some(scrape_core::SalarySource::Structured),
+                workplace_type: WorkplaceType::Remote,
+                sponsorship: TriState::Unknown,
+                sponsorship_evidence: None,
+                clearance: TriState::Unknown,
+                clearance_level: None,
+                clearance_evidence: None,
+                experience_min: Some(2),
+                experience_max: Some(5),
+                experience_raw: None,
+                is_new_grad: TriState::No,
+                experience_evidence: None,
+                description_text: Some("Build edge networking systems".to_string()),
+                locations: vec![],
+            },
+        ];
+
+        // 4. Upsert into database
+        let stats = JobsRepo::upsert_scraped(&pool, &batch).await.unwrap();
+        assert_eq!(stats.inserted, 2, "Expected 2 new jobs to be inserted");
+        assert_eq!(stats.updated, 0);
+
+        // Finish the run
+        let _ = RunsRepo::finish(&pool, &run.id, RunStatus::Success, 2, 2, None)
+            .await
+            .unwrap();
+
+        // 5. Query DISCOVERED inbox: statuses = ['scraped', 'viewed']
+        let discovered_page = JobsRepo::list(
+            &pool,
+            JobFilter {
+                statuses: Some(vec![JobStatus::Scraped, JobStatus::Viewed]),
+                role_types: None,
+                search: None,
+                source_id: None,
+                sort: None,
+                limit: Some(50),
+                offset: Some(0),
+                favorited_only: None,
+                salary_min: None,
+                salary_max: None,
+                salary_currency: None,
+                salary_include_unknown: None,
+                salary_interval: None,
+                experience_min: None,
+                experience_max: None,
+                experience_include_unknown: None,
+                new_grad: None,
+                sponsorship: None,
+                clearance: None,
+                countries: None,
+                regions: None,
+                remote: None,
+                location_include_unknown: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            discovered_page.items.len(),
+            2,
+            "Both scraped jobs must appear in Discovered inbox"
+        );
+        assert!(discovered_page
+            .items
+            .iter()
+            .all(|j| j.status == JobStatus::Scraped));
+
+        // 6. Query TRACKED pipeline: statuses = ['applied', 'interviewing', 'offer', 'rejected']
+        let tracked_page = JobsRepo::list(
+            &pool,
+            JobFilter {
+                statuses: Some(vec![
+                    JobStatus::Applied,
+                    JobStatus::Interviewing,
+                    JobStatus::Offer,
+                    JobStatus::Rejected,
+                ]),
+                role_types: None,
+                search: None,
+                source_id: None,
+                sort: None,
+                limit: Some(50),
+                offset: Some(0),
+                favorited_only: None,
+                salary_min: None,
+                salary_max: None,
+                salary_currency: None,
+                salary_include_unknown: None,
+                salary_interval: None,
+                experience_min: None,
+                experience_max: None,
+                experience_include_unknown: None,
+                new_grad: None,
+                sponsorship: None,
+                clearance: None,
+                countries: None,
+                regions: None,
+                remote: None,
+                location_include_unknown: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(tracked_page.items.len(), 0, "No jobs should be tracked yet");
+
+        // 7. Move job-101 to Applied
+        let job101 = &discovered_page.items[0];
+        let moved = JobsRepo::update_status(&pool, &job101.id, JobStatus::Applied)
+            .await
+            .unwrap();
+        assert_eq!(moved.status, JobStatus::Applied);
+
+        // 8. Re-query Discovered: now only 1 job remains
+        let discovered_after = JobsRepo::list(
+            &pool,
+            JobFilter {
+                statuses: Some(vec![JobStatus::Scraped, JobStatus::Viewed]),
+                role_types: None,
+                search: None,
+                source_id: None,
+                sort: None,
+                limit: Some(50),
+                offset: Some(0),
+                favorited_only: None,
+                salary_min: None,
+                salary_max: None,
+                salary_currency: None,
+                salary_include_unknown: None,
+                salary_interval: None,
+                experience_min: None,
+                experience_max: None,
+                experience_include_unknown: None,
+                new_grad: None,
+                sponsorship: None,
+                clearance: None,
+                countries: None,
+                regions: None,
+                remote: None,
+                location_include_unknown: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            discovered_after.items.len(),
+            1,
+            "Discovered count must decrease to 1 when a job is tracked"
+        );
+
+        // 9. Re-scrape same jobs on next run: verify user status is NOT overwritten
+        let stats_second = JobsRepo::upsert_scraped(&pool, &batch).await.unwrap();
+        assert_eq!(stats_second.updated, 2);
+        assert_eq!(stats_second.inserted, 0);
+
+        let job101_after = JobsRepo::get(&pool, &job101.id).await.unwrap();
+        assert_eq!(
+            job101_after.status,
+            JobStatus::Applied,
+            "Re-scraping must preserve user Applied state"
+        );
+    }
 }

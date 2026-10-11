@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Source } from "../../../bindings/Source";
 import type { ScrapeRun } from "../../../bindings/ScrapeRun";
 import type { ScrapeLogEntry } from "../../../bindings/ScrapeLogEntry";
@@ -25,6 +26,7 @@ interface SourcesSettingsProps {
 }
 
 export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
+  const queryClient = useQueryClient();
   const [sources, setSources] = useState<Source[]>([]);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
@@ -166,6 +168,9 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
       setRunningSourceId(null);
       fetchSources();
       await refreshInspectedRunsAndLogs(source.id);
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["job_counts"] });
+      queryClient.invalidateQueries({ queryKey: ["metrics"] });
     }
   };
 
