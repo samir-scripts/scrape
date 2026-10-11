@@ -102,11 +102,16 @@ describe("Domain models & types", () => {
       notifications_enabled: true,
       app_start_hidden: true,
       app_launch_at_login: false,
+      app_auto_update: true,
+      app_update_channel: "stable",
+      app_last_update_check: null,
     };
     expect(settings.ui_theme).toBe("paper");
     expect(settings.ui_tooltips_enabled).toBe(true);
     expect(settings.ui_font_family).toBe("default");
     expect(settings.scraper_enabled).toBe(true);
+    expect(settings.app_auto_update).toBe(true);
+    expect(settings.app_update_channel).toBe("stable");
   });
 
   it("updates dev settings correctly with dot-notation keys", async () => {

@@ -18,6 +18,8 @@ pub fn run() {
             services::tray::show_main_window(app);
         }))
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let app_dir = app
                 .path()
@@ -129,6 +131,13 @@ pub fn run() {
             commands::scrape::test_source,
             commands::scrape::test_source_transient,
             commands::metrics::get_metrics,
+            commands::notifications::list_notifications,
+            commands::notifications::mark_notification_read,
+            commands::notifications::mark_all_notifications_read,
+            commands::notifications::clear_all_notifications,
+            commands::notifications::count_unread_notifications,
+            commands::notifications::check_app_update,
+            commands::notifications::install_app_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -185,6 +194,10 @@ mod bindings_test {
         db::metrics::RoleTypeMetric::export().unwrap();
         db::metrics::SalaryDistributionBucket::export().unwrap();
         db::metrics::MetricsStreak::export().unwrap();
+        db::notifications::AppNotification::export().unwrap();
+        db::notifications::NotificationKind::export().unwrap();
+        db::notifications::CreateNotificationInput::export().unwrap();
+        commands::notifications::UpdateCheckResult::export().unwrap();
         services::scheduler::CronValidationResult::export().unwrap();
         services::scheduler::SchedulerStatus::export().unwrap();
         commands::scrape::TransientSourceInput::export().unwrap();

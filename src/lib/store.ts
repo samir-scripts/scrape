@@ -81,6 +81,13 @@ interface UIState {
   tooltipsEnabled: boolean;
   setTooltipsEnabled: (enabled: boolean) => void;
 
+  // Notification Popover state
+  isNotificationOpen: boolean;
+  setNotificationOpen: (open: boolean) => void;
+  toggleNotificationOpen: () => void;
+  unreadNotificationCount: number;
+  setUnreadNotificationCount: (count: number) => void;
+
   // Global Scrape Status
   isScanning: boolean;
   scanStatusText: string;
@@ -186,6 +193,13 @@ export const useUIStore = create<UIState>((set, get) => ({
     setStored("scrape:tooltipsEnabled", String(tooltipsEnabled));
     set({ tooltipsEnabled });
   },
+
+  isNotificationOpen: false,
+  setNotificationOpen: (open) => set({ isNotificationOpen: open }),
+  toggleNotificationOpen: () =>
+    set((state) => ({ isNotificationOpen: !state.isNotificationOpen })),
+  unreadNotificationCount: 0,
+  setUnreadNotificationCount: (count) => set({ unreadNotificationCount: count }),
 
   isScanning: false,
   scanStatusText: "",

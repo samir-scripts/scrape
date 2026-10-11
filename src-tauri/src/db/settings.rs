@@ -26,6 +26,9 @@ pub struct Settings {
     pub notifications_enabled: bool,
     pub app_start_hidden: bool,
     pub app_launch_at_login: bool,
+    pub app_auto_update: bool,
+    pub app_update_channel: String,
+    pub app_last_update_check: Option<String>,
 }
 
 impl Default for Settings {
@@ -50,6 +53,9 @@ impl Default for Settings {
             notifications_enabled: true,
             app_start_hidden: true,
             app_launch_at_login: false,
+            app_auto_update: true,
+            app_update_channel: "stable".to_string(),
+            app_last_update_check: None,
         }
     }
 }
@@ -76,6 +82,9 @@ impl SettingsRepo {
     const KEY_NOTIFICATIONS_ENABLED: &'static str = "notifications.enabled";
     const KEY_APP_START_HIDDEN: &'static str = "app.start_hidden";
     const KEY_APP_LAUNCH_AT_LOGIN: &'static str = "app.launch_at_login";
+    const KEY_APP_AUTO_UPDATE: &'static str = "app.auto_update";
+    const KEY_APP_UPDATE_CHANNEL: &'static str = "app.update_channel";
+    const KEY_APP_LAST_UPDATE_CHECK: &'static str = "app.last_update_check";
 
     pub async fn ensure_defaults(pool: &SqlitePool, defaults: &Settings) -> Result<()> {
         let entries = vec![
@@ -154,6 +163,18 @@ impl SettingsRepo {
             (
                 Self::KEY_APP_LAUNCH_AT_LOGIN,
                 serde_json::to_string(&defaults.app_launch_at_login)?,
+            ),
+            (
+                Self::KEY_APP_AUTO_UPDATE,
+                serde_json::to_string(&defaults.app_auto_update)?,
+            ),
+            (
+                Self::KEY_APP_UPDATE_CHANNEL,
+                serde_json::to_string(&defaults.app_update_channel)?,
+            ),
+            (
+                Self::KEY_APP_LAST_UPDATE_CHECK,
+                serde_json::to_string(&defaults.app_last_update_check)?,
             ),
         ];
 
@@ -320,6 +341,21 @@ impl SettingsRepo {
                         settings.app_launch_at_login = v;
                     }
                 }
+                Self::KEY_APP_AUTO_UPDATE => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.app_auto_update = v;
+                    }
+                }
+                Self::KEY_APP_UPDATE_CHANNEL => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.app_update_channel = v;
+                    }
+                }
+                Self::KEY_APP_LAST_UPDATE_CHECK => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.app_last_update_check = v;
+                    }
+                }
                 _ => {}
             }
         }
@@ -352,6 +388,9 @@ impl SettingsRepo {
             Self::KEY_NOTIFICATIONS_ENABLED,
             Self::KEY_APP_START_HIDDEN,
             Self::KEY_APP_LAUNCH_AT_LOGIN,
+            Self::KEY_APP_AUTO_UPDATE,
+            Self::KEY_APP_UPDATE_CHANNEL,
+            Self::KEY_APP_LAST_UPDATE_CHECK,
         ];
 
         if !valid_keys.contains(&key) {

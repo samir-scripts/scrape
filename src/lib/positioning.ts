@@ -129,6 +129,62 @@ export function getTooltipVisualBounds(
   return { top, bottom, left, right, width, height };
 }
 
+export interface PopoverAnchorOptions {
+  panelWidth?: number;
+  align?: "left" | "right";
+  gap?: number;
+  viewportPadding?: number;
+  minWidth?: number;
+}
+
+/**
+ * Calculates anchored popover coordinates tethered directly beneath any trigger button.
+ * Supports "left" or "right" alignment with viewport boundary clamping.
+ */
+export function calculateAnchoredPopoverCoordinates(
+  triggerRect: { top: number; bottom: number; left: number; right: number; width: number } | null,
+  windowWidth: number = typeof window !== "undefined" ? window.innerWidth : 1024,
+  windowHeight: number = typeof window !== "undefined" ? window.innerHeight : 768,
+  options: PopoverAnchorOptions = {}
+): FilterDropdownCoordinates {
+  const panelWidth = options.panelWidth ?? 400;
+  const align = options.align ?? "left";
+  const gap = options.gap ?? 4;
+  const padding = options.viewportPadding ?? 12;
+  const minWidth = options.minWidth ?? 300;
+
+  const width = Math.min(panelWidth, Math.max(minWidth, windowWidth - padding * 2));
+
+  if (!triggerRect) {
+    return {
+      top: 48,
+      left: align === "right" ? Math.max(padding, windowWidth - width - padding) : padding,
+      maxHeight: Math.max(220, windowHeight - 48 - 16),
+      width,
+    };
+  }
+
+  const top = triggerRect.bottom + gap;
+  let left = 0;
+  if (align === "right") {
+    left = triggerRect.right - width;
+  } else {
+    left = triggerRect.left;
+  }
+
+  // Viewport clamping
+  const maxLeft = Math.max(padding, windowWidth - width - padding);
+  left = Math.max(padding, Math.min(left, maxLeft));
+  const maxHeight = Math.max(220, windowHeight - top - 16);
+
+  return {
+    top,
+    left,
+    maxHeight,
+    width,
+  };
+}
+
 /**
  * Calculates anchored popover coordinates tethered directly beneath the FILTERS trigger button.
  * Clamps coordinates within viewport boundaries to prevent screen overflow.
@@ -140,27 +196,10 @@ export function calculateFilterDropdownCoordinates(
   panelWidth: number = 420,
   gap: number = 4
 ): FilterDropdownCoordinates {
-  const width = Math.min(panelWidth, Math.max(320, windowWidth - 24));
-
-  if (!triggerRect) {
-    return {
-      top: 48,
-      left: 12,
-      maxHeight: Math.max(300, windowHeight - 48 - 16),
-      width,
-    };
-  }
-
-  const top = triggerRect.bottom + gap;
-  // Left-align with button, clamped within viewport safe margins (12px padding)
-  const maxLeft = Math.max(12, windowWidth - width - 12);
-  const left = Math.max(12, Math.min(triggerRect.left, maxLeft));
-  const maxHeight = Math.max(220, windowHeight - top - 16);
-
-  return {
-    top,
-    left,
-    maxHeight,
-    width,
-  };
+  return calculateAnchoredPopoverCoordinates(triggerRect, windowWidth, windowHeight, {
+    panelWidth,
+    align: "left",
+    gap,
+    minWidth: 320,
+  });
 }

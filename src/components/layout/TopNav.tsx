@@ -1,6 +1,7 @@
 import { useUIStore } from "../../lib/store";
 import { NAV_TABS, type NavTabId } from "../../lib/constants";
 import { Tooltip } from "../ui/Tooltip";
+import { NotificationBell } from "../notifications/NotificationBell";
 
 interface TopNavProps {
   discoveredCount?: number;
@@ -61,8 +62,8 @@ export function TopNav({
           </nav>
         </div>
 
-        {/* Right: Status Indicator / Next Run / Scanning */}
-        <div className="flex items-center font-mono text-xs text-[var(--color-ink)] pl-4">
+        {/* Right: Status Indicator / Next Run / Scanning & Notification Bell */}
+        <div className="flex items-center gap-3 font-mono text-xs text-[var(--color-ink)] pl-4">
           {isScanning ? (
             <div className="flex items-center gap-2 bg-[var(--color-signal)] text-white px-2.5 py-1 text-[11px] font-bold">
               <span className="animate-pulse">●</span>
@@ -74,6 +75,10 @@ export function TopNav({
               <span>{nextRunText || "IDLE"}</span>
             </div>
           )}
+
+          <div className="h-4 w-px bg-[var(--color-ink-mute)]/30" />
+
+          <NotificationBell />
         </div>
       </div>
     </header>

@@ -101,6 +101,25 @@ export default function App() {
     }
   }, [settings]);
 
+  // 3b. Check for application updates on startup if enabled
+  useEffect(() => {
+    if (settings?.app_auto_update) {
+      api
+        .checkAppUpdate()
+        .then((res) => {
+          if (res.available) {
+            queryClient.invalidateQueries({ queryKey: ["notifications"] });
+            api.countUnreadNotifications().then((count) => {
+              useUIStore.getState().setUnreadNotificationCount(Number(count));
+            });
+          }
+        })
+        .catch((err) => {
+          console.debug("Background update check skipped/failed:", err);
+        });
+    }
+  }, [settings?.app_auto_update, queryClient]);
+
   const allJobs = useMemo(() => jobsPage?.items || [], [jobsPage]);
 
   // 4. Status transition mutation with optimistic updates

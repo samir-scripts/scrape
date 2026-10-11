@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Settings } from "../../../bindings/Settings";
 import { api } from "../../../lib/api";
 import { formatDateTime } from "../../../lib/formatters";
@@ -16,6 +17,27 @@ export function SystemSettings({
   settings,
   onUpdateSetting,
 }: SystemSettingsProps) {
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateCheckStatus, setUpdateCheckStatus] = useState<string | null>(null);
+
+  const handleCheckUpdate = async () => {
+    try {
+      setIsCheckingUpdate(true);
+      setUpdateCheckStatus("QUERYING RELEASE ENDPOINT…");
+      const res = await api.checkAppUpdate();
+      if (res.available) {
+        setUpdateCheckStatus(`UPDATE AVAILABLE: v${res.latest_version || "NEW"}`);
+      } else if (res.error) {
+        setUpdateCheckStatus(`INFO: ${res.error}`);
+      } else {
+        setUpdateCheckStatus("APPLICATION IS UP TO DATE");
+      }
+    } catch (e) {
+      setUpdateCheckStatus(e instanceof Error ? e.message : "UPDATE CHECK FAILED");
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
   const handleOpenDataFolder = async () => {
     try {
       if (isTauri()) {
@@ -225,6 +247,78 @@ export function SystemSettings({
           }
           label="DESKTOP NOTIFICATIONS"
         />
+      </div>
+
+      <Rule />
+
+      {/* Software Updates & Releases */}
+      <div className="flex flex-col gap-4 p-4 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 font-mono">
+        <label className="font-bold uppercase tracking-wider text-[var(--color-ink)] text-xs">
+          SOFTWARE UPDATES & RELEASES
+        </label>
+
+        <Toggle
+          checked={settings.app_auto_update ?? true}
+          onChange={(checked) => onUpdateSetting("app.auto_update", checked)}
+          label="CHECK FOR UPDATES AUTOMATICALLY ON STARTUP"
+        />
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[11px] text-[var(--color-ink-mute)] font-mono">
+            UPDATE CHANNEL
+          </span>
+          <div className="flex max-w-sm border border-[var(--color-ink)]">
+            <button
+              type="button"
+              onClick={() => onUpdateSetting("app.update_channel", "stable")}
+              className={`flex-1 py-1 text-center font-bold text-xs cursor-pointer ${
+                (settings.app_update_channel || "stable") === "stable"
+                  ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
+                  : "hover:bg-[var(--color-paper-2)] text-[var(--color-ink)]"
+              }`}
+            >
+              STABLE (RECOMMENDED)
+            </button>
+            <button
+              type="button"
+              onClick={() => onUpdateSetting("app.update_channel", "nightly")}
+              className={`flex-1 py-1 text-center font-bold text-xs cursor-pointer ${
+                settings.app_update_channel === "nightly"
+                  ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
+                  : "hover:bg-[var(--color-paper-2)] text-[var(--color-ink)]"
+              }`}
+            >
+              NIGHTLY
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 pt-2 border-t border-[var(--color-ink-mute)]/30 text-xs">
+          <div className="flex items-center justify-between text-[11px] text-[var(--color-ink-mute)]">
+            <span>CURRENT VERSION: v0.1.0</span>
+            <span>
+              LAST CHECKED:{" "}
+              {settings.app_last_update_check
+                ? formatDateTime(settings.app_last_update_check, settings)
+                : "NEVER"}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button
+              variant="default"
+              disabled={isCheckingUpdate}
+              onClick={handleCheckUpdate}
+            >
+              {isCheckingUpdate ? "CHECKING FOR UPDATES…" : "CHECK FOR UPDATES NOW"}
+            </Button>
+            {updateCheckStatus && (
+              <span className="text-[11px] font-bold text-[var(--color-ink)]">
+                {updateCheckStatus}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
 
       <Rule />

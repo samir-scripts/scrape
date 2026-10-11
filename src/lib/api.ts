@@ -17,6 +17,8 @@ import type { LocationOptions } from "../bindings/LocationOptions";
 import type { ParsedLocation } from "../bindings/ParsedLocation";
 import type { ScrapeLogEntry } from "../bindings/ScrapeLogEntry";
 import type { Metrics } from "../bindings/Metrics";
+import type { AppNotification } from "../bindings/AppNotification";
+import type { UpdateCheckResult } from "../bindings/UpdateCheckResult";
 
 export interface DetectResult {
   kind: string;
@@ -46,6 +48,9 @@ export const DEFAULT_SETTINGS: Settings = {
   notifications_enabled: true,
   app_start_hidden: false,
   app_launch_at_login: false,
+  app_auto_update: true,
+  app_update_channel: "stable",
+  app_last_update_check: null,
 };
 
 let devSettings: Settings = (() => {
@@ -65,6 +70,19 @@ let devSettings: Settings = (() => {
   } catch {}
   return { ...DEFAULT_SETTINGS };
 })();
+
+let devNotifications: AppNotification[] = [
+  {
+    id: "mock-1",
+    kind: "system",
+    title: "SYSTEM READY",
+    message: "SCRAPE initialized in local preview mode.",
+    action_label: null,
+    action_payload: null,
+    read: false,
+    created_at: new Date().toISOString(),
+  },
+];
 
 export const api = {
   // Jobs
@@ -287,5 +305,65 @@ export const api = {
       });
     }
     return invoke<Metrics>("get_metrics", { granularity, periods });
+  },
+
+  // Notifications & Updater
+  listNotifications: (limit?: number): Promise<AppNotification[]> => {
+    if (!isTauri()) {
+      return Promise.resolve(limit ? devNotifications.slice(0, limit) : [...devNotifications]);
+    }
+    return invoke<AppNotification[]>("list_notifications", { limit: limit ?? null });
+  },
+
+  markNotificationRead: (id: string): Promise<AppNotification> => {
+    if (!isTauri()) {
+      const item = devNotifications.find((n) => n.id === id);
+      if (item) item.read = true;
+      return Promise.resolve(item || devNotifications[0]);
+    }
+    return invoke<AppNotification>("mark_notification_read", { id });
+  },
+
+  markAllNotificationsRead: (): Promise<void> => {
+    if (!isTauri()) {
+      devNotifications.forEach((n) => (n.read = true));
+      return Promise.resolve();
+    }
+    return invoke<void>("mark_all_notifications_read");
+  },
+
+  clearAllNotifications: (): Promise<void> => {
+    if (!isTauri()) {
+      devNotifications = [];
+      return Promise.resolve();
+    }
+    return invoke<void>("clear_all_notifications");
+  },
+
+  countUnreadNotifications: (): Promise<number> => {
+    if (!isTauri()) {
+      return Promise.resolve(devNotifications.filter((n) => !n.read).length);
+    }
+    return invoke<number>("count_unread_notifications");
+  },
+
+  checkAppUpdate: (): Promise<UpdateCheckResult> => {
+    if (!isTauri()) {
+      return Promise.resolve({
+        available: false,
+        current_version: "0.1.0",
+        latest_version: null,
+        release_notes: null,
+        error: null,
+      });
+    }
+    return invoke<UpdateCheckResult>("check_app_update");
+  },
+
+  installAppUpdate: (): Promise<void> => {
+    if (!isTauri()) {
+      return Promise.resolve();
+    }
+    return invoke<void>("install_app_update");
   },
 };
