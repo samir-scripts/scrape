@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run && node scripts/test-app-startup.mjs",
+    "test:startup": "node scripts/test-app-startup.mjs",
     "tauri": "tauri",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "gen:types": "cargo test --workspace export_bindings"
