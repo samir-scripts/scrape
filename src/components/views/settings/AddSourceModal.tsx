@@ -126,6 +126,7 @@ export function AddSourceModal({
 
   // Ingestion filters
   const [selectedRoleTypes, setSelectedRoleTypes] = useState<RoleType[]>([]);
+  const [filterQuery, setFilterQuery] = useState("");
   const [includeKeywords, setIncludeKeywords] = useState("");
   const [excludeKeywords, setExcludeKeywords] = useState("");
   const [locations, setLocations] = useState("");
@@ -195,6 +196,8 @@ export function AddSourceModal({
       setExcludeUrlPatterns(excPats.join(", "));
 
       const flt = (initialSource.filters as Record<string, unknown>) || {};
+      if (typeof flt.query === "string") setFilterQuery(flt.query);
+      else setFilterQuery("");
       if (Array.isArray(flt.role_types)) setSelectedRoleTypes(flt.role_types as RoleType[]);
       if (Array.isArray(flt.include_keywords)) setIncludeKeywords(flt.include_keywords.join(", "));
       if (Array.isArray(flt.exclude_keywords)) setExcludeKeywords(flt.exclude_keywords.join(", "));
@@ -222,6 +225,7 @@ export function AddSourceModal({
         initialSource.cadence === "cron" ||
         pats.length > 0 ||
         excPats.length > 0 ||
+        Boolean(flt.query) ||
         (Array.isArray(flt.role_types) && flt.role_types.length > 0) ||
         (Array.isArray(flt.include_keywords) && flt.include_keywords.length > 0) ||
         (Array.isArray(flt.exclude_keywords) && flt.exclude_keywords.length > 0) ||
@@ -251,6 +255,7 @@ export function AddSourceModal({
       setRetentionDays(30);
       setRetentionPolicy("untracked_only");
       setSelectedRoleTypes([]);
+      setFilterQuery("");
       setIncludeKeywords("");
       setExcludeKeywords("");
       setLocations("");
@@ -335,6 +340,7 @@ export function AddSourceModal({
   const assembleFilters = () => {
     const filters: Record<string, unknown> = {};
     if (selectedRoleTypes.length > 0) filters.role_types = selectedRoleTypes;
+    if (filterQuery.trim()) filters.query = filterQuery.trim();
     if (includeKeywords.trim()) {
       filters.include_keywords = includeKeywords
         .split(",")
@@ -395,6 +401,8 @@ export function AddSourceModal({
     if (spec.retention?.policy) setRetentionPolicy(spec.retention.policy);
 
     if (spec.filters?.role_types) setSelectedRoleTypes(spec.filters.role_types);
+    if (spec.filters?.query) setFilterQuery(spec.filters.query);
+    else setFilterQuery("");
     if (spec.filters?.include_keywords) setIncludeKeywords(spec.filters.include_keywords.join(", "));
     if (spec.filters?.exclude_keywords) setExcludeKeywords(spec.filters.exclude_keywords.join(", "));
     if (spec.filters?.locations) setLocations(spec.filters.locations.join(", "));
@@ -479,6 +487,7 @@ export function AddSourceModal({
       },
       filters: {
         role_types: selectedRoleTypes.length > 0 ? selectedRoleTypes : undefined,
+        query: filterQuery.trim() ? filterQuery.trim() : undefined,
         include_keywords: includeKeywords
           ? includeKeywords.split(",").map((s) => s.trim()).filter(Boolean)
           : undefined,
@@ -1219,6 +1228,20 @@ export function AddSourceModal({
                       className="text-xs"
                     />
                   </Field>
+                </div>
+
+                <div className="pt-1">
+                  <Field label="CUSTOM FILTER POLICY (SQL LIKE / BOOLEAN QUERY)">
+                    <Input
+                      value={filterQuery}
+                      onChange={(e) => setFilterQuery(e.target.value)}
+                      placeholder="e.g. (title LIKE '%Engineer%' OR title LIKE '%Developer%') AND location LIKE '%Remote%'"
+                      className="text-xs font-mono"
+                    />
+                  </Field>
+                  <div className="text-[10px] text-[var(--color-ink)]/70 font-mono mt-0.5">
+                    Supports SQL LIKE wildcards (%, _), AND, OR, NOT, IN (...), and field targeting (title, location, company, description).
+                  </div>
                 </div>
               </div>
 

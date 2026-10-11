@@ -23,6 +23,7 @@ schedule:
 filters:
   role_types:
     - internship
+  query: "title LIKE '%Engineer%' OR title LIKE '%Developer%' OR title LIKE '%Intern%'"
   include_keywords:
     - "Software"
     - "Engineer"

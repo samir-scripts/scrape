@@ -124,7 +124,8 @@ async fn execute_dry_run_worker(
         .spawn()
         .map_err(|e| AppError::Internal(format!("Failed to spawn sidecar: {}", e)))?;
 
-    let config_bytes = serde_json::to_vec(&config)?;
+    let mut config_bytes = serde_json::to_vec(&config)?;
+    config_bytes.push(b'\n');
     child
         .write(&config_bytes)
         .map_err(|e| AppError::Internal(format!("Failed to write to sidecar stdin: {}", e)))?;

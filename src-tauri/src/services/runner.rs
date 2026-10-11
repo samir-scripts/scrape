@@ -60,11 +60,23 @@ pub fn resolve_worker_filters(
         .filter(|v| !v.is_empty())
         .unwrap_or(global_filters.role_types);
 
+    let query = source_filters
+        .get("query")
+        .and_then(|v| v.as_str().map(ToString::to_string))
+        .or(global_filters.query);
+
+    let policy = source_filters
+        .get("policy")
+        .cloned()
+        .or(global_filters.policy);
+
     WorkerFilters {
         include_keywords,
         exclude_keywords,
         locations,
         role_types,
+        query,
+        policy,
     }
 }
 
@@ -196,6 +208,8 @@ impl ScrapeRunner {
                 exclude_keywords,
                 locations,
                 role_types,
+                query: None,
+                policy: None,
             },
             limits: WorkerLimits::default(),
         };
@@ -400,6 +414,8 @@ impl ScrapeRunner {
             exclude_keywords,
             locations,
             role_types,
+            query: None,
+            policy: None,
         };
         let filters = resolve_worker_filters(&source.filters, global_filters);
 
@@ -472,7 +488,11 @@ impl ScrapeRunner {
                 self.log_event(
                     app,
                     &run.id,
-                    LogLevel::Info,
+                    if final_status == RunStatus::Success {
+                        LogLevel::Info
+                    } else {
+                        LogLevel::Error
+                    },
                     Some(source_id),
                     &format!(
                         "Workflow run completed in {:.2}s with status: {}",
@@ -536,6 +556,14 @@ impl ScrapeRunner {
             Ok(Err(err)) => {
                 let err_str = err.to_string();
                 tracing::error!("Single source scrape error: {}", err_str);
+                self.log_event(
+                    app,
+                    &run.id,
+                    LogLevel::Error,
+                    Some(source_id),
+                    &format!("Workflow execution failed: {}", err_str),
+                )
+                .await;
                 let _ = SourcesRepo::set_run_result(
                     &self.pool,
                     source_id,
@@ -555,6 +583,14 @@ impl ScrapeRunner {
             Err(_) => {
                 tracing::error!("Single source scrape timed out (3m limit)");
                 let err_str = "Execution timed out (3 minute limit)";
+                self.log_event(
+                    app,
+                    &run.id,
+                    LogLevel::Error,
+                    Some(source_id),
+                    "Workflow execution timed out (3 minute limit)",
+                )
+                .await;
                 let _ = SourcesRepo::set_run_result(
                     &self.pool,
                     source_id,
@@ -608,7 +644,8 @@ impl ScrapeRunner {
         )
         .await;
 
-        let config_bytes = serde_json::to_vec(&config)?;
+        let mut config_bytes = serde_json::to_vec(&config)?;
+        config_bytes.push(b'\n');
         child
             .write(&config_bytes)
             .map_err(|e| AppError::Internal(format!("Failed to write to sidecar stdin: {}", e)))?;
@@ -979,11 +1016,14 @@ mod tests {
             exclude_keywords: vec!["GlobalExclude".to_string()],
             locations: vec!["GlobalLoc".to_string()],
             role_types: vec![RoleType::FullTime],
+            query: Some("title LIKE '%Global%'".to_string()),
+            policy: None,
         };
 
         let source_filters = serde_json::json!({
             "include_keywords": ["CustomKW", "Rust"],
-            "role_types": ["internship"]
+            "role_types": ["internship"],
+            "query": "title LIKE '%Engineer%' AND location LIKE '%Remote%'"
         });
 
         let resolved = resolve_worker_filters(&source_filters, global);
@@ -992,6 +1032,10 @@ mod tests {
             vec!["CustomKW".to_string(), "Rust".to_string()]
         );
         assert_eq!(resolved.role_types, vec![RoleType::Internship]);
+        assert_eq!(
+            resolved.query.as_deref(),
+            Some("title LIKE '%Engineer%' AND location LIKE '%Remote%'")
+        );
         // Fallback to global for omitted fields
         assert_eq!(resolved.exclude_keywords, vec!["GlobalExclude".to_string()]);
         assert_eq!(resolved.locations, vec!["GlobalLoc".to_string()]);
@@ -1004,6 +1048,8 @@ mod tests {
             exclude_keywords: vec!["Manager".to_string()],
             locations: vec!["Remote".to_string()],
             role_types: vec![RoleType::FullTime],
+            query: None,
+            policy: None,
         };
 
         let null_filters = serde_json::Value::Null;
@@ -1016,5 +1062,184 @@ mod tests {
         let empty_filters = serde_json::json!({});
         let resolved_empty = resolve_worker_filters(&empty_filters, global.clone());
         assert_eq!(resolved_empty.include_keywords, global.include_keywords);
+    }
+
+    #[tokio::test]
+    async fn test_single_source_workflow_execution_logs_pipeline() {
+        let pool = crate::db::init_memory_db().await.unwrap();
+
+        // 1. Create a test source
+        let source = crate::db::sources::SourcesRepo::create(
+            &pool,
+            crate::db::sources::CreateSourceInput {
+                kind: scrape_core::SourceKind::Greenhouse,
+                name: "Cloudflare Tests".to_string(),
+                identifier: "cloudflare".to_string(),
+                config: None,
+                enabled: Some(true),
+                cadence: Some(scrape_core::SourceCadence::Daily),
+                cadence_cron: None,
+                retention_days: Some(30),
+                retention_policy: Some("untracked_only".to_string()),
+                filters: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // 2. Start a workflow execution run
+        let run = RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&source.id))
+            .await
+            .unwrap();
+        assert_eq!(run.source_id.as_deref(), Some(source.id.as_str()));
+        assert_eq!(run.status, RunStatus::Running);
+
+        // 3. Emulate execution logs generated throughout runner lifecycle
+        RunsRepo::add_log(
+            &pool,
+            &run.id,
+            LogLevel::Info,
+            Some(&source.id),
+            "Scrape workflow initiated: Cloudflare Tests (Greenhouse)",
+        )
+        .await
+        .unwrap();
+
+        RunsRepo::add_log(
+            &pool,
+            &run.id,
+            LogLevel::Info,
+            Some(&source.id),
+            "Sidecar worker spawned. Scraping 1 sources.",
+        )
+        .await
+        .unwrap();
+
+        RunsRepo::add_log(
+            &pool,
+            &run.id,
+            LogLevel::Info,
+            Some(&source.id),
+            "Fetched 142 postings, matched 15 jobs",
+        )
+        .await
+        .unwrap();
+
+        let finished = RunsRepo::finish(&pool, &run.id, RunStatus::Success, 142, 15, None)
+            .await
+            .unwrap();
+        assert_eq!(finished.status, RunStatus::Success);
+
+        RunsRepo::add_log(
+            &pool,
+            &run.id,
+            LogLevel::Info,
+            Some(&source.id),
+            "Workflow run completed in 1.25s with status: SUCCESS",
+        )
+        .await
+        .unwrap();
+
+        // 4. Assert logs are persisted and queryable by run ID
+        let logs = RunsRepo::get_logs(&pool, &run.id).await.unwrap();
+        assert_eq!(logs.len(), 4, "Expected 4 lifecycle logs to be recorded");
+        assert_eq!(
+            logs[0].message,
+            "Scrape workflow initiated: Cloudflare Tests (Greenhouse)"
+        );
+        assert_eq!(logs[0].source_id.as_deref(), Some(source.id.as_str()));
+        assert_eq!(logs[0].level, LogLevel::Info);
+
+        assert_eq!(
+            logs[1].message,
+            "Sidecar worker spawned. Scraping 1 sources."
+        );
+        assert_eq!(logs[2].message, "Fetched 142 postings, matched 15 jobs");
+        assert_eq!(
+            logs[3].message,
+            "Workflow run completed in 1.25s with status: SUCCESS"
+        );
+
+        // 5. Assert that list_by_source correctly returns the run
+        let source_runs = RunsRepo::list_by_source(&pool, &source.id, 10)
+            .await
+            .unwrap();
+        assert_eq!(source_runs.len(), 1);
+        assert_eq!(source_runs[0].id, run.id);
+        assert_eq!(source_runs[0].jobs_found, 142);
+        assert_eq!(source_runs[0].jobs_new, 15);
+    }
+
+    #[tokio::test]
+    async fn test_failed_source_workflow_execution_logs_pipeline() {
+        let pool = crate::db::init_memory_db().await.unwrap();
+
+        let source = crate::db::sources::SourcesRepo::create(
+            &pool,
+            crate::db::sources::CreateSourceInput {
+                kind: scrape_core::SourceKind::Selector,
+                name: "Broken Careers".to_string(),
+                identifier: "https://invalid.example.com".to_string(),
+                config: None,
+                enabled: Some(true),
+                cadence: Some(scrape_core::SourceCadence::Manual),
+                cadence_cron: None,
+                retention_days: Some(30),
+                retention_policy: Some("untracked_only".to_string()),
+                filters: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let run = RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&source.id))
+            .await
+            .unwrap();
+
+        RunsRepo::add_log(
+            &pool,
+            &run.id,
+            LogLevel::Info,
+            Some(&source.id),
+            "Scrape workflow initiated: Broken Careers (Selector)",
+        )
+        .await
+        .unwrap();
+
+        let err_msg = "Workflow execution failed: HTTP 500 Internal Server Error";
+        RunsRepo::add_log(&pool, &run.id, LogLevel::Error, Some(&source.id), err_msg)
+            .await
+            .unwrap();
+
+        let _ = RunsRepo::finish(&pool, &run.id, RunStatus::Failed, 0, 0, Some(err_msg))
+            .await
+            .unwrap();
+
+        RunsRepo::add_log(
+            &pool,
+            &run.id,
+            LogLevel::Error,
+            Some(&source.id),
+            "Workflow run completed in 0.45s with status: FAILED",
+        )
+        .await
+        .unwrap();
+
+        let logs = RunsRepo::get_logs(&pool, &run.id).await.unwrap();
+        assert_eq!(logs.len(), 3);
+        assert_eq!(logs[0].level, LogLevel::Info);
+        assert_eq!(logs[1].level, LogLevel::Error);
+        assert_eq!(logs[1].message, err_msg);
+        assert_eq!(logs[2].level, LogLevel::Error);
+
+        let error_logs: Vec<_> = logs.iter().filter(|l| l.level == LogLevel::Error).collect();
+        assert_eq!(error_logs.len(), 2, "Expected 2 error level logs");
+
+        let source_runs = RunsRepo::list_by_source(&pool, &source.id, 10)
+            .await
+            .unwrap();
+        assert_eq!(source_runs.len(), 1);
+        assert_eq!(source_runs[0].status, RunStatus::Failed);
+        assert_eq!(source_runs[0].error.as_deref(), Some(err_msg));
     }
 }

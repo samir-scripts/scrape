@@ -1,4 +1,4 @@
-import { parseDocument } from "yaml";
+import { parseDocument, stringify } from "yaml";
 import type { SourceKind } from "../bindings/SourceKind";
 import type { SourceCadence } from "../bindings/SourceCadence";
 import type { RoleType } from "../bindings/RoleType";
@@ -41,6 +41,8 @@ export interface WorkflowFilters {
   include_keywords?: string[];
   exclude_keywords?: string[];
   locations?: string[];
+  query?: string;
+  policy?: Record<string, unknown>;
   experience_min?: number;
   experience_max?: number;
 }
@@ -247,6 +249,43 @@ export function validateWorkflowYaml(yamlContent: string): YamlValidationResult 
         }
       }
     }
+
+    if (json.filters.query !== undefined) {
+      if (typeof json.filters.query !== "string") {
+        errors.push({ message: "filters.query must be a string expression" });
+      } else {
+        const q = json.filters.query.trim();
+        // Check for basic query syntax errors (unmatched parens, unclosed quotes)
+        let parenCount = 0;
+        let inQuote: string | null = null;
+        for (let i = 0; i < q.length; i++) {
+          const char = q[i];
+          if (char === "'" || char === '"') {
+            if (inQuote === char) inQuote = null;
+            else if (!inQuote) inQuote = char;
+          } else if (!inQuote) {
+            if (char === "(") parenCount++;
+            else if (char === ")") {
+              parenCount--;
+              if (parenCount < 0) {
+                errors.push({ message: `Unmatched closing parenthesis ')' at character ${i + 1}` });
+                break;
+              }
+            }
+          }
+        }
+        if (inQuote) {
+          errors.push({ message: `Unclosed string quote (${inQuote}) in filter query` });
+        }
+        if (parenCount > 0) {
+          errors.push({ message: `Unclosed opening parenthesis '(' in filter query` });
+        }
+      }
+    }
+
+    if (json.filters.policy !== undefined && (typeof json.filters.policy !== "object" || json.filters.policy === null)) {
+      errors.push({ message: "filters.policy must be a valid policy object mapping" });
+    }
   }
 
   if (errors.length > 0) {
@@ -301,6 +340,15 @@ export function workflowSpecToYaml(spec: WorkflowSpec): string {
   } else {
     lines.push("  role_types: []");
   }
+  if (spec.filters?.query) {
+    lines.push(`  query: "${spec.filters.query.replace(/"/g, '\\"')}"`);
+  }
+  if (spec.filters?.policy && typeof spec.filters.policy === "object") {
+    const policyBlock = stringify({ policy: spec.filters.policy }).trim();
+    for (const pLine of policyBlock.split("\n")) {
+      lines.push(`  ${pLine}`);
+    }
+  }
   if (spec.filters?.include_keywords && spec.filters.include_keywords.length > 0) {
     lines.push(`  include_keywords: [${spec.filters.include_keywords.map((k) => `"${k}"`).join(", ")}]`);
   }
@@ -352,6 +400,8 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
       include_keywords: filters.include_keywords as string[] | undefined,
       exclude_keywords: filters.exclude_keywords as string[] | undefined,
       locations: filters.locations as string[] | undefined,
+      query: (filters.query as string) || undefined,
+      policy: (filters.policy as Record<string, unknown>) || undefined,
     },
     retention: {
       days: Number(source.retention_days ?? 30),
@@ -387,6 +437,8 @@ export function workflowSpecToCreateInput(spec: WorkflowSpec): CreateSourceInput
 
   const filtersObj: Record<string, unknown> = {};
   if (spec.filters?.role_types) filtersObj.role_types = spec.filters.role_types;
+  if (spec.filters?.query) filtersObj.query = spec.filters.query;
+  if (spec.filters?.policy) filtersObj.policy = spec.filters.policy;
   if (spec.filters?.include_keywords) filtersObj.include_keywords = spec.filters.include_keywords;
   if (spec.filters?.exclude_keywords) filtersObj.exclude_keywords = spec.filters.exclude_keywords;
   if (spec.filters?.locations) filtersObj.locations = spec.filters.locations;

@@ -66,9 +66,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn run_stdin_config(dry_run: bool) -> Result<(), Box<dyn std::error::Error>> {
     let mut input = String::new();
-    io::stdin().read_to_string(&mut input)?;
+    let _ = io::stdin().read_line(&mut input);
 
-    let config: WorkerConfig = serde_json::from_str(&input)?;
+    let config: WorkerConfig = match serde_json::from_str(input.trim()) {
+        Ok(cfg) => cfg,
+        Err(_) => {
+            // Fallback for multiline or EOF-terminated JSON payloads
+            io::stdin().read_to_string(&mut input)?;
+            serde_json::from_str(&input)?
+        }
+    };
+
     if config.version != PROTOCOL_VERSION {
         eprintln!(
             "Unsupported protocol version: expected {}, got {}",
@@ -157,11 +165,20 @@ async fn execute_worker(
                     if let WorkerEvent::Job {
                         ref title,
                         ref location,
+                        ref company,
+                        ref description_text,
                         role_type,
                         ..
                     } = event
                     {
-                        if matcher.matches(title, location, role_type) {
+                        let ctx = scrape_core::JobFilterContext {
+                            title,
+                            location,
+                            description: description_text.as_deref().unwrap_or(""),
+                            company,
+                            role_type,
+                        };
+                        if matcher.matches_context(&ctx) {
                             matched_count += 1;
                             total_emitted += 1;
                             emit_event(&event)?;

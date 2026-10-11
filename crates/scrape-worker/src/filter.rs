@@ -1,57 +1,29 @@
-use scrape_core::{RoleType, WorkerFilters};
+use scrape_core::{FilterExpr, JobFilterContext, RoleType, WorkerFilters};
 
 pub struct FilterMatcher<'a> {
-    filters: &'a WorkerFilters,
+    pub filters: &'a WorkerFilters,
+    expr: FilterExpr,
 }
 
 impl<'a> FilterMatcher<'a> {
     pub fn new(filters: &'a WorkerFilters) -> Self {
-        Self { filters }
+        let expr = filters.to_expr().unwrap_or(FilterExpr::AlwaysTrue);
+        Self { filters, expr }
     }
 
     pub fn matches(&self, title: &str, location: &str, role_type: RoleType) -> bool {
-        let title_lower = title.to_lowercase();
-        let loc_lower = location.to_lowercase();
+        let ctx = JobFilterContext {
+            title,
+            location,
+            description: "",
+            company: "",
+            role_type,
+        };
+        self.matches_context(&ctx)
+    }
 
-        // Include keywords: at least one must match if filter is set
-        if !self.filters.include_keywords.is_empty() {
-            let matched = self.filters.include_keywords.iter().any(|k| {
-                let k_lower = k.to_lowercase();
-                title_lower.contains(&k_lower) || loc_lower.contains(&k_lower)
-            });
-            if !matched {
-                return false;
-            }
-        }
-
-        // Exclude keywords: none must match
-        if !self.filters.exclude_keywords.is_empty() {
-            let excluded = self.filters.exclude_keywords.iter().any(|k| {
-                let k_lower = k.to_lowercase();
-                title_lower.contains(&k_lower) || loc_lower.contains(&k_lower)
-            });
-            if excluded {
-                return false;
-            }
-        }
-
-        // Locations: at least one must match if filter is set
-        if !self.filters.locations.is_empty() {
-            let matched = self.filters.locations.iter().any(|loc| {
-                let l_lower = loc.to_lowercase();
-                loc_lower.contains(&l_lower)
-            });
-            if !matched {
-                return false;
-            }
-        }
-
-        // Role types: must match if filter is set
-        if !self.filters.role_types.is_empty() && !self.filters.role_types.contains(&role_type) {
-            return false;
-        }
-
-        true
+    pub fn matches_context(&self, ctx: &JobFilterContext) -> bool {
+        self.expr.eval(ctx)
     }
 }
 
@@ -66,6 +38,8 @@ mod tests {
             exclude_keywords: vec!["Senior".to_string(), "Staff".to_string()],
             locations: vec!["Remote".to_string()],
             role_types: vec![RoleType::FullTime],
+            query: None,
+            policy: None,
         };
 
         let matcher = FilterMatcher::new(&filters);
@@ -84,5 +58,40 @@ mod tests {
 
         // Missing include keyword
         assert!(!matcher.matches("Product Manager", "Remote", RoleType::FullTime));
+    }
+
+    #[test]
+    fn test_filter_matcher_with_sql_query() {
+        let filters = WorkerFilters {
+            include_keywords: vec![],
+            exclude_keywords: vec![],
+            locations: vec![],
+            role_types: vec![],
+            query: Some(
+                "title LIKE '%Engineer%' AND (location LIKE '%Remote%' OR location LIKE '%Austin%') AND title NOT LIKE '%Senior%'"
+                    .to_string(),
+            ),
+            policy: None,
+        };
+
+        let matcher = FilterMatcher::new(&filters);
+
+        let ctx_match = JobFilterContext {
+            title: "Software Engineer",
+            location: "Austin, TX",
+            description: "Distributed systems",
+            company: "Cloudflare",
+            role_type: RoleType::FullTime,
+        };
+        assert!(matcher.matches_context(&ctx_match));
+
+        let ctx_senior = JobFilterContext {
+            title: "Senior Software Engineer",
+            location: "Austin, TX",
+            description: "Distributed systems",
+            company: "Cloudflare",
+            role_type: RoleType::FullTime,
+        };
+        assert!(!matcher.matches_context(&ctx_senior));
     }
 }

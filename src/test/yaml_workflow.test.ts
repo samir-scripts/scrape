@@ -236,4 +236,134 @@ extractor:
       expect(ashbyResult.parsedSpec?.extractor.url).toBe("ramp");
     });
   });
+
+  describe("Expressive Filter Policy Engine & SQL LIKE Query Validation", () => {
+    it("validates workflow YAML with complex boolean and SQL LIKE filter query", () => {
+      const queryYaml = `
+version: 2
+metadata:
+  name: "Custom Query Source"
+extractor:
+  kind: greenhouse
+  url: "https://boards.greenhouse.io/stripe"
+filters:
+  query: "(title LIKE '%Engineer%' OR title LIKE '%Developer%') AND location LIKE '%Remote%' AND NOT (title LIKE '%Senior%' OR title LIKE '%Staff%')"
+  include_keywords: ["Rust"]
+`;
+      const result = validateWorkflowYaml(queryYaml);
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+      expect(result.parsedSpec?.filters?.query).toBe(
+        "(title LIKE '%Engineer%' OR title LIKE '%Developer%') AND location LIKE '%Remote%' AND NOT (title LIKE '%Senior%' OR title LIKE '%Staff%')"
+      );
+    });
+
+    it("detects syntax errors in filters.query with diagnostic messages", () => {
+      // Unclosed quote
+      const unclosedQuoteYaml = `
+version: 2
+metadata:
+  name: "Bad Quote"
+extractor:
+  kind: greenhouse
+  url: "https://boards.greenhouse.io/stripe"
+filters:
+  query: "title LIKE '%Engineer"
+`;
+      const quoteResult = validateWorkflowYaml(unclosedQuoteYaml);
+      expect(quoteResult.isValid).toBe(false);
+      expect(quoteResult.errors.some((e) => e.message.includes("Unclosed string quote"))).toBe(true);
+
+      // Unmatched closing paren
+      const unmatchedClosingYaml = `
+version: 2
+metadata:
+  name: "Bad Paren"
+extractor:
+  kind: greenhouse
+  url: "https://boards.greenhouse.io/stripe"
+filters:
+  query: "title LIKE '%Engineer%')"
+`;
+      const parenResult = validateWorkflowYaml(unmatchedClosingYaml);
+      expect(parenResult.isValid).toBe(false);
+      expect(parenResult.errors.some((e) => e.message.includes("Unmatched closing parenthesis"))).toBe(true);
+
+      // Unclosed opening paren
+      const unclosedOpeningYaml = `
+version: 2
+metadata:
+  name: "Bad Paren 2"
+extractor:
+  kind: greenhouse
+  url: "https://boards.greenhouse.io/stripe"
+filters:
+  query: "(title LIKE '%Engineer%'"
+`;
+      const unclosedResult = validateWorkflowYaml(unclosedOpeningYaml);
+      expect(unclosedResult.isValid).toBe(false);
+      expect(unclosedResult.errors.some((e) => e.message.includes("Unclosed opening parenthesis"))).toBe(true);
+    });
+
+    it("round-trips filters.query and filters.policy through spec conversion and YAML", () => {
+      const spec: WorkflowSpec = {
+        version: 2,
+        metadata: { name: "Policy Test", enabled: true },
+        extractor: { kind: "lever", url: "https://jobs.lever.co/figma" },
+        filters: {
+          query: "title LIKE '%Intern%' AND location LIKE '%Remote%'",
+          policy: {
+            all: [
+              { field: "title", op: "like", value: "%Intern%" },
+              { field: "location", op: "like", value: "%Remote%" },
+            ],
+          },
+        },
+      };
+
+      const serialized = workflowSpecToYaml(spec);
+      expect(serialized).toContain("query: \"title LIKE '%Intern%' AND location LIKE '%Remote%'\"");
+
+      const parsed = validateWorkflowYaml(serialized);
+      expect(parsed.isValid).toBe(true);
+      expect(parsed.parsedSpec?.filters?.query).toBe("title LIKE '%Intern%' AND location LIKE '%Remote%'");
+      expect(parsed.parsedSpec?.filters?.policy).toEqual({
+        all: [
+          { field: "title", op: "like", value: "%Intern%" },
+          { field: "location", op: "like", value: "%Remote%" },
+        ],
+      });
+
+      const createInput = workflowSpecToCreateInput(spec);
+      expect((createInput.filters as any).query).toBe("title LIKE '%Intern%' AND location LIKE '%Remote%'");
+      expect((createInput.filters as any).policy).toBeDefined();
+
+      const sourceRecord: Source = {
+        id: "src-test",
+        kind: "lever",
+        name: "Policy Test",
+        identifier: "figma",
+        config: { url: "https://jobs.lever.co/figma" },
+        enabled: true,
+        last_run_at: null,
+        last_status: null,
+        last_error: null,
+        created_at: "2026-10-10T00:00:00Z",
+        cadence: "daily",
+        cadence_cron: null,
+        next_run_at: null,
+        last_run_duration_ms: null,
+        retention_days: 30n,
+        retention_policy: "untracked_only",
+        filters: {
+          query: "title LIKE '%Intern%'",
+          policy: { all: [{ field: "title", op: "like", value: "%Intern%" }] },
+        },
+      };
+
+      const convertedSpec = sourceToWorkflowSpec(sourceRecord);
+      expect(convertedSpec.filters?.query).toBe("title LIKE '%Intern%'");
+      expect(convertedSpec.filters?.policy).toBeDefined();
+    });
+  });
 });

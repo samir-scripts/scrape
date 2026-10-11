@@ -5,6 +5,7 @@ import type { ScrapeLogEntry } from "../../../bindings/ScrapeLogEntry";
 import type { WorkerEvent } from "../../../bindings/WorkerEvent";
 import type { Settings } from "../../../bindings/Settings";
 import { api } from "../../../lib/api";
+import { listen } from "@tauri-apps/api/event";
 import { useUIStore } from "../../../lib/store";
 import { formatDateTime, formatTime } from "../../../lib/formatters";
 import { Button } from "../../ui/Button";
@@ -56,6 +57,31 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
     fetchSources();
   }, []);
 
+  const refreshInspectedRunsAndLogs = async (sourceId: string) => {
+    try {
+      setIsLoadingRuns(true);
+      const runs = await api.listSourceRuns(sourceId, 10);
+      setSourceRuns(runs);
+      if (runs.length > 0) {
+        const targetRunId = runs[0].id;
+        setSelectedRunId(targetRunId);
+        setIsLoadingLogs(true);
+        const logs = await api.getScrapeLogs(targetRunId).catch(() => []);
+        setRunLogs(logs);
+        setIsLoadingLogs(false);
+      } else {
+        setSelectedRunId(null);
+        setRunLogs([]);
+      }
+    } catch {
+      setSourceRuns([]);
+      setSelectedRunId(null);
+      setRunLogs([]);
+    } finally {
+      setIsLoadingRuns(false);
+    }
+  };
+
   // Fetch runs when inspecting a source
   useEffect(() => {
     if (!inspectedSource) {
@@ -64,24 +90,43 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
       setRunLogs([]);
       return;
     }
-    setIsLoadingRuns(true);
-    api.listSourceRuns(inspectedSource.id, 10)
-      .then((runs) => {
-        setSourceRuns(runs);
-        if (runs.length > 0) {
-          setSelectedRunId((prev) => (prev && runs.some((r) => r.id === prev) ? prev : runs[0].id));
-        } else {
-          setSelectedRunId(null);
-        }
-      })
-      .catch(() => {
-        setSourceRuns([]);
-        setSelectedRunId(null);
-      })
-      .finally(() => setIsLoadingRuns(false));
+    refreshInspectedRunsAndLogs(inspectedSource.id);
   }, [inspectedSource]);
 
-  // Fetch logs for the selected run
+  // Real-time event listener for scrape progress and completion
+  useEffect(() => {
+    let unlistenSourceFinished: (() => void) | undefined;
+    let unlistenFinished: (() => void) | undefined;
+
+    listen<{ source_id?: string }>("scrape://source_finished", (event) => {
+      fetchSources();
+      if (inspectedSource && event.payload?.source_id === inspectedSource.id) {
+        refreshInspectedRunsAndLogs(inspectedSource.id);
+      }
+    })
+      .then((un) => {
+        unlistenSourceFinished = un;
+      })
+      .catch(() => {});
+
+    listen("scrape://finished", () => {
+      fetchSources();
+      if (inspectedSource) {
+        refreshInspectedRunsAndLogs(inspectedSource.id);
+      }
+    })
+      .then((un) => {
+        unlistenFinished = un;
+      })
+      .catch(() => {});
+
+    return () => {
+      unlistenSourceFinished?.();
+      unlistenFinished?.();
+    };
+  }, [inspectedSource]);
+
+  // Fetch logs when switching selected run manually
   useEffect(() => {
     if (!selectedRunId) {
       setRunLogs([]);
@@ -115,14 +160,12 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
       setRunningSourceId(source.id);
       setInspectedSource(source);
       await api.runSourceNow(source.id);
-      fetchSources();
-      const runs = await api.listSourceRuns(source.id, 10).catch(() => []);
-      setSourceRuns(runs);
-      if (runs[0]) setSelectedRunId(runs[0].id);
     } catch (e) {
       console.error("Run single source error:", e);
     } finally {
       setRunningSourceId(null);
+      fetchSources();
+      await refreshInspectedRunsAndLogs(source.id);
     }
   };
 
