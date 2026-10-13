@@ -289,7 +289,7 @@ mod bindings_test {
     }
 
     #[tokio::test]
-    async fn test_app_startup_recovers_from_corrupted_migration_checksum() {
+    async fn test_app_startup_refuses_corrupted_migration_checksum() {
         let temp_dir =
             std::env::temp_dir().join(format!("scrape_boot_corrupt_{}", uuid::Uuid::new_v4()));
         let db_path = temp_dir.join("scrape_data.db");
@@ -302,15 +302,19 @@ mod bindings_test {
             .unwrap();
         pool1.close().await;
 
-        // Reboot: must heal and succeed
         let res2 = bootstrap_database_and_services(&db_path).await;
-        assert!(
-            res2.is_ok(),
-            "Startup must heal corrupted migration checksum and boot cleanly: {:?}",
-            res2.err()
-        );
-
-        let (pool2, _runner2) = res2.unwrap();
+        assert!(res2.is_err(), "Startup must refuse a modified history");
+        let pool2 = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(sqlx::sqlite::SqliteConnectOptions::new().filename(&db_path))
+            .await
+            .unwrap();
+        let checksum: Vec<u8> =
+            sqlx::query_scalar("SELECT checksum FROM _sqlx_migrations WHERE version = 6")
+                .fetch_one(&pool2)
+                .await
+                .unwrap();
+        assert_eq!(checksum, vec![0x12, 0x34, 0x56, 0x78]);
         pool2.close().await;
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
