@@ -20,6 +20,21 @@ pub async fn init_db(db_path: &Path) -> Result<SqlitePool> {
             .map_err(|e| crate::error::AppError::Internal(e.to_string()))?;
     }
 
+    // Inspect existing files read-only before setting WAL or any writable pragma.
+    // Unknown schema/checksum states must remain byte-for-byte recoverable.
+    if db_path.exists() && std::fs::metadata(db_path).is_ok_and(|m| m.len() > 0) {
+        let inspection = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(db_path)
+                    .read_only(true),
+            )
+            .await?;
+        let history = has_pending_migrations(&inspection).await;
+        inspection.close().await;
+        history?;
+    }
     let options = SqliteConnectOptions::new()
         .filename(db_path)
         .create_if_missing(true)
@@ -343,5 +358,32 @@ mod tests {
         upgraded.close().await;
         pool.close().await;
         tokio::fs::remove_dir_all(dir).await.unwrap();
+    }
+    #[tokio::test]
+    async fn unknown_database_is_rejected_before_journal_changes() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("unknown.db");
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(&path)
+                    .create_if_missing(true),
+            )
+            .await
+            .unwrap();
+        sqlx::query("CREATE TABLE unrelated (secret TEXT)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO unrelated VALUES ('preserve me')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+        let original = std::fs::read(&path).unwrap();
+        assert!(init_db(&path).await.is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
     }
 }
