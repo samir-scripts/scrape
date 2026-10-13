@@ -31,35 +31,78 @@ pub async fn init_db(db_path: &Path) -> Result<SqlitePool> {
         .connect_with(options)
         .await?;
 
+    // VACUUM INTO takes a consistent SQLite snapshot, including committed WAL data.
+    // A filesystem copy of the main database alone is not a safe backup.
+    if has_pending_migrations(&pool).await? {
+        let backup = db_path.with_file_name(format!(
+            "{}.pre-migration-{}.db",
+            db_path.file_name().unwrap_or_default().to_string_lossy(),
+            uuid::Uuid::new_v4()
+        ));
+        sqlx::query("VACUUM INTO ?")
+            .bind(backup.to_string_lossy().as_ref())
+            .execute(&pool)
+            .await?;
+        tracing::info!(path = %backup.display(), "Created pre-migration database backup");
+    }
     run_migrations(&pool).await?;
 
     Ok(pool)
 }
 
-pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
-    let migrator = sqlx::migrate!("./migrations");
-    match migrator.run(pool).await {
-        Ok(_) => Ok(()),
-        Err(sqlx::migrate::MigrateError::VersionMismatch(v)) => {
-            tracing::warn!(
-                "Migration checksum mismatch detected for version {}. Repairing _sqlx_migrations...",
-                v
-            );
-            if let Some(target_mig) = migrator.iter().find(|m| m.version == v) {
-                let _ = sqlx::query("UPDATE _sqlx_migrations SET checksum = ? WHERE version = ?")
-                    .bind(&*target_mig.checksum)
-                    .bind(v)
-                    .execute(pool)
-                    .await;
-                // Re-run migration execution
-                migrator.run(pool).await?;
-                Ok(())
-            } else {
-                Err(sqlx::migrate::MigrateError::VersionMismatch(v).into())
-            }
+/// Check applied metadata before any migration can write to the database.
+/// Unknown/modified histories must be recovered explicitly, never relabeled.
+async fn has_pending_migrations(pool: &SqlitePool) -> Result<bool> {
+    let exists: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations'",
+    )
+    .fetch_one(pool)
+    .await?;
+    if exists == 0 {
+        // A new, empty database needs no backup. An unversioned populated one
+        // is not a supported upgrade source.
+        let tables: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+        )
+        .fetch_one(pool)
+        .await?;
+        if tables > 0 {
+            return Err(crate::error::AppError::Validation(
+                "Unversioned database: refusing automatic migration. Preserve the database and recover from a compatible backup.".into(),
+            ));
         }
-        Err(e) => Err(e.into()),
+        return Ok(false);
     }
+    let applied: Vec<(i64, Vec<u8>, bool)> =
+        sqlx::query_as("SELECT version, checksum, success FROM _sqlx_migrations ORDER BY version")
+            .fetch_all(pool)
+            .await?;
+    let migrator = sqlx::migrate!("./migrations");
+    for (version, checksum, success) in &applied {
+        let expected = migrator.iter().find(|m| m.version == *version);
+        if !success || expected.is_none_or(|m| m.checksum.as_ref() != checksum.as_slice()) {
+            return Err(crate::error::AppError::Validation(format!(
+                "Migration history mismatch at version {version}. No checksums were changed. Close the application, preserve the database and its WAL files, and restore a compatible pre-migration backup or use a reviewed forward repair. See plans/database-recovery.md."
+            )));
+        }
+    }
+    // Applied migrations must be a prefix, not a history with missing steps.
+    if applied
+        .iter()
+        .map(|r| r.0)
+        .ne(migrator.iter().take(applied.len()).map(|m| m.version))
+    {
+        return Err(crate::error::AppError::Validation(
+            "Migration history has missing versions; refusing automatic repair. See plans/database-recovery.md.".into(),
+        ));
+    }
+    Ok(applied.len() < migrator.iter().count())
+}
+
+pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
+    has_pending_migrations(pool).await?;
+    sqlx::migrate!("./migrations").run(pool).await?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -84,7 +127,7 @@ mod tests {
     use sqlx::Row;
 
     #[tokio::test]
-    async fn test_all_migrations_apply_cleanly_up_to_version_10() {
+    async fn test_all_migrations_apply_cleanly() {
         let pool = init_memory_db()
             .await
             .expect("Failed to initialize in-memory DB");
@@ -98,10 +141,10 @@ mod tests {
         let cnt: i64 = count_row.get("cnt");
         let max_v: i64 = count_row.get("max_v");
 
-        assert_eq!(cnt, 10, "Expected exactly 10 migrations to be applied");
+        assert_eq!(cnt as usize, sqlx::migrate!("./migrations").iter().count());
         assert_eq!(
-            max_v, 10,
-            "Expected migration version 10 to be highest version"
+            max_v, 11,
+            "Expected migration version 11 to be highest version"
         );
 
         // Verify that app_notifications allows 'error'
@@ -145,45 +188,100 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_migration_recovery_on_version_mismatch() {
-        let pool = init_memory_db()
-            .await
-            .expect("Failed to initialize in-memory DB");
-
-        // Corrupt the checksum for migration version 6 to simulate a version mismatch
-        let corrupt_checksum = vec![0xDE, 0xAD, 0xBE, 0xEF];
+    async fn checksum_mismatch_preserves_metadata_and_user_data() {
+        let pool = init_memory_db().await.unwrap();
+        sqlx::query(
+            "INSERT INTO deleted_jobs (dedupe_key, deleted_at) VALUES ('protected', '2026-01-01')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let corrupt = vec![0xde_u8, 0xad, 0xbe, 0xef];
         sqlx::query("UPDATE _sqlx_migrations SET checksum = ? WHERE version = 6")
-            .bind(corrupt_checksum)
+            .bind(&corrupt)
             .execute(&pool)
             .await
-            .expect("Failed to corrupt checksum");
+            .unwrap();
+        let err = run_migrations(&pool).await.unwrap_err();
+        assert!(err.to_string().contains("No checksums were changed"));
+        let after: Vec<u8> =
+            sqlx::query_scalar("SELECT checksum FROM _sqlx_migrations WHERE version = 6")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(after, corrupt);
+        let count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM deleted_jobs WHERE dedupe_key = 'protected'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(count, 1);
+    }
 
-        // Verifying standard migrator throws VersionMismatch(6)
-        let raw_migrator = sqlx::migrate!("./migrations");
-        let err = raw_migrator
-            .run(&pool)
+    #[tokio::test]
+    async fn populated_upgrade_creates_consistent_backup() {
+        let dir = std::env::temp_dir().join(format!("scrape-upgrade-{}", uuid::Uuid::new_v4()));
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        let path = dir.join("jobs.db");
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(&path)
+                    .create_if_missing(true)
+                    .journal_mode(SqliteJournalMode::Wal),
+            )
             .await
-            .expect_err("Raw migrator should have failed with VersionMismatch");
-        match err {
-            sqlx::migrate::MigrateError::VersionMismatch(v) => {
-                assert_eq!(v, 6, "Expected version mismatch on version 6");
+            .unwrap();
+        // Apply an actual historical prefix, not edited metadata.
+        let mut historical = sqlx::migrate!("./migrations");
+        historical.migrations = historical
+            .iter()
+            .take(9)
+            .cloned()
+            .collect::<Vec<_>>()
+            .into();
+        historical.run(&pool).await.unwrap();
+        sqlx::query("INSERT INTO jobs (id, dedupe_key, title, company, role_type, url, date_added, last_seen_at, status, status_changed_at, notes, favorited) VALUES ('saved', 'saved', 'Engineer', 'Acme', 'full_time', 'https://example.com/1', '2020-01-01', '2020-01-01', 'applied', '2020-01-01', 'Referral', 1)")
+            .execute(&pool).await.unwrap();
+        // Leave the original connection open to exercise committed WAL data.
+        let upgraded = init_db(&path).await.unwrap();
+        let mut entries = tokio::fs::read_dir(&dir).await.unwrap();
+        let mut backup_path = None;
+        while let Some(entry) = entries.next_entry().await.unwrap() {
+            if entry
+                .file_name()
+                .to_string_lossy()
+                .contains("pre-migration")
+            {
+                backup_path = Some(entry.path());
             }
-            other => panic!("Expected VersionMismatch, got: {:?}", other),
         }
-
-        // Now run our resilient run_migrations healing function
-        let heal_res = run_migrations(&pool).await;
-        assert!(
-            heal_res.is_ok(),
-            "run_migrations must heal the version mismatch and succeed: {:?}",
-            heal_res
-        );
-
-        // Verify that subsequent migration execution succeeds directly
-        let second_run = raw_migrator.run(&pool).await;
-        assert!(
-            second_run.is_ok(),
-            "Subsequent migration run after healing must succeed"
-        );
+        let backup = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(backup_path.unwrap())
+                    .read_only(true),
+            )
+            .await
+            .unwrap();
+        for db in [&backup, &upgraded] {
+            let state: (String, bool, String) =
+                sqlx::query_as("SELECT notes, favorited, status FROM jobs WHERE id = 'saved'")
+                    .fetch_one(db)
+                    .await
+                    .unwrap();
+            assert_eq!(state, ("Referral".into(), true, "applied".into()));
+        }
+        let version: i64 = sqlx::query_scalar("SELECT max(version) FROM _sqlx_migrations")
+            .fetch_one(&backup)
+            .await
+            .unwrap();
+        assert_eq!(version, 9);
+        backup.close().await;
+        upgraded.close().await;
+        pool.close().await;
+        tokio::fs::remove_dir_all(dir).await.unwrap();
     }
 }

@@ -999,30 +999,21 @@ impl JobsRepo {
 
         let cutoff = format!("-{} days", retention_days);
 
-        // Absolute safety shield:
-        // Never delete:
-        // 1. User-tracked stages ('applied', 'interviewing', 'offer', 'rejected')
-        // 2. Postings with candidate notes (notes IS NOT NULL AND notes != '')
-        // 3. Favorited postings (favorited = 1)
-        let query_str = if policy == "all" {
-            r#"
-            DELETE FROM jobs
-            WHERE source_id = ?1
-              AND favorited = 0
-              AND (notes IS NULL OR notes = '')
-              AND date_added <= datetime('now', ?2)
-            "#
-        } else {
-            // Default: untracked_only (prunes only 'scraped', 'viewed', 'ignored')
-            r#"
+        // Legacy "all" is intentionally as safe as "untracked_only".
+        // Unknown policies fail closed instead of deleting anything.
+        if !matches!(policy, "all" | "untracked_only") {
+            return Err(AppError::Validation(format!(
+                "Unknown retention policy: {policy}"
+            )));
+        }
+        let query_str = r#"
             DELETE FROM jobs
             WHERE source_id = ?1
               AND status IN ('scraped', 'viewed', 'ignored')
               AND favorited = 0
-              AND (notes IS NULL OR notes = '')
-              AND date_added <= datetime('now', ?2)
-            "#
-        };
+              AND (notes IS NULL OR trim(notes, char(9) || char(10) || char(13) || ' ') = '')
+              AND julianday(date_added) <= julianday('now', ?2)
+            "#;
 
         let result = sqlx::query(query_str)
             .bind(source_id)
@@ -2415,7 +2406,7 @@ mod tests {
         .unwrap();
 
         // Create 4 jobs directly in SQL with date_added = 60 days ago
-        let old_date = "2026-08-01T00:00:00Z";
+        let old_date = "2000-01-01T00:00:00Z";
 
         // Job 1: Untracked, unfavorited, no notes (WILL BE PRUNED)
         sqlx::query(
@@ -2494,6 +2485,59 @@ mod tests {
             JobsRepo::get(&pool, "j4").await.is_ok(),
             "Job 4 (applied) must be preserved"
         );
+    }
+
+    #[tokio::test]
+    async fn every_retention_policy_protects_all_tracked_states_and_annotations() {
+        for policy in ["all", "untracked_only"] {
+            let pool = init_memory_db().await.unwrap();
+            sqlx::query("INSERT INTO sources (id, kind, name, identifier, created_at) VALUES ('source', 'greenhouse', 'Test', 'test', '2000-01-01')")
+                .execute(&pool).await.unwrap();
+            for (id, status, notes, favorite) in [
+                ("applied", "applied", "", false),
+                ("interview", "interviewing", "", false),
+                ("offer", "offer", "", false),
+                ("rejected", "rejected", "", false),
+                ("notes", "scraped", "  Referral  ", false),
+                ("favorite", "viewed", "", true),
+                ("eligible", "scraped", " \t\n", false),
+            ] {
+                sqlx::query("INSERT INTO jobs (id, dedupe_key, source_id, title, company, url, date_added, last_seen_at, status, status_changed_at, notes, favorited) VALUES (?1, ?1, 'source', 'Engineer', 'Co', 'https://example.com/job', '2000-01-01T02:00:00+02:00', '2000-01-01', ?2, '2000-01-01', ?3, ?4)")
+                    .bind(id).bind(status).bind(notes).bind(favorite).execute(&pool).await.unwrap();
+            }
+            sqlx::query("INSERT INTO job_status_events (job_id, to_status, changed_at) VALUES ('applied', 'applied', '2000-01-01')")
+                .execute(&pool).await.unwrap();
+            sqlx::query("INSERT INTO deleted_jobs (dedupe_key, deleted_at) VALUES ('blocked', '2000-01-01')")
+                .execute(&pool).await.unwrap();
+            assert_eq!(
+                JobsRepo::prune_expired_by_source(&pool, "source", 30, policy)
+                    .await
+                    .unwrap(),
+                1
+            );
+            let ids: Vec<String> = sqlx::query_scalar("SELECT id FROM jobs ORDER BY id")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+            assert_eq!(
+                ids,
+                [
+                    "applied",
+                    "favorite",
+                    "interview",
+                    "notes",
+                    "offer",
+                    "rejected"
+                ]
+            );
+            for table in ["job_status_events", "deleted_jobs"] {
+                let count: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM {table}"))
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+                assert_eq!(count, 1);
+            }
+        }
     }
 
     #[tokio::test]
