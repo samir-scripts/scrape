@@ -103,16 +103,20 @@ pub struct TransientSourceInput {
     pub name: String,
     pub identifier: String,
     pub config: Option<serde_json::Value>,
+    #[serde(default)]
+    pub filters: Option<serde_json::Value>,
 }
 
 async fn execute_dry_run_worker(
     app: &AppHandle,
     worker_source: WorkerSource,
+    filters: WorkerFilters,
 ) -> Result<Vec<WorkerEvent>> {
     let config = WorkerConfig {
         version: PROTOCOL_VERSION,
+        filters_by_source: Default::default(),
         sources: vec![worker_source],
-        filters: WorkerFilters::default(),
+        filters,
         limits: WorkerLimits::default(),
     };
 
@@ -131,20 +135,50 @@ async fn execute_dry_run_worker(
         .map_err(|e| AppError::Internal(format!("Failed to write to sidecar stdin: {}", e)))?;
 
     let mut events = Vec::new();
-
-    while let Some(event) = rx.recv().await {
-        if let CommandEvent::Stdout(bytes) = event {
-            let text = String::from_utf8_lossy(&bytes);
-            for line in text.lines() {
-                let trimmed = line.trim();
-                if trimmed.is_empty() {
-                    continue;
-                }
-                if let Ok(worker_event) = serde_json::from_str::<WorkerEvent>(trimmed) {
-                    events.push(worker_event);
+    let mut done = false;
+    let mut exit = None;
+    let mut failure = None;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(60);
+    loop {
+        let event = match tokio::time::timeout_at(deadline, rx.recv()).await {
+            Ok(Some(event)) => event,
+            Ok(None) => break,
+            Err(_) => {
+                let _ = child.kill();
+                return Err(AppError::Internal(
+                    "Preview timed out after 60 seconds".into(),
+                ));
+            }
+        };
+        match event {
+            CommandEvent::Stdout(bytes) => {
+                let text = String::from_utf8_lossy(&bytes);
+                for line in text.lines().filter(|line| !line.trim().is_empty()) {
+                    if done {
+                        failure = Some("Worker emitted data after completion".into());
+                        continue;
+                    }
+                    match serde_json::from_str::<WorkerEvent>(line) {
+                        Ok(event) => {
+                            done = matches!(event, WorkerEvent::Done { .. });
+                            events.push(event);
+                        }
+                        Err(error) => failure = Some(format!("Malformed worker event: {error}")),
+                    }
                 }
             }
+            CommandEvent::Terminated(status) => {
+                exit = status.code;
+                break;
+            }
+            CommandEvent::Error(error) => {
+                failure = Some(error);
+            }
+            _ => {}
         }
+    }
+    if let Some(message) = crate::services::runner::worker_failure(exit, done, failure.as_deref()) {
+        return Err(AppError::Internal(message));
     }
 
     Ok(events)
@@ -153,8 +187,13 @@ async fn execute_dry_run_worker(
 #[tauri::command]
 pub async fn test_source_transient(
     app: AppHandle,
+    state: State<'_, AppState>,
     input: TransientSourceInput,
 ) -> Result<Vec<WorkerEvent>> {
+    let filters = crate::services::runner::resolve_worker_filters(
+        &input.filters.unwrap_or(serde_json::Value::Null),
+        crate::services::runner::load_global_filters(&state.db).await?,
+    )?;
     let worker_source = WorkerSource {
         id: "transient-test".to_string(),
         kind: input.kind,
@@ -162,7 +201,7 @@ pub async fn test_source_transient(
         identifier: input.identifier,
         config: input.config.unwrap_or_else(|| serde_json::json!({})),
     };
-    execute_dry_run_worker(&app, worker_source).await
+    execute_dry_run_worker(&app, worker_source, filters).await
 }
 
 #[tauri::command]
@@ -172,6 +211,10 @@ pub async fn test_source(
     id: String,
 ) -> Result<Vec<WorkerEvent>> {
     let source = SourcesRepo::get(&state.db, &id).await?;
+    let filters = crate::services::runner::resolve_worker_filters(
+        &source.filters,
+        crate::services::runner::load_global_filters(&state.db).await?,
+    )?;
     let worker_source = WorkerSource {
         id: source.id,
         kind: source.kind,
@@ -179,7 +222,7 @@ pub async fn test_source(
         identifier: source.identifier,
         config: source.config,
     };
-    execute_dry_run_worker(&app, worker_source).await
+    execute_dry_run_worker(&app, worker_source, filters).await
 }
 
 #[tauri::command]

@@ -35,3 +35,10 @@ Application Boot (lib.rs)
         │
         └──► TrayService::init() (Maintains background presence)
 ```
+
+Workflow filters now resolve absent fields from global defaults, while explicit
+empty collections remove restrictions. Invalid/unsupported values are errors.
+Run all sends effective filters per source; preview accepts the same draft filters.
+All automatic scheduler paths share a pause flag, including delayed startup and
+per-source dispatch. Due-date comparisons use parsed instants. Per-workflow IANA
+calendar scheduling, DST policy, and the unified dispatcher remain pending.

@@ -2,4 +2,4 @@
 import type { JsonValue } from "./serde_json/JsonValue";
 import type { SourceKind } from "./SourceKind";
 
-export type TransientSourceInput = { kind: SourceKind, name: string, identifier: string, config: JsonValue | null, };
+export type TransientSourceInput = { kind: SourceKind, name: string, identifier: string, config: JsonValue | null, filters: JsonValue | null, };

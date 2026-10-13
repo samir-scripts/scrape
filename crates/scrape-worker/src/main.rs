@@ -117,6 +117,7 @@ async fn run_single_source(spec: &str, dry_run: bool) -> Result<(), Box<dyn std:
 
     let config = WorkerConfig {
         version: PROTOCOL_VERSION,
+        filters_by_source: Default::default(),
         sources: vec![source],
         filters: WorkerFilters::default(),
         limits: WorkerLimits::default(),
@@ -134,14 +135,22 @@ async fn execute_worker(
         config.limits.request_timeout_s,
         config.limits.per_host_delay_ms,
     );
-    let matcher = FilterMatcher::new(&config.filters)
-        .map_err(|e| format!("Invalid workflow filters: {e}"))?;
+    // Validate every effective rule before contacting any source.
+    FilterMatcher::new(&config.filters).map_err(|e| format!("Invalid workflow filters: {e}"))?;
+    for filters in config.filters_by_source.values() {
+        FilterMatcher::new(filters).map_err(|e| format!("Invalid workflow filters: {e}"))?;
+    }
 
     let mut stats = WorkerStats::default();
     let mut total_emitted = 0u64;
     let max_dry_run_jobs = 10u64;
 
     for source in &config.sources {
+        let filters = config
+            .filters_by_source
+            .get(&source.id)
+            .unwrap_or(&config.filters);
+        let matcher = FilterMatcher::new(filters)?;
         if dry_run && total_emitted >= max_dry_run_jobs {
             break;
         }

@@ -131,3 +131,19 @@ fn cli_url_survives_http_extraction_and_ndjson() {
         Some(scrape_core::WorkerEvent::Done { .. })
     ));
 }
+
+#[test]
+fn source_specific_invalid_filters_fail_even_when_global_filters_are_valid() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+        .arg("--stdin")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(br#"{"version":1,"sources":[],"filters_by_source":{"workflow":{"query":"title LIKE"}}}"#).unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Invalid workflow filters"));
+    assert!(output.stdout.is_empty());
+}

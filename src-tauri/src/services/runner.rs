@@ -4,7 +4,7 @@ use crate::db::settings::SettingsRepo;
 use crate::db::sources::SourcesRepo;
 use crate::error::{AppError, Result};
 use scrape_core::{
-    RoleType, TriState, WorkerConfig, WorkerEvent, WorkerFilters, WorkerLimits, WorkerSource,
+    TriState, WorkerConfig, WorkerEvent, WorkerFilters, WorkerLimits, WorkerSource,
     PROTOCOL_VERSION,
 };
 use sqlx::SqlitePool;
@@ -16,7 +16,7 @@ use tauri::{AppHandle, Emitter};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
-use tokio::time::{timeout, Instant};
+use tokio::time::{timeout_at, Instant};
 
 pub struct RunLockGuard {
     flag: Arc<AtomicBool>,
@@ -31,53 +31,58 @@ impl Drop for RunLockGuard {
 pub fn resolve_worker_filters(
     source_filters: &serde_json::Value,
     global_filters: WorkerFilters,
-) -> WorkerFilters {
-    if !source_filters.is_object() {
-        return global_filters;
+) -> Result<WorkerFilters> {
+    let mut effective = serde_json::to_value(global_filters)?;
+    if !source_filters.is_null() {
+        let overrides = source_filters
+            .as_object()
+            .ok_or_else(|| AppError::Validation("Workflow filters must be an object".into()))?;
+        for (key, value) in overrides {
+            effective[key] = value.clone();
+        }
     }
+    let filters: WorkerFilters = serde_json::from_value(effective)
+        .map_err(|e| AppError::Validation(format!("workflow.filters: {e}")))?;
+    filters.to_expr().map_err(AppError::Validation)?;
+    Ok(filters)
+}
 
-    let include_keywords = source_filters
-        .get("include_keywords")
-        .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
-        .filter(|v| !v.is_empty())
-        .unwrap_or(global_filters.include_keywords);
+pub async fn load_global_filters(pool: &SqlitePool) -> Result<WorkerFilters> {
+    Ok(WorkerFilters {
+        include_keywords: SettingsRepo::get_value(pool, "filters.include_keywords")
+            .await?
+            .unwrap_or_default(),
+        exclude_keywords: SettingsRepo::get_value(pool, "filters.exclude_keywords")
+            .await?
+            .unwrap_or_default(),
+        locations: SettingsRepo::get_value(pool, "filters.locations")
+            .await?
+            .unwrap_or_default(),
+        role_types: SettingsRepo::get_value(pool, "filters.role_types")
+            .await?
+            .unwrap_or_default(),
+        query: None,
+        policy: None,
+    })
+}
 
-    let exclude_keywords = source_filters
-        .get("exclude_keywords")
-        .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
-        .filter(|v| !v.is_empty())
-        .unwrap_or(global_filters.exclude_keywords);
-
-    let locations = source_filters
-        .get("locations")
-        .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
-        .filter(|v| !v.is_empty())
-        .unwrap_or(global_filters.locations);
-
-    let role_types = source_filters
-        .get("role_types")
-        .and_then(|v| serde_json::from_value::<Vec<RoleType>>(v.clone()).ok())
-        .filter(|v| !v.is_empty())
-        .unwrap_or(global_filters.role_types);
-
-    let query = source_filters
-        .get("query")
-        .and_then(|v| v.as_str().map(ToString::to_string))
-        .or(global_filters.query);
-
-    let policy = source_filters
-        .get("policy")
-        .cloned()
-        .or(global_filters.policy);
-
-    WorkerFilters {
-        include_keywords,
-        exclude_keywords,
-        locations,
-        role_types,
-        query,
-        policy,
+pub(crate) fn worker_failure(
+    exit_code: Option<i32>,
+    done: bool,
+    error: Option<&str>,
+) -> Option<String> {
+    if let Some(error) = error {
+        return Some(error.to_string());
     }
+    if exit_code != Some(0) {
+        return Some(format!(
+            "Worker exited without success (code {exit_code:?})"
+        ));
+    }
+    if !done {
+        return Some("Worker exited without its required completion event".into());
+    }
+    None
 }
 
 #[derive(Clone)]
@@ -133,15 +138,28 @@ impl ScrapeRunner {
         // 1. Overlap guard
         let _guard = self.try_acquire_lock()?;
 
-        // 2. Start scrape run in DB
-        let run = RunsRepo::start(&self.pool, trigger).await?;
-        let _ = app.emit("scrape://started", serde_json::json!({ "run_id": run.id }));
-
         // 3. Load sources & settings
         let sources = SourcesRepo::list(&self.pool).await?;
+        let sources: Vec<_> = sources
+            .into_iter()
+            .filter(|s| {
+                s.enabled
+                    && (trigger == TriggerType::Manual
+                        || s.cadence == scrape_core::SourceCadence::Global)
+            })
+            .collect();
+        let globals = load_global_filters(&self.pool).await?;
+        let filters_by_source = sources
+            .iter()
+            .map(|s| {
+                Ok((
+                    s.id.clone(),
+                    resolve_worker_filters(&s.filters, globals.clone())?,
+                ))
+            })
+            .collect::<Result<HashMap<_, _>>>()?;
         let enabled_sources: Vec<WorkerSource> = sources
             .into_iter()
-            .filter(|s| s.enabled)
             .map(|s| WorkerSource {
                 id: s.id,
                 kind: s.kind,
@@ -150,6 +168,10 @@ impl ScrapeRunner {
                 config: s.config,
             })
             .collect();
+
+        // 2. Start scrape run in DB
+        let run = RunsRepo::start(&self.pool, trigger).await?;
+        let _ = app.emit("scrape://started", serde_json::json!({ "run_id": run.id }));
 
         if enabled_sources.is_empty() {
             tracing::info!("No enabled sources to scrape");
@@ -177,52 +199,19 @@ impl ScrapeRunner {
             return Ok(finished);
         }
 
-        let include_keywords: Vec<String> =
-            SettingsRepo::get_value(&self.pool, "filters.include_keywords")
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or_default();
-        let exclude_keywords: Vec<String> =
-            SettingsRepo::get_value(&self.pool, "filters.exclude_keywords")
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or_default();
-        let locations: Vec<String> = SettingsRepo::get_value(&self.pool, "filters.locations")
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_default();
-        let role_types: Vec<RoleType> = SettingsRepo::get_value(&self.pool, "filters.role_types")
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_default();
-
         let config = WorkerConfig {
             version: PROTOCOL_VERSION,
             sources: enabled_sources,
-            filters: WorkerFilters {
-                include_keywords,
-                exclude_keywords,
-                locations,
-                role_types,
-                query: None,
-                policy: None,
-            },
+            filters: globals,
+            filters_by_source,
             limits: WorkerLimits::default(),
         };
 
         // 4. Run sidecar with 10 minute timeout
-        let run_result = timeout(
-            Duration::from_secs(600),
-            self.execute_sidecar(app, &run.id, config),
-        )
-        .await;
+        let run_result = self.execute_sidecar(app, &run.id, config).await;
 
         match run_result {
-            Ok(Ok((total_found, total_new, source_statuses))) => {
+            Ok((total_found, total_new, source_statuses)) => {
                 // Update source statuses
                 for (src_id, (status, err_msg)) in &source_statuses {
                     let _ = SourcesRepo::set_last_result(
@@ -332,7 +321,7 @@ impl ScrapeRunner {
 
                 Ok(finished)
             }
-            Ok(Err(err)) => {
+            Err(err) => {
                 let err_str = err.to_string();
                 tracing::error!("Scrape execution error: {}", err_str);
                 let finished =
@@ -340,20 +329,6 @@ impl ScrapeRunner {
                         .await?;
                 let _ = app.emit("scrape://finished", &finished);
                 Err(err)
-            }
-            Err(_) => {
-                tracing::error!("Scrape execution timed out (hard 10m limit)");
-                let finished = RunsRepo::finish(
-                    &self.pool,
-                    &run.id,
-                    RunStatus::Failed,
-                    0,
-                    0,
-                    Some("Execution timed out (10 minute limit)"),
-                )
-                .await?;
-                let _ = app.emit("scrape://finished", &finished);
-                Err(AppError::Internal("Scrape execution timed out".to_string()))
             }
         }
     }
@@ -366,6 +341,8 @@ impl ScrapeRunner {
         let _guard = self.try_acquire_lock()?;
 
         let source = SourcesRepo::get(&self.pool, source_id).await?;
+        let filters =
+            resolve_worker_filters(&source.filters, load_global_filters(&self.pool).await?)?;
         let run =
             RunsRepo::start_with_source(&self.pool, TriggerType::SingleSource, Some(source_id))
                 .await?;
@@ -386,41 +363,9 @@ impl ScrapeRunner {
         )
         .await;
 
-        let include_keywords: Vec<String> =
-            SettingsRepo::get_value(&self.pool, "filters.include_keywords")
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or_default();
-        let exclude_keywords: Vec<String> =
-            SettingsRepo::get_value(&self.pool, "filters.exclude_keywords")
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or_default();
-        let locations: Vec<String> = SettingsRepo::get_value(&self.pool, "filters.locations")
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_default();
-        let role_types: Vec<RoleType> = SettingsRepo::get_value(&self.pool, "filters.role_types")
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_default();
-
-        let global_filters = WorkerFilters {
-            include_keywords,
-            exclude_keywords,
-            locations,
-            role_types,
-            query: None,
-            policy: None,
-        };
-        let filters = resolve_worker_filters(&source.filters, global_filters);
-
         let config = WorkerConfig {
             version: PROTOCOL_VERSION,
+            filters_by_source: Default::default(),
             sources: vec![WorkerSource {
                 id: source.id.clone(),
                 kind: source.kind,
@@ -433,11 +378,7 @@ impl ScrapeRunner {
         };
 
         let start_time = Instant::now();
-        let run_result = timeout(
-            Duration::from_secs(180),
-            self.execute_sidecar(app, &run.id, config),
-        )
-        .await;
+        let run_result = self.execute_sidecar(app, &run.id, config).await;
         let duration_ms = start_time.elapsed().as_millis() as i64;
 
         let tz_str: String = SettingsRepo::get_value(&self.pool, "system.timezone")
@@ -448,7 +389,7 @@ impl ScrapeRunner {
         let next_run = crate::services::scheduler::calculate_next_run_for_source(&source, &tz_str);
 
         match run_result {
-            Ok(Ok((total_found, total_new, source_statuses))) => {
+            Ok((total_found, total_new, source_statuses)) => {
                 let (status, err_msg) = source_statuses
                     .get(source_id)
                     .cloned()
@@ -553,7 +494,7 @@ impl ScrapeRunner {
 
                 Ok(finished)
             }
-            Ok(Err(err)) => {
+            Err(err) => {
                 let err_str = err.to_string();
                 tracing::error!("Single source scrape error: {}", err_str);
                 self.log_event(
@@ -579,35 +520,6 @@ impl ScrapeRunner {
                 let _ = app.emit("scrape://finished", &finished);
                 let _ = app.emit("sources://changed", ());
                 Err(err)
-            }
-            Err(_) => {
-                tracing::error!("Single source scrape timed out (3m limit)");
-                let err_str = "Execution timed out (3 minute limit)";
-                self.log_event(
-                    app,
-                    &run.id,
-                    LogLevel::Error,
-                    Some(source_id),
-                    "Workflow execution timed out (3 minute limit)",
-                )
-                .await;
-                let _ = SourcesRepo::set_run_result(
-                    &self.pool,
-                    source_id,
-                    "error",
-                    Some(err_str),
-                    Some(duration_ms),
-                    next_run.as_deref(),
-                )
-                .await;
-                let finished =
-                    RunsRepo::finish(&self.pool, &run.id, RunStatus::Failed, 0, 0, Some(err_str))
-                        .await?;
-                let _ = app.emit("scrape://finished", &finished);
-                let _ = app.emit("sources://changed", ());
-                Err(AppError::Internal(
-                    "Single source scrape timed out".to_string(),
-                ))
             }
         }
     }
@@ -646,9 +558,12 @@ impl ScrapeRunner {
 
         let mut config_bytes = serde_json::to_vec(&config)?;
         config_bytes.push(b'\n');
-        child
-            .write(&config_bytes)
-            .map_err(|e| AppError::Internal(format!("Failed to write to sidecar stdin: {}", e)))?;
+        if let Err(error) = child.write(&config_bytes) {
+            let _ = child.kill();
+            return Err(AppError::Internal(format!(
+                "Failed to write to sidecar stdin: {error}"
+            )));
+        }
 
         let mut job_buffer: Vec<ScrapedJob> = Vec::new();
         let mut last_flush = Instant::now();
@@ -659,7 +574,28 @@ impl ScrapeRunner {
         let mut termination_code: Option<i32> = None;
         let mut sidecar_err: Option<String> = None;
 
-        while let Some(event) = rx.recv().await {
+        let mut saw_done = false;
+        let deadline =
+            Instant::now() + Duration::from_secs(if config.sources.len() == 1 { 180 } else { 600 });
+        loop {
+            let event = match timeout_at(deadline, rx.recv()).await {
+                Ok(Some(event)) => event,
+                Ok(None) => break,
+                Err(_) => {
+                    sidecar_err =
+                        Some("Worker execution timed out; partial results retained".into());
+                    let _ = child.kill();
+                    // The shell plugin owns reaping; consume its terminal notification.
+                    let reap_deadline = Instant::now() + Duration::from_secs(5);
+                    while let Ok(Some(event)) = timeout_at(reap_deadline, rx.recv()).await {
+                        if let CommandEvent::Terminated(status) = event {
+                            termination_code = status.code;
+                            break;
+                        }
+                    }
+                    break;
+                }
+            };
             match event {
                 CommandEvent::Stdout(bytes) => {
                     let text = String::from_utf8_lossy(&bytes);
@@ -668,7 +604,18 @@ impl ScrapeRunner {
                         if trimmed.is_empty() {
                             continue;
                         }
-                        if let Ok(worker_event) = serde_json::from_str::<WorkerEvent>(trimmed) {
+                        if saw_done {
+                            sidecar_err = Some("Worker emitted data after completion".into());
+                            continue;
+                        }
+                        let worker_event = match serde_json::from_str::<WorkerEvent>(trimmed) {
+                            Ok(event) => event,
+                            Err(error) => {
+                                sidecar_err = Some(format!("Malformed worker event: {error}"));
+                                continue;
+                            }
+                        };
+                        {
                             match worker_event {
                                 WorkerEvent::Job {
                                     source_id,
@@ -863,7 +810,9 @@ impl ScrapeRunner {
                                         }),
                                     );
                                 }
-                                WorkerEvent::Done { .. } => {}
+                                WorkerEvent::Done { .. } => {
+                                    saw_done = true;
+                                }
                             }
                         }
                     }
@@ -912,23 +861,10 @@ impl ScrapeRunner {
             }
         }
 
-        // If the sidecar crashed or exited with an error code, ensure all sources are marked failed
-        if let Some(code) = termination_code {
-            if code != 0 {
-                let fatal_msg = format!("Sidecar process exited with non-zero exit code: {}", code);
-                for src in &config.sources {
-                    source_statuses
-                        .entry(src.id.clone())
-                        .or_insert_with(|| ("error".to_string(), Some(fatal_msg.clone())));
-                }
-            }
-        }
-        if let Some(ref err) = sidecar_err {
-            let fatal_msg = format!("Sidecar process error: {}", err);
-            for src in &config.sources {
-                source_statuses
-                    .entry(src.id.clone())
-                    .or_insert_with(|| ("error".to_string(), Some(fatal_msg.clone())));
+        // Terminal failures override earlier progress; partial rows remain recoverable.
+        if let Some(message) = worker_failure(termination_code, saw_done, sidecar_err.as_deref()) {
+            for source in &config.sources {
+                source_statuses.insert(source.id.clone(), ("error".into(), Some(message.clone())));
             }
         }
 
@@ -996,6 +932,7 @@ impl ScrapeRunner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use scrape_core::RoleType;
 
     #[tokio::test]
     async fn test_overlap_guard() {
@@ -1022,6 +959,19 @@ mod tests {
     }
 
     #[test]
+    fn completion_requires_zero_exit_done_and_valid_protocol() {
+        assert!(worker_failure(Some(0), true, None).is_none());
+        for (exit, done, error) in [
+            (Some(1), true, None),
+            (None, true, None),
+            (Some(0), false, None),
+            (Some(0), true, Some("Malformed event")),
+        ] {
+            assert!(worker_failure(exit, done, error).is_some());
+        }
+    }
+
+    #[test]
     fn test_resolve_worker_filters_with_overrides() {
         let global = WorkerFilters {
             include_keywords: vec!["GlobalKW".to_string()],
@@ -1038,7 +988,7 @@ mod tests {
             "query": "title LIKE '%Engineer%' AND location LIKE '%Remote%'"
         });
 
-        let resolved = resolve_worker_filters(&source_filters, global);
+        let resolved = resolve_worker_filters(&source_filters, global).unwrap();
         assert_eq!(
             resolved.include_keywords,
             vec!["CustomKW".to_string(), "Rust".to_string()]
@@ -1054,6 +1004,25 @@ mod tests {
     }
 
     #[test]
+    fn explicit_empty_overrides_and_invalid_filters_fail() {
+        let global = WorkerFilters {
+            include_keywords: vec!["Engineer".into()],
+            ..Default::default()
+        };
+        let result =
+            resolve_worker_filters(&serde_json::json!({"include_keywords": []}), global.clone())
+                .unwrap();
+        assert!(result.include_keywords.is_empty());
+        for invalid in [
+            serde_json::json!({"include_keywords": "Engineer"}),
+            serde_json::json!({"query": "title LIKE"}),
+            serde_json::json!({"unsupported": true}),
+        ] {
+            assert!(resolve_worker_filters(&invalid, global.clone()).is_err());
+        }
+    }
+
+    #[test]
     fn test_resolve_worker_filters_fallback() {
         let global = WorkerFilters {
             include_keywords: vec!["Engineer".to_string()],
@@ -1065,14 +1034,14 @@ mod tests {
         };
 
         let null_filters = serde_json::Value::Null;
-        let resolved = resolve_worker_filters(&null_filters, global.clone());
+        let resolved = resolve_worker_filters(&null_filters, global.clone()).unwrap();
         assert_eq!(resolved.include_keywords, global.include_keywords);
         assert_eq!(resolved.exclude_keywords, global.exclude_keywords);
         assert_eq!(resolved.locations, global.locations);
         assert_eq!(resolved.role_types, global.role_types);
 
         let empty_filters = serde_json::json!({});
-        let resolved_empty = resolve_worker_filters(&empty_filters, global.clone());
+        let resolved_empty = resolve_worker_filters(&empty_filters, global.clone()).unwrap();
         assert_eq!(resolved_empty.include_keywords, global.include_keywords);
     }
 

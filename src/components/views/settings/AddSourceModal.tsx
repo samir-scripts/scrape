@@ -578,6 +578,7 @@ export function AddSourceModal({
         kind,
         identifier: identifier.trim() || url.trim(),
         config: assembleConfig() as any,
+        filters: assembleFilters() as any,
       });
       setDryRunEvents(events);
     } catch (e) {

@@ -34,6 +34,8 @@ pub struct WorkerConfig {
     #[serde(default)]
     pub filters: WorkerFilters,
     #[serde(default)]
+    pub filters_by_source: std::collections::HashMap<String, WorkerFilters>,
+    #[serde(default)]
     pub limits: WorkerLimits,
 }
 
@@ -50,6 +52,7 @@ pub struct WorkerSource {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS, PartialEq)]
 #[ts(export)]
+#[serde(deny_unknown_fields)]
 pub struct WorkerFilters {
     #[serde(default)]
     pub include_keywords: Vec<String>,
