@@ -1,3 +1,11 @@
+# Plan status
+
+[Trustworthy scraping](06-trustworthy-scraping.md) is the current behavior and
+verification specification. Older plans below are historical design records;
+conflicting claims about permanent deletion, guessed icons, browser live data,
+client-only filtering, or scheduling are superseded. See also
+[Workflow v3](workflow-v3.md) and [database recovery](database-recovery.md).
+
 # `plans/` — Architecture Specifications & Implementation Blueprints
 
 ## Overview

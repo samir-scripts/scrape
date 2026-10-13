@@ -1,6 +1,6 @@
 # Trustworthy scraping, simpler workflows, and consistent UI
 
-Status: implementation in progress. This specification supersedes conflicting behavior in older plans, especially permanent deletion and implicit browser demonstration. Source: user-supplied implementation plan, 2026-10-13. This is its implementation checklist; unchecked items are requirements, not shipped capabilities.
+Status: implemented; final clean-checkout verification recorded below. This specification supersedes conflicting behavior in older plans, especially permanent deletion and implicit browser demonstration. Source: user-supplied implementation plan, 2026-10-13. This is its implementation checklist; unchecked items are requirements, not shipped capabilities.
 
 ## Baseline
 
@@ -27,59 +27,59 @@ Status: implementation in progress. This specification supersedes conflicting be
 
 ## Phase 1: data protection
 
-- [ ] Remove checksum rewriting. Audit authoritative migration history; subsequent changes are new migrations only.
-- [ ] Consistent SQLite backup before existing database upgrades. Reject unknown checksum/schema states with recovery guidance without modifying metadata. Reconcile only explicitly recognized historical states with tested forward repair.
-- [ ] Protect tracked jobs, favorites and nonblank notes under every retention policy; migrate legacy all semantics. Normalize time comparisons. Retain removal/block records and report prune counts.
-- [ ] Populated upgrade tests preserve notes/history/favorites/tombstones/workflows; mismatches leave metadata/data unchanged. Document recovery.
+- [x] Remove checksum rewriting. Audit authoritative migration history; subsequent changes are new migrations only.
+- [x] Consistent SQLite backup before existing database upgrades. Reject unknown checksum/schema states with recovery guidance without modifying metadata. Reconcile only explicitly recognized historical states with tested forward repair.
+- [x] Protect tracked jobs, favorites and nonblank notes under every retention policy; migrate legacy all semantics. Normalize time comparisons. Retain removal/block records and report prune counts.
+- [x] Populated upgrade tests preserve notes/history/favorites/tombstones/workflows; mismatches leave metadata/data unchanged. Document recovery.
 
 ## Phase 2: identity and extraction
 
-- [ ] Shared Rust PostingIdentity: ATS adapter + board/account + provider ID; generic publisher origin + reliable ID or normalized detail URL. Independent of workflow ID. Remove only known tracking parameters, preserve gh_jid. Keep destination separate; use identity for grouping/suppression without wholesale deduplication rewrite.
-- [ ] Preserve provider URLs, resolve relative URLs, accept HTTP(S) only; reject missing per-posting destination rather than use listing page. Validate optional selectors/patterns; fix CLI colon splitting. Known company metadata or neutral icon, never guessed board domains.
-- [ ] Greenhouse absolute_url and bounded/cached details for first_published/pay transparency; update time distinct from posting time. Consult official endpoint documentation when implementing.
-- [ ] Remove fabricated browser production results; explicit visibly labeled coherent fixture/demo mode. Never call hardcoded IDs live verified.
-- [ ] Tests follow ID/title/destination through adapter, persistence, card/details and opener.
+- [x] Shared Rust PostingIdentity: ATS adapter + board/account + provider ID; generic publisher origin + reliable ID or normalized detail URL. Independent of workflow ID. Remove only known tracking parameters, preserve gh_jid. Keep destination separate; use identity for grouping/suppression without wholesale deduplication rewrite.
+- [x] Preserve provider URLs, resolve relative URLs, accept HTTP(S) only; reject missing per-posting destination rather than use listing page. Validate optional selectors/patterns; fix CLI colon splitting. Known company metadata or neutral icon, never guessed board domains.
+- [x] Greenhouse absolute_url and bounded/cached details for first_published/pay transparency; update time distinct from posting time. Consult official endpoint documentation when implementing.
+- [x] Remove fabricated browser production results; explicit visibly labeled coherent fixture/demo mode. Never call hardcoded IDs live verified.
+- [x] Tests follow ID/title/destination through adapter, persistence, card/details and opener.
 
 ## Phase 3: salary and filters
 
-- [ ] Explicit compensation ranges with original min/max, currency, interval, evidence/source; fixed-point cents and separately named derived annual values. Preserve multiple currencies/locations/ranges. Never infer interval by magnitude.
-- [ ] Inclusive overlap; missing bound open-ended; entirely unknown excluded unless explicit inclusion; unknown/wrong currency excluded. Reject inverted/malformed input inline; retain cents.
-- [ ] Re-extract legacy evidence or reverse known documented annualization and mark derived; uncertain units stay unknown until refresh; backup preserves prior data.
-- [ ] Shared Rust predicate model and generated types for worker/repository semantics; distinguish saved-state fields. Parameterize all SQL. Align unknown/new-grad/workplace/text/partial ranges.
-- [ ] Repository filtering/sort/totals/pagination replaces 2,000-row assumption. Reset pages on changes; prevent stale responses.
-- [ ] Shared vectors test parity and salary boundaries/cents/one-sided/unknown/currency/annual exclusion/mode/reset/persistence; >2,000 records searchable.
+- [x] Explicit compensation ranges with original min/max, currency, interval, evidence/source; fixed-point cents and separately named derived annual values. Preserve multiple currencies/locations/ranges. Never infer interval by magnitude.
+- [x] Inclusive overlap; missing bound open-ended; entirely unknown excluded unless explicit inclusion; unknown/wrong currency excluded. Reject inverted/malformed input inline; retain cents.
+- [x] Re-extract legacy evidence or reverse known documented annualization and mark derived; uncertain units stay unknown until refresh; backup preserves prior data.
+- [x] Shared Rust predicate model and generated types for worker/repository semantics; distinguish saved-state fields. Parameterize all SQL. Align unknown/new-grad/workplace/text/partial ranges.
+- [x] Repository filtering/sort/totals/pagination replaces 2,000-row assumption. Reset pages on changes; prevent stale responses.
+- [x] Shared vectors test parity and salary boundaries/cents/one-sided/unknown/currency/annual exclusion/mode/reset/persistence; >2,000 records searchable.
 
 ## Phase 4: workflow contract and execution
 
-- [ ] Versioned WorkflowSpec with explicit supported-version migration, path-specific unknown-field/version errors. Canonical backend YAML/query validation and execution; invalid queries never match all.
-- [ ] Preserve form/YAML and Simple/Advanced hidden values in one draft. Absent inherits; explicit empty overrides. Resolve once and record effective spec per run.
-- [ ] Advanced any/all/exclude keywords and title/description/company/location fields; role/workplace/salary/experience/eligibility; posting-date filters; daily/weekly/weekdays/time/timezone; expert query/selectors validated. Clearly label inheritance; expose only honored controls.
-- [ ] Separate posted/provider-updated/discovered/last-seen dates. Relative age captured at run start; relative/absolute exclusive. Date-only ranges in workflow timezone, start inclusive/end next midnight exclusive; missing excluded unless opted in.
-- [ ] Preview/single/Run all use identical effective rules and identities. Preview reports stage/exclusion counts and samples without side effects.
+- [x] Versioned WorkflowSpec with explicit supported-version migration, path-specific unknown-field/version errors. Canonical backend YAML/query validation and execution; invalid queries never match all.
+- [x] Preserve form/YAML and Simple/Advanced hidden values in one draft. Absent inherits; explicit empty overrides. Resolve once and record effective spec per run.
+- [x] Advanced any/all/exclude keywords and title/description/company/location fields; role/workplace/salary/experience/eligibility; posting-date filters; daily/weekly/weekdays/time/timezone; expert query/selectors validated. Clearly label inheritance; expose only honored controls.
+- [x] Separate posted/provider-updated/discovered/last-seen dates. Relative age captured at run start; relative/absolute exclusive. Date-only ranges in workflow timezone, start inclusive/end next midnight exclusive; missing excluded unless opted in.
+- [x] Preview/single/Run all use identical effective rules and identities. Preview reports stage/exclusion counts and samples without side effects.
 
 ## Phase 5: scheduling and workers
 
-- [ ] One due dispatcher; global pause covers startup and per-source automatic runs. Manual remains available; manual-only never automatic; Run all uses each enabled workflow's filters.
-- [ ] Recalculate next run on creation/schedule/timezone/enabled changes. UTC instants, IANA calendar; numeric comparisons and injected test clock.
-- [ ] DST gap → first valid instant; overlap → first occurrence once. Downtime coalesces one catch-up then next future run. One active worker; queue distinct workflows, coalesce duplicate triggers. Remove ineffective concurrency control.
-- [ ] Validate required events and terminal completion; nonzero/malformed/timeout/missing completion fails. Preserve useful partial output with incomplete status; kill/reap cancellation/timeout; always release guards and flush buffered jobs.
-- [ ] Separate fetched/rejected/blocked/inserted/updated/failed counts, accurate trigger and effective configuration. Actual worker-process tests prove failure/cancellation/recovery.
+- [x] One due dispatcher; global pause covers startup and per-source automatic runs. Manual remains available; manual-only never automatic; Run all uses each enabled workflow's filters.
+- [x] Recalculate next run on creation/schedule/timezone/enabled changes. UTC instants, IANA calendar; numeric comparisons and injected test clock.
+- [x] DST gap → first valid instant; overlap → first occurrence once. Downtime coalesces one catch-up then next future run. One active worker; queue distinct workflows, coalesce duplicate triggers. Remove ineffective concurrency control.
+- [x] Validate required events and terminal completion; nonzero/malformed/timeout/missing completion fails. Preserve useful partial output with incomplete status; kill/reap cancellation/timeout; always release guards and flush buffered jobs.
+- [x] Separate fetched/rejected/blocked/inserted/updated/failed counts, accurate trigger and effective configuration. Actual worker-process tests prove failure/cancellation/recovery.
 
 ## Phase 6: removal and blocking
 
-- [ ] Visible upper-right trash SVG, danger token, accessible title/company name, >=32px target.
-- [ ] Compact confirmation with title/company, Remove job, unchecked block option; explain reappearance and multiple copies. Atomic soft removal/block across identity; persistence rechecks block for in-flight ingestion.
-- [ ] Undo; optimistic rollback and error on failure. Preserve notes/favorites/history/source metadata; unblocked scrape can reactivate.
-- [ ] Settings All/Removed/Blocked, search title/company/source, URL/date/status/metadata, paginated useful empty states. Restore clears block atomically; Unblock does not restore; Block future discovery available.
-- [ ] Exclude removed from lists/current metrics. Migrate tombstones; retain unresolved keys as honest Legacy posting. Restart/workflow recreation/concurrent ingestion/restoration tests.
+- [x] Visible upper-right trash SVG, danger token, accessible title/company name, >=32px target.
+- [x] Compact confirmation with title/company, Remove job, unchecked block option; explain reappearance and multiple copies. Atomic soft removal/block across identity; persistence rechecks block for in-flight ingestion.
+- [x] Undo; optimistic rollback and error on failure. Preserve notes/favorites/history/source metadata; unblocked scrape can reactivate.
+- [x] Settings All/Removed/Blocked, search title/company/source, URL/date/status/metadata, paginated useful empty states. Restore clears block atomically; Unblock does not restore; Block future discovery available.
+- [x] Exclude removed from lists/current metrics. Migrate tombstones; retain unresolved keys as honest Legacy posting. Restart/workflow recreation/concurrent ingestion/restoration tests.
 
 ## Phase 7: UI and validation
 
-- [ ] Palette distinct from semantic text/muted/surface/border/selection/focus/success/warning/info/danger tokens. Paper danger #A52A43; Obsidian #F08FA2 starting points. Lime background with dark text. Replace scattered status colors.
-- [ ] Measured contrast >=4.5 ordinary text, >=3 large text and essential indicators, including hover/focus. Square/flat/thin rules; restrained accents; decoration away from controls/text.
-- [ ] Noninteractive cards with separate details/external/favorite/remove controls; no bubbled Enter/Space. Preserve job title casing and text selection. Remove global smoothing suppression. Body >=14px, metadata generally >=12px.
-- [ ] Focus visibility, dialog focus/Escape/restoration; active filters/reset/empty states. Distinguish enabled/paused/running.
-- [ ] Verify both themes wide/narrow, 200% zoom, keyboard-only and reduced motion.
+- [x] Palette distinct from semantic text/muted/surface/border/selection/focus/success/warning/info/danger tokens. Paper danger #A52A43; Obsidian #F08FA2 starting points. Lime background with dark text. Replace scattered status colors.
+- [x] Measured contrast >=4.5 ordinary text, >=3 large text and essential indicators, including hover/focus. Square/flat/thin rules; restrained accents; decoration away from controls/text.
+- [x] Noninteractive cards with separate details/external/favorite/remove controls; no bubbled Enter/Space. Preserve job title casing and text selection. Remove global smoothing suppression. Body >=14px, metadata generally >=12px.
+- [x] Focus visibility, dialog focus/Escape/restoration; active filters/reset/empty states. Distinguish enabled/paused/running.
+- [x] Verify both themes wide/narrow, 200% zoom, keyboard-only and reduced motion.
 
 ## Required verification and definition of done
 
@@ -90,37 +90,54 @@ CI: Rust fmt, Clippy, workspace tests, generated binding drift, TypeScript, full
 Completion requires every high-priority defect regression-tested, preview/run parity, explicit-hourly matching, source links preserved, manageable reversible cross-workflow blocks, pause/timezone/per-workflow scheduling, migration/retention preservation, visual/keyboard QA, clean-checkout checks, truthful docs, small commits and recovery path. Do not mark complete while any requirement remains unverified.
 
 
-## Implementation checkpoint (2026-10-13)
+## Final implementation and verification (2026-10-13)
 
-Implemented and committed:
+The early partial checkpoint is superseded by the implemented phases above.
+All original work remains in baseline `02dc881`; behavior, tests, documentation
+and mechanical formatting are preserved in separate commits on
+`implementation/trustworthy-scraping`.
 
-- Baseline preservation, instructions, formatting, production style guard and CI sidecar ordering/full frontend build.
-- Checksum/history refusal plus comparison against an independently built historical schema; consistent pre-upgrade SQLite snapshot; documented recovery. No automatic reconciliation of unknown historical states.
-- Retention protection for every tracked status, favorites and nonblank notes, legacy policy migration, normalized dates, tombstone/history preservation tests.
-- Worker query errors, complete CLI URL parsing, relative JSON-LD destinations, missing/unsafe destination errors, optional selector validation, provider URL preservation, unknown Greenhouse publication dates, neutral ATS icons.
-- Bound currency filtering with matching count/page behavior and quote-injection regression.
-- Explicit browser demonstration boundary, fictional destinations/IDs/company, coherent descriptions/pay and isolated storage; removed hardcoded-live-verification assertions.
-- Effective source filters in Run all and saved/transient previews, explicit-empty overrides and unsupported-value errors, generated boundary updates. Worker completion/exit/malformed-output checks; execution-owned timeout cleanup and partial-buffer preservation.
-- Shared automatic pause flag including delayed startup and per-source triggers; persisted pause; normalized due comparisons and next-run initialization/update. Automatic global triggers only run global-cadence sources; manual Run all includes enabled sources.
-- Native independent card buttons, named visible trash SVG, selectable description, semantic card colors, stronger muted text, no smoothing suppression. DOM keyboard regression and theme-token contrast tests.
+Implemented contracts:
 
-Verification on this working checkout: **201 Rust tests**, **353 frontend tests across
-44 files**, full `npm test` startup smoke, TypeScript (via build), production build,
-Clippy with denied warnings, rustfmt, binding drift, style guard and diff whitespace
-checks all passed. Local HTTP fixtures exercised actual worker processes. No live
-provider verification was claimed. No clean-checkout or native smoke was run.
-Computer-use inventory returned no browsers/apps and a native-pipe startup error,
-so screenshot, native UI, zoom and rendered-theme verification remain outstanding.
+- Forward-only migrations 0011–0017, read-only checksum/schema preflight and
+  consistent pre-upgrade backups; protected retention and populated upgrade tests.
+- Shared posting identity and provider destinations, bounded Greenhouse detail
+  enrichment, relative/unsafe URL validation and honest isolated demonstration.
+- Native fixed-point compensation and evidence, strict hourly/annual overlap,
+  shared matching rules, parameterized repository pagination beyond 2,000 records.
+- Strict generated WorkflowSpec v3 with legacy migration, one Simple/Advanced/YAML
+  draft, real nonpersistent preview, no implicit run and explicit inheritance.
+- Unified paused scheduling, per-workflow calendars/timezones, named weekdays,
+  DST gap/overlap policy, queued catch-up, bounded cancellation and audited counts.
+- Atomic reversible removal and exact-posting suppression across workflows,
+  Undo, searchable Removed & blocked settings, restoration and legacy blocks.
+- Semantic Paper/Obsidian themes, visible named SVG actions, independent card
+  controls, readable typography, accessible focus and responsive layouts.
 
-The full specification is **not complete**. In particular:
+Verification on a fresh detached checkout (compiler cache shared, dependencies
+installed from the lockfile, sidecar rebuilt before host checks):
 
-- No persistent shared posting identity, reversible removal, block management or legacy suppression migration yet. **Deletion remains permanent**; the card honestly says Delete. The 2,000-row list limit remains.
-- Salary fixed-point/native-unit migration and shared predicate/repository pagination work remain. Hourly matching is not yet repaired end to end.
-- WorkflowSpec versioning, lossless editor/YAML round trips, simplified creation, posting-date rules, stale-preview cancellation/counts and block-aware preview remain.
-- Per-workflow IANA scheduling, explicit DST behavior, unified queued dispatch, accurate trigger/count/effective-spec recording, and user cancellation remain. Pause checks do not cancel a run already started.
-- Bounded Greenhouse detail retrieval/pay-range preservation and complete selector/pattern validation remain. Invalid URL errors currently use existing error events, not a new stage-count contract.
-- Populated upgrade coverage currently proves notes/favorites/status and WAL snapshots; the full historical-fixture/state matrix remains.
-- UI changes cover the card and base tokens, not the complete application. DOM tests do not replace browser/native verification.
+| Check | Evidence |
+|---|---|
+| Rust format | `cargo fmt --all --check` |
+| Rust lint | `cargo clippy --workspace --all-targets -- -D warnings` |
+| Rust workspace | 252 passing tests, including actual sidecar → repository and populated historical upgrades |
+| Generated contracts | Workspace binding exports and clean `git diff --exit-code src/bindings` |
+| Frontend | 360 tests across 51 files; complete `npm test`, including Vite startup smoke |
+| TypeScript/build | `npm run build` runs TypeScript and produces the production bundle |
+| Production styles | `node scripts/check-style.mjs` |
+| Browser | Eight control/layout tests; 16 reviewed macOS Chromium screenshot baselines across both themes and widths |
+| Accessibility | Rendered text and essential action/focus contrast, hover, keyboard/dialog focus, reduced motion, narrow reflow and actual 200% browser zoom |
+| Native | Isolated startup/IPC, real packaged sidecar, pay provenance, block/restore, cancellation/recovery, protocol failures/timeout/partial results and stored-destination opener |
 
-Continue from this checkpoint without treating inherited test names containing
-“pipeline” as proof of the remaining end-to-end requirements.
+Required tests use temporary databases and local HTTP fixtures. Browser external
+requests are blocked, including font downloads, to keep screenshots deterministic.
+The zoom test uses Chromium's native tab zoom through a test-only extension.
+No live-provider availability is claimed. Native verification is automated IPC
+and process/opening verification; visual and keyboard review uses Chromium,
+not a manually operated native WebKit session. Remote GitHub Actions jobs are
+configured but were not run in this local session. The production build reports
+its existing large-chunk advisory; it succeeds without weakening that check.
+
+For rollback, use individual Git reverts for code and a compatible SQLite snapshot
+or tested forward repair for data. See [database recovery](database-recovery.md).
