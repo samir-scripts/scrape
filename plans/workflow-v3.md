@@ -19,3 +19,24 @@ Greenhouse detail enrichment follows the [official Job Board API](https://docs.g
 Each persisted run records its effective worker configuration (including per-workflow specs and resolved filters) and separate fetched, rejected, blocked, inserted, updated, failed and retention-removal counts. Cancelling a desktop run kills its sidecar, consumes termination and flushes buffered valid postings while marking the run incomplete. A process guard also kills children when a persistence error or dropped execution future exits early. The shell plugin owns process reaping.
 
 The native boundary regression in `src-tauri/tests/worker_repository.rs` invokes the packaged sidecar against a local HTTP fixture, parses real NDJSON with the production ingestion mapper and persists to a temporary SQLite database. It compares preview/single/global posting identities, excludes annual pay from hourly rules, preserves native compensation provenance and proves a blocked posting cannot be persisted. Run `npm run build:sidecar` before Rust integration tests.
+
+Legacy versions decode through generated strict contracts; malformed roots,
+non-integer versions, unknown selectors and corrupt stored filters fail explicitly.
+Recognized nested legacy selectors normalize to the supported adapter fields.
+Source identity and stored cron timezone remain authoritative during edit/export.
+Simple mode summarizes active Advanced constraints instead of hiding them.
+
+Clock schedules use named `MON-FRI` and `SAT,SUN` expressions. The Rust cron
+library numbers Sunday as 1; historical expert numeric expressions retain that
+meaning and remain in Advanced mode. Global cron validation and execution share
+calendar scheduling's DST policy: first valid instant after a gap, first occurrence
+of a repeated time, and no second execution during the repeated local hour.
+
+`npm run test:native` additionally drives actual Tauri commands in an isolated
+app, proving preview does not save/run, hourly provenance survives IPC, blocks
+survive workflow recreation, restoration retains annotations, cancellation
+releases execution guards, and malformed/unknown-source/invalid-UTF-8 output,
+nonzero exit, missing completion and timeout retain valid partial results while
+reporting failure. Native external opening must reach the stored local destination.
+Browser demonstration extraction remains fictional; unsupported date/expert rules
+require the desktop rather than silently broadening the fixture match.

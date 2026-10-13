@@ -17,18 +17,34 @@ The `src-tauri/migrations` directory contains incremental, versioned SQL migrati
 | [`0005_workflow_retention_filters_favorites.sql`](0005_workflow_retention_filters_favorites.sql) | **Workflow & Retention Support**: Adds `is_favorite` boolean column to `jobs`, workflow rule storage, and data retention parameters. |
 | [`0006_notifications.sql`](0006_notifications.sql) | **In-App Notifications**: Creates the `notifications` table storing run summaries, crawl failures, and high-match job discovery alerts. |
 | [`0007_notification_error_kind.sql`](0007_notification_error_kind.sql) | **Error Categorization**: Adds error classification taxonomy to notification records to differentiate network timeouts, ATS rate limits, and CSS selector breakage. |
-| [`0008_company_icon.sql`](0008_company_icon.sql) | **Company Favicon Support**: Adds `company_icon_url` to `jobs` to cache and display Google favicon proxy icons. |
+| [`0008_company_icon.sql`](0008_company_icon.sql) | **Company Favicon Support**: Adds `company_icon_url` to `jobs` for provider-supplied imagery; missing images use neutral monograms. |
 | [`0009_work_auth_green_card.sql`](0009_work_auth_green_card.sql) | **Work Authorization**: Adds the `work_auth` column (`citizen_only`, `us_person`, `open`, `unknown`) to store U.S. citizenship and permanent residency requirements. |
-| [`0010_deleted_jobs_tombstone.sql`](0010_deleted_jobs_tombstone.sql) | **Deletion Tombstone Table**: Creates the `deleted_jobs` table (`external_id`, `source_id`, `url`, `deleted_at`) ensuring that jobs deleted by the user in Discovered or Tracked views are never re-ingested on subsequent scrapes. |
+| [`0010_deleted_jobs_tombstone.sql`](0010_deleted_jobs_tombstone.sql) | **Deletion Tombstone Table**: Creates the `deleted_jobs` table for historical workflow-dependent keys ensuring that jobs deleted by the user in Discovered or Tracked views are never re-ingested on subsequent scrapes. |
 
 ---
 
-## Migration Execution
+## Migration execution and recovery
 
-Migrations are compiled directly into the Rust binary at build time and executed on database connection initialization in [`src-tauri/src/db/mod.rs`](../src/db/mod.rs):
+Startup first opens existing databases read-only and validates their migration
+history and actual schema against an independently built historical prefix.
+Unknown states fail before writable pragmas or migration metadata changes.
+Recognized databases receive a consistent SQLite `VACUUM INTO` backup before
+pending upgrades. Applied migration SQL and checksums are immutable.
 
-```rust
-sqlx::migrate!("./migrations")
-    .run(&pool)
-    .await?;
-```
+Additional forward migrations:
+
+| Migration | Behavior |
+|---|---|
+| 0011 | Safe retention policy: protect tracking, notes and favorites. |
+| 0012 | Shared posting identities, soft removal and legacy block metadata. |
+| 0013 | Native compensation evidence, separate from annual analytics. |
+| 0014 | Matching metadata used by shared worker/repository predicates. |
+| 0015 | Provider edit time separate from publication time. |
+| 0016 | Run-stage counts and effective execution specification. |
+| 0017 | Recognized pre-0011 Greenhouse update timestamps preserved as edits, with false posting dates cleared. |
+
+The Rust backfills preserve source identities, uncertain legacy salary values and
+unresolved suppression keys. Populated upgrade tests preserve all tracked states,
+notes, favorites, status events, workflow rules, custom settings and tombstones.
+See [database recovery](../../plans/database-recovery.md); a Git revert does not
+reverse database schema changes. Never update `_sqlx_migrations` to bypass errors.

@@ -76,10 +76,10 @@ Each directory in this repository contains its own dedicated `README.md` documen
 - [`workflows/`](workflows/README.md) — Declarative YAML workflow specifications for automated crawling.
 
 ### 4. React Frontend (`src/`)
-- [`src/`](src/README.md) — React 18 frontend root, application bootstrap, and global hotkey routing.
+- [`src/`](src/README.md) — React 19 frontend root, application bootstrap, and global hotkey routing.
   - [`src/styles/`](src/styles/README.md) — Tailwind CSS v4 styling rules, custom typography, and NieR brutalist color variables.
   - [`src/hooks/`](src/hooks/README.md) — Custom hooks for keyboard navigation (`useHotkeys`) and debouncing (`useDebounce`).
-  - [`src/lib/`](src/lib/README.md) — IPC client, Zustand store, client-side filtering algorithms, and formatters.
+  - [`src/lib/`](src/lib/README.md) — IPC client, Zustand store, repository pagination contracts and demo filtering, and formatters.
   - [`src/test/`](src/test/README.md) — Vitest test suites covering state, UI components, and filtering math.
   - [`src/bindings/`](src/bindings/README.md) — Auto-generated TypeScript types matching Rust domain models (`ts-rs`).
     - [`src/bindings/serde_json/`](src/bindings/serde_json/README.md) — TypeScript type definitions for arbitrary JSON values.
@@ -125,17 +125,21 @@ Each directory in this repository contains its own dedicated `README.md` documen
 
 ```bash
 # Install frontend dependencies
-npm install
+npm ci
 
 # Run application in development mode (spawns Tauri window + Vite dev server)
 npm run tauri dev
 
-# Run all automated tests (Rust workspace + Vitest frontend)
+# Build the packaged worker before host/integration checks
+npm run build:sidecar
+
+# Run Rust and frontend suites
 cargo test --workspace
 npm test
 
 # Run code linters and type checkers
-cargo clippy --workspace --all-targets
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
 npx tsc --noEmit
 
 # Compile production frontend bundle
@@ -150,3 +154,46 @@ persistent banner identifies that mode. Demo storage uses its own versioned keys
 previous browser fallback records are not loaded into it. Fixture IDs and URLs
 are not live-provider verification. Use the desktop application for real extraction
 and database-backed workflows.
+
+### Workflows and saved postings
+
+Create a workflow with a source URL, preview actual matches, then choose Manual or
+Daily (09:00 in the displayed device timezone) and save. Saving does not scrape;
+Run now is explicit. Advanced and YAML editing share one validated v3 draft, with
+keywords, native compensation, posting dates, selected weekdays and timezone.
+Automatic scheduling and global matching defaults are available in Scraper.
+Pausing automation leaves explicit manual runs available.
+
+Hourly filters compare explicitly hourly ranges in their original currency,
+including cents and inclusive overlap. Annual analytics are separately derived.
+Unknown units remain unknown. Saved-job search, sorting, counts and pagination
+are performed in SQLite, including databases larger than 2,000 postings.
+
+Remove job preserves saved state. The optional **Keep this job out of future
+scrapes** checkbox starts unchecked. A block applies to the exact posting across
+workflows. Settings → Removed & blocked jobs supports search, restore and unblock;
+Undo is available after removal. Notes, favorites and tracked history survive
+restoration and retention. Read [database recovery](plans/database-recovery.md)
+before restoring an older database or application version.
+
+### Browser and native regression checks
+
+```bash
+npx playwright install chromium
+npm run test:browser
+# Debug native app; the harness uses only a temporary database and local HTTP.
+cargo build -p scrape
+npm run test:native
+node scripts/check-style.mjs
+npm run gen:types
+git diff --exit-code src/bindings
+```
+
+Browser checks exercise the explicitly labeled fictional demonstration, real DOM
+controls, both themes, contrast, keyboard focus and narrow/zoom-equivalent reflow.
+Screenshot baselines target macOS Chromium; Linux CI runs interaction tests.
+The separate native harness exercises real Tauri IPC and the packaged sidecar,
+including cancellation, malformed output, timeout, partial-result recovery and
+external opening. It skips normal tray/autostart setup and cannot use the live
+application database. Release builds ignore its debug-only opt-in. Required checks
+use local fixtures; they do not establish current public-provider availability.

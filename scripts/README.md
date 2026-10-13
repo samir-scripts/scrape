@@ -24,3 +24,10 @@ node scripts/build-sidecar.mjs
 # Run frontend startup smoke verification
 node scripts/test-app-startup.mjs
 ```
+
+`check-style.mjs` checks relevant production class strings rather than comments or
+fixtures. `native-smoke.mjs` drives real Tauri IPC with a temporary database, local
+HTTP fixture, packaged sidecar and controlled failing processes. Build the sidecar
+and debug host first. It verifies cancellation, persistence, block/restore,
+protocol failures, timeouts and the external opener without normal app startup
+side effects. Playwright browser checks live in `e2e/`.

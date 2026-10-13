@@ -52,3 +52,14 @@ otherwise it reverses documented backend annualization only when both recorded
 interval and extraction source are known, and marks the range derived. Values
 without sufficient provenance remain recoverable in the legacy fields and do
 not match strict native-unit filters. Native hourly amounts retain cents.
+
+Migration 0017 repairs only recognized Greenhouse records last seen before the
+0011 upgrade. The older adapter stored provider edit time as posting time; that
+value is retained in `provider_updated_at` and the false posting date is cleared.
+Refreshed publication evidence remains intact. Populated version-10 upgrade tests
+verify the backup, four tracked statuses, notes, favorites, history, workflow
+filters, custom settings, native-hourly recovery and historical suppression.
+
+Changing a workflow board does not transfer saved user state to an unrelated
+posting with the same provider ID. Repository ingestion selects the shared
+posting identity and retains separate saved copies when the board changes.
