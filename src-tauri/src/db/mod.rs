@@ -5,6 +5,7 @@ use std::path::Path;
 use std::time::Duration;
 
 pub mod compensation;
+mod history;
 pub mod jobs;
 pub mod metrics;
 pub mod notifications;
@@ -31,7 +32,7 @@ pub async fn init_db(db_path: &Path) -> Result<SqlitePool> {
                     .read_only(true),
             )
             .await?;
-        let history = has_pending_migrations(&inspection).await;
+        let history = checked_manifest(&inspection).await;
         inspection.close().await;
         history?;
     }
@@ -50,16 +51,13 @@ pub async fn init_db(db_path: &Path) -> Result<SqlitePool> {
 
     // VACUUM INTO takes a consistent SQLite snapshot, including committed WAL data.
     // A filesystem copy of the main database alone is not a safe backup.
-    if has_pending_migrations(&pool).await? {
+    if checked_manifest(&pool).await?.1 {
         let backup = db_path.with_file_name(format!(
             "{}.pre-migration-{}.db",
             db_path.file_name().unwrap_or_default().to_string_lossy(),
             uuid::Uuid::new_v4()
         ));
-        sqlx::query("VACUUM INTO ?")
-            .bind(backup.to_string_lossy().as_ref())
-            .execute(&pool)
-            .await?;
+        backup_to(&pool, &backup).await?;
         tracing::info!(path = %backup.display(), "Created pre-migration database backup");
     }
     run_migrations(&pool).await?;
@@ -67,9 +65,17 @@ pub async fn init_db(db_path: &Path) -> Result<SqlitePool> {
     Ok(pool)
 }
 
+async fn backup_to(pool: &SqlitePool, path: &Path) -> Result<()> {
+    sqlx::query("VACUUM INTO ?")
+        .bind(path.to_string_lossy().as_ref())
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Check applied metadata before any migration can write to the database.
 /// Unknown/modified histories must be recovered explicitly, never relabeled.
-async fn has_pending_migrations(pool: &SqlitePool) -> Result<bool> {
+async fn checked_manifest(pool: &SqlitePool) -> Result<(sqlx::migrate::Migrator, bool)> {
     let exists: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations'",
     )
@@ -88,13 +94,13 @@ async fn has_pending_migrations(pool: &SqlitePool) -> Result<bool> {
                 "Unversioned database: refusing automatic migration. Preserve the database and recover from a compatible backup.".into(),
             ));
         }
-        return Ok(false);
+        return Ok((history::manifest(&[]), false));
     }
     let applied: Vec<(i64, Vec<u8>, bool)> =
         sqlx::query_as("SELECT version, checksum, success FROM _sqlx_migrations ORDER BY version")
             .fetch_all(pool)
             .await?;
-    let migrator = sqlx::migrate!("./migrations");
+    let migrator = history::manifest(&applied);
     for (version, checksum, success) in &applied {
         let expected = migrator.iter().find(|m| m.version == *version);
         if !success || expected.is_none_or(|m| m.checksum.as_ref() != checksum.as_slice()) {
@@ -119,7 +125,7 @@ async fn has_pending_migrations(pool: &SqlitePool) -> Result<bool> {
         .max_connections(1)
         .connect_with(SqliteConnectOptions::new().filename(":memory:"))
         .await?;
-    let mut historical = sqlx::migrate!("./migrations");
+    let mut historical = history::manifest(&applied);
     historical.migrations = historical
         .iter()
         .take(applied.len())
@@ -137,12 +143,13 @@ async fn has_pending_migrations(pool: &SqlitePool) -> Result<bool> {
             "Database schema does not match its migration history. No automatic reconciliation was performed. Preserve the database and use a compatible backup or reviewed forward repair; see plans/database-recovery.md.".into(),
         ));
     }
-    Ok(applied.len() < migrator.iter().count())
+    let pending = applied.len() < migrator.iter().count();
+    Ok((migrator, pending))
 }
 
 pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
-    has_pending_migrations(pool).await?;
-    sqlx::migrate!("./migrations").run(pool).await?;
+    let (manifest, _) = checked_manifest(pool).await?;
+    manifest.run(pool).await?;
     postings::backfill(pool).await?;
     compensation::backfill(pool).await?;
     Ok(())
@@ -168,6 +175,312 @@ pub async fn init_memory_db() -> Result<SqlitePool> {
 mod tests {
     use super::*;
     use sqlx::Row;
+
+    #[tokio::test]
+    async fn failed_forward_repair_rolls_back_and_can_resume() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("interrupted.db");
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(&path)
+                    .create_if_missing(true),
+            )
+            .await
+            .unwrap();
+        let legacy = sqlx::migrate::Migration::new(
+            12,
+            "posting removal".into(),
+            sqlx::migrate::MigrationType::Simple,
+            include_str!("../../historical-migrations/0012_posting_removal.sql").into(),
+            false,
+        );
+        let applied = [(12, legacy.checksum.to_vec(), true)];
+        let mut manifest = history::manifest(&applied);
+        manifest.migrations = manifest
+            .iter()
+            .map(|migration| {
+                if migration.version == 18 {
+                    sqlx::migrate::Migration::new(
+                        18,
+                        migration.description.clone(),
+                        migration.migration_type,
+                        format!("{}; SELECT * FROM missing_failure_fixture;", migration.sql).into(),
+                        false,
+                    )
+                } else {
+                    migration.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .into();
+        assert!(manifest.run(&pool).await.is_err());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT max(version) FROM _sqlx_migrations")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            17
+        );
+        let names: Vec<String> = sqlx::query_scalar("SELECT name FROM pragma_table_info('jobs')")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        assert!(!names.contains(&"source_name_snapshot".into()));
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM sqlite_master WHERE name='posting_legacy_blocks'"
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+            0
+        );
+        let destination = directory.path().join("occupied.db");
+        std::fs::write(&destination, b"Do not replace").unwrap();
+        assert!(backup_to(&pool, &destination).await.is_err());
+        assert_eq!(std::fs::read(&destination).unwrap(), b"Do not replace");
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT max(version) FROM _sqlx_migrations")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            17
+        );
+        pool.close().await;
+        let restarted = init_db(&path).await.unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT max(version) FROM _sqlx_migrations")
+                .fetch_one(&restarted)
+                .await
+                .unwrap(),
+            18
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, Vec<u8>>(
+                "SELECT checksum FROM _sqlx_migrations WHERE version=12"
+            )
+            .fetch_one(&restarted)
+            .await
+            .unwrap(),
+            legacy.checksum.to_vec()
+        );
+    }
+
+    #[tokio::test]
+    async fn both_version_twelve_histories_upgrade_preserving_state_and_checksums() {
+        for legacy in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("historical.db");
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(
+                    SqliteConnectOptions::new()
+                        .filename(&path)
+                        .create_if_missing(true)
+                        .journal_mode(SqliteJournalMode::Wal),
+                )
+                .await
+                .unwrap();
+            let legacy_migration = sqlx::migrate::Migration::new(
+                12,
+                "posting removal".into(),
+                sqlx::migrate::MigrationType::Simple,
+                include_str!("../../historical-migrations/0012_posting_removal.sql").into(),
+                false,
+            );
+            let applied = if legacy {
+                vec![(12, legacy_migration.checksum.to_vec(), true)]
+            } else {
+                vec![]
+            };
+            let mut manifest = history::manifest(&applied);
+            manifest.migrations = manifest.iter().take(12).cloned().collect::<Vec<_>>().into();
+            manifest.run(&pool).await.unwrap();
+            sqlx::query("INSERT INTO sources (id,kind,name,identifier,created_at,filters) VALUES ('preserved','greenhouse','Preserved workflow','acme','2026-01-01',?)")
+                .bind(r#"{"include_keywords":[],"locations":["remote"]}"#).execute(&pool).await.unwrap();
+            for (index, status) in ["applied", "interviewing", "offer", "rejected"]
+                .iter()
+                .enumerate()
+            {
+                sqlx::query("INSERT INTO jobs (id,dedupe_key,source_id,external_id,title,company,role_type,url,date_added,last_seen_at,status,status_changed_at,notes,favorited,removed_at) VALUES (?,?, 'preserved',?, 'Engineer','Acme','full_time',?,'2026-01-01','2026-01-01',?,'2026-01-01','Saved note',1,?)")
+                    .bind(format!("saved-{index}")).bind(format!("preserved:{index}")).bind(index.to_string())
+                    .bind(format!("https://example.com/posting/{index}")).bind(status)
+                    .bind((index == 0).then_some("2026-01-02"))
+                    .execute(&pool).await.unwrap();
+                sqlx::query("INSERT INTO job_status_events (job_id,from_status,to_status,changed_at) VALUES (?,'scraped',?,'2026-01-01')")
+                    .bind(format!("saved-{index}")).bind(status).execute(&pool).await.unwrap();
+            }
+            sqlx::query("INSERT INTO blocked_postings VALUES ('preserved-block','Removed engineer','Acme','https://example.com/blocked','Preserved workflow','2026-01-01',NULL)")
+                .execute(&pool).await.unwrap();
+            sqlx::query("INSERT INTO deleted_jobs VALUES ('preserved:99','2026-01-01')")
+                .execute(&pool)
+                .await
+                .unwrap();
+            sqlx::query("INSERT INTO app_settings VALUES ('custom.preserved','42','2026-01-01')")
+                .execute(&pool)
+                .await
+                .unwrap();
+            let before: Vec<(i64, Vec<u8>, String)> = sqlx::query_as(
+                "SELECT version,checksum,installed_on FROM _sqlx_migrations ORDER BY version",
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            let upgraded = init_db(&path).await.unwrap();
+            let after: Vec<(i64, Vec<u8>, String)> = sqlx::query_as("SELECT version,checksum,installed_on FROM _sqlx_migrations WHERE version <= 12 ORDER BY version").fetch_all(&upgraded).await.unwrap();
+            assert_eq!(before, after);
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>("SELECT max(version) FROM _sqlx_migrations")
+                    .fetch_one(&upgraded)
+                    .await
+                    .unwrap(),
+                18
+            );
+            let states: Vec<(String, bool, String, Option<String>, String)> = sqlx::query_as("SELECT notes,favorited,status,removed_at,source_name_snapshot FROM jobs ORDER BY id").fetch_all(&upgraded).await.unwrap();
+            assert_eq!(states.len(), 4);
+            for (index, row) in states.iter().enumerate() {
+                assert_eq!(row.0, "Saved note");
+                assert!(row.1);
+                assert_eq!(
+                    row.2,
+                    ["applied", "interviewing", "offer", "rejected"][index]
+                );
+                assert_eq!(row.3.is_some(), index == 0);
+                assert_eq!(row.4, "Preserved workflow");
+            }
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>("SELECT count(*) FROM job_status_events")
+                    .fetch_one(&upgraded)
+                    .await
+                    .unwrap(),
+                4
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, String>(
+                    "SELECT value FROM app_settings WHERE key='custom.preserved'"
+                )
+                .fetch_one(&upgraded)
+                .await
+                .unwrap(),
+                "42"
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT count(*) FROM blocked_postings WHERE identity='preserved-block'"
+                )
+                .fetch_one(&upgraded)
+                .await
+                .unwrap(),
+                1
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT count(*) FROM posting_legacy_blocks WHERE legacy_key='preserved:99'"
+                )
+                .fetch_one(&upgraded)
+                .await
+                .unwrap(),
+                1
+            );
+            // The backup includes committed WAL data and the exact pre-repair history.
+            let backups: Vec<_> = std::fs::read_dir(directory.path())
+                .unwrap()
+                .flatten()
+                .filter(|entry| {
+                    entry
+                        .file_name()
+                        .to_string_lossy()
+                        .contains("pre-migration")
+                })
+                .collect();
+            assert_eq!(backups.len(), 1);
+            let backup = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(
+                    SqliteConnectOptions::new()
+                        .filename(backups[0].path())
+                        .read_only(true),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>("SELECT count(*) FROM jobs")
+                    .fetch_one(&backup)
+                    .await
+                    .unwrap(),
+                4
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, Vec<u8>>(
+                    "SELECT checksum FROM _sqlx_migrations WHERE version=12"
+                )
+                .fetch_one(&backup)
+                .await
+                .unwrap(),
+                before[11].1
+            );
+            backup.close().await;
+            upgraded.close().await;
+            pool.close().await;
+            let restarted = init_db(&path).await.unwrap();
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>("SELECT count(*) FROM posting_legacy_blocks")
+                    .fetch_one(&restarted)
+                    .await
+                    .unwrap(),
+                1
+            );
+            restarted.close().await;
+            assert_eq!(
+                std::fs::read_dir(directory.path())
+                    .unwrap()
+                    .flatten()
+                    .filter(|entry| entry
+                        .file_name()
+                        .to_string_lossy()
+                        .contains("pre-migration"))
+                    .count(),
+                1
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn recognized_legacy_checksum_does_not_accept_schema_drift() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        let legacy = sqlx::migrate::Migration::new(
+            12,
+            "posting removal".into(),
+            sqlx::migrate::MigrationType::Simple,
+            include_str!("../../historical-migrations/0012_posting_removal.sql").into(),
+            false,
+        );
+        let mut manifest = history::manifest(&[(12, legacy.checksum.to_vec(), true)]);
+        manifest.migrations = manifest.iter().take(12).cloned().collect::<Vec<_>>().into();
+        manifest.run(&pool).await.unwrap();
+        sqlx::query("ALTER TABLE jobs ADD COLUMN unknown_data TEXT")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(run_migrations(&pool)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("schema does not match"));
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT max(version) FROM _sqlx_migrations")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            12
+        );
+    }
 
     #[tokio::test]
     async fn populated_version_ten_upgrade_preserves_annotations_history_settings_and_blocks() {
