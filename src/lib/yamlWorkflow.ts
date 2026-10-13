@@ -75,7 +75,13 @@ export interface YamlValidationResult {
   parsedSpec?: WorkflowSpec;
 }
 
-const VALID_KINDS: SourceKind[] = ["greenhouse", "lever", "ashby", "jsonld", "selector"];
+const VALID_KINDS: SourceKind[] = [
+  "greenhouse",
+  "lever",
+  "ashby",
+  "jsonld",
+  "selector",
+];
 const VALID_CADENCES: SourceCadence[] = [
   "global",
   "hourly",
@@ -86,9 +92,18 @@ const VALID_CADENCES: SourceCadence[] = [
   "manual",
   "cron",
 ];
-const VALID_ROLE_TYPES: RoleType[] = ["full_time", "contract", "internship", "part_time", "seasonal", "unknown"];
+const VALID_ROLE_TYPES: RoleType[] = [
+  "full_time",
+  "contract",
+  "internship",
+  "part_time",
+  "seasonal",
+  "unknown",
+];
 
-export function validateWorkflowYaml(yamlContent: string): YamlValidationResult {
+export function validateWorkflowYaml(
+  yamlContent: string,
+): YamlValidationResult {
   if (!yamlContent.trim()) {
     return {
       isValid: false,
@@ -101,7 +116,9 @@ export function validateWorkflowYaml(yamlContent: string): YamlValidationResult 
 
   if (doc.errors && doc.errors.length > 0) {
     for (const err of doc.errors) {
-      const linePos = (err as unknown as { linePos?: [ { line: number; col: number } ] }).linePos;
+      const linePos = (
+        err as unknown as { linePos?: [{ line: number; col: number }] }
+      ).linePos;
       const line = linePos?.[0]?.line;
       const col = linePos?.[0]?.col;
       errors.push({
@@ -121,20 +138,28 @@ export function validateWorkflowYaml(yamlContent: string): YamlValidationResult 
   if (typeof json !== "object" || json === null || Array.isArray(json)) {
     return {
       isValid: false,
-      errors: [{ message: "Top-level specification must be an object/mapping" }],
+      errors: [
+        { message: "Top-level specification must be an object/mapping" },
+      ],
     };
   }
 
   // Version check
   if (json.version !== undefined && ![2, 3].includes(json.version)) {
-    errors.push({ message: `Unsupported workflow version ${json.version}. Expected supported version: 2 or 3` });
+    errors.push({
+      message: `Unsupported workflow version ${json.version}. Expected supported version: 2 or 3`,
+    });
   }
 
   // Metadata check
   if (!json.metadata || typeof json.metadata !== "object") {
     errors.push({ message: "Missing required 'metadata' section" });
   } else {
-    if (!json.metadata.name || typeof json.metadata.name !== "string" || !json.metadata.name.trim()) {
+    if (
+      !json.metadata.name ||
+      typeof json.metadata.name !== "string" ||
+      !json.metadata.name.trim()
+    ) {
       errors.push({ message: "metadata.name must be a non-empty string" });
     }
   }
@@ -148,16 +173,27 @@ export function validateWorkflowYaml(yamlContent: string): YamlValidationResult 
         message: `extractor.kind must be one of: ${VALID_KINDS.join(", ")}`,
       });
     }
-    if (!json.extractor.url || typeof json.extractor.url !== "string" || !json.extractor.url.trim()) {
-      errors.push({ message: "extractor.url must be a valid non-empty URL string" });
+    if (
+      !json.extractor.url ||
+      typeof json.extractor.url !== "string" ||
+      !json.extractor.url.trim()
+    ) {
+      errors.push({
+        message: "extractor.url must be a valid non-empty URL string",
+      });
     } else {
-      const isAtsKind = ["greenhouse", "lever", "ashby"].includes(json.extractor.kind);
-      const isPlainSlug = isAtsKind && /^[a-zA-Z0-9_\-\.]+$/.test(json.extractor.url.trim());
+      const isAtsKind = ["greenhouse", "lever", "ashby"].includes(
+        json.extractor.kind,
+      );
+      const isPlainSlug =
+        isAtsKind && /^[a-zA-Z0-9_\-\.]+$/.test(json.extractor.url.trim());
       if (!isPlainSlug) {
         try {
           const u = new URL(json.extractor.url);
           if (u.protocol !== "http:" && u.protocol !== "https:") {
-            errors.push({ message: "extractor.url must start with http:// or https://" });
+            errors.push({
+              message: "extractor.url must start with http:// or https://",
+            });
           }
         } catch {
           errors.push({ message: "extractor.url is not a valid URL" });
@@ -168,23 +204,43 @@ export function validateWorkflowYaml(yamlContent: string): YamlValidationResult 
 
   // Schedule check
   if (json.schedule && typeof json.schedule === "object") {
-    if (json.schedule.cadence && !VALID_CADENCES.includes(json.schedule.cadence)) {
+    if (
+      json.schedule.cadence &&
+      !VALID_CADENCES.includes(json.schedule.cadence)
+    ) {
       errors.push({
         message: `schedule.cadence must be one of: ${VALID_CADENCES.join(", ")}`,
       });
     }
-    if (json.schedule.cadence === "cron" && (!json.schedule.cron || !json.schedule.cron.trim())) {
-      errors.push({ message: "schedule.cron is required when cadence is set to 'cron'" });
+    if (
+      json.schedule.cadence === "cron" &&
+      (!json.schedule.cron || !json.schedule.cron.trim())
+    ) {
+      errors.push({
+        message: "schedule.cron is required when cadence is set to 'cron'",
+      });
     }
   }
 
   // Retention check
   if (json.retention && typeof json.retention === "object") {
-    if (json.retention.days !== undefined && (typeof json.retention.days !== "number" || json.retention.days < 0)) {
-      errors.push({ message: "retention.days must be a non-negative number (0 = keep forever)" });
+    if (
+      json.retention.days !== undefined &&
+      (typeof json.retention.days !== "number" || json.retention.days < 0)
+    ) {
+      errors.push({
+        message:
+          "retention.days must be a non-negative number (0 = keep forever)",
+      });
     }
-    if (json.retention.policy !== undefined && json.retention.policy !== "untracked_only" && json.retention.policy !== "all") {
-      errors.push({ message: "retention.policy must be either 'untracked_only' or 'all'" });
+    if (
+      json.retention.policy !== undefined &&
+      json.retention.policy !== "untracked_only" &&
+      json.retention.policy !== "all"
+    ) {
+      errors.push({
+        message: "retention.policy must be either 'untracked_only' or 'all'",
+      });
     }
   }
 
@@ -196,7 +252,9 @@ export function validateWorkflowYaml(yamlContent: string): YamlValidationResult 
       } else {
         for (const rt of json.filters.role_types) {
           if (!VALID_ROLE_TYPES.includes(rt)) {
-            errors.push({ message: `Invalid role type '${rt}'. Allowed: ${VALID_ROLE_TYPES.join(", ")}` });
+            errors.push({
+              message: `Invalid role type '${rt}'. Allowed: ${VALID_ROLE_TYPES.join(", ")}`,
+            });
           }
         }
       }
@@ -220,23 +278,34 @@ export function validateWorkflowYaml(yamlContent: string): YamlValidationResult 
             else if (char === ")") {
               parenCount--;
               if (parenCount < 0) {
-                errors.push({ message: `Unmatched closing parenthesis ')' at character ${i + 1}` });
+                errors.push({
+                  message: `Unmatched closing parenthesis ')' at character ${i + 1}`,
+                });
                 break;
               }
             }
           }
         }
         if (inQuote) {
-          errors.push({ message: `Unclosed string quote (${inQuote}) in filter query` });
+          errors.push({
+            message: `Unclosed string quote (${inQuote}) in filter query`,
+          });
         }
         if (parenCount > 0) {
-          errors.push({ message: `Unclosed opening parenthesis '(' in filter query` });
+          errors.push({
+            message: `Unclosed opening parenthesis '(' in filter query`,
+          });
         }
       }
     }
 
-    if (json.filters.policy !== undefined && (typeof json.filters.policy !== "object" || json.filters.policy === null)) {
-      errors.push({ message: "filters.policy must be a valid policy object mapping" });
+    if (
+      json.filters.policy !== undefined &&
+      (typeof json.filters.policy !== "object" || json.filters.policy === null)
+    ) {
+      errors.push({
+        message: "filters.policy must be a valid policy object mapping",
+      });
     }
   }
 
@@ -259,32 +328,105 @@ export function workflowSpecToYaml(spec: WorkflowSpec): string {
 }
 
 export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
-  const config = (source.config && typeof source.config === "object" && !Array.isArray(source.config) ? source.config : {}) as Record<string, unknown>;
+  const config = (
+    source.config &&
+    typeof source.config === "object" &&
+    !Array.isArray(source.config)
+      ? source.config
+      : {}
+  ) as Record<string, unknown>;
   const snapshot = config.__workflow_spec as WorkflowSpec | undefined;
-  const sourceConfig = Object.fromEntries(Object.entries(config).filter(([key]) => !key.startsWith("__")));
+  const sourceConfig = Object.fromEntries(
+    Object.entries(config).filter(([key]) => !key.startsWith("__")),
+  );
   const filters = (source.filters || {}) as WorkflowSpec["filters"];
-  const calendar = config.__schedule as { time?: string; weekdays?: number[]; timezone?: string } | undefined;
+  const calendar = config.__schedule as
+    | { time?: string; weekdays?: number[]; timezone?: string }
+    | undefined;
   return {
-    ...snapshot, version: 3,
-    metadata: { ...snapshot?.metadata, name: source.name, enabled: source.enabled },
-    extractor: { ...snapshot?.extractor, kind: source.kind, url: String(config.url || canonicalizeAtsUrl(source.kind, source.identifier)), source_config: sourceConfig as WorkflowSpec["extractor"]["source_config"] },
-    schedule: { ...snapshot?.schedule, cadence: source.cadence, cron: source.cadence_cron ?? undefined, ...calendar },
+    ...snapshot,
+    version: 3,
+    metadata: {
+      ...snapshot?.metadata,
+      name: source.name,
+      enabled: source.enabled,
+    },
+    extractor: {
+      ...snapshot?.extractor,
+      kind: source.kind,
+      url: String(
+        config.url || canonicalizeAtsUrl(source.kind, source.identifier),
+      ),
+      source_config: sourceConfig as WorkflowSpec["extractor"]["source_config"],
+    },
+    schedule: {
+      ...snapshot?.schedule,
+      cadence: source.cadence,
+      cron: source.cadence_cron ?? undefined,
+      ...calendar,
+    },
     filters,
-    retention: { days: Number(source.retention_days), policy: source.retention_policy },
+    retention: {
+      days: Number(source.retention_days),
+      policy: source.retention_policy,
+    },
   };
 }
-export function workflowSpecToCreateInput(spec: WorkflowSpec): CreateSourceInput {
+export function workflowSpecToCreateInput(
+  spec: WorkflowSpec,
+): CreateSourceInput {
   let identifier = spec.extractor.url;
-  if (["greenhouse", "lever", "ashby"].includes(spec.extractor.kind) && identifier.includes("://")) identifier = new URL(identifier).pathname.split("/").filter(Boolean)[0] || "";
-  const config: Record<string, unknown> = { ...(spec.extractor.source_config as Record<string, unknown> || {}), url: spec.extractor.url, __workflow_spec: spec };
-  const mapping = { job_container: "item", title_selector: "title", url_selector: "link", location_selector: "location", salary_selector: "salary", description_selector: "description", date_selector: "date", title_regex: "title_regex", link_regex: "link_regex", location_regex: "location_regex", salary_regex: "salary_regex", url_pattern: "url_pattern", url_patterns: "url_patterns", exclude_url_patterns: "exclude_url_patterns" } as const;
+  if (
+    ["greenhouse", "lever", "ashby"].includes(spec.extractor.kind) &&
+    identifier.includes("://")
+  )
+    identifier =
+      new URL(identifier).pathname.split("/").filter(Boolean)[0] || "";
+  const config: Record<string, unknown> = {
+    ...((spec.extractor.source_config as Record<string, unknown>) || {}),
+    url: spec.extractor.url,
+    __workflow_spec: spec,
+  };
+  const mapping = {
+    job_container: "item",
+    title_selector: "title",
+    url_selector: "link",
+    location_selector: "location",
+    salary_selector: "salary",
+    description_selector: "description",
+    date_selector: "date",
+    title_regex: "title_regex",
+    link_regex: "link_regex",
+    location_regex: "location_regex",
+    salary_regex: "salary_regex",
+    url_pattern: "url_pattern",
+    url_patterns: "url_patterns",
+    exclude_url_patterns: "exclude_url_patterns",
+  } as const;
   for (const [field, key] of Object.entries(mapping)) {
-    const value = spec.extractor[field as keyof typeof mapping]; if (value != null) config[key] = value;
+    const value = spec.extractor[field as keyof typeof mapping];
+    if (value != null) config[key] = value;
   }
   const cadence = spec.schedule?.cadence || "global";
-  if (["daily", "weekly"].includes(cadence)) config.__schedule = { time: spec.schedule?.time || "09:00", weekdays: spec.schedule?.weekdays || (cadence === "weekly" ? [1] : []), timezone: spec.schedule?.timezone || "UTC" };
+  if (["daily", "weekly"].includes(cadence))
+    config.__schedule = {
+      time: spec.schedule?.time || "09:00",
+      weekdays: spec.schedule?.weekdays || (cadence === "weekly" ? [1] : []),
+      timezone: spec.schedule?.timezone || "UTC",
+    };
   if (spec.metadata.company) config.__company = spec.metadata.company;
-  return { kind: spec.extractor.kind, name: spec.metadata.name, identifier, config: config as CreateSourceInput["config"], enabled: spec.metadata.enabled ?? true, cadence, cadence_cron: spec.schedule?.cron ?? null, retention_days: BigInt(spec.retention?.days ?? 30), retention_policy: spec.retention?.policy || "untracked_only", filters: (spec.filters || {}) as CreateSourceInput["filters"] };
+  return {
+    kind: spec.extractor.kind,
+    name: spec.metadata.name,
+    identifier,
+    config: config as CreateSourceInput["config"],
+    enabled: spec.metadata.enabled ?? true,
+    cadence,
+    cadence_cron: spec.schedule?.cron ?? null,
+    retention_days: BigInt(spec.retention?.days ?? 30),
+    retention_policy: spec.retention?.policy || "untracked_only",
+    filters: (spec.filters || {}) as CreateSourceInput["filters"],
+  };
 }
 
 export function canonicalizeAtsUrl(kind: string, urlOrSlug: string): string {
