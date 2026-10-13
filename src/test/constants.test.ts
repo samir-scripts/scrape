@@ -38,7 +38,7 @@ describe("Frontend Constants & Themes", () => {
     expect(STATUS_CONFIG.applied.bg).toBe("var(--color-lime)");
     expect(STATUS_CONFIG.interviewing.bg).toBe("var(--color-signal)");
     expect(STATUS_CONFIG.offer.bg).toBe("var(--color-ink)");
-    expect(STATUS_CONFIG.rejected.bg).toBe("var(--color-cherry)");
+    expect(STATUS_CONFIG.rejected.bg).toBe("var(--color-danger)");
     expect(STATUS_CONFIG.ignored.bg).toBe("transparent");
     expect(STATUS_CONFIG.ignored.dither).toBe("checker");
   });

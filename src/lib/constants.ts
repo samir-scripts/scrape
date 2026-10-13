@@ -13,19 +13,19 @@ export const STATUS_CONFIG: Record<JobStatus, StatusStyle> = {
   scraped: {
     label: "SCRAPED",
     bg: "var(--color-lavender)",
-    text: "var(--color-ink)",
+    text: "var(--color-accent-ink)",
     border: "var(--color-ink)",
   },
   viewed: {
     label: "VIEWED",
     bg: "var(--color-cream)",
-    text: "var(--color-ink)",
+    text: "var(--color-accent-ink)",
     border: "var(--color-ink)",
   },
   applied: {
     label: "APPLIED",
     bg: "var(--color-lime)",
-    text: "var(--color-ink)",
+    text: "var(--color-accent-ink)",
     border: "var(--color-ink)",
   },
   interviewing: {
@@ -42,9 +42,9 @@ export const STATUS_CONFIG: Record<JobStatus, StatusStyle> = {
   },
   rejected: {
     label: "REJECTED",
-    bg: "var(--color-cherry)",
-    text: "#FFFFFF",
-    border: "var(--color-cherry)",
+    bg: "var(--color-danger)",
+    text: "var(--color-paper)",
+    border: "var(--color-danger)",
   },
   ignored: {
     label: "IGNORED",
@@ -85,7 +85,7 @@ export const CRON_PRESETS = [
   { label: "HOURLY", expr: "0 0 * * * *" },
   { label: "EVERY 6 HOURS", expr: "0 0 */6 * * *" },
   { label: "DAILY 09:00", expr: "0 0 9 * * *" },
-  { label: "WEEKDAYS 09:00", expr: "0 0 9 * * 1-5" },
+  { label: "WEEKDAYS 09:00", expr: "0 0 9 * * MON-FRI" },
 ];
 
 export const NAV_TABS = [
@@ -169,6 +169,6 @@ export const FONT_OPTIONS: FontFamilyOption[] = [
     category: "monospace",
     description: "Engineered grotesque monospace blending mechanical rigor with human warmth.",
     fontFamily: '"IBM Plex Mono", Menlo, monospace',
-    previewText: "SYSTEM_CADENCE: 0 0 9 * * 1-5 [ACTIVE]",
+    previewText: "SYSTEM_CADENCE: 0 0 9 * * MON-FRI [ACTIVE]",
   },
 ];

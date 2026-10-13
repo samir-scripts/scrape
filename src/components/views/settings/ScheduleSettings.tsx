@@ -204,13 +204,13 @@ export function ScheduleSettings({
             <div className="flex flex-col gap-3 w-full md:w-64 p-3 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/20">
               <div className="flex justify-between items-center text-xs font-mono uppercase text-[var(--color-ink-mute)] pb-1 border-b border-[var(--color-ink)]">
                 <span>SCHEDULE SUMMARY</span>
-                <span className={cronInput === settings.scraper_cron ? "text-[var(--color-lime)] font-bold" : "text-[var(--color-signal)] font-bold"}>
+                <span className={cronInput === settings.scraper_cron ? "text-[var(--color-success)] font-bold" : "text-[var(--color-signal)] font-bold"}>
                   {cronInput === settings.scraper_cron ? "CURRENT" : "UNSAVED"}
                 </span>
               </div>
 
               {isCustomCronOutOfSyncWithClock && (
-                <div className="p-2 border border-dashed border-[var(--color-cherry)] text-xs font-mono text-[var(--color-cherry)]">
+                <div className="p-2 border border-dashed border-[var(--color-danger)] text-xs font-mono text-[var(--color-danger)]">
                   ACTIVE SETTING USES A CUSTOM CRON FORMAT. APPLYING CLOCK SCHEDULE WILL REPLACE IT.
                 </div>
               )}
@@ -240,7 +240,7 @@ export function ScheduleSettings({
                 <div className="mt-1 pt-2 border-t border-[var(--color-ink)]/40 font-mono text-xs">
                   {validation.ok ? (
                     <div className="flex flex-col gap-1 text-xs">
-                      <span className="text-[var(--color-lime)] font-bold">
+                      <span className="text-[var(--color-success)] font-bold">
                         ✓ VALID SCHEDULE
                       </span>
                       <span className="text-xs text-[var(--color-ink-mute)] uppercase">
@@ -255,7 +255,7 @@ export function ScheduleSettings({
                       </ul>
                     </div>
                   ) : (
-                    <span className="text-[var(--color-cherry)] text-xs font-bold">
+                    <span className="text-[var(--color-danger)] text-xs font-bold">
                       ✗ {validation.error || "INVALID CRON"}
                     </span>
                   )}
@@ -319,7 +319,7 @@ export function ScheduleSettings({
               </div>
               <div>
                 <span className="text-[var(--color-ink-mute)] block">DOW</span>
-                <span className="font-bold">1-5 / *</span>
+                <span className="font-bold">MON-FRI / *</span>
               </div>
             </div>
 
@@ -328,7 +328,7 @@ export function ScheduleSettings({
               <div className="mt-1 font-mono text-xs">
                 {validation.ok ? (
                   <div className="flex flex-col gap-1 text-xs text-[var(--color-ink-mute)]">
-                    <span className="text-[var(--color-lime)] font-bold">
+                    <span className="text-[var(--color-success)] font-bold">
                       ✓ VALID EXPRESSION
                     </span>
                     <span>NEXT RUNS:</span>
@@ -339,7 +339,7 @@ export function ScheduleSettings({
                     </ul>
                   </div>
                 ) : (
-                  <span className="text-[var(--color-cherry)] text-xs font-bold">
+                  <span className="text-[var(--color-danger)] text-xs font-bold">
                     ✗ {validation.error || "INVALID CRON EXPRESSION"}
                   </span>
                 )}
@@ -390,10 +390,10 @@ export function ScheduleSettings({
                     <span
                       className={`px-1.5 py-0.5 text-xs font-mono uppercase font-bold border ${
                         r.status === "success"
-                          ? "bg-[var(--color-lime)] text-[var(--color-ink)] border-[var(--color-ink)]"
+                          ? "bg-[var(--color-lime)] text-[var(--color-accent-ink)] border-[var(--color-ink)]"
                           : r.status === "failed"
-                          ? "bg-[var(--color-cherry)] text-white border-[var(--color-cherry)]"
-                          : "bg-[var(--color-lavender)] text-[var(--color-ink)] border-[var(--color-ink)]"
+                          ? "bg-[var(--color-danger)] text-[var(--color-paper)] border-[var(--color-danger)]"
+                          : "bg-[var(--color-lavender)] text-[var(--color-accent-ink)] border-[var(--color-ink)]"
                       }`}
                     >
                       {r.status}

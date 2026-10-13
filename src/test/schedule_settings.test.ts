@@ -9,7 +9,7 @@ describe("ScheduleSettings Tab Logic & State Machine", () => {
 
     // Standard clock expressions default to 'clock'
     expect(getInitialMode("0 0 9 * * *")).toBe("clock");
-    expect(getInitialMode("0 30 14 * * 1-5")).toBe("clock");
+    expect(getInitialMode("0 30 14 * * MON-FRI")).toBe("clock");
     expect(getInitialMode("0 0 */6 * * *")).toBe("clock");
     expect(getInitialMode("0 15 * * * *")).toBe("clock");
 
@@ -19,7 +19,7 @@ describe("ScheduleSettings Tab Logic & State Machine", () => {
   });
 
   it("synchronizes clock state when switching from custom cron to clock tab", () => {
-    let cronInput = "0 45 18 * * 1-5"; // 6:45 PM Weekdays
+    let cronInput = "0 45 18 * * MON-FRI"; // 6:45 PM Weekdays
     let currentClockState: ClockScheduleState = {
       hour12: 9,
       minute: 0,
@@ -56,7 +56,7 @@ describe("ScheduleSettings Tab Logic & State Machine", () => {
       clockState.cadence
     );
 
-    expect(newCron).toBe("0 15 10 * * 6,7");
+    expect(newCron).toBe("0 15 10 * * SAT,SUN");
   });
 
   it("detects when custom cron is out of sync with standard clock representation", () => {

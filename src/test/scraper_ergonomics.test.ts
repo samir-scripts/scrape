@@ -168,16 +168,16 @@ describe("Scraper Ergonomics, Dual-Mode & Workflow Inspector", () => {
     it("advanced mode clock cadence generates distinct day expressions", async () => {
       const { clockToCron } = await import("../lib/cronClock");
       // Weekdays at 10:00 AM
-      expect(clockToCron(10, 0, "AM", "weekdays")).toBe("0 0 10 * * 1-5");
+      expect(clockToCron(10, 0, "AM", "weekdays")).toBe("0 0 10 * * MON-FRI");
       // Weekends at 08:00 AM
-      expect(clockToCron(8, 0, "AM", "weekends")).toBe("0 0 8 * * 6,7");
+      expect(clockToCron(8, 0, "AM", "weekends")).toBe("0 0 8 * * SAT,SUN");
       // Hourly at :45
       expect(clockToCron(1, 45, "AM", "hourly")).toBe("0 45 * * * *");
     });
 
     it("converts cron expressions back to clock schedule state", async () => {
       const { cronToClock } = await import("../lib/cronClock");
-      const state = cronToClock("0 45 16 * * 1-5");
+      const state = cronToClock("0 45 16 * * MON-FRI");
       expect(state).not.toBeNull();
       expect(state?.hour12).toBe(4);
       expect(state?.minute).toBe(45);

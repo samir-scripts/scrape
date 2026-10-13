@@ -50,14 +50,14 @@ describe("Cron-Clock Synchronizer & Geometry Math", () => {
       expect(clockToCron(11, 59, "PM", "daily")).toBe("0 59 23 * * *");
     });
 
-    it("generates weekdays cron expressions (0 {min} {h24} * * 1-5)", () => {
-      expect(clockToCron(9, 0, "AM", "weekdays")).toBe("0 0 9 * * 1-5");
-      expect(clockToCron(5, 45, "PM", "weekdays")).toBe("0 45 17 * * 1-5");
+    it("generates weekdays cron expressions (0 {min} {h24} * * MON-FRI)", () => {
+      expect(clockToCron(9, 0, "AM", "weekdays")).toBe("0 0 9 * * MON-FRI");
+      expect(clockToCron(5, 45, "PM", "weekdays")).toBe("0 45 17 * * MON-FRI");
     });
 
-    it("generates weekends cron expressions (0 {min} {h24} * * 6,7)", () => {
-      expect(clockToCron(10, 0, "AM", "weekends")).toBe("0 0 10 * * 6,7");
-      expect(clockToCron(2, 30, "PM", "weekends")).toBe("0 30 14 * * 6,7");
+    it("generates weekends cron expressions (0 {min} {h24} * * SAT,SUN)", () => {
+      expect(clockToCron(10, 0, "AM", "weekends")).toBe("0 0 10 * * SAT,SUN");
+      expect(clockToCron(2, 30, "PM", "weekends")).toBe("0 30 14 * * SAT,SUN");
     });
 
     it("generates interval cadences", () => {
@@ -101,8 +101,8 @@ describe("Cron-Clock Synchronizer & Geometry Math", () => {
       });
     });
 
-    it("parses weekdays cron expressions (numeric 1-5 and named MON-FRI)", () => {
-      const numWeekdays = cronToClock("0 0 9 * * 1-5");
+    it("parses weekdays cron expressions (numeric 2-6 and named MON-FRI)", () => {
+      const numWeekdays = cronToClock("0 0 9 * * 2-6");
       expect(numWeekdays).toEqual({
         hour12: 9,
         minute: 0,
@@ -120,7 +120,7 @@ describe("Cron-Clock Synchronizer & Geometry Math", () => {
     });
 
     it("parses weekends cron expressions", () => {
-      const numWeekends = cronToClock("0 0 10 * * 6,7");
+      const numWeekends = cronToClock("0 0 10 * * 7,1");
       expect(numWeekends).toEqual({
         hour12: 10,
         minute: 0,
@@ -164,7 +164,7 @@ describe("Cron-Clock Synchronizer & Geometry Math", () => {
     });
 
     it("supports standard 5-field cron parsing", () => {
-      const fiveField = cronToClock("30 14 * * 1-5");
+      const fiveField = cronToClock("30 14 * * MON-FRI");
       expect(fiveField).toEqual({
         hour12: 2,
         minute: 30,
@@ -175,6 +175,8 @@ describe("Cron-Clock Synchronizer & Geometry Math", () => {
 
     it("returns null for non-standard/unparseable expressions", () => {
       expect(cronToClock("invalid string")).toBeNull();
+      expect(cronToClock("0 0 9 * * 1-5")).toBeNull(); // Sunday–Thursday stays an expert rule.
+      expect(cronToClock("0 0 9 * * 6,7")).toBeNull(); // Friday–Saturday.
       expect(cronToClock("0 0 0 0")).toBeNull();
       expect(cronToClock("0 0 25 * * *")).toBeNull(); // Hour 25 is invalid
     });

@@ -123,8 +123,8 @@ describe("ClockPicker Mechanics & Geometry Snapping", () => {
       };
 
       expect(clockToCron(state.hour12, state.minute, state.ampm, "daily")).toBe("0 15 8 * * *");
-      expect(clockToCron(state.hour12, state.minute, state.ampm, "weekdays")).toBe("0 15 8 * * 1-5");
-      expect(clockToCron(state.hour12, state.minute, state.ampm, "weekends")).toBe("0 15 8 * * 6,7");
+      expect(clockToCron(state.hour12, state.minute, state.ampm, "weekdays")).toBe("0 15 8 * * MON-FRI");
+      expect(clockToCron(state.hour12, state.minute, state.ampm, "weekends")).toBe("0 15 8 * * SAT,SUN");
       expect(clockToCron(state.hour12, state.minute, state.ampm, "every_12h")).toBe("0 15 */12 * * *");
       expect(clockToCron(state.hour12, state.minute, state.ampm, "every_6h")).toBe("0 15 */6 * * *");
       expect(clockToCron(state.hour12, state.minute, state.ampm, "hourly")).toBe("0 15 * * * *");

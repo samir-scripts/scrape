@@ -97,9 +97,9 @@ export function clockToCron(
     case "daily":
       return `0 ${m} ${h24} * * *`;
     case "weekdays":
-      return `0 ${m} ${h24} * * 1-5`;
+      return `0 ${m} ${h24} * * MON-FRI`;
     case "weekends":
-      return `0 ${m} ${h24} * * 6,7`;
+      return `0 ${m} ${h24} * * SAT,SUN`;
     case "every_12h":
       return `0 ${m} */12 * * *`;
     case "every_6h":
@@ -229,7 +229,7 @@ export function cronToClock(cron: string): ClockScheduleState | null {
       };
     }
 
-    if (dowNorm === "1-5" || dowNorm === "MON-FRI") {
+    if (dowNorm === "2-6" || dowNorm === "MON-FRI") {
       return {
         hour12,
         minute,
@@ -239,12 +239,10 @@ export function cronToClock(cron: string): ClockScheduleState | null {
     }
 
     if (
-      dowNorm === "6,7" ||
-      dowNorm === "7,6" ||
+      dowNorm === "7,1" ||
+      dowNorm === "1,7" ||
       dowNorm === "SAT,SUN" ||
-      dowNorm === "SUN,SAT" ||
-      dowNorm === "0,6" ||
-      dowNorm === "6,0"
+      dowNorm === "SUN,SAT"
     ) {
       return {
         hour12,

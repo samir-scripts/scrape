@@ -264,7 +264,7 @@ impl SchedulerService {
 }
 
 pub fn validate_cron_expression(expr: &str, tz_str: &str) -> CronValidationResult {
-    let Ok(tz) = Tz::from_str(tz_str) else {
+    let Ok(_) = Tz::from_str(tz_str) else {
         return CronValidationResult {
             ok: false,
             next_runs: vec![],
@@ -272,16 +272,18 @@ pub fn validate_cron_expression(expr: &str, tz_str: &str) -> CronValidationResul
         };
     };
     match Schedule::from_str(expr) {
-        Ok(schedule) => {
-            let now = chrono::Utc::now().with_timezone(&tz);
-            let next_runs: Vec<String> = schedule
-                .after(&now)
-                .take(3)
-                .map(|dt| {
-                    dt.with_timezone(&chrono::Utc)
-                        .to_rfc3339_opts(SecondsFormat::Millis, true)
-                })
-                .collect();
+        Ok(_) => {
+            let mut after = chrono::Utc::now();
+            let mut next_runs = Vec::new();
+            for _ in 0..3 {
+                let Some(next) = calculate_next_run_at(expr, tz_str, after) else {
+                    break;
+                };
+                after = chrono::DateTime::parse_from_rfc3339(&next)
+                    .expect("Calculated UTC instant")
+                    .with_timezone(&chrono::Utc);
+                next_runs.push(next);
+            }
             CronValidationResult {
                 ok: true,
                 next_runs,
@@ -307,10 +309,20 @@ pub fn calculate_next_run_at(
 ) -> Option<String> {
     let tz = Tz::from_str(tz_str).ok()?;
     let schedule = Schedule::from_str(cron_expr).ok()?;
-    schedule.after(&after.with_timezone(&tz)).next().map(|dt| {
-        dt.with_timezone(&chrono::Utc)
-            .to_rfc3339_opts(SecondsFormat::Millis, true)
-    })
+    // Evaluate calendar candidates without timezone gaps/duplicates, then apply
+    // the shared local-time policy. A repeated instant runs only at its first occurrence.
+    let calendar_start = after.with_timezone(&tz).naive_local().and_utc();
+    schedule
+        .after(&calendar_start)
+        // At most two days of second-level candidates can precede the UTC
+        // cursor during an exceptional local-clock rollback. Normal schedules
+        // return on the first candidate.
+        .take(172_801)
+        .find_map(|candidate| {
+            let instant =
+                scrape_core::posting_date::first_local_instant(tz, candidate.naive_utc())?;
+            (instant > after).then(|| instant.to_rfc3339_opts(SecondsFormat::Millis, true))
+        })
 }
 
 pub fn calculate_next_run_for_source(
@@ -332,6 +344,64 @@ pub fn calculate_next_run_for_source(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cron_uses_the_same_gap_and_overlap_policy_as_calendar_workflows() {
+        let parse = |value: &str| {
+            chrono::DateTime::parse_from_rfc3339(value)
+                .unwrap()
+                .with_timezone(&chrono::Utc)
+        };
+        assert_eq!(
+            calculate_next_run_at(
+                "0 30 2 * * *",
+                "America/New_York",
+                parse("2026-03-08T06:00:00Z")
+            ),
+            Some("2026-03-08T07:00:00.000Z".into())
+        );
+        assert_eq!(
+            calculate_next_run_at(
+                "0 30 1 * * *",
+                "America/New_York",
+                parse("2026-11-01T04:00:00Z")
+            ),
+            Some("2026-11-01T05:30:00.000Z".into())
+        );
+        assert_eq!(
+            calculate_next_run_at(
+                "0 30 1 * * *",
+                "America/New_York",
+                parse("2026-11-01T06:15:00Z")
+            ),
+            Some("2026-11-02T06:30:00.000Z".into())
+        );
+    }
+
+    #[test]
+    fn cron_weekday_names_and_frequent_overlap_candidates_are_correct() {
+        let parse = |value: &str| {
+            chrono::DateTime::parse_from_rfc3339(value)
+                .unwrap()
+                .with_timezone(&chrono::Utc)
+        };
+        assert_eq!(
+            calculate_next_run_at("0 0 9 * * MON-FRI", "UTC", parse("2026-10-18T08:00:00Z")),
+            Some("2026-10-19T09:00:00.000Z".into())
+        );
+        assert_eq!(
+            calculate_next_run_at("0 0 9 * * SAT,SUN", "UTC", parse("2026-10-19T08:00:00Z")),
+            Some("2026-10-24T09:00:00.000Z".into())
+        );
+        assert_eq!(
+            calculate_next_run_at(
+                "* * * * * *",
+                "America/New_York",
+                parse("2026-11-01T06:15:00Z")
+            ),
+            Some("2026-11-01T07:00:00.000Z".into())
+        );
+    }
 
     #[test]
     fn test_validate_cron_valid() {

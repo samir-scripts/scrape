@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 pub fn first_local_instant(timezone: Tz, local: NaiveDateTime) -> Option<DateTime<Utc>> {
-    for minute in 0..=2880 {
-        match timezone.from_local_datetime(&(local + Duration::minutes(minute))) {
+    for second in 0..=172800 {
+        match timezone.from_local_datetime(&(local + Duration::seconds(second))) {
             LocalResult::Single(dt) => return Some(dt.with_timezone(&Utc)),
             LocalResult::Ambiguous(a, b) => return Some(a.min(b).with_timezone(&Utc)),
             LocalResult::None => {}
