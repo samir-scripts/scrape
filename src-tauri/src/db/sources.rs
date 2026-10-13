@@ -139,6 +139,32 @@ impl SourcesRepo {
         Self::row_to_source(&r)
     }
 
+    async fn next_run_for_schedule(
+        pool: &SqlitePool,
+        cadence: SourceCadence,
+        cron: Option<&str>,
+        enabled: bool,
+    ) -> Result<Option<String>> {
+        if !enabled || matches!(cadence, SourceCadence::Global | SourceCadence::Manual) {
+            return Ok(None);
+        }
+        let expression = if cadence == SourceCadence::Cron {
+            cron
+        } else {
+            cadence.default_cron()
+        }
+        .ok_or_else(|| {
+            AppError::Validation("A custom schedule requires a cron expression".into())
+        })?;
+        let timezone: String =
+            crate::db::settings::SettingsRepo::get_value(pool, "system.timezone")
+                .await?
+                .unwrap_or_else(|| "UTC".into());
+        crate::services::scheduler::calculate_next_run(expression, &timezone)
+            .map(Some)
+            .ok_or_else(|| AppError::Validation("Schedule has no valid future occurrence".into()))
+    }
+
     pub async fn create(pool: &SqlitePool, input: CreateSourceInput) -> Result<Source> {
         let id = Uuid::now_v7().to_string();
         let created_at = now_iso();
@@ -165,10 +191,21 @@ impl SourcesRepo {
             None => "{}".to_string(),
         };
 
+        let next_run = Self::next_run_for_schedule(
+            pool,
+            cadence,
+            input.cadence_cron.as_deref(),
+            enabled_val == 1,
+        )
+        .await?;
+        crate::services::runner::resolve_worker_filters(
+            input.filters.as_ref().unwrap_or(&serde_json::Value::Null),
+            scrape_core::WorkerFilters::default(),
+        )?;
         sqlx::query(
             r#"
             INSERT INTO sources (id, kind, name, identifier, config, enabled, created_at, cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, NULL, ?10, ?11, ?12)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?13, NULL, ?10, ?11, ?12)
             "#,
         )
         .bind(&id)
@@ -183,6 +220,7 @@ impl SourcesRepo {
         .bind(retention_days)
         .bind(retention_policy)
         .bind(filters_str)
+        .bind(next_run)
         .execute(pool)
         .await?;
 
@@ -211,12 +249,18 @@ impl SourcesRepo {
         let retention_policy = input.retention_policy.unwrap_or(existing.retention_policy);
         let filters = input.filters.unwrap_or(existing.filters);
         let filters_str = serde_json::to_string(&filters)?;
+        crate::services::runner::resolve_worker_filters(
+            &filters,
+            scrape_core::WorkerFilters::default(),
+        )?;
+        let next_run =
+            Self::next_run_for_schedule(pool, cadence, cadence_cron.as_deref(), enabled).await?;
 
         sqlx::query(
             r#"
             UPDATE sources
             SET name = ?1, identifier = ?2, config = ?3, enabled = ?4, cadence = ?5, cadence_cron = ?6,
-                retention_days = ?7, retention_policy = ?8, filters = ?9
+                retention_days = ?7, retention_policy = ?8, filters = ?9, next_run_at = ?11
             WHERE id = ?10
             "#,
         )
@@ -230,6 +274,7 @@ impl SourcesRepo {
         .bind(retention_policy)
         .bind(filters_str)
         .bind(input.id.clone())
+        .bind(next_run)
         .execute(pool)
         .await?;
 
@@ -303,6 +348,10 @@ impl SourcesRepo {
     }
 
     pub async fn get_due_sources(pool: &SqlitePool) -> Result<Vec<Source>> {
+        Self::get_due_sources_at(pool, &now_iso()).await
+    }
+
+    pub async fn get_due_sources_at(pool: &SqlitePool, now: &str) -> Result<Vec<Source>> {
         let rows = sqlx::query(
             r#"
             SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_error, created_at,
@@ -312,10 +361,11 @@ impl SourcesRepo {
               AND cadence != 'global'
               AND cadence != 'manual'
               AND next_run_at IS NOT NULL
-              AND next_run_at <= datetime('now')
-            ORDER BY next_run_at ASC
+              AND julianday(next_run_at) <= julianday(?)
+            ORDER BY julianday(next_run_at) ASC
             "#,
         )
+        .bind(now)
         .fetch_all(pool)
         .await?;
 
@@ -455,6 +505,27 @@ mod tests {
 
         SourcesRepo::delete(&pool, &created.id).await.unwrap();
         assert!(SourcesRepo::get(&pool, &created.id).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn due_sources_use_instants_and_exclude_manual_and_disabled() {
+        let pool = init_memory_db().await.unwrap();
+        for (id, cadence, enabled, next) in [
+            ("offset", "daily", true, "2026-10-13T09:00:00+02:00"),
+            ("future", "daily", true, "2026-10-13T08:00:00Z"),
+            ("manual", "manual", true, "2026-10-13T06:00:00Z"),
+            ("disabled", "daily", false, "2026-10-13T06:00:00Z"),
+        ] {
+            sqlx::query("INSERT INTO sources (id, kind, name, identifier, created_at, cadence, enabled, next_run_at) VALUES (?1, 'greenhouse', ?1, ?1, '2026-01-01', ?2, ?3, ?4)")
+                .bind(id).bind(cadence).bind(enabled).bind(next).execute(&pool).await.unwrap();
+        }
+        let due = SourcesRepo::get_due_sources_at(&pool, "2026-10-13T07:00:00Z")
+            .await
+            .unwrap();
+        assert_eq!(
+            due.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(),
+            ["offset"]
+        );
     }
 
     #[tokio::test]

@@ -8,6 +8,7 @@ use cron::Schedule;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::AppHandle;
@@ -35,7 +36,7 @@ pub struct SchedulerStatus {
 pub struct SchedulerService {
     scheduler: JobScheduler,
     job_id: Option<Uuid>,
-    is_paused: bool,
+    is_paused: Arc<AtomicBool>,
     pool: SqlitePool,
     runner: ScrapeRunner,
     app: AppHandle,
@@ -54,7 +55,7 @@ impl SchedulerService {
         let service = Arc::new(Mutex::new(Self {
             scheduler,
             job_id: None,
-            is_paused: false,
+            is_paused: Arc::new(AtomicBool::new(true)),
             pool: pool.clone(),
             runner: runner.clone(),
             app: app.clone(),
@@ -77,6 +78,11 @@ impl SchedulerService {
             .flatten()
             .unwrap_or(false);
 
+        service
+            .lock()
+            .await
+            .is_paused
+            .store(!enabled, Ordering::SeqCst);
         if enabled {
             let mut s = service.lock().await;
             if let Err(e) = s.schedule_job(&cron_expr).await {
@@ -94,17 +100,22 @@ impl SchedulerService {
         }
 
         // Run on startup delay (~10s) if enabled
-        if run_on_startup {
+        if enabled && run_on_startup {
+            let paused = service.lock().await.is_paused.clone();
             let app_clone = app.clone();
             let runner_clone = runner.clone();
             tokio::spawn(async move {
                 tokio::time::sleep(Duration::from_secs(10)).await;
+                if paused.load(Ordering::SeqCst) {
+                    return;
+                }
                 tracing::info!("Executing startup scrape trigger...");
                 let _ = runner_clone.trigger(&app_clone, TriggerType::Startup).await;
             });
         }
 
         // Background ticker for custom cadence sources (checks every 60 seconds)
+        let paused = service.lock().await.is_paused.clone();
         let ticker_pool = pool.clone();
         let ticker_runner = runner.clone();
         let ticker_app = app.clone();
@@ -112,10 +123,16 @@ impl SchedulerService {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             loop {
                 interval.tick().await;
+                if paused.load(Ordering::SeqCst) {
+                    continue;
+                }
                 if let Ok(due_sources) =
                     crate::db::sources::SourcesRepo::get_due_sources(&ticker_pool).await
                 {
                     for source in due_sources {
+                        if paused.load(Ordering::SeqCst) {
+                            break;
+                        }
                         tracing::info!(
                             "Custom cadence trigger for source {} ({})",
                             source.name,
@@ -144,13 +161,21 @@ impl SchedulerService {
             .unwrap_or_else(|| "UTC".to_string());
         let tz = Tz::from_str(&tz_str).unwrap_or(chrono_tz::UTC);
 
+        if self.is_paused.load(Ordering::SeqCst) {
+            return Ok(());
+        }
+        let paused = self.is_paused.clone();
         let runner = self.runner.clone();
         let app = self.app.clone();
 
         let job = Job::new_async_tz(cron_expr, tz, move |_uuid, _lock| {
+            let paused = paused.clone();
             let runner = runner.clone();
             let app = app.clone();
             Box::pin(async move {
+                if paused.load(Ordering::SeqCst) {
+                    return;
+                }
                 tracing::info!("Scheduler tick: triggering scrape...");
                 let _ = runner.trigger(&app, TriggerType::Schedule).await;
             })
@@ -174,7 +199,7 @@ impl SchedulerService {
     }
 
     pub async fn set_paused(&mut self, paused: bool) -> Result<()> {
-        self.is_paused = paused;
+        self.is_paused.store(paused, Ordering::SeqCst);
         if paused {
             if let Some(id) = self.job_id.take() {
                 let _ = self.scheduler.remove(&id).await;
@@ -191,7 +216,7 @@ impl SchedulerService {
     }
 
     pub async fn get_status(&self) -> Result<SchedulerStatus> {
-        let enabled = !self.is_paused && self.job_id.is_some();
+        let enabled = !self.is_paused.load(Ordering::SeqCst);
         let running = self.runner.is_running();
 
         let cron_expr: String = SettingsRepo::get_value(&self.pool, "scraper.cron")
@@ -205,7 +230,11 @@ impl SchedulerService {
             .flatten()
             .unwrap_or_else(|| "UTC".to_string());
 
-        let next_run_at = calculate_next_run(&cron_expr, &tz_str);
+        let next_run_at = if enabled {
+            calculate_next_run(&cron_expr, &tz_str)
+        } else {
+            None
+        };
 
         Ok(SchedulerStatus {
             enabled,
@@ -223,7 +252,10 @@ pub fn validate_cron_expression(expr: &str, tz_str: &str) -> CronValidationResul
             let next_runs: Vec<String> = schedule
                 .after(&now)
                 .take(3)
-                .map(|dt| dt.to_rfc3339_opts(SecondsFormat::Millis, true))
+                .map(|dt| {
+                    dt.with_timezone(&chrono::Utc)
+                        .to_rfc3339_opts(SecondsFormat::Millis, true)
+                })
                 .collect();
             CronValidationResult {
                 ok: true,
@@ -243,10 +275,10 @@ pub fn calculate_next_run(cron_expr: &str, tz_str: &str) -> Option<String> {
     let tz = Tz::from_str(tz_str).unwrap_or(chrono_tz::UTC);
     let schedule = Schedule::from_str(cron_expr).ok()?;
     let now = chrono::Utc::now().with_timezone(&tz);
-    schedule
-        .after(&now)
-        .next()
-        .map(|dt| dt.to_rfc3339_opts(SecondsFormat::Millis, true))
+    schedule.after(&now).next().map(|dt| {
+        dt.with_timezone(&chrono::Utc)
+            .to_rfc3339_opts(SecondsFormat::Millis, true)
+    })
 }
 
 pub fn calculate_next_run_for_source(
