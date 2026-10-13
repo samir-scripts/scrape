@@ -96,6 +96,30 @@ async fn has_pending_migrations(pool: &SqlitePool) -> Result<bool> {
             "Migration history has missing versions; refusing automatic repair. See plans/database-recovery.md.".into(),
         ));
     }
+    // Metadata may have been relabeled by older releases. Compare the actual
+    // schema with the exact supported migration prefix before allowing writes.
+    let reference = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(SqliteConnectOptions::new().filename(":memory:"))
+        .await?;
+    let mut historical = sqlx::migrate!("./migrations");
+    historical.migrations = historical
+        .iter()
+        .take(applied.len())
+        .cloned()
+        .collect::<Vec<_>>()
+        .into();
+    historical.run(&reference).await?;
+    let schema_sql = "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name != '_sqlx_migrations' ORDER BY type, name";
+    type SchemaObject = (String, String, String, Option<String>);
+    let expected: Vec<SchemaObject> = sqlx::query_as(schema_sql).fetch_all(&reference).await?;
+    let actual: Vec<SchemaObject> = sqlx::query_as(schema_sql).fetch_all(pool).await?;
+    reference.close().await;
+    if actual != expected {
+        return Err(crate::error::AppError::Validation(
+            "Database schema does not match its migration history. No automatic reconciliation was performed. Preserve the database and use a compatible backup or reviewed forward repair; see plans/database-recovery.md.".into(),
+        ));
+    }
     Ok(applied.len() < migrator.iter().count())
 }
 
@@ -216,6 +240,33 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    async fn matching_checksums_do_not_hide_an_unknown_schema() {
+        let pool = init_memory_db().await.unwrap();
+        let before: Vec<(i64, Vec<u8>)> =
+            sqlx::query_as("SELECT version, checksum FROM _sqlx_migrations ORDER BY version")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        sqlx::query("ALTER TABLE jobs ADD COLUMN unexpected TEXT")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let err = run_migrations(&pool).await.unwrap_err();
+        assert!(err.to_string().contains("schema does not match"));
+        let after: Vec<(i64, Vec<u8>)> =
+            sqlx::query_as("SELECT version, checksum FROM _sqlx_migrations ORDER BY version")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert_eq!(before, after);
+        // Failure does not drop or rewrite the unfamiliar column.
+        sqlx::query("SELECT unexpected FROM jobs")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

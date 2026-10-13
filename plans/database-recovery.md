@@ -27,8 +27,9 @@ If startup reports a mismatch:
 
 No automatic reconciliation is currently offered for databases whose checksums
 were previously rewritten. Their actual schema needs review and a tested forward
-repair. Matching metadata alone cannot establish that these historical databases
-are correct. Unknown states must not be relabeled as supported.
+repair. Startup compares the actual schema against an independently built historical
+migration prefix, so rewritten checksums cannot hide a structural mismatch.
+Unknown states are rejected without automatic reconciliation.
 
 Migration 0006 already matches the restored historical file in commit 9998f5a;
 its follow-up 0007 remains separate. This implementation does not rewrite either.
