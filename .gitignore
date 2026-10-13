@@ -3,7 +3,7 @@ node_modules/
 
 # Build output
 dist/
-target/
+/target
 src-tauri/gen/schemas/*.json
 
 # Sidecar binaries (built per target by scripts/build-sidecar.mjs)

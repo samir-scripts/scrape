@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtemp, writeFile, chmod } from "node:fs/promises";
+import { mkdtemp, writeFile, chmod, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 const directory = await mkdtemp(join(tmpdir(), "scrape-native-smoke-"));
@@ -122,7 +122,8 @@ let child;
 try {
   const deadline = Date.now() + 15000;
   while (Date.now() < deadline) { try { if ((await fetch("http://127.0.0.1:1420")).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
-  child = spawn(resolve("target/debug/scrape"), [], { env: { ...process.env, SCRAPE_NATIVE_SMOKE_DIR: directory }, stdio: "inherit" });
+  // Tauri resolves adjacent sidecars only from a canonical executable path.
+  child = spawn(await realpath(resolve("target/debug/scrape")), [], { env: { ...process.env, SCRAPE_NATIVE_SMOKE_DIR: directory }, stdio: "inherit" });
   const timer = setTimeout(() => child.kill("SIGKILL"), 70000);
   const code = await new Promise(resolve => child.once("exit", resolve)); clearTimeout(timer);
   if (code !== 0) throw new Error(`Native smoke failed (${code}); isolated artifacts: ${directory}`);
