@@ -6,6 +6,8 @@
 
 ## Index of Recorded Errors
 
+25. [Native startup: historical migration-12 variant](25-native-startup-migration-12.md)
+
 1. [Sqlx: Query Macro DATABASE_URL Requirement](#1-sqlx-query-macro-database_url-requirement)
 2. [Tauri: Icon Format RGBA Panic](#2-tauri-icon-format-rgba-panic)
 3. [Rust: Result Type Alias Shadowing Serde Trait Signature](#3-rust-result-type-alias-shadowing-serde-trait-signature)
@@ -406,6 +408,9 @@
 
 ### 24. SQLx Migration Checksum VersionMismatch & Non-Unwinding macOS Startup Panic
 
+> Superseded: the checksum-synchronization workaround below is unsafe and has been
+> removed. Never apply it. See [incident 25 and the reviewed repair plan](25-native-startup-migration-12.md).
+
 - **Phase:** Phase 3.10 (Workflow Hardening & Notification Error Storage)
 - **Error Signature:**
   ```text
@@ -429,3 +434,13 @@
 
 
 
+
+
+### 25. Native startup rejects the historical migration-12 variant
+
+Recorded 2026-10-13: exact stored checksum and 31 schema objects match an earlier
+version of migration 12. Later additions were placed in the same migration.
+Read-only refusal is correct; native `.expect()` causes the non-unwinding abort.
+The fresh-database native harness missed this historical variant.
+See [research, error log and proposed repair](25-native-startup-migration-12.md).
+Repair has not been implemented; live data and migration checksums remain intact.

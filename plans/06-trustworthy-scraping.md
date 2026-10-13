@@ -1,6 +1,12 @@
 # Trustworthy scraping, simpler workflows, and consistent UI
 
-Status: implemented; final clean-checkout verification recorded below. This specification supersedes conflicting behavior in older plans, especially permanent deletion and implicit browser demonstration. Source: user-supplied implementation plan, 2026-10-13. This is its implementation checklist; unchecked items are requirements, not shipped capabilities.
+Status: implementation present, but completion reopened by the historical migration-12 native startup failure. See [incident 25 and repair plan](errors/25-native-startup-migration-12.md). This specification supersedes conflicting behavior in older plans, especially permanent deletion and implicit browser demonstration. Source: user-supplied implementation plan, 2026-10-13. This is its implementation checklist; unchecked items are requirements, not shipped capabilities.
+
+## Reopened acceptance requirements
+
+- [ ] Support the exact observed historical migration-12 history through a backed-up forward repair, retaining existing checksums and saved state.
+- [ ] Handle native initialization failures without a macOS abort.
+- [ ] Verify actual Tauri development startup on both migration-12 histories and safe refusal of unknown states.
 
 ## Baseline
 
@@ -90,7 +96,11 @@ CI: Rust fmt, Clippy, workspace tests, generated binding drift, TypeScript, full
 Completion requires every high-priority defect regression-tested, preview/run parity, explicit-hourly matching, source links preserved, manageable reversible cross-workflow blocks, pause/timezone/per-workflow scheduling, migration/retention preservation, visual/keyboard QA, clean-checkout checks, truthful docs, small commits and recovery path. Do not mark complete while any requirement remains unverified.
 
 
-## Final implementation and verification (2026-10-13)
+## Prior completion claim and verification (2026-10-13)
+
+The passing checks below did not cover the exact earlier version-12 migration
+variant in the existing installation. Native startup currently fails for that
+recognized historical state; the new repair plan supersedes the completion claim.
 
 The early partial checkpoint is superseded by the implemented phases above.
 All original work remains in baseline `02dc881`; behavior, tests, documentation
