@@ -134,6 +134,7 @@ fn parse_job_posting_map(
         .filter(|u| matches!(u.scheme(), "http" | "https"));
     let Some(job_url) = job_url else {
         return Some(WorkerEvent::Error {
+            invalid_posting: Some(true),
             source_id: source.id.clone(),
             message: format!("Posting '{title}' has no valid HTTP(S) detail URL on {page_url}"),
             retryable: false,

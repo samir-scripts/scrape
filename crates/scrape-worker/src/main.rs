@@ -170,13 +170,19 @@ async fn execute_worker(
 
         match adapters::scrape_source(&client, source).await {
             Ok(events) => {
-                stats.sources_ok += 1;
+                let has_invalid = events
+                    .iter()
+                    .any(|event| matches!(event, WorkerEvent::Error { .. }));
+                if has_invalid {
+                    stats.sources_failed += 1;
+                } else {
+                    stats.sources_ok += 1;
+                }
                 let fetched_count = events.len() as u64;
                 let mut matched_count = 0u64;
 
                 for event in events {
                     if let WorkerEvent::Error { .. } = &event {
-                        stats.sources_failed += 1;
                         emit_event(&event)?;
                         continue;
                     }
@@ -229,6 +235,7 @@ async fn execute_worker(
             Err(err) => {
                 stats.sources_failed += 1;
                 let error_event = WorkerEvent::Error {
+                    invalid_posting: Some(false),
                     source_id: source.id.clone(),
                     message: err.to_string(),
                     retryable: matches!(

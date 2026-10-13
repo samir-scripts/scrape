@@ -7,9 +7,15 @@ use crate::state::AppState;
 use scrape_core::{
     WorkerConfig, WorkerEvent, WorkerFilters, WorkerLimits, WorkerSource, PROTOCOL_VERSION,
 };
+use serde::{Deserialize, Serialize};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, LazyLock, Mutex as StdMutex,
+};
 use tauri::{AppHandle, State};
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
+use ts_rs::TS;
 
 #[tauri::command]
 pub async fn run_scrape_now(app: AppHandle, state: State<'_, AppState>) -> Result<ScrapeRun> {
@@ -107,10 +113,33 @@ pub struct TransientSourceInput {
     pub filters: Option<serde_json::Value>,
 }
 
+static PREVIEW_CANCEL: LazyLock<StdMutex<std::collections::HashMap<String, Arc<AtomicBool>>>> =
+    LazyLock::new(|| StdMutex::new(std::collections::HashMap::new()));
+struct PreviewRegistration(String);
+impl Drop for PreviewRegistration {
+    fn drop(&mut self) {
+        PREVIEW_CANCEL.lock().unwrap().remove(&self.0);
+    }
+}
+async fn terminate_preview(
+    child: tauri_plugin_shell::process::CommandChild,
+    receiver: &mut tauri::async_runtime::Receiver<CommandEvent>,
+) {
+    let _ = child.kill();
+    let until = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    while let Ok(Some(event)) = tokio::time::timeout_at(until, receiver.recv()).await {
+        if matches!(event, CommandEvent::Terminated(_)) {
+            break;
+        }
+    }
+}
+
 async fn execute_dry_run_worker(
     app: &AppHandle,
     worker_source: WorkerSource,
     filters: WorkerFilters,
+    full_preview: bool,
+    cancel: Option<Arc<AtomicBool>>,
 ) -> Result<Vec<WorkerEvent>> {
     let config = WorkerConfig {
         version: PROTOCOL_VERSION,
@@ -125,7 +154,11 @@ async fn execute_dry_run_worker(
         .shell()
         .sidecar("scrape-worker")
         .map_err(|e| AppError::Internal(format!("Failed to find sidecar: {}", e)))?
-        .args(["--stdin", "--dry-run"])
+        .args(if full_preview {
+            vec!["--stdin"]
+        } else {
+            vec!["--stdin", "--dry-run"]
+        })
         .spawn()
         .map_err(|e| AppError::Internal(format!("Failed to spawn sidecar: {}", e)))?;
 
@@ -144,11 +177,19 @@ async fn execute_dry_run_worker(
     let mut failure = None;
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(60);
     loop {
-        let event = match tokio::time::timeout_at(deadline, rx.recv()).await {
+        if cancel
+            .as_ref()
+            .is_some_and(|flag| flag.load(Ordering::SeqCst))
+        {
+            terminate_preview(child, &mut rx).await;
+            return Err(AppError::Internal("Preview cancelled".into()));
+        }
+        let incoming = tokio::select! { result=tokio::time::timeout_at(deadline,rx.recv())=>result, _=tokio::time::sleep(std::time::Duration::from_millis(100))=>continue };
+        let event = match incoming {
             Ok(Some(event)) => event,
             Ok(None) => break,
             Err(_) => {
-                let _ = child.kill();
+                terminate_preview(child, &mut rx).await;
                 return Err(AppError::Internal(
                     "Preview timed out after 60 seconds".into(),
                 ));
@@ -205,7 +246,7 @@ pub async fn test_source_transient(
         identifier: input.identifier,
         config: input.config.unwrap_or_else(|| serde_json::json!({})),
     };
-    execute_dry_run_worker(&app, worker_source, filters).await
+    execute_dry_run_worker(&app, worker_source, filters, false, None).await
 }
 
 #[tauri::command]
@@ -226,10 +267,215 @@ pub async fn test_source(
         identifier: source.identifier,
         config: source.config,
     };
-    execute_dry_run_worker(&app, worker_source, filters).await
+    execute_dry_run_worker(&app, worker_source, filters, false, None).await
 }
 
 #[tauri::command]
 pub async fn open_terminal_console(app: AppHandle) -> Result<()> {
     crate::services::system::SystemService::launch_terminal_console(&app)
+}
+
+#[tauri::command]
+pub async fn validate_workflow(
+    state: State<'_, AppState>,
+    spec: serde_json::Value,
+) -> Result<crate::services::workflow::WorkflowSpec> {
+    let timezone: String = SettingsRepo::get_value(&state.db, "system.timezone")
+        .await?
+        .unwrap_or_else(|| "UTC".into());
+    crate::services::workflow::validate(spec, &timezone)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PreviewPosting {
+    pub identity: String,
+    pub job: WorkerEvent,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct WorkflowPreview {
+    pub spec: crate::services::workflow::WorkflowSpec,
+    pub jobs: Vec<PreviewPosting>,
+    #[ts(type = "number")]
+    pub fetched: u64,
+    #[ts(type = "number")]
+    pub matched: u64,
+    #[ts(type = "number")]
+    pub rejected: u64,
+    #[ts(type = "number")]
+    pub blocked: u64,
+    #[ts(type = "number")]
+    pub invalid: u64,
+    pub sampled: bool,
+    pub errors: Vec<String>,
+    pub next_run_at: Option<String>,
+}
+#[tauri::command]
+pub async fn preview_workflow(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    spec: serde_json::Value,
+    request_id: String,
+) -> Result<WorkflowPreview> {
+    let timezone: String = SettingsRepo::get_value(&state.db, "system.timezone")
+        .await?
+        .unwrap_or_else(|| "UTC".into());
+    let spec = crate::services::workflow::validate(spec, &timezone)?;
+    let source = crate::services::workflow::source_input(&spec, &timezone)?;
+    let filters = crate::services::runner::resolve_worker_filters(
+        source.filters.as_ref().unwrap_or(&serde_json::Value::Null),
+        crate::services::runner::load_global_filters(&state.db).await?,
+    )?;
+    let _guard = state.runner.try_acquire_lock()?;
+    let cancel = Arc::new(AtomicBool::new(false));
+    PREVIEW_CANCEL
+        .lock()
+        .unwrap()
+        .insert(request_id.clone(), cancel.clone());
+    let _registration = PreviewRegistration(request_id);
+
+    let events = execute_dry_run_worker(
+        &app,
+        WorkerSource {
+            id: "preview".into(),
+            kind: source.kind,
+            name: spec
+                .metadata
+                .company
+                .clone()
+                .unwrap_or_else(|| source.name.clone()),
+            identifier: source.identifier.clone(),
+            config: source.config.clone().unwrap_or(serde_json::Value::Null),
+        },
+        filters,
+        true,
+        Some(cancel),
+    )
+    .await?;
+    let mut result = WorkflowPreview {
+        spec: spec.clone(),
+        jobs: vec![],
+        fetched: 0,
+        matched: 0,
+        rejected: 0,
+        blocked: 0,
+        invalid: 0,
+        sampled: false,
+        errors: vec![],
+        next_run_at: crate::services::calendar::next_for_source(
+            source.cadence.unwrap_or_default(),
+            source.cadence_cron.as_deref(),
+            source.config.as_ref().unwrap_or(&serde_json::Value::Null),
+            source.enabled.unwrap_or(true),
+            &timezone,
+            chrono::Utc::now(),
+        )?,
+    };
+    for event in events {
+        match event {
+            WorkerEvent::Job {
+                ref external_id,
+                ref url,
+                ..
+            } => {
+                let identity = scrape_core::PostingIdentity::for_posting(
+                    Some(source.kind),
+                    Some(&source.identifier),
+                    Some(external_id),
+                    url,
+                )
+                .map_err(AppError::Validation)?
+                .key;
+                let blocked: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM blocked_postings WHERE identity=?)",
+                )
+                .bind(&identity)
+                .fetch_one(&state.db)
+                .await?;
+                if blocked {
+                    result.blocked += 1;
+                } else if result.jobs.len() < 10 {
+                    result.jobs.push(PreviewPosting {
+                        identity,
+                        job: event,
+                    });
+                }
+            }
+            WorkerEvent::Progress {
+                fetched, matched, ..
+            } => {
+                result.fetched += fetched;
+                result.matched += matched;
+            }
+            WorkerEvent::Error {
+                message,
+                invalid_posting,
+                ..
+            } => {
+                if invalid_posting == Some(true) {
+                    result.invalid += 1;
+                }
+                result.errors.push(message);
+            }
+            _ => {}
+        }
+    }
+    result.rejected = result
+        .fetched
+        .saturating_sub(result.matched + result.invalid);
+    result.sampled = result.matched.saturating_sub(result.blocked) > result.jobs.len() as u64;
+    Ok(result)
+}
+#[tauri::command]
+pub async fn save_workflow(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    spec: serde_json::Value,
+    id: Option<String>,
+) -> Result<crate::db::sources::Source> {
+    let timezone: String = SettingsRepo::get_value(&state.db, "system.timezone")
+        .await?
+        .unwrap_or_else(|| "UTC".into());
+    let spec = crate::services::workflow::validate(spec, &timezone)?;
+    let input = crate::services::workflow::source_input(&spec, &timezone)?;
+    let source = if let Some(id) = id {
+        let old = SourcesRepo::get(&state.db, &id).await?;
+        if old.kind != input.kind {
+            return Err(AppError::Validation(
+                "Create a new workflow to change the source adapter".into(),
+            ));
+        }
+        SourcesRepo::update(
+            &state.db,
+            crate::db::sources::UpdateSourceInput {
+                id,
+                name: Some(input.name),
+                identifier: Some(input.identifier),
+                config: input.config,
+                enabled: input.enabled,
+                cadence: input.cadence,
+                cadence_cron: input.cadence_cron,
+                retention_days: input.retention_days,
+                retention_policy: input.retention_policy,
+                filters: input.filters,
+            },
+        )
+        .await?
+    } else {
+        SourcesRepo::create(&state.db, input).await?
+    };
+    use tauri::Emitter;
+    let _ = app.emit("sources://changed", &source);
+    Ok(source)
+}
+
+#[tauri::command]
+pub fn cancel_workflow_preview(request_id: String) -> bool {
+    if let Some(flag) = PREVIEW_CANCEL.lock().unwrap().get(&request_id) {
+        flag.store(true, Ordering::SeqCst);
+        true
+    } else {
+        false
+    }
 }

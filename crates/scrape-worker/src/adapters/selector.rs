@@ -171,6 +171,7 @@ pub fn extract_jobs_with_selectors(
     let loc_sel = optional_selector("location", loc_sel_str)?;
     let sal_sel = optional_selector("salary", sal_sel_str)?;
     let desc_sel = optional_selector("description", desc_sel_str)?;
+    let date_sel = optional_selector("date", source.config.get("date").and_then(|v| v.as_str()))?;
 
     let document = Html::parse_document(html_text);
     let mut events = Vec::new();
@@ -230,6 +231,7 @@ pub fn extract_jobs_with_selectors(
             Ok(u) if matches!(u.scheme(), "http" | "https") => u.to_string(),
             _ => {
                 events.push(WorkerEvent::Error {
+                    invalid_posting: Some(true),
                     source_id: source.id.clone(),
                     message: format!("Posting '{title}' has an invalid HTTP(S) destination"),
                     retryable: false,
@@ -324,6 +326,17 @@ pub fn extract_jobs_with_selectors(
             .map(|e| e.is_new_grad)
             .unwrap_or(TriState::Unknown);
 
+        let date_posted = date_sel
+            .as_ref()
+            .and_then(|selector| item.select(selector).next())
+            .and_then(|element| {
+                let raw = element
+                    .value()
+                    .attr("datetime")
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| element.text().collect::<String>().trim().to_owned());
+                scrape_core::posting_date::posting_instant(&raw, "UTC").map(|_| raw)
+            });
         let company_icon_url = base_url
             .host_str()
             .map(|h| format!("https://www.google.com/s2/favicons?domain={h}&sz=64"));
@@ -336,7 +349,7 @@ pub fn extract_jobs_with_selectors(
             role_type,
             location,
             url: job_url,
-            date_posted: None,
+            date_posted,
             salary,
             locations,
             workplace_type,

@@ -29,6 +29,7 @@ pub async fn scrape_source(
                     url::Url::parse(url).is_ok_and(|u| matches!(u.scheme(), "http" | "https"));
                 if !valid {
                     return WorkerEvent::Error {
+                        invalid_posting: Some(true),
                         source_id: source.id.clone(),
                         message: format!("Posting '{title}' has an invalid HTTP(S) destination"),
                         retryable: false,

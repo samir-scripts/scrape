@@ -101,11 +101,18 @@ pub fn next_for_source(
         cadence.default_cron()
     }
     .ok_or_else(|| AppError::Validation("Custom schedules require a cron expression".into()))?;
-    super::scheduler::calculate_next_run_at(expression, timezone, after)
-        .map(Some)
-        .ok_or_else(|| {
-            AppError::Validation("Schedule or timezone has no valid future occurrence".into())
-        })
+    super::scheduler::calculate_next_run_at(
+        expression,
+        config
+            .get("__cron_timezone")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or(timezone),
+        after,
+    )
+    .map(Some)
+    .ok_or_else(|| {
+        AppError::Validation("Schedule or timezone has no valid future occurrence".into())
+    })
 }
 
 #[cfg(test)]

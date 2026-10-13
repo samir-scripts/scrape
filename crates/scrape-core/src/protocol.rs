@@ -261,6 +261,9 @@ pub enum WorkerEvent {
         matched: u64,
     },
     Error {
+        #[serde(default)]
+        #[ts(optional = nullable)]
+        invalid_posting: Option<bool>,
         source_id: String,
         message: String,
         retryable: bool,

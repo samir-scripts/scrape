@@ -165,7 +165,12 @@ impl ScrapeRunner {
             .map(|s| WorkerSource {
                 id: s.id,
                 kind: s.kind,
-                name: s.name,
+                name: s
+                    .config
+                    .get("__company")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(&s.name)
+                    .to_owned(),
                 identifier: s.identifier,
                 config: s.config,
             })
@@ -381,7 +386,12 @@ impl ScrapeRunner {
             sources: vec![WorkerSource {
                 id: source.id.clone(),
                 kind: source.kind,
-                name: source.name.clone(),
+                name: source
+                    .config
+                    .get("__company")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(&source.name)
+                    .to_owned(),
                 identifier: source.identifier.clone(),
                 config: source.config.clone(),
             }],
@@ -805,6 +815,7 @@ impl ScrapeRunner {
                                     source_id,
                                     message,
                                     retryable,
+                                    ..
                                 } => {
                                     source_statuses.insert(
                                         source_id.clone(),

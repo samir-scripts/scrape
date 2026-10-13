@@ -36,3 +36,7 @@ tracing.workspace = true
 ts-rs.workspace = true
 sys-locale = "0.3"
 iana-time-zone = "0.1"
+serde_path_to_error = "0.1"
+url = "2"
+regex.workspace = true
+scraper = "0.27"
