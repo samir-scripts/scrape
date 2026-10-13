@@ -23,6 +23,11 @@ pub async fn run_scrape_now(app: AppHandle, state: State<'_, AppState>) -> Resul
 }
 
 #[tauri::command]
+pub fn cancel_scrape(state: State<'_, AppState>) -> bool {
+    state.runner.cancel_current()
+}
+
+#[tauri::command]
 pub async fn list_scrape_runs(
     state: State<'_, AppState>,
     limit: Option<i64>,
@@ -122,7 +127,7 @@ impl Drop for PreviewRegistration {
     }
 }
 async fn terminate_preview(
-    child: tauri_plugin_shell::process::CommandChild,
+    mut child: crate::services::process::ChildGuard,
     receiver: &mut tauri::async_runtime::Receiver<CommandEvent>,
 ) {
     let _ = child.kill();
@@ -150,7 +155,7 @@ async fn execute_dry_run_worker(
         limits: WorkerLimits::default(),
     };
 
-    let (mut rx, mut child) = app
+    let (mut rx, child) = app
         .shell()
         .sidecar("scrape-worker")
         .map_err(|e| AppError::Internal(format!("Failed to find sidecar: {}", e)))?
@@ -162,6 +167,7 @@ async fn execute_dry_run_worker(
         .spawn()
         .map_err(|e| AppError::Internal(format!("Failed to spawn sidecar: {}", e)))?;
 
+    let mut child = crate::services::process::ChildGuard::new(child);
     let mut config_bytes = serde_json::to_vec(&config)?;
     config_bytes.push(b'\n');
     if let Err(error) = child.write(&config_bytes) {
@@ -213,6 +219,7 @@ async fn execute_dry_run_worker(
                 }
             }
             CommandEvent::Terminated(status) => {
+                child.disarm();
                 exit = status.code;
                 break;
             }

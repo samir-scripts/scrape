@@ -229,6 +229,8 @@ pub struct ScrapedJob {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS, PartialEq)]
 #[ts(export)]
 pub struct UpsertStats {
+    #[ts(type = "number")]
+    pub blocked: i64,
     pub total: i64,
     pub inserted: i64,
     pub updated: i64,
@@ -961,6 +963,7 @@ impl JobsRepo {
             let blocked: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM blocked_postings WHERE identity = ? OR legacy_key = ?)")
                 .bind(&identity).bind(&job.dedupe_key).fetch_one(&mut *tx).await?;
             if blocked {
+                stats.blocked += 1;
                 continue;
             }
 
@@ -1224,10 +1227,11 @@ impl JobsRepo {
                 }
             }
             sqlx::query(
-                "UPDATE jobs SET posting_identity = ?, provider_updated_at = ?, removed_at = NULL, source_name_snapshot = COALESCE(source_name_snapshot, (SELECT name FROM sources WHERE id = jobs.source_id)) WHERE dedupe_key = ?",
+                "UPDATE jobs SET posting_identity = ?, provider_updated_at = ?, compensation_json = ?, compensation_migrated = 1, removed_at = NULL, source_name_snapshot = COALESCE(source_name_snapshot, (SELECT name FROM sources WHERE id = jobs.source_id)) WHERE dedupe_key = ?",
             )
             .bind(&identity)
             .bind(&job.provider_updated_at)
+            .bind(serde_json::to_string(&job.compensation)?)
             .bind(&job.dedupe_key)
             .execute(&mut *tx)
             .await?;

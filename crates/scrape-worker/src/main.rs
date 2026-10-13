@@ -178,7 +178,19 @@ async fn execute_worker(
                 } else {
                     stats.sources_ok += 1;
                 }
-                let fetched_count = events.len() as u64;
+                let fetched_count = events
+                    .iter()
+                    .filter(|event| {
+                        matches!(
+                            event,
+                            WorkerEvent::Job { .. }
+                                | WorkerEvent::Error {
+                                    invalid_posting: Some(true),
+                                    ..
+                                }
+                        )
+                    })
+                    .count() as u64;
                 let mut matched_count = 0u64;
 
                 for event in events {

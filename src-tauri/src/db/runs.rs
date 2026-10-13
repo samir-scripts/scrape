@@ -25,6 +25,26 @@ pub enum RunStatus {
     Failed,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS, PartialEq)]
+#[serde(default)]
+#[ts(export)]
+pub struct RunCounts {
+    #[ts(type = "number")]
+    pub fetched: i64,
+    #[ts(type = "number")]
+    pub rejected: i64,
+    #[ts(type = "number")]
+    pub blocked: i64,
+    #[ts(type = "number")]
+    pub inserted: i64,
+    #[ts(type = "number")]
+    pub updated: i64,
+    #[ts(type = "number")]
+    pub failed: i64,
+    #[ts(type = "number")]
+    pub retention_removed: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[ts(export)]
 pub struct ScrapeRun {
@@ -37,6 +57,12 @@ pub struct ScrapeRun {
     pub jobs_new: i64,
     pub error: Option<String>,
     pub source_id: Option<String>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub counts: Option<RunCounts>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub effective_config: Option<scrape_core::WorkerConfig>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -101,7 +127,30 @@ impl RunsRepo {
             jobs_new: 0,
             error: None,
             source_id: source_id.map(ToString::to_string),
+            counts: None,
+            effective_config: None,
         })
+    }
+
+    pub async fn record_config(
+        pool: &SqlitePool,
+        id: &str,
+        config: &scrape_core::WorkerConfig,
+    ) -> Result<()> {
+        sqlx::query("UPDATE scrape_runs SET effective_config_json=? WHERE id=?")
+            .bind(serde_json::to_string(config)?)
+            .bind(id)
+            .execute(pool)
+            .await?;
+        Ok(())
+    }
+    pub async fn record_counts(pool: &SqlitePool, id: &str, counts: &RunCounts) -> Result<()> {
+        sqlx::query("UPDATE scrape_runs SET counts_json=? WHERE id=?")
+            .bind(serde_json::to_string(counts)?)
+            .bind(id)
+            .execute(pool)
+            .await?;
+        Ok(())
     }
 
     pub async fn finish(
@@ -141,7 +190,7 @@ impl RunsRepo {
         use sqlx::Row;
         let r = sqlx::query(
             r#"
-            SELECT id, trigger, status, started_at, finished_at, jobs_found, jobs_new, error, source_id
+            SELECT id, trigger, status, started_at, finished_at, jobs_found, jobs_new, error, source_id, counts_json, effective_config_json
             FROM scrape_runs
             WHERE id = ?
             "#,
@@ -166,6 +215,14 @@ impl RunsRepo {
             jobs_new: r.get("jobs_new"),
             error: r.get("error"),
             source_id: r.get("source_id"),
+            counts: r
+                .get::<Option<String>, _>("counts_json")
+                .map(|value| serde_json::from_str(&value))
+                .transpose()?,
+            effective_config: r
+                .get::<Option<String>, _>("effective_config_json")
+                .map(|value| serde_json::from_str(&value))
+                .transpose()?,
         })
     }
 
@@ -173,7 +230,7 @@ impl RunsRepo {
         use sqlx::Row;
         let rows = sqlx::query(
             r#"
-            SELECT id, trigger, status, started_at, finished_at, jobs_found, jobs_new, error, source_id
+            SELECT id, trigger, status, started_at, finished_at, jobs_found, jobs_new, error, source_id, counts_json, effective_config_json
             FROM scrape_runs
             ORDER BY started_at DESC
             LIMIT ?
@@ -200,6 +257,14 @@ impl RunsRepo {
                 jobs_new: r.get("jobs_new"),
                 error: r.get("error"),
                 source_id: r.get("source_id"),
+                counts: r
+                    .get::<Option<String>, _>("counts_json")
+                    .map(|value| serde_json::from_str(&value))
+                    .transpose()?,
+                effective_config: r
+                    .get::<Option<String>, _>("effective_config_json")
+                    .map(|value| serde_json::from_str(&value))
+                    .transpose()?,
             });
         }
 
@@ -214,7 +279,7 @@ impl RunsRepo {
         use sqlx::Row;
         let rows = sqlx::query(
             r#"
-            SELECT id, trigger, status, started_at, finished_at, jobs_found, jobs_new, error, source_id
+            SELECT id, trigger, status, started_at, finished_at, jobs_found, jobs_new, error, source_id, counts_json, effective_config_json
             FROM scrape_runs
             WHERE source_id = ?1
                OR id IN (SELECT DISTINCT run_id FROM scrape_logs WHERE source_id = ?1)
@@ -244,6 +309,14 @@ impl RunsRepo {
                 jobs_new: r.get("jobs_new"),
                 error: r.get("error"),
                 source_id: r.get("source_id"),
+                counts: r
+                    .get::<Option<String>, _>("counts_json")
+                    .map(|value| serde_json::from_str(&value))
+                    .transpose()?,
+                effective_config: r
+                    .get::<Option<String>, _>("effective_config_json")
+                    .map(|value| serde_json::from_str(&value))
+                    .transpose()?,
             });
         }
 
@@ -322,6 +395,53 @@ impl RunsRepo {
 mod tests {
     use super::*;
     use crate::db::init_memory_db;
+
+    #[tokio::test]
+    async fn effective_rules_and_stage_counts_survive_failure_and_restart_queries() {
+        let pool = crate::db::init_memory_db().await.unwrap();
+        let run = RunsRepo::start(&pool, TriggerType::Manual).await.unwrap();
+        let config = scrape_core::WorkerConfig {
+            version: scrape_core::PROTOCOL_VERSION,
+            sources: vec![],
+            filters: Default::default(),
+            filters_by_source: Default::default(),
+            run_started_at: Some(run.started_at.clone()),
+            limits: Default::default(),
+        };
+        let counts = RunCounts {
+            fetched: 12,
+            rejected: 4,
+            blocked: 2,
+            inserted: 3,
+            updated: 1,
+            failed: 2,
+            retention_removed: 5,
+        };
+        RunsRepo::record_config(&pool, &run.id, &config)
+            .await
+            .unwrap();
+        RunsRepo::record_counts(&pool, &run.id, &counts)
+            .await
+            .unwrap();
+        RunsRepo::finish(
+            &pool,
+            &run.id,
+            RunStatus::Partial,
+            6,
+            3,
+            Some("Worker cancelled"),
+        )
+        .await
+        .unwrap();
+        for saved in [
+            RunsRepo::get(&pool, &run.id).await.unwrap(),
+            RunsRepo::recent(&pool, 1).await.unwrap().remove(0),
+        ] {
+            assert_eq!(saved.counts, Some(counts.clone()));
+            assert_eq!(saved.effective_config, Some(config.clone()));
+            assert_eq!(saved.status, RunStatus::Partial);
+        }
+    }
 
     #[tokio::test]
     async fn test_scrape_run_lifecycle() {

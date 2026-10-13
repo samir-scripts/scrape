@@ -128,6 +128,7 @@ pub fn run() {
             commands::sources::delete_source,
             commands::sources::seed_sample_workflow,
             commands::scrape::run_scrape_now,
+            commands::scrape::cancel_scrape,
             commands::scrape::run_source_now,
             commands::scrape::list_scrape_runs,
             commands::scrape::list_source_runs,

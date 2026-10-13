@@ -1,11 +1,10 @@
 use crate::db::jobs::{JobsRepo, ScrapedJob};
-use crate::db::runs::{LogLevel, RunStatus, RunsRepo, ScrapeRun, TriggerType};
+use crate::db::runs::{LogLevel, RunCounts, RunStatus, RunsRepo, ScrapeRun, TriggerType};
 use crate::db::settings::SettingsRepo;
 use crate::db::sources::SourcesRepo;
 use crate::error::{AppError, Result};
 use scrape_core::{
-    TriState, WorkerConfig, WorkerEvent, WorkerFilters, WorkerLimits, WorkerSource,
-    PROTOCOL_VERSION,
+    WorkerConfig, WorkerEvent, WorkerFilters, WorkerLimits, WorkerSource, PROTOCOL_VERSION,
 };
 use sqlx::SqlitePool;
 use std::collections::HashMap;
@@ -91,6 +90,7 @@ pub(crate) fn worker_failure(
 pub struct ScrapeRunner {
     pool: SqlitePool,
     is_running: Arc<AtomicBool>,
+    cancel_requested: Arc<AtomicBool>,
 }
 
 impl ScrapeRunner {
@@ -98,11 +98,20 @@ impl ScrapeRunner {
         Self {
             pool,
             is_running: Arc::new(AtomicBool::new(false)),
+            cancel_requested: Arc::new(AtomicBool::new(false)),
         }
     }
 
     pub fn is_running(&self) -> bool {
         self.is_running.load(Ordering::SeqCst)
+    }
+
+    pub fn cancel_current(&self) -> bool {
+        if !self.is_running() {
+            return false;
+        }
+        self.cancel_requested.store(true, Ordering::SeqCst);
+        true
     }
 
     pub fn try_acquire_lock(&self) -> Result<RunLockGuard> {
@@ -114,6 +123,7 @@ impl ScrapeRunner {
             tracing::warn!("Scrape run skipped: another run is already in progress");
             return Err(AppError::AlreadyRunning);
         }
+        self.cancel_requested.store(false, Ordering::SeqCst);
         Ok(RunLockGuard {
             flag: self.is_running.clone(),
         })
@@ -552,7 +562,10 @@ impl ScrapeRunner {
         run_id: &str,
         config: WorkerConfig,
     ) -> Result<(i64, i64, HashMap<String, (String, Option<String>)>)> {
-        let (mut rx, mut child) = app
+        RunsRepo::record_config(&self.pool, run_id, &config).await?;
+        let mut counts = RunCounts::default();
+        let mut invalid = 0i64;
+        let (mut rx, child) = app
             .shell()
             .sidecar("scrape-worker")
             .map_err(|e| AppError::Internal(format!("Failed to find sidecar: {}", e)))?
@@ -560,6 +573,7 @@ impl ScrapeRunner {
             .spawn()
             .map_err(|e| AppError::Internal(format!("Failed to spawn sidecar: {}", e)))?;
 
+        let mut child = super::process::ChildGuard::new(child);
         let single_source_id = if config.sources.len() == 1 {
             Some(config.sources[0].id.as_str())
         } else {
@@ -600,12 +614,27 @@ impl ScrapeRunner {
         let deadline =
             Instant::now() + Duration::from_secs(if config.sources.len() == 1 { 180 } else { 600 });
         loop {
-            let event = match timeout_at(deadline, rx.recv()).await {
-                Ok(Some(event)) => event,
-                Ok(None) => break,
-                Err(_) => {
-                    sidecar_err =
-                        Some("Worker execution timed out; partial results retained".into());
+            let received = tokio::select! {
+                event = timeout_at(deadline, rx.recv()) => Some(event),
+                _ = tokio::time::sleep(Duration::from_millis(100)) => None,
+            };
+            let cancelled = self.cancel_requested.load(Ordering::SeqCst);
+            if received.is_none() && !cancelled {
+                continue;
+            }
+            let received = if cancelled { None } else { received };
+            let event = match received {
+                Some(Ok(Some(event))) => event,
+                Some(Ok(None)) => break,
+                Some(Err(_)) | None => {
+                    sidecar_err = Some(
+                        if cancelled {
+                            "Worker cancelled; partial results retained"
+                        } else {
+                            "Worker execution timed out; partial results retained"
+                        }
+                        .into(),
+                    );
                     let _ = child.kill();
                     // The shell plugin owns reaping; consume its terminal notification.
                     let reap_deadline = Instant::now() + Duration::from_secs(5);
@@ -639,125 +668,9 @@ impl ScrapeRunner {
                         };
                         {
                             match worker_event {
-                                WorkerEvent::Job {
-                                    source_id,
-                                    external_id,
-                                    title,
-                                    company,
-                                    role_type,
-                                    location,
-                                    url,
-                                    provider_updated_at,
-                                    date_posted,
-                                    salary,
-                                    locations,
-                                    workplace_type,
-                                    sponsorship,
-                                    work_auth,
-                                    clearance,
-                                    experience,
-                                    is_new_grad,
-                                    description_text,
-                                    company_icon_url,
-                                } => {
-                                    let dedupe_key = format!("{}:{}", source_id, external_id);
-                                    let loc_opt = if location.is_empty() {
-                                        None
-                                    } else {
-                                        Some(location)
-                                    };
-
-                                    let compensation = salary
-                                        .as_ref()
-                                        .map(|s| s.ranges.clone())
-                                        .unwrap_or_default();
-                                    let (
-                                        salary_min,
-                                        salary_max,
-                                        salary_currency,
-                                        salary_interval,
-                                        salary_raw,
-                                        salary_source,
-                                    ) = if let Some(s) = salary {
-                                        (
-                                            s.min,
-                                            s.max,
-                                            Some(s.currency),
-                                            s.ranges.first().and_then(|range| range.interval),
-                                            Some(s.raw),
-                                            Some(s.source),
-                                        )
-                                    } else {
-                                        (None, None, None, None, None, None)
-                                    };
-
-                                    let (sponsorship_val, sponsorship_evidence) =
-                                        if let Some(sp) = sponsorship {
-                                            (sp.value, sp.evidence)
-                                        } else {
-                                            (TriState::Unknown, None)
-                                        };
-
-                                    let (work_auth_val, work_auth_evidence) =
-                                        if let Some(wa) = work_auth {
-                                            (wa.value, wa.evidence)
-                                        } else {
-                                            (scrape_core::WorkAuthRequirement::Unknown, None)
-                                        };
-
-                                    let (clearance_val, clearance_level, clearance_evidence) =
-                                        if let Some(cl) = clearance {
-                                            (cl.value, cl.level, cl.evidence)
-                                        } else {
-                                            (TriState::Unknown, None, None)
-                                        };
-
-                                    let (
-                                        experience_min,
-                                        experience_max,
-                                        experience_raw,
-                                        experience_evidence,
-                                    ) = if let Some(exp) = experience {
-                                        (exp.min_years, exp.max_years, exp.raw, exp.evidence)
-                                    } else {
-                                        (None, None, None, None)
-                                    };
-
-                                    job_buffer.push(ScrapedJob {
-                                        compensation,
-                                        dedupe_key,
-                                        source_id: Some(source_id),
-                                        external_id: Some(external_id),
-                                        title,
-                                        company,
-                                        role_type,
-                                        location: loc_opt,
-                                        url,
-                                        provider_updated_at,
-                                        date_posted,
-                                        salary_min,
-                                        salary_max,
-                                        salary_currency,
-                                        salary_interval,
-                                        salary_raw,
-                                        salary_source,
-                                        workplace_type,
-                                        sponsorship: sponsorship_val,
-                                        sponsorship_evidence,
-                                        work_auth: work_auth_val,
-                                        work_auth_evidence,
-                                        clearance: clearance_val,
-                                        clearance_level,
-                                        clearance_evidence,
-                                        experience_min,
-                                        experience_max,
-                                        experience_raw,
-                                        is_new_grad,
-                                        experience_evidence,
-                                        description_text,
-                                        company_icon_url,
-                                        locations,
-                                    });
+                                event @ WorkerEvent::Job { .. } => {
+                                    job_buffer
+                                        .push(super::ingestion::scraped_job_from_event(event)?);
                                     total_found += 1;
 
                                     if job_buffer.len() >= 50
@@ -766,7 +679,12 @@ impl ScrapeRunner {
                                         let stats =
                                             JobsRepo::upsert_scraped(&self.pool, &job_buffer)
                                                 .await?;
-                                        total_new += stats.inserted as i64;
+                                        total_new += stats.inserted;
+                                        counts.inserted += stats.inserted;
+                                        counts.updated += stats.updated;
+                                        counts.blocked += stats.blocked;
+                                        RunsRepo::record_counts(&self.pool, run_id, &counts)
+                                            .await?;
                                         job_buffer.clear();
                                         last_flush = Instant::now();
                                     }
@@ -776,6 +694,11 @@ impl ScrapeRunner {
                                     fetched,
                                     matched,
                                 } => {
+                                    counts.fetched += fetched as i64;
+                                    counts.rejected +=
+                                        (fetched as i64 - matched as i64 - invalid).max(0);
+                                    invalid = 0;
+                                    RunsRepo::record_counts(&self.pool, run_id, &counts).await?;
                                     source_statuses
                                         .entry(source_id.clone())
                                         .or_insert_with(|| ("success".to_string(), None));
@@ -817,8 +740,13 @@ impl ScrapeRunner {
                                     source_id,
                                     message,
                                     retryable,
-                                    ..
+                                    invalid_posting,
                                 } => {
+                                    counts.failed += 1;
+                                    if invalid_posting == Some(true) {
+                                        invalid += 1;
+                                    }
+                                    RunsRepo::record_counts(&self.pool, run_id, &counts).await?;
                                     source_statuses.insert(
                                         source_id.clone(),
                                         ("error".to_string(), Some(message.clone())),
@@ -871,6 +799,7 @@ impl ScrapeRunner {
                     .await;
                 }
                 CommandEvent::Terminated(status) => {
+                    child.disarm();
                     tracing::info!("[sidecar exit] status: {:?}", status.code);
                     termination_code = status.code;
                     if let Some(code) = status.code {
@@ -893,6 +822,7 @@ impl ScrapeRunner {
 
         // Terminal failures override earlier progress; partial rows remain recoverable.
         if let Some(message) = worker_failure(termination_code, saw_done, sidecar_err.as_deref()) {
+            counts.failed += 1;
             for source in &config.sources {
                 source_statuses.insert(source.id.clone(), ("error".into(), Some(message.clone())));
             }
@@ -914,7 +844,10 @@ impl ScrapeRunner {
         // Flush remaining buffered jobs
         if !job_buffer.is_empty() {
             let stats = JobsRepo::upsert_scraped(&self.pool, &job_buffer).await?;
-            total_new += stats.inserted as i64;
+            total_new += stats.inserted;
+            counts.inserted += stats.inserted;
+            counts.updated += stats.updated;
+            counts.blocked += stats.blocked;
             job_buffer.clear();
         }
 
@@ -942,6 +875,7 @@ impl ScrapeRunner {
                     )
                     .await
                     {
+                        counts.retention_removed += pruned as i64;
                         if pruned > 0 {
                             tracing::info!(
                                 "Retention pruned {} expired jobs for workflow '{}' ({})",
@@ -955,6 +889,7 @@ impl ScrapeRunner {
             }
         }
 
+        RunsRepo::record_counts(&self.pool, run_id, &counts).await?;
         Ok((total_found, total_new, source_statuses))
     }
 }
@@ -962,7 +897,7 @@ impl ScrapeRunner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use scrape_core::RoleType;
+    use scrape_core::{RoleType, TriState};
 
     #[tokio::test]
     async fn test_overlap_guard() {
@@ -972,6 +907,8 @@ mod tests {
 
         let guard = runner.try_acquire_lock().unwrap();
         assert!(runner.is_running());
+        assert!(runner.cancel_current());
+        assert!(runner.cancel_requested.load(Ordering::SeqCst));
 
         // Concurrently acquiring lock fails with AlreadyRunning
         let second = runner.try_acquire_lock();
@@ -986,6 +923,7 @@ mod tests {
 
         let third = runner.try_acquire_lock();
         assert!(third.is_ok());
+        assert!(!runner.cancel_requested.load(Ordering::SeqCst));
     }
 
     #[test]
