@@ -103,10 +103,84 @@ pub struct WorkflowSpec {
     pub retention: Option<WorkflowRetention>,
 }
 
+optional_fields!(LegacySelectors {
+    item: String,
+    title: String,
+    link: String,
+    location: String,
+    salary: String
+});
+optional_fields!(LegacyRegex {
+    title: String,
+    link: String,
+    location: String,
+    salary: String
+});
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct LegacyCadence {
+    pub r#type: SourceCadence,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub cron: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct LegacyEngine {
+    pub kind: SourceKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub selectors: Option<LegacySelectors>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub regex: Option<LegacyRegex>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct LegacyWorkflowSpec {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub version: Option<u32>,
+    pub company: String,
+    pub url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub cadence: Option<LegacyCadence>,
+    pub engine: LegacyEngine,
+}
+
 pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
     let mut value = value;
-    let version = value.get("version").and_then(Value::as_u64).unwrap_or(2);
+    if !value.is_object() {
+        return Err(AppError::Validation("workflow: expected a mapping".into()));
+    }
+    let version = match value.get("version") {
+        None => {
+            if value.get("engine").is_some() {
+                1
+            } else {
+                2
+            }
+        }
+        Some(version) => version
+            .as_u64()
+            .ok_or_else(|| AppError::Validation("version: expected an integer".into()))?,
+    };
     if version == 1 {
+        if let Some(cadence) = value.pointer_mut("/cadence/type") {
+            match cadence.as_str() {
+                Some("custom_cron") => *cadence = Value::String("cron".into()),
+                Some("every_1h") => *cadence = Value::String("hourly".into()),
+                _ => {}
+            }
+        }
+        let encoded = serde_json::to_string(&value)?;
+        let mut decoder = serde_json::Deserializer::from_str(&encoded);
+        let _: LegacyWorkflowSpec = serde_path_to_error::deserialize(&mut decoder)
+            .map_err(|e| AppError::Validation(format!("{}: {}", e.path(), e.inner())))?;
         // Legacy yamlJob shape is explicitly migrated; unknown legacy fields
         // remain errors, never silently dropped by the migration.
         let allowed = ["version", "company", "url", "cadence", "engine"];
@@ -242,10 +316,8 @@ pub fn source_input(spec: &WorkflowSpec, timezone: &str) -> Result<CreateSourceI
             "extractor.url: invalid ATS account identifier".into(),
         ));
     }
-    let mut config = extractor
-        .source_config
-        .clone()
-        .unwrap_or_else(|| serde_json::json!({}));
+    let mut config =
+        normalize_source_config(extractor.source_config.as_ref().unwrap_or(&Value::Null))?;
     if !config.is_object() {
         return Err(AppError::Validation(
             "extractor.source_config: must be a mapping".into(),
@@ -338,6 +410,55 @@ pub fn source_input(spec: &WorkflowSpec, timezone: &str) -> Result<CreateSourceI
         )?),
     })
 }
+pub fn normalize_source_config(config: &Value) -> Result<Value> {
+    let mut config = if config.is_null() {
+        serde_json::json!({})
+    } else {
+        config.clone()
+    };
+    let object = config
+        .as_object_mut()
+        .ok_or_else(|| AppError::Validation("extractor.source_config: expected mapping".into()))?;
+    if let Some(legacy) = object.remove("selectors") {
+        let selectors: LegacySelectors = serde_json::from_value(legacy).map_err(|error| {
+            AppError::Validation(format!("extractor.source_config.selectors: {error}"))
+        })?;
+        for (key, value) in serde_json::to_value(selectors)?.as_object().unwrap() {
+            object.entry(key.clone()).or_insert(value.clone());
+        }
+    }
+    Ok(config)
+}
+pub fn validated_stored_config(kind: SourceKind, config: &Value) -> Result<Value> {
+    let normalized = normalize_source_config(config)?;
+    let mut public = normalized.clone();
+    for key in [
+        "__workflow_spec",
+        "__schedule",
+        "__cron_timezone",
+        "__company",
+    ] {
+        public.as_object_mut().unwrap().remove(key);
+    }
+    validate_config(kind, &public)?;
+    if let Some(company) = normalized.get("__company") {
+        if !company.is_string() {
+            return Err(AppError::Validation(
+                "metadata.company: expected string".into(),
+            ));
+        }
+    }
+    if let Some(spec) = normalized.get("__workflow_spec") {
+        let timezone = normalized
+            .pointer("/__schedule/timezone")
+            .and_then(Value::as_str)
+            .or_else(|| normalized.get("__cron_timezone").and_then(Value::as_str))
+            .unwrap_or("UTC");
+        validate(spec.clone(), timezone)?;
+    }
+    Ok(normalized)
+}
+
 pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
     let allowed = [
         "url",
@@ -363,7 +484,15 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
         .into_iter()
         .flat_map(|object| object.keys())
     {
-        if !allowed.contains(&key.as_str()) {
+        let implemented = match kind {
+            SourceKind::Jsonld => ["url", "follow_links", "max_pages"].contains(&key.as_str()),
+            SourceKind::Selector => {
+                allowed.contains(&key.as_str())
+                    && !["follow_links", "max_pages"].contains(&key.as_str())
+            }
+            _ => key == "url",
+        };
+        if !implemented {
             return Err(AppError::Validation(format!(
                 "extractor.source_config.{key}: unsupported field"
             )));
@@ -440,6 +569,55 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn malformed_root_and_version_values_return_errors_without_mutation_or_panics() {
+        for value in [
+            Value::Null,
+            serde_json::json!([]),
+            Value::String("workflow".into()),
+            Value::Bool(true),
+        ] {
+            assert!(validate(value, "UTC").is_err());
+        }
+        for version in [
+            Value::String("3".into()),
+            Value::from(3.5),
+            Value::Null,
+            Value::Bool(true),
+        ] {
+            assert!(validate(serde_json::json!({"version":version,"metadata":{"name":"X"},"extractor":{"kind":"greenhouse","url":"acme"}}), "UTC").unwrap_err().to_string().contains("version"));
+        }
+    }
+
+    #[test]
+    fn advanced_specs_are_lossless_and_irrelevant_or_malformed_selectors_fail() {
+        let value = serde_json::json!({"version":3,"metadata":{"name":"Careers","company":"Publisher"},"extractor":{"kind":"selector","url":"https://example.com/careers","job_container":".job","title_selector":"h2","url_selector":"a","date_selector":"time","salary_regex":"[0-9]+","url_patterns":["*/jobs/*"]},"filters":{"include_keywords":[],"matching":{"keywords":{"any":["Engineer"],"all":["Rust"],"exclude":["Senior"],"fields":["title","description"]},"compensation":{"min_minor":5025,"max_minor":6075,"currency":"USD","interval":"hour"}}},"schedule":{"cadence":"weekly","time":"02:30","weekdays":[1,5],"timezone":"America/New_York"},"retention":{"days":90}});
+        let spec = validate(value.clone(), "UTC").unwrap();
+        let encoded = serde_json::to_value(&spec).unwrap();
+        assert_eq!(
+            serde_json::to_value(validate(encoded.clone(), "UTC").unwrap()).unwrap(),
+            encoded
+        );
+        let input = source_input(&spec, "UTC").unwrap();
+        assert_eq!(input.config.as_ref().unwrap()["date"], "time");
+        assert_eq!(input.config.as_ref().unwrap()["__workflow_spec"], encoded);
+        for (field, invalid) in [
+            ("salary_regex", "["),
+            ("date_selector", "["),
+            ("kind", "greenhouse"),
+        ] {
+            let mut bad = value.clone();
+            bad["extractor"][field] = Value::String(invalid.into());
+            assert!(validate(bad, "UTC").is_err());
+        }
+        let mut bad = value;
+        bad["extractor"]["source_config"] = serde_json::json!({"ignored_option":true});
+        assert!(validate(bad, "UTC")
+            .unwrap_err()
+            .to_string()
+            .contains("ignored_option"));
+    }
+
     #[test]
     fn versions_unknown_paths_queries_and_empty_overrides_are_validated() {
         let base = serde_json::json!({"version":2,"metadata":{"name":"Acme"},"extractor":{"kind":"greenhouse","url":"https://boards.greenhouse.io/acme"},"filters":{"include_keywords":[]},"schedule":{"cadence":"daily","time":"09:00","timezone":"America/New_York","weekdays":[1,3,5]}});

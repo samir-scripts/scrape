@@ -27,6 +27,7 @@ fn default_request_timeout_s() -> u64 {
 /// Configuration payload passed from Tauri host to scrape-worker via stdin JSON.
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[ts(export)]
+#[serde(deny_unknown_fields)]
 pub struct WorkerConfig {
     #[serde(default = "default_protocol_version")]
     pub version: u32,
@@ -43,6 +44,7 @@ pub struct WorkerConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[ts(export)]
+#[serde(deny_unknown_fields)]
 pub struct WorkerSource {
     pub id: String,
     pub kind: SourceKind,
@@ -198,6 +200,7 @@ impl WorkerFilters {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[ts(export)]
+#[serde(deny_unknown_fields)]
 pub struct WorkerLimits {
     #[serde(default = "default_concurrency")]
     pub concurrency: usize,
@@ -288,6 +291,18 @@ pub struct WorkerStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unknown_worker_configuration_fields_are_rejected_at_each_boundary() {
+        for value in [
+            serde_json::json!({"sources": [], "unexpected": true}),
+            serde_json::json!({"sources": [], "filters": {"salary_guess": 50}}),
+            serde_json::json!({"sources": [], "limits": {"unsupported": 2}}),
+            serde_json::json!({"sources": [{"id":"one", "kind":"greenhouse", "name":"Acme", "identifier":"acme", "unexpected":true}]}),
+        ] {
+            assert!(serde_json::from_value::<WorkerConfig>(value).is_err());
+        }
+    }
 
     #[test]
     fn test_worker_config_deserialization() {

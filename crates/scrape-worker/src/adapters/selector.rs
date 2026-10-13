@@ -120,18 +120,24 @@ pub fn extract_jobs_with_selectors(
     let mut include_patterns = Vec::new();
     if let Some(pat) = source.config.get("url_pattern").and_then(|v| v.as_str()) {
         if !pat.trim().is_empty() {
-            if let Ok(re) = glob_to_regex(pat) {
-                include_patterns.push(re);
-            }
+            include_patterns.push(glob_to_regex(pat).map_err(|error| {
+                ClientError::HttpStatus(
+                    reqwest::StatusCode::BAD_REQUEST,
+                    format!("Invalid URL pattern: {error}"),
+                )
+            })?);
         }
     }
     if let Some(pats) = source.config.get("url_patterns").and_then(|v| v.as_array()) {
         for p in pats {
             if let Some(s) = p.as_str() {
                 if !s.trim().is_empty() {
-                    if let Ok(re) = glob_to_regex(s) {
-                        include_patterns.push(re);
-                    }
+                    include_patterns.push(glob_to_regex(s).map_err(|error| {
+                        ClientError::HttpStatus(
+                            reqwest::StatusCode::BAD_REQUEST,
+                            format!("Invalid URL pattern: {error}"),
+                        )
+                    })?);
                 }
             }
         }
@@ -146,9 +152,12 @@ pub fn extract_jobs_with_selectors(
         for p in pats {
             if let Some(s) = p.as_str() {
                 if !s.trim().is_empty() {
-                    if let Ok(re) = glob_to_regex(s) {
-                        exclude_patterns.push(re);
-                    }
+                    exclude_patterns.push(glob_to_regex(s).map_err(|error| {
+                        ClientError::HttpStatus(
+                            reqwest::StatusCode::BAD_REQUEST,
+                            format!("Invalid excluded URL pattern: {error}"),
+                        )
+                    })?);
                 }
             }
         }

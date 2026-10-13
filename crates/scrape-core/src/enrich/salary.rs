@@ -141,15 +141,21 @@ impl Salary {
         }
         let min_minor = min.and_then(minor);
         let max_minor = max.and_then(minor);
-        if min_minor.is_none() && max_minor.is_none()
-            || matches!((min_minor, max_minor), (Some(lo), Some(hi)) if lo > hi)
-        {
+        if matches!((min_minor, max_minor), (Some(lo), Some(hi)) if lo > hi) {
             return None;
         }
         let interval = parse_interval(interval_str);
         let curr = currency_value
             .map(|v| v.trim().to_ascii_uppercase())
             .filter(|v| !v.is_empty());
+        if min_minor.is_none()
+            && max_minor.is_none()
+            && interval.is_none()
+            && curr.is_none()
+            && raw_display.is_none()
+        {
+            return None;
+        }
         let raw = raw_display
             .filter(|r| !r.trim().is_empty())
             .map(str::to_string)
@@ -269,6 +275,31 @@ impl Salary {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unknown_amounts_retain_explicit_unit_and_currency_evidence() {
+        let pay = Salary::from_structured(
+            None,
+            None,
+            Some("USD"),
+            Some("HOUR"),
+            Some("Hourly pay negotiated individually"),
+        )
+        .unwrap();
+        let mut filter = CompensationFilter {
+            min_minor: Some(5000),
+            max_minor: Some(6000),
+            currency: Some("USD".into()),
+            interval: Some(SalaryInterval::Hour),
+            include_unknown: false,
+        };
+        assert!(!filter.matches(&pay.ranges));
+        filter.include_unknown = true;
+        assert!(filter.matches(&pay.ranges));
+        filter.currency = Some("CAD".into());
+        assert!(!filter.matches(&pay.ranges));
+        assert!(Salary::from_structured(None, None, None, None, None).is_none());
+    }
 
     #[test]
     fn test_salary_structured() {

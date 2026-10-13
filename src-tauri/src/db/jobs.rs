@@ -960,7 +960,7 @@ impl JobsRepo {
                 &job.url,
             )
             .await?;
-            let blocked: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM blocked_postings WHERE identity = ? OR legacy_key = ?)")
+            let blocked: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM blocked_postings WHERE identity = ? OR (identity LIKE 'legacy:%' AND legacy_key = ?))")
                 .bind(&identity).bind(&job.dedupe_key).fetch_one(&mut *tx).await?;
             if blocked {
                 stats.blocked += 1;
@@ -968,10 +968,24 @@ impl JobsRepo {
             }
 
             use sqlx::Row;
-            let existing = sqlx::query("SELECT id, role_type FROM jobs WHERE dedupe_key = ?")
-                .bind(&job.dedupe_key)
-                .fetch_optional(&mut *tx)
-                .await?;
+            // A workflow can be repointed at another board. A provider ID reused
+            // there must not overwrite annotations belonging to the old posting.
+            let existing = sqlx::query("SELECT id, role_type, dedupe_key FROM jobs WHERE (posting_identity = ? AND source_id = ?) OR (dedupe_key = ? AND (posting_identity IS NULL OR posting_identity = ?)) ORDER BY CASE WHEN dedupe_key = ? THEN 0 ELSE 1 END, id LIMIT 1")
+                .bind(&identity).bind(&job.source_id).bind(&job.dedupe_key).bind(&identity).bind(&job.dedupe_key).fetch_optional(&mut *tx).await?;
+            let dedupe_key = if let Some(row) = &existing {
+                row.get::<String, _>("dedupe_key")
+            } else {
+                let occupied: bool =
+                    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM jobs WHERE dedupe_key=?)")
+                        .bind(&job.dedupe_key)
+                        .fetch_one(&mut *tx)
+                        .await?;
+                if occupied {
+                    format!("{}:posting:{identity}", job.dedupe_key)
+                } else {
+                    job.dedupe_key.clone()
+                }
+            };
 
             let role_type_str = match serde_json::to_value(job.role_type)? {
                 serde_json::Value::String(s) => s,
@@ -1037,7 +1051,7 @@ impl JobsRepo {
                     let ex_id: String = ex.get("id");
                     let ex_role_type: String = ex.get("role_type");
 
-                    let should_update_role = ex_role_type == "unknown";
+                    let should_update_role = job.role_type != RoleType::Unknown;
                     let new_role_type = if should_update_role {
                         role_type_str
                     } else {
@@ -1159,7 +1173,7 @@ impl JobsRepo {
                         "#,
                     )
                     .bind(&id)
-                    .bind(&job.dedupe_key)
+                    .bind(&dedupe_key)
                     .bind(&job.source_id)
                     .bind(&job.external_id)
                     .bind(&job.title)
@@ -1232,7 +1246,7 @@ impl JobsRepo {
             .bind(&identity)
             .bind(&job.provider_updated_at)
             .bind(serde_json::to_string(&job.compensation)?)
-            .bind(&job.dedupe_key)
+            .bind(&dedupe_key)
             .execute(&mut *tx)
             .await?;
         }
@@ -1424,12 +1438,117 @@ mod tests {
     use crate::db::init_memory_db;
 
     #[tokio::test]
+    async fn repointing_a_workflow_never_transfers_saved_state_to_a_reused_provider_id() {
+        let pool = init_memory_db().await.unwrap();
+        let source = crate::db::sources::SourcesRepo::create(
+            &pool,
+            crate::db::sources::CreateSourceInput {
+                kind: scrape_core::SourceKind::Greenhouse,
+                name: "Scope fixture".into(),
+                identifier: "acme".into(),
+                config: None,
+                enabled: Some(true),
+                cadence: Some(scrape_core::SourceCadence::Manual),
+                cadence_cron: None,
+                retention_days: Some(30),
+                retention_policy: None,
+                filters: None,
+            },
+        )
+        .await
+        .unwrap();
+        let posting = |title: &str, board: &str, role: &str| {
+            crate::services::ingestion::scraped_job_from_event(serde_json::from_value(serde_json::json!({"type":"job","source_id":source.id,"external_id":"42","title":title,"company":board,"role_type":role,"url":format!("https://boards.greenhouse.io/{board}/jobs/42")})).unwrap()).unwrap()
+        };
+        let acme = posting("Acme Engineer", "acme", "full_time");
+        JobsRepo::upsert_scraped(&pool, std::slice::from_ref(&acme))
+            .await
+            .unwrap();
+        let original = JobsRepo::list(&pool, JobFilter::default())
+            .await
+            .unwrap()
+            .items
+            .remove(0);
+        JobsRepo::update_notes(&pool, &original.id, "Acme referral".into())
+            .await
+            .unwrap();
+        JobsRepo::update_status(&pool, &original.id, JobStatus::Applied)
+            .await
+            .unwrap();
+        JobsRepo::set_favorite(&pool, &original.id, true)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE sources SET identifier='other' WHERE id=?")
+            .bind(&source.id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let other = posting("Other Contractor", "other", "contract");
+        assert_eq!(
+            JobsRepo::upsert_scraped(&pool, std::slice::from_ref(&other))
+                .await
+                .unwrap()
+                .inserted,
+            1
+        );
+        let saved = JobsRepo::get(&pool, &original.id).await.unwrap();
+        assert_eq!(saved.title, "Acme Engineer");
+        assert_eq!(saved.notes.as_deref(), Some("Acme referral"));
+        assert_eq!(saved.status, JobStatus::Applied);
+        assert!(saved.favorited);
+        let page = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+        assert_eq!(page.total, 2);
+        assert!(page.items.iter().any(|job| job.title == "Other Contractor"
+            && job.notes.is_none()
+            && job.status == JobStatus::Scraped));
+        assert_eq!(
+            JobsRepo::upsert_scraped(&pool, &[other])
+                .await
+                .unwrap()
+                .updated,
+            1
+        );
+        sqlx::query("UPDATE sources SET identifier='acme' WHERE id=?")
+            .bind(&source.id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            JobsRepo::upsert_scraped(&pool, &[acme])
+                .await
+                .unwrap()
+                .updated,
+            1
+        );
+        assert_eq!(
+            JobsRepo::list(&pool, JobFilter::default())
+                .await
+                .unwrap()
+                .total,
+            2
+        );
+        let refreshed = posting("Acme Contract Engineer", "acme", "contract");
+        JobsRepo::upsert_scraped(&pool, &[refreshed]).await.unwrap();
+        let saved = JobsRepo::get(&pool, &original.id).await.unwrap();
+        assert_eq!(saved.role_type, RoleType::Contract);
+        assert_eq!(saved.notes.as_deref(), Some("Acme referral"));
+    }
+
+    #[tokio::test]
     async fn test_upsert_and_enrichment_query() {
         let pool = init_memory_db().await.unwrap();
 
         let batch = vec![
             ScrapedJob {
-                compensation: vec![],
+                compensation: scrape_core::enrich::Salary::from_structured(
+                    Some(180_000.0),
+                    Some(240_000.0),
+                    Some("USD"),
+                    Some("YEAR"),
+                    Some("Fixture provider annual range"),
+                )
+                .unwrap()
+                .ranges,
                 dedupe_key: "greenhouse:stripe:101".to_string(),
                 source_id: None,
                 external_id: Some("101".to_string()),
@@ -1474,7 +1593,15 @@ mod tests {
                 }],
             },
             ScrapedJob {
-                compensation: vec![],
+                compensation: scrape_core::enrich::Salary::from_structured(
+                    Some(130_000.0),
+                    Some(160_000.0),
+                    Some("USD"),
+                    Some("YEAR"),
+                    Some("Fixture provider annual range"),
+                )
+                .unwrap()
+                .ranges,
                 dedupe_key: "lever:figma:202".to_string(),
                 source_id: None,
                 external_id: Some("202".to_string()),
@@ -1880,7 +2007,15 @@ mod tests {
         // Insert jobs across varied attribute permutations
         let jobs = vec![
             ScrapedJob {
-                compensation: vec![],
+                compensation: scrape_core::enrich::Salary::from_structured(
+                    Some(160_000.0),
+                    Some(200_000.0),
+                    Some("USD"),
+                    Some("YEAR"),
+                    Some("Fixture provider annual range"),
+                )
+                .unwrap()
+                .ranges,
                 dedupe_key: "t1".to_string(),
                 source_id: None,
                 external_id: Some("1".to_string()),
@@ -1921,7 +2056,15 @@ mod tests {
                 }],
             },
             ScrapedJob {
-                compensation: vec![],
+                compensation: scrape_core::enrich::Salary::from_structured(
+                    Some(130_000.0),
+                    Some(170_000.0),
+                    Some("USD"),
+                    Some("YEAR"),
+                    Some("Fixture provider annual range"),
+                )
+                .unwrap()
+                .ranges,
                 dedupe_key: "t2".to_string(),
                 source_id: None,
                 external_id: Some("2".to_string()),

@@ -65,21 +65,24 @@ impl SourcesRepo {
         let kind_str: String = r.get("kind");
         let config_str: String = r.get("config");
         let kind: SourceKind = serde_json::from_value(serde_json::Value::String(kind_str))?;
-        let config: serde_json::Value = serde_json::from_str(&config_str)?;
+        let config = crate::services::workflow::normalize_source_config(&serde_json::from_str::<
+            serde_json::Value,
+        >(&config_str)?)?;
         let enabled_int: i64 = r.get("enabled");
         let cadence_str: Option<String> = r.get("cadence");
         let cadence: SourceCadence = match cadence_str {
-            Some(s) => serde_json::from_value(serde_json::Value::String(s))
-                .unwrap_or(SourceCadence::Global),
+            Some(s) => serde_json::from_value(serde_json::Value::String(s))?,
             None => SourceCadence::Global,
         };
-        let retention_days: i64 = r.try_get("retention_days").unwrap_or(30);
-        let retention_policy: String = r
-            .try_get("retention_policy")
-            .unwrap_or_else(|_| "untracked_only".to_string());
-        let filters_str: String = r.try_get("filters").unwrap_or_else(|_| "{}".to_string());
-        let filters: serde_json::Value =
-            serde_json::from_str(&filters_str).unwrap_or_else(|_| serde_json::json!({}));
+        let retention_days: i64 = r.try_get("retention_days")?;
+        let retention_policy: String = r.try_get("retention_policy")?;
+        let filters_str: String = r.try_get("filters")?;
+        let filters: serde_json::Value = serde_json::from_str(&filters_str).map_err(|error| {
+            AppError::Validation(format!(
+                "Workflow {} filters: invalid stored JSON: {error}",
+                r.get::<String, _>("id")
+            ))
+        })?;
 
         Ok(Source {
             id: r.get("id"),
@@ -160,13 +163,17 @@ impl SourcesRepo {
         )
     }
 
-    pub async fn create(pool: &SqlitePool, input: CreateSourceInput) -> Result<Source> {
+    pub async fn create(pool: &SqlitePool, mut input: CreateSourceInput) -> Result<Source> {
         let id = Uuid::now_v7().to_string();
         let created_at = now_iso();
         let kind_str = match serde_json::to_value(input.kind)? {
             serde_json::Value::String(s) => s,
             _ => unreachable!(),
         };
+        input.config = Some(crate::services::workflow::validated_stored_config(
+            input.kind,
+            input.config.as_ref().unwrap_or(&serde_json::Value::Null),
+        )?);
         let config_str = match input.config {
             Some(ref c) => serde_json::to_string(c)?,
             None => "{}".to_string(),
@@ -228,7 +235,10 @@ impl SourcesRepo {
 
         let name = input.name.unwrap_or(existing.name);
         let identifier = input.identifier.unwrap_or(existing.identifier);
-        let config = input.config.unwrap_or(existing.config);
+        let config = crate::services::workflow::validated_stored_config(
+            existing.kind,
+            &input.config.unwrap_or(existing.config),
+        )?;
         let config_str = serde_json::to_string(&config)?;
         let enabled = input.enabled.unwrap_or(existing.enabled);
         let enabled_val: i64 = if enabled { 1 } else { 0 };
@@ -419,6 +429,42 @@ impl SourcesRepo {
 mod tests {
     use super::*;
     use crate::db::init_memory_db;
+
+    #[tokio::test]
+    async fn invalid_stored_rules_fail_and_legacy_selectors_migrate_explicitly() {
+        let pool = crate::db::init_memory_db().await.unwrap();
+        let input = CreateSourceInput {
+            kind: SourceKind::Selector,
+            name: "Legacy selectors".into(),
+            identifier: "https://example.com/careers".into(),
+            config: Some(serde_json::json!({"selectors":{"item":".job","title":"h2","link":"a"}})),
+            enabled: Some(true),
+            cadence: Some(SourceCadence::Manual),
+            cadence_cron: None,
+            retention_days: Some(30),
+            retention_policy: None,
+            filters: Some(serde_json::json!({"include_keywords":[]})),
+        };
+        let source = SourcesRepo::create(&pool, input).await.unwrap();
+        assert_eq!(source.config["item"], ".job");
+        assert!(source.config.get("selectors").is_none());
+        sqlx::query("UPDATE sources SET filters='{invalid JSON' WHERE id=?")
+            .bind(&source.id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let error = SourcesRepo::get(&pool, &source.id)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(&source.id) && error.contains("invalid stored JSON"));
+        let retained: String = sqlx::query_scalar("SELECT filters FROM sources WHERE id=?")
+            .bind(&source.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(retained, "{invalid JSON");
+    }
 
     #[tokio::test]
     async fn test_crud_source() {

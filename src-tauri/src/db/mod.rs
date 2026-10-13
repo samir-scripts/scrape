@@ -170,6 +170,112 @@ mod tests {
     use sqlx::Row;
 
     #[tokio::test]
+    async fn populated_version_ten_upgrade_preserves_annotations_history_settings_and_blocks() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("historical.db");
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(&path)
+                    .create_if_missing(true),
+            )
+            .await
+            .unwrap();
+        let mut old = sqlx::migrate!("./migrations");
+        old.migrations = old.iter().take(10).cloned().collect::<Vec<_>>().into();
+        old.run(&pool).await.unwrap();
+        sqlx::query("INSERT INTO sources (id, kind, name, identifier, config, created_at, filters, retention_policy) VALUES ('old-workflow', 'greenhouse', 'Preserved workflow', 'acme', ?, '2026-01-01T00:00:00Z', ?, 'all')")
+            .bind(serde_json::json!({"url":"https://boards.greenhouse.io/acme"}).to_string())
+            .bind(serde_json::json!({"include_keywords":[],"query":"title LIKE '%Engineer%'"}).to_string()).execute(&pool).await.unwrap();
+        for (index, status) in ["applied", "interviewing", "offer", "rejected"]
+            .iter()
+            .enumerate()
+        {
+            sqlx::query("INSERT INTO jobs (id,dedupe_key,source_id,external_id,title,company,role_type,url,date_posted,date_added,last_seen_at,status,status_changed_at,notes,favorited,salary_min,salary_max,salary_currency,salary_interval,salary_source) VALUES (?,?,?,?, 'Engineer','Acme','full_time',?,'2026-01-02T00:00:00Z','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z',?,'2026-01-01T00:00:00Z','Protected note',1,104520,126360,'USD','hour','structured')")
+                .bind(format!("saved-{index}")).bind(format!("old-workflow:{index}")).bind("old-workflow").bind(index.to_string()).bind(format!("https://careers.example.com/apply?gh_jid={index}")).bind(status).execute(&pool).await.unwrap();
+            sqlx::query("INSERT INTO job_status_events (job_id,from_status,to_status,changed_at) VALUES (?, 'scraped', ?, '2026-01-01T00:00:00Z')").bind(format!("saved-{index}")).bind(status).execute(&pool).await.unwrap();
+        }
+        sqlx::query("INSERT INTO deleted_jobs VALUES ('old-workflow:99', '2026-01-02T00:00:00Z')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO app_settings VALUES ('custom.preserved', ?, '2026-01-01T00:00:00Z')",
+        )
+        .bind(serde_json::json!({"value":42}).to_string())
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool.close().await;
+        let upgraded = init_db(&path).await.unwrap();
+        let page = jobs::JobsRepo::list(&upgraded, jobs::JobFilter::default())
+            .await
+            .unwrap();
+        assert_eq!(page.total, 4);
+        for job in page.items {
+            assert_eq!(job.notes.as_deref(), Some("Protected note"));
+            assert!(job.favorited);
+            assert!(job.date_posted.is_none());
+            assert_eq!(
+                job.provider_updated_at.as_deref(),
+                Some("2026-01-02T00:00:00Z")
+            );
+            assert!(matches!(
+                job.status,
+                scrape_core::JobStatus::Applied
+                    | scrape_core::JobStatus::Interviewing
+                    | scrape_core::JobStatus::Offer
+                    | scrape_core::JobStatus::Rejected
+            ));
+            assert_eq!(
+                jobs::JobsRepo::get_status_events(&upgraded, &job.id)
+                    .await
+                    .unwrap()
+                    .len(),
+                1
+            );
+            assert_eq!(job.compensation.unwrap()[0].min_minor, Some(5025));
+        }
+        let source = sources::SourcesRepo::get(&upgraded, "old-workflow")
+            .await
+            .unwrap();
+        assert_eq!(source.retention_policy, "untracked_only");
+        assert_eq!(source.filters["include_keywords"], serde_json::json!([]));
+        assert_eq!(source.filters["query"], "title LIKE '%Engineer%'");
+        let blocked: i64 = sqlx::query_scalar("SELECT count(*) FROM blocked_postings")
+            .fetch_one(&upgraded)
+            .await
+            .unwrap();
+        assert_eq!(blocked, 1);
+        let identity: String = sqlx::query_scalar("SELECT identity FROM blocked_postings")
+            .fetch_one(&upgraded)
+            .await
+            .unwrap();
+        assert!(identity.contains("99"));
+        let custom: String =
+            sqlx::query_scalar("SELECT value FROM app_settings WHERE key='custom.preserved'")
+                .fetch_one(&upgraded)
+                .await
+                .unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&custom).unwrap(),
+            serde_json::json!({"value":42})
+        );
+        assert_eq!(
+            jobs::JobsRepo::prune_expired_by_source(&upgraded, "old-workflow", 1, "all")
+                .await
+                .unwrap(),
+            0
+        );
+        assert!(std::fs::read_dir(directory.path())
+            .unwrap()
+            .filter_map(|file| file.ok())
+            .any(|file| file.file_name().to_string_lossy().contains("pre-migration")));
+        upgraded.close().await;
+    }
+
+    #[tokio::test]
     async fn test_all_migrations_apply_cleanly() {
         let pool = init_memory_db()
             .await

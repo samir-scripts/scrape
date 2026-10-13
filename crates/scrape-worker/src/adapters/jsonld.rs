@@ -34,11 +34,31 @@ pub async fn scrape_jsonld(
                 format!("Invalid follow_links selector: {e}"),
             )
         })?;
-        let links = find_links(&html_text, &base_url, sel_str, max_pages);
+        let mut links = find_links(&html_text, &base_url, sel_str, max_pages + 1);
+        if links.len() > max_pages {
+            links.truncate(max_pages);
+            all_events.push(WorkerEvent::Error {
+                source_id: source.id.clone(),
+                message: format!(
+                    "Detail-page limit of {max_pages} reached; results cover fetched pages only"
+                ),
+                retryable: false,
+                invalid_posting: Some(false),
+            });
+        }
         for link in links {
-            if let Ok(page_html) = client.fetch_text(link.as_str(), true).await {
-                let sub_events = extract_job_postings_from_html(&page_html, link.as_str(), source);
-                all_events.extend(sub_events);
+            match client.fetch_text(link.as_str(), true).await {
+                Ok(page_html) => all_events.extend(extract_job_postings_from_html(
+                    &page_html,
+                    link.as_str(),
+                    source,
+                )),
+                Err(error) => all_events.push(WorkerEvent::Error {
+                    source_id: source.id.clone(),
+                    message: format!("Could not extract detail page {link}: {error}"),
+                    retryable: true,
+                    invalid_posting: Some(false),
+                }),
             }
         }
     }
