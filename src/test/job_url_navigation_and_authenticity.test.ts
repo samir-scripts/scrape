@@ -142,7 +142,7 @@ describe("Job URL Navigation & Authenticity Engine", () => {
       for (const job of jobs) {
         expect(job.company).toBe("Demo Company");
         expect(job.external_id).toMatch(/^demo-\d+$/);
-        expect(job.url).toBe(`https://example.com/demo/jobs/${job.external_id}`);
+        expect(job.url).toBe(`https://example.com/demo/${source.kind}/${encodeURIComponent(source.identifier)}/jobs/${job.external_id}`);
         expect(job.description_text).toContain("FICTIONAL DEMONSTRATION POSTING");
         expect(job.description_text).toContain(job.title);
         expect(job.description_text).toContain(job.salary_raw!);

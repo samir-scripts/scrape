@@ -1,3 +1,4 @@
+import { errorMessage } from "./errors";
 import type { WorkflowSpec } from "../bindings/WorkflowSpec";
 import type { WorkflowPreview } from "../bindings/WorkflowPreview";
 import { workflowSpecToCreateInput, workflowSpecToYaml, validateWorkflowYaml } from "./yamlWorkflow";
@@ -259,14 +260,9 @@ export function __seedDevJobs(jobs: Job[]) {
   saveDevJobs();
 }
 
-export function generateScrapedJobsForSource(source: Source): Job[] {
+export function generateScrapedJobsForSource(source: Source, applyFilters = true): Job[] {
   const now = new Date().toISOString();
-  const sourceName = source.name || "Target Company";
-  const sourceCompany =
-    sourceName.split(" — ")[0].split(" - ")[0].trim() ||
-    source.identifier ||
-    "Cloudflare";
-  const isCloudflare = sourceCompany.toLowerCase().includes("cloudflare");
+  const isCloudflare = source.identifier.toLowerCase() === "cloudflare";
   const company = "Demo Company";
 
   const rawSampleRoles = isCloudflare
@@ -361,7 +357,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
           salary_min: 145000,
           salary_max: 185000,
           salary_interval: "year" as const,
-          role_type: ((source.filters as any)?.role_types?.[0] as any) || "full_time",
+          role_type: "full_time" as const,
           workplace_type: "hybrid" as const,
         },
         {
@@ -371,7 +367,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
           salary_min: 155000,
           salary_max: 195000,
           salary_interval: "year" as const,
-          role_type: ((source.filters as any)?.role_types?.[0] as any) || "full_time",
+          role_type: "full_time" as const,
           workplace_type: "remote" as const,
         },
         {
@@ -381,7 +377,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
           salary_min: 140000,
           salary_max: 175000,
           salary_interval: "year" as const,
-          role_type: ((source.filters as any)?.role_types?.[0] as any) || "full_time",
+          role_type: "full_time" as const,
           workplace_type: "onsite" as const,
         },
         {
@@ -391,7 +387,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
           salary_min: 45,
           salary_max: 55,
           salary_interval: "hour" as const,
-          role_type: ((source.filters as any)?.role_types?.[0] as any) || "internship",
+          role_type: "internship" as const,
           workplace_type: "remote" as const,
         },
       ];
@@ -404,7 +400,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
     const jobId = `dev-job-${prefix}-${activeExternalId}`;
     const dedupeKey = `${prefix}:${activeExternalId}`;
     const externalId = activeExternalId;
-    const url = `https://example.com/demo/jobs/${externalId}`;
+    const url = `https://example.com/demo/${source.kind}/${encodeURIComponent(prefix)}/jobs/${externalId}`;
     const isHourly = role.salary_interval === "hour";
     const salaryRaw = isHourly
       ? `$${role.salary_min} - $${role.salary_max} / hr`
@@ -445,8 +441,10 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
       favorited: false,
       favorited_at: null,
       compensation: [{ min_minor: Math.round(role.salary_min * 100), max_minor: Math.round(role.salary_max * 100), currency: "USD", interval: role.salary_interval, raw: salaryRaw, source: "structured", derived: false, location: role.location }],
-      salary_min: role.salary_min,
-      salary_max: role.salary_max,
+      salary_min: isHourly ? role.salary_min * 2080 : role.salary_min,
+      salary_max: isHourly ? role.salary_max * 2080 : role.salary_max,
+      salary_annual_min: isHourly ? role.salary_min * 2080 : role.salary_min,
+      salary_annual_max: isHourly ? role.salary_max * 2080 : role.salary_max,
       salary_currency: "USD",
       salary_interval: isHourly ? "hour" : "year",
       salary_raw: salaryRaw,
@@ -478,45 +476,41 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
     };
   });
 
-  if (!source.filters) {
-    return candidates;
+  return applyFilters ? candidates.filter(job => matchesDemoWorkflow(job, source)) : candidates;
+}
+
+// Demonstration semantics are deliberately limited and never used by desktop execution.
+function matchesDemoWorkflow(job: Job, source: Source): boolean {
+  if (source.filters && (typeof source.filters !== "object" || Array.isArray(source.filters))) throw new Error("Workflow filters must be an object.");
+  const filters = source.filters as WorkflowSpec["filters"] || {};
+  if (filters.query || filters.policy) throw new Error("Expert queries and policies require desktop validation.");
+  const rules = filters.matching;
+  if (rules?.posting_date) throw new Error("Posting-date previews require desktop extraction.");
+  const includes = filters.include_keywords ?? devSettings.filters_include_keywords;
+  const excludes = filters.exclude_keywords ?? devSettings.filters_exclude_keywords;
+  const locations = filters.locations ?? devSettings.filters_locations;
+  const roles = filters.role_types ?? devSettings.filters_role_types;
+  const text = `${job.title} ${job.location || ""}`.toLowerCase();
+  const contains = (word: string) => text.includes(word.toLowerCase());
+  if (includes.length && !includes.some(contains) || excludes.some(contains)) return false;
+  if (locations.length && !locations.some(loc => (job.location || "").toLowerCase().includes(loc.toLowerCase()))) return false;
+  if (roles.length && !roles.includes(job.role_type)) return false;
+  const keywords = rules?.keywords;
+  if (keywords) {
+    const values = { title: job.title, company: job.company, location: job.location || "", description: job.description_text || "" };
+    const haystack = keywords.fields.map(field => values[field as keyof typeof values] || "").join(" ").toLowerCase();
+    const match = (word: string) => haystack.includes(word.toLowerCase());
+    if (keywords.any.length && !keywords.any.some(match) || !keywords.all.every(match) || keywords.exclude.some(match)) return false;
   }
-
-  const filters = source.filters as any;
-  return candidates.filter((job) => {
-    // 1. Role types
-    if (Array.isArray(filters.role_types) && filters.role_types.length > 0) {
-      if (!filters.role_types.includes(job.role_type)) {
-        return false;
-      }
-    }
-
-    const titleLower = job.title.toLowerCase();
-    const locLower = (job.location || "").toLowerCase();
-
-    // 2. Exclude keywords
-    if (Array.isArray(filters.exclude_keywords) && filters.exclude_keywords.length > 0) {
-      for (const kw of filters.exclude_keywords) {
-        if (typeof kw === "string" && kw.trim().length > 0) {
-          const kwLower = kw.trim().toLowerCase();
-          if (titleLower.includes(kwLower) || locLower.includes(kwLower)) {
-            return false;
-          }
-        }
-      }
-    }
-
-    // 3. Include keywords
-    if (Array.isArray(filters.include_keywords) && filters.include_keywords.length > 0) {
-      const hasAny = filters.include_keywords.some((kw: string) => {
-        if (typeof kw !== "string" || !kw.trim()) return false;
-        const kwLower = kw.trim().toLowerCase();
-        return titleLower.includes(kwLower) || locLower.includes(kwLower);
-      });
-      if (!hasAny) return false;
-    }
-
-    return true;
+  if (rules?.workplaces?.length && !rules.workplaces.includes(job.workplace_type)) return false;
+  const pay = rules?.compensation || filters.compensation;
+  return matchesJob(job, {
+    role_types: rules?.role_types, experience_min: rules?.experience_min, experience_max: rules?.experience_max,
+    experience_include_unknown: rules?.experience_include_unknown, new_grad: rules?.new_grad,
+    sponsorship: rules?.sponsorship, clearance: rules?.clearance, work_auth: rules?.work_auth,
+    countries: rules?.countries, regions: rules?.regions, location_include_unknown: rules?.location_include_unknown,
+    salary_min: pay?.min_minor == null ? undefined : pay.min_minor / 100, salary_max: pay?.max_minor == null ? undefined : pay.max_minor / 100,
+    salary_interval: pay?.interval, salary_currency: pay?.currency, salary_include_unknown: pay?.include_unknown,
   });
 }
 
@@ -899,6 +893,8 @@ const apiImplementation = {
     return invoke<ScrapeRun>("run_scrape_now");
   },
 
+  cancelScrape: (): Promise<boolean> => isTauri() ? invoke("cancel_scrape") : Promise.reject(new Error("Demonstration runs do not launch a worker process.")),
+
   runSourceNow: async (id: string): Promise<ScrapeRun> => {
     if (!isTauri()) {
       const target = devSources.find((s) => s.id === id);
@@ -1018,7 +1014,8 @@ const apiImplementation = {
         if (existingIdx >= 0) {
           // Idempotent upsert: refresh last_seen_at and metadata, preserve user triage state!
           devJobs[existingIdx] = {
-            ...devJobs[existingIdx],
+            ...candidate,
+            id: devJobs[existingIdx].id, notes: devJobs[existingIdx].notes, status: devJobs[existingIdx].status, status_changed_at: devJobs[existingIdx].status_changed_at, favorited: devJobs[existingIdx].favorited, favorited_at: devJobs[existingIdx].favorited_at, date_added: devJobs[existingIdx].date_added,
             last_seen_at: nowIso,
             removed_at: null,
             salary_min: candidate.salary_min ?? devJobs[existingIdx].salary_min,
@@ -1035,11 +1032,7 @@ const apiImplementation = {
       }
       saveDevJobs();
 
-      const isCloudflare =
-        target?.identifier === "cloudflare" ||
-        target?.name?.toLowerCase().includes("cloudflare") ||
-        id === SAMPLE_SWE_SOURCE.id;
-      const extractedCount = isCloudflare ? 8 : newJobs.length;
+      const extractedCount = target ? generateScrapedJobsForSource(target, false).length : newJobs.length;
       const matchedCount = newJobs.length;
 
       devLogs[runId].push({
@@ -1147,25 +1140,11 @@ const apiImplementation = {
     const validated = await api.validateWorkflow(spec);
     const input = workflowSpecToCreateInput(validated);
     const source = { ...SAMPLE_SWE_SOURCE, ...input, id: "demo-preview", created_at: new Date().toISOString() } as Source;
-    const events = await api.testSourceTransient({ kind: source.kind, name: source.name, identifier: source.identifier, config: source.config, filters: source.filters });
-    const rules = validated.filters?.matching;
-    if (rules?.posting_date || rules?.sponsorship?.length || rules?.work_auth?.length || rules?.clearance?.length) throw new Error("Date and eligibility previews require desktop extraction. Demonstration cannot verify these fields.");
-    const matched = events.filter(event => {
-      if (event.type !== "job") return false;
-      const kw = rules?.keywords;
-      const text = (kw?.fields || ["title"]).map(field => String(event[field as keyof typeof event] || "")).join(" ").toLowerCase();
-      const contains = (word: string) => text.includes(word.toLowerCase());
-      if (kw && ((kw.any.length > 0 && !kw.any.some(contains)) || !kw.all.every(contains) || kw.exclude.some(contains))) return false;
-      if (validated.filters?.locations?.length && !validated.filters.locations.some(loc => (event.location || "").toLowerCase().includes(loc.toLowerCase()))) return false;
-      const pay = rules?.compensation || validated.filters?.compensation;
-      return matchesJob({ ...generateScrapedJobsForSource(source).find(j => j.external_id === event.external_id)! }, {
-        role_types: rules?.role_types?.length ? rules.role_types : validated.filters?.role_types || undefined,
-        experience_min: rules?.experience_min ?? undefined, experience_max: rules?.experience_max ?? undefined,
-        salary_min: pay?.min_minor == null ? undefined : pay.min_minor / 100, salary_max: pay?.max_minor == null ? undefined : pay.max_minor / 100,
-        salary_interval: pay?.interval, salary_currency: pay?.currency, salary_include_unknown: pay?.include_unknown,
-      });
-    });
-    return { spec: validated, jobs: matched.slice(0, 10).map(job => ({ identity: job.type === "job" ? `demo:${source.identifier}:${job.external_id}` : "", job })), fetched: events.length, matched: matched.length, rejected: events.length - matched.length, blocked: 0, invalid: 0, sampled: matched.length > 10, errors: [], next_run_at: null };
+    const events = await api.testSourceTransient({ kind: source.kind, name: source.name, identifier: source.identifier, config: source.config, filters: {} });
+    const fixtures = generateScrapedJobsForSource(source, false);
+    const matched = events.filter(event => event.type === "job" && matchesDemoWorkflow(fixtures.find(job => job.external_id === event.external_id)!, source));
+    const eligible = matched.filter(event => event.type === "job" && !demoBlocks.some(block => block.identity === fixtures.find(job => job.external_id === event.external_id)?.posting_identity));
+    return { spec: validated, jobs: eligible.slice(0, 10).map(job => ({ identity: job.type === "job" ? `demo:${source.identifier}:${job.external_id}` : "", job })), fetched: events.length, matched: matched.length, rejected: events.length - matched.length, blocked: matched.length - eligible.length, invalid: 0, sampled: eligible.length > 10, errors: [], next_run_at: null };
   },
 
   testSource: (id: string): Promise<WorkerEvent[]> => {
@@ -1216,6 +1195,7 @@ const apiImplementation = {
         identifier: input.identifier,
         kind: input.kind as any,
         config: input.config as any,
+        filters: input.filters,
       };
       const jobs = generateScrapedJobsForSource(dummySource);
       const events: WorkerEvent[] = jobs.map((j) => ({
@@ -1417,7 +1397,10 @@ export const api: typeof apiImplementation = new Proxy(apiImplementation, {
       if (needsDesktop()) return Promise.reject(new Error(
         "This action requires the desktop application. Open ?demo=1 for fictional demonstration data."
       ));
-      return Reflect.apply(method, target, args);
+      return Promise.resolve(Reflect.apply(method, target, args)).catch(error => {
+        if (error instanceof Error) throw error;
+        throw Object.assign(new Error(errorMessage(error)), error && typeof error === "object" ? error : {});
+      });
     };
   },
 });

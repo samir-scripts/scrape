@@ -19,7 +19,7 @@ describe("Dev-Mode Scrape Workflow Execution & Discovered Pipeline", () => {
     expect(run.status).toBe("success");
     expect(run.source_id).toBe(SAMPLE_SWE_SOURCE.id);
     expect(Number(run.jobs_found)).toBe(8);
-    expect(Number(run.jobs_new)).toBe(4);
+    expect(Number(run.jobs_new)).toBe(2);
 
     // 3. Terminal Log Stream verification
     const logs = await api.getScrapeLogs(run.id);
@@ -33,22 +33,22 @@ describe("Dev-Mode Scrape Workflow Execution & Discovered Pipeline", () => {
 
     expect(logs[2].level).toBe("info");
     expect(logs[2].message).toContain("Extracted 8 postings from source");
-    expect(logs[2].message).toContain("matched 4 postings against criteria");
+    expect(logs[2].message).toContain("matched 2 postings against criteria");
 
     expect(logs[3].level).toBe("info");
     expect(logs[3].message).toContain("Workflow run completed");
     expect(logs[3].message).toContain("SUCCESS");
-    expect(logs[3].message).toContain("Committed 4 new postings to Discovered inbox");
+    expect(logs[3].message).toContain("Committed 2 new postings to Discovered inbox");
 
     // 4. Discovered Inbox verification
     const discovered = await api.listJobs({ statuses: ["scraped"] });
-    expect(discovered.items).toHaveLength(4);
-    expect(discovered.total).toBe(BigInt(4));
+    expect(discovered.items).toHaveLength(2);
+    expect(discovered.total).toBe(BigInt(2));
 
     // Verify job structure and fields
     const titles = discovered.items.map((j) => j.title);
     expect(titles).toContain("Software Engineer Intern (2027) - Austin, TX");
-    expect(titles).toContain("Software Engineer Intern (2027)");
+    expect(titles).not.toContain("Software Engineer Intern (2027)");
     expect(titles).toContain("Systems Engineer, Network Protocols & Distributed Systems");
     expect(titles).not.toContain("Technical Product Marketing Manager");
     expect(titles).not.toContain("Account Executive, FedCiv");
@@ -58,7 +58,7 @@ describe("Dev-Mode Scrape Workflow Execution & Discovered Pipeline", () => {
       expect(job.status).toBe("scraped");
       expect(job.source_id).toBe(SAMPLE_SWE_SOURCE.id);
       expect(job.role_type).toBe("internship");
-      expect(job.url).toContain("https://example.com/demo/jobs/demo-");
+      expect(job.url).toContain("https://example.com/demo/greenhouse/cloudflare/jobs/demo-");
       expect(job.salary_min).toBeGreaterThan(0);
     }
 
@@ -67,7 +67,7 @@ describe("Dev-Mode Scrape Workflow Execution & Discovered Pipeline", () => {
     expect(runs).toHaveLength(1);
     expect(runs[0].id).toBe(run.id);
     expect(runs[0].status).toBe("success");
-    expect(Number(runs[0].jobs_new)).toBe(4);
+    expect(Number(runs[0].jobs_new)).toBe(2);
 
     // Source metadata updated
     const sources = await api.listSources();
@@ -80,7 +80,7 @@ describe("Dev-Mode Scrape Workflow Execution & Discovered Pipeline", () => {
     // Run workflow to populate jobs
     await api.runSourceNow(SAMPLE_SWE_SOURCE.id);
     const jobs = await api.listJobs();
-    expect(jobs.items).toHaveLength(4);
+    expect(jobs.items).toHaveLength(2);
 
     const firstJob = jobs.items[0];
 
@@ -97,7 +97,7 @@ describe("Dev-Mode Scrape Workflow Execution & Discovered Pipeline", () => {
 
     // Check remaining in Discovered
     const inDiscovered = await api.listJobs({ statuses: ["scraped", "viewed"] });
-    expect(inDiscovered.items).toHaveLength(3);
+    expect(inDiscovered.items).toHaveLength(1);
 
     // Check in Tracked (applied)
     const inTracked = await api.listJobs({ statuses: ["applied"] });
@@ -106,7 +106,7 @@ describe("Dev-Mode Scrape Workflow Execution & Discovered Pipeline", () => {
 
     // Metrics reflect triage
     const metrics = await api.getMetrics();
-    expect(metrics.totals.scraped).toBe(3);
+    expect(metrics.totals.scraped).toBe(1);
     expect(metrics.totals.applied).toBe(1);
     expect(metrics.totals.favorited).toBe(1);
   });
