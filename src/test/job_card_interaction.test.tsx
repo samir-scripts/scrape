@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useHotkeys, useGlobalHotkeys } from "../hooks/useHotkeys";
 import { JobCard } from "../components/views/discovered/JobCard";
 import { generateScrapedJobsForSource, SAMPLE_SWE_SOURCE } from "../lib/api";
 
@@ -11,7 +12,12 @@ describe("independent card keyboard controls", () => {
   it("opens the stored destination without activating details; delete/favorite also stay independent", async () => {
     const job = generateScrapedJobsForSource(SAMPLE_SWE_SOURCE)[0];
     const details = vi.fn(), open = vi.fn(), remove = vi.fn(), favorite = vi.fn();
-    render(<JobCard job={job} onClick={details} onOpenUrl={open} onDelete={remove} onToggleFavorite={favorite} />);
+    const globalOpen = vi.fn();
+    function Harness() {
+      useGlobalHotkeys(); useHotkeys({ onOpenUrl: globalOpen });
+      return <JobCard job={job} onClick={details} onOpenUrl={open} onDelete={remove} onToggleFavorite={favorite} />;
+    }
+    render(<Harness />);
     const user = userEvent.setup();
     screen.getByRole("button", { name: /^Open .* in browser$/ }).focus();
     await user.keyboard("{Enter}");
@@ -28,6 +34,7 @@ describe("independent card keyboard controls", () => {
     screen.getByRole("button", { name: /^View / }).focus();
     await user.keyboard("{Enter}");
     expect(details).toHaveBeenCalledTimes(1);
+    expect(globalOpen).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: /^Remove / }).querySelector("svg")).not.toBeNull();
   });
 });

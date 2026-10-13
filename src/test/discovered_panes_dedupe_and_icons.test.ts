@@ -148,7 +148,7 @@ describe("Company Logo & Monogram Fallback Component", () => {
     expect(html).toContain('alt="Stripe"');
   });
 
-  it("derives Google Favicon URL for recognized companies without direct iconUrl", () => {
+  it("uses a neutral monogram when a known company has no provider logo", () => {
     const html = renderToStaticMarkup(
       React.createElement(CompanyLogo, {
         company: "Cloudflare",
@@ -156,8 +156,8 @@ describe("Company Logo & Monogram Fallback Component", () => {
       })
     );
 
-    expect(html).toContain("<img");
-    expect(html).toContain("domain=cloudflare.com");
+    expect(html).not.toContain("<img");
+    expect(html).toContain("CL");
   });
 
   it("renders a brutalist monogram when no URL can be derived", () => {

@@ -1,3 +1,4 @@
+import { countActiveFilters } from "../../../lib/filter";
 import { useEffect, useMemo } from "react";
 import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
@@ -117,9 +118,9 @@ export function DiscoveredView({
         <EmptyState
           title="NO POSTINGS FOUND"
           description={
-            filterSpec.search
-              ? "TRY CLEARING FILTERS OR SEARCH TERMS."
-              : "ALL DISCOVERED JOBS HAVE BEEN TRIAGED."
+            countActiveFilters(filterSpec) > 0
+              ? "No postings match the current filters. Clear filters or change the matching rules."
+              : "No saved discoveries available. Run a workflow or review your tracked jobs."
           }
         />
       </div>

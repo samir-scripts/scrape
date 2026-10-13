@@ -32,24 +32,8 @@ export function CompanyLogo({
     return (clean.slice(0, 2) || "?").toUpperCase();
   };
 
-  // Derive favicon fallback url if iconUrl wasn't directly provided
-  const derivedUrl =
-    iconUrl ||
-    (() => {
-      // If company has a domain suffix or recognizable name, build google favicon url
-      const slug = company.toLowerCase().replace(/[^a-z0-9]/g, "");
-      if (slug.includes("cloudflare")) return "https://www.google.com/s2/favicons?domain=cloudflare.com&sz=64";
-      if (slug.includes("stripe")) return "https://www.google.com/s2/favicons?domain=stripe.com&sz=64";
-      if (slug.includes("figma")) return "https://www.google.com/s2/favicons?domain=figma.com&sz=64";
-      if (slug.includes("google")) return "https://www.google.com/s2/favicons?domain=google.com&sz=64";
-      if (slug.includes("meta")) return "https://www.google.com/s2/favicons?domain=meta.com&sz=64";
-      if (slug.includes("amazon")) return "https://www.google.com/s2/favicons?domain=amazon.com&sz=64";
-      if (slug.includes("apple")) return "https://www.google.com/s2/favicons?domain=apple.com&sz=64";
-      if (company.includes(".")) {
-        return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(company)}&sz=64`;
-      }
-      return null;
-    })();
+  // Only source-provided metadata identifies an actual company logo.
+  const derivedUrl = iconUrl;
 
   if (derivedUrl && !imgError) {
     return (

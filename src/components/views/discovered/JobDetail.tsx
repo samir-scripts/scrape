@@ -1,3 +1,4 @@
+import { RemoveJobButton } from "../../ui/RemoveJobButton";
 import { useState, useEffect } from "react";
 import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
@@ -172,16 +173,7 @@ export function JobDetail({
           </Button>
         )}
 
-        {onDelete && (
-          <Button
-            variant="ghost"
-            onClick={() => onDelete(job)}
-            shortcut="DEL"
-            className="text-[var(--color-cherry)] hover:bg-[var(--color-cherry)] hover:text-white"
-          >
-            REMOVE JOB
-          </Button>
-        )}
+        {onDelete && <RemoveJobButton title={job.title} company={job.company} label="Remove job" onClick={() => onDelete(job)} />}
       </div>
 
       {/* 3. Main Title & Company Info */}
@@ -193,7 +185,7 @@ export function JobDetail({
           className="mt-1"
         />
         <div className="flex flex-col gap-1 min-w-0 flex-1">
-          <h1 className="text-xl md:text-2xl font-black uppercase tracking-tight text-[var(--color-ink)] leading-tight">
+          <h1 className="text-xl md:text-2xl font-black tracking-tight text-[var(--color-ink)] leading-tight">
             {job.title}
           </h1>
           <div className="flex items-center gap-2 text-xs font-mono text-[var(--color-ink-mute)] uppercase tracking-wider">
@@ -391,7 +383,7 @@ export function JobDetail({
             </span>
           )}
         </div>
-        <div className="p-4 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/20 font-sans text-xs leading-relaxed text-[var(--color-ink)] whitespace-pre-wrap max-h-96 overflow-y-auto select-text">
+        <div className="p-4 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/20 font-sans text-sm leading-relaxed text-[var(--color-ink)] whitespace-pre-wrap max-h-96 overflow-y-auto select-text">
           {job.description_text ? (
             job.description_text
           ) : (
@@ -416,7 +408,7 @@ export function JobDetail({
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="ENTER APPLICATION NOTES, REFERRAL DETAILS, RECRUITER CONTACTS, INTERVIEW STAGES..."
-          className="w-full h-24 p-3 border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[var(--color-ink)] resize-y uppercase placeholder:text-[var(--color-ink-mute)]"
+          className="w-full h-24 p-3 border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[var(--color-ink)] resize-y placeholder:text-[var(--color-ink-mute)]"
         />
       </div>
     </div>

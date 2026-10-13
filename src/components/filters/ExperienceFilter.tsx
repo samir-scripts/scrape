@@ -101,7 +101,7 @@ export function ExperienceFilter({
                 includeUnknown,
               })
             }
-            className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
+            className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-danger)] uppercase cursor-pointer"
           >
             [RESET]
           </button>

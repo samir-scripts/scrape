@@ -1,7 +1,7 @@
+import { openPostingUrl } from "./lib/postingUrl";
 import { notifyError, useToastStore } from "./lib/toast";
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { api } from "./lib/api";
 import { useUIStore } from "./lib/store";
 import { setupAppEventListeners } from "./lib/events";
@@ -245,18 +245,7 @@ export default function App() {
 
   // 8. Open URL helper (Tauri native opener with resilient browser fallback)
   const handleOpenUrl = async (url: string) => {
-    if (!url) return;
-    try {
-      if (typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__)) {
-        await openUrl(url);
-        return;
-      }
-    } catch (e) {
-      console.warn("Tauri opener failed, using browser window.open fallback:", e);
-    }
-    if (typeof window !== "undefined") {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
+    try { await openPostingUrl(url); } catch (error) { notifyError(String(error), "OPEN POSTING FAILED"); }
   };
 
   const discoveredJobs = view === "discovered" ? allJobs : [];
@@ -449,6 +438,7 @@ export default function App() {
 
       {/* Delete Job Confirmation Modal */}
       <DeleteJobModal
+        key={jobPendingDelete?.id || "closed"}
         isOpen={jobPendingDelete !== null}
         job={jobPendingDelete}
         copies={removalCopies}

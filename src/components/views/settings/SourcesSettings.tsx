@@ -16,7 +16,7 @@ import { Toggle } from "../../ui/Toggle";
 import { Rule } from "../../ui/Rule";
 import { Tooltip } from "../../ui/Tooltip";
 import { AddSourceModal } from "./AddSourceModal";
-import { notifySuccess, notifyInfo } from "../../../lib/toast";
+import { notifyError, notifySuccess, notifyInfo } from "../../../lib/toast";
 import { getWorkflowStatus } from "../../../lib/status";
 
 type FilterTab = "all" | "ats" | "custom" | "errors";
@@ -28,6 +28,7 @@ interface SourcesSettingsProps {
 export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   const queryClient = useQueryClient();
   const [sources, setSources] = useState<Source[]>([]);
+  const [sourceLoadError, setSourceLoadError] = useState("");
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
 
@@ -52,7 +53,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   const { setView, setFilterSpec, runningSourceIds } = useUIStore();
 
   const fetchSources = () => {
-    api.listSources().then(setSources).catch(() => {});
+    api.listSources().then(sources => { setSources(sources); setSourceLoadError(""); }).catch(error => setSourceLoadError(String(error)));
   };
 
   useEffect(() => {
@@ -278,9 +279,10 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   }, [sourceRuns, selectedRunId]);
 
   return (
-    <div className="flex flex-col gap-5 w-full select-none font-mono">
+    <div className="flex flex-col gap-5 w-full select-text font-mono">
+      {sourceLoadError && <div role="alert" className="text-[var(--color-danger)]"><p>Could not load workflows: {sourceLoadError}</p><Button onClick={fetchSources}>Retry loading workflows</Button></div>}
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap gap-3 items-center justify-between">
         <div>
           <h2 className="text-base font-black uppercase tracking-tight text-[var(--color-ink)]">
             WORKFLOWS REGISTRY ({sources.length})
@@ -289,9 +291,10 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
             AUTONOMOUS STATIC WORKFLOWS & CONSOLIDATED EXECUTION LOGS
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+            {runningSourceIds.length > 0 && <Button variant="danger" onClick={() => api.cancelScrape().then(() => notifyInfo("Cancellation requested; committed results remain saved.")).catch(e => notifyError(String(e)))}>Cancel active run</Button>}
           <Tooltip content="Prune untracked postings past retention TTL. Favorited and tracked jobs are strictly protected.">
-            <Button
+          <Button
               variant="default"
               onClick={handlePruneExpired}
             >
@@ -351,8 +354,8 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
             onClick={() => setActiveTab("errors")}
             className={`px-3 py-1 text-xs uppercase tracking-wider font-bold cursor-pointer border ${
               activeTab === "errors"
-                ? "bg-[var(--color-cherry)] text-white border-[var(--color-cherry)]"
-                : "bg-[var(--color-paper)] text-[var(--color-cherry)] border-[var(--color-cherry)] hover:bg-[var(--color-cherry)]/10"
+                ? "bg-[var(--color-danger)] text-[var(--color-paper)] border-[var(--color-danger)]"
+                : "bg-[var(--color-paper)] text-[var(--color-danger)] border-[var(--color-danger)] hover:bg-[var(--color-cherry)]/10"
             }`}
           >
             ERRORS ({counts.errors})
@@ -450,7 +453,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       onClick={() => setInspectedSource(isInspected ? null : s)}
                       className="flex flex-col cursor-pointer group"
                     >
-                      <span className="font-bold uppercase tracking-tight text-[var(--color-ink)] group-hover:underline">
+                      <span className="font-bold tracking-tight text-[var(--color-ink)] group-hover:underline">
                         {s.name}
                       </span>
                       <span className="text-xs text-[var(--color-ink-mute)] truncate max-w-[240px]">
@@ -533,7 +536,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       <Tooltip content="Delete scrape workflow">
                         <button
                           onClick={() => handleDeleteSource(s.id)}
-                          className="px-2 py-0.5 border border-[var(--color-cherry)] text-[var(--color-cherry)] hover:bg-[var(--color-cherry)] hover:text-white text-xs font-mono uppercase cursor-pointer"
+                          className="px-2 py-0.5 border border-[var(--color-danger)] text-[var(--color-danger)] hover:bg-[var(--color-danger)] hover:text-[var(--color-paper)] text-xs font-mono uppercase cursor-pointer"
                         >
                           DEL
                         </button>
@@ -552,7 +555,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
         <div className="flex flex-col gap-3 p-4 border-2 border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 text-xs">
           {/* Dock Header */}
           <div className="flex justify-between items-center border-b border-[var(--color-ink)] pb-2 font-bold">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm uppercase tracking-tight text-[var(--color-ink)]">
                 {inspectedSource.name} // WORKFLOW OBSERVABILITY & EXECUTION LOGS
               </span>
@@ -563,7 +566,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                 {inspectedSource.cadence}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => handleRunSourceNow(inspectedSource)}
                 disabled={runningSourceId === inspectedSource.id}
@@ -645,15 +648,15 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                             : "hover:bg-[var(--color-paper-2)]"
                         }`}
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap gap-3 items-center justify-between">
                           <div className="flex items-center gap-1.5">
                             <span
                               className={`px-1 py-0.2 text-[9px] uppercase font-bold border ${
                                 r.status === "success"
-                                  ? "bg-[var(--color-lime)] text-[var(--color-ink)] border-[var(--color-ink)]"
+                                  ? "bg-[var(--color-lime)] text-[var(--color-accent-ink)] border-[var(--color-ink)]"
                                   : r.status === "running"
                                   ? "bg-[var(--color-paper-2)] text-[var(--color-ink)] border-[var(--color-ink)] animate-pulse"
-                                  : "bg-[var(--color-cherry)] text-white border-[var(--color-cherry)]"
+                                  : "bg-[var(--color-danger)] text-[var(--color-paper)] border-[var(--color-danger)]"
                               }`}
                             >
                               {r.status}
@@ -666,8 +669,9 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                             {r.status === "running" ? "RUNNING…" : `+${Number(r.jobs_new)}`}
                           </span>
                         </div>
+                        {r.counts && <p className="text-xs">Fetched {r.counts.fetched} · rejected {r.counts.rejected} · blocked {r.counts.blocked} · inserted {r.counts.inserted} · updated {r.counts.updated} · failed {r.counts.failed} · retention removed {r.counts.retention_removed}</p>}
                         {r.error && (
-                          <span className={`text-xs truncate ${isSelected ? "text-red-300" : "text-[var(--color-cherry)]"}`}>
+                          <span className={`text-xs truncate ${isSelected ? "text-[var(--color-danger)]" : "text-[var(--color-danger)]"}`}>
                             ERR: {r.error}
                           </span>
                         )}
@@ -681,7 +685,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
             {/* Right 8 Cols: Terminal Execution Log Viewer */}
             <div className="col-span-8 flex flex-col gap-1.5 border border-[var(--color-ink)] bg-[var(--color-paper)] p-2">
               <div className="flex items-center justify-between border-b border-[var(--color-ink)]/30 pb-1">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="font-bold text-xs uppercase tracking-wider text-[var(--color-ink)]">
                     TERMINAL LOG STREAM {selectedRun ? `· RUN ${selectedRun.id.slice(0, 8)}` : ""}
                   </span>
@@ -691,7 +695,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs text-[var(--color-ink-mute)] font-mono uppercase">
                     FILTER:
                   </span>
@@ -730,14 +734,14 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                         key={log.id}
                         className={`p-1.5 border text-xs leading-relaxed ${
                           isError
-                            ? "border-red-600 bg-red-50/50 text-red-900"
+                            ? "border-[var(--color-danger)] bg-[var(--color-paper-2)] text-[var(--color-danger)]"
                             : isWarn
-                            ? "border-amber-600 bg-amber-50/50 text-amber-900"
+                            ? "border-[var(--color-warning)] bg-[var(--color-paper-2)] text-[var(--color-warning)]"
                             : "border-[var(--color-ink)]/20 bg-[var(--color-paper)] text-[var(--color-ink)]"
                         }`}
                       >
                         <div className="flex items-center justify-between text-xs opacity-80 mb-0.5 font-bold">
-                          <span className={isError ? "text-red-700" : isWarn ? "text-amber-700" : "text-[var(--color-ink)]"}>
+                          <span className={isError ? "text-[var(--color-danger)]" : isWarn ? "text-[var(--color-warning)]" : "text-[var(--color-ink)]"}>
                             [{log.level.toUpperCase()}]
                           </span>
                           <span>
@@ -783,7 +787,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       {ev.salary?.raw ? ` · ${ev.salary.raw}` : ""}
                     </span>
                   ) : ev.type === "error" ? (
-                    <span className="text-[var(--color-cherry)]">
+                    <span className="text-[var(--color-danger)]">
                       ERROR: {ev.message}
                     </span>
                   ) : (

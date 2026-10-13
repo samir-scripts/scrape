@@ -70,10 +70,10 @@ export function AppearanceSettings({
                 handleSelectTheme("paper");
               }
             }}
-            className={`p-4 border-2 cursor-pointer flex flex-col gap-3 bg-[#F5F5DC] text-[#1A1A1A] focus:outline-none ${
+            className={`p-4 border-2 cursor-pointer flex flex-col gap-3 bg-[#F5F5DC] text-[var(--color-accent-ink)] focus:outline-none ${
               currentTheme === "paper"
                 ? "border-[var(--color-ink)]"
-                : "border-[var(--color-ink-mute)]/50 opacity-70 hover:opacity-100"
+                : "border-[var(--color-ink-mute)]/50"
             }`}
           >
             <div className="flex justify-between items-center font-bold">
@@ -111,7 +111,7 @@ export function AppearanceSettings({
             className={`p-4 border-2 cursor-pointer flex flex-col gap-3 bg-[#262628] text-[#FFF6EE] focus:outline-none ${
               currentTheme === "obsidian"
                 ? "border-[var(--color-ink)]"
-                : "border-[var(--color-ink-mute)]/50 opacity-70 hover:opacity-100"
+                : "border-[var(--color-ink-mute)]/50"
             }`}
           >
             <div className="flex justify-between items-center font-bold">
@@ -197,7 +197,7 @@ export function AppearanceSettings({
                     <span className="text-xs font-bold tracking-normal">
                       AaBbCc 0123456789
                     </span>
-                    <span className="text-[9px] opacity-60">
+                    <span className="text-xs opacity-80">
                       {font.category === "readable" ? "ABC xyz" : "{ } => !="}
                     </span>
                   </div>

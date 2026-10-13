@@ -56,7 +56,7 @@ export function TriStateFilter({
         {currentList.length > 0 && (
           <button
             onClick={() => onChange(null)}
-            className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
+            className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-danger)] uppercase cursor-pointer"
           >
             [ANY]
           </button>

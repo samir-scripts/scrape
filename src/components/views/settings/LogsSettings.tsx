@@ -126,7 +126,7 @@ export function LogsSettings() {
                   : "text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
               }`}
             >
-              <span className="inline-block w-2.5 h-2.5 bg-red-600 border border-red-700" />
+              <span className="inline-block w-2.5 h-2.5 bg-[var(--color-paper-2)] border border-[var(--color-danger)]" />
               ERRORS ({sortedRuns.filter(isRunError).length})
             </button>
           </div>
@@ -182,7 +182,7 @@ export function LogsSettings() {
                         {/* Red square error marker */}
                         {hasError ? (
                           <span
-                            className="inline-block w-2.5 h-2.5 bg-red-600 border border-red-700 shrink-0"
+                            className="inline-block w-2.5 h-2.5 bg-[var(--color-paper-2)] border border-[var(--color-danger)] shrink-0"
                             title="Error occurred during this scrape run"
                           />
                         ) : (
@@ -207,8 +207,8 @@ export function LogsSettings() {
                           className={
                             hasError
                               ? isSelected
-                                ? "text-red-300"
-                                : "text-red-600 font-bold"
+                                ? "text-[var(--color-danger)]"
+                                : "text-[var(--color-danger)] font-bold"
                               : ""
                           }
                         >
@@ -237,7 +237,7 @@ export function LogsSettings() {
                     <div className="flex items-center gap-2">
                       {isRunError(selectedRun) ? (
                         <span
-                          className="inline-block w-3 h-3 bg-red-600 border border-red-700"
+                          className="inline-block w-3 h-3 bg-[var(--color-paper-2)] border border-[var(--color-danger)]"
                           title="REQUIRES ATTENTION"
                         />
                       ) : (
@@ -257,7 +257,7 @@ export function LogsSettings() {
                     <span
                       className={`text-xs font-bold uppercase px-2 py-0.5 border ${
                         isRunError(selectedRun)
-                          ? "border-red-600 bg-red-100 text-red-700"
+                          ? "border-[var(--color-danger)] bg-[var(--color-paper-2)] text-[var(--color-danger)]"
                           : "border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)]"
                       }`}
                     >
@@ -268,9 +268,9 @@ export function LogsSettings() {
 
                 {/* Prominent Error Banner if run failed */}
                 {selectedRun.error && (
-                  <div className="p-2.5 border border-red-600 bg-red-50 text-red-800 text-xs flex flex-col gap-1">
+                  <div className="p-2.5 border border-[var(--color-danger)] bg-[var(--color-paper-2)] text-[var(--color-danger)] text-xs flex flex-col gap-1">
                     <span className="font-bold uppercase flex items-center gap-1.5">
-                      <span className="inline-block w-2.5 h-2.5 bg-red-600" />
+                      <span className="inline-block w-2.5 h-2.5 bg-[var(--color-paper-2)]" />
                       ERROR REQUIRING ATTENTION:
                     </span>
                     <span className="break-all font-mono">
@@ -306,16 +306,16 @@ export function LogsSettings() {
                           key={log.id}
                           className={`p-2 border ${
                             isError
-                              ? "border-red-600 bg-red-50/50 text-red-900"
+                              ? "border-[var(--color-danger)] bg-[var(--color-paper-2)] text-[var(--color-danger)]"
                               : isWarn
-                              ? "border-amber-600 bg-amber-50/50 text-amber-900"
+                              ? "border-[var(--color-warning)] bg-[var(--color-paper-2)] text-[var(--color-warning)]"
                               : "border-[var(--color-ink)]/30 bg-[var(--color-paper-2)]/20 text-[var(--color-ink)]"
                           }`}
                         >
                           <div className="flex items-center justify-between text-xs mb-1 opacity-80">
                             <div className="flex items-center gap-1.5 font-bold uppercase">
                               {isError && (
-                                <span className="inline-block w-2 h-2 bg-red-600" />
+                                <span className="inline-block w-2 h-2 bg-[var(--color-paper-2)]" />
                               )}
                               <span>[{log.level.toUpperCase()}]</span>
                               {log.source_id && (
@@ -338,13 +338,13 @@ export function LogsSettings() {
 
                           {/* Quick Edit Source link if error is attached to a source */}
                           {isError && log.source_id && (
-                            <div className="mt-2 pt-1.5 border-t border-red-300 flex justify-end">
+                            <div className="mt-2 pt-1.5 border-t border-[var(--color-danger)] flex justify-end">
                               <button
                                 onClick={() => {
                                   setView("scraper");
                                   setScraperCategory("sources");
                                 }}
-                                className="px-2 py-0.5 border border-red-600 bg-white text-red-700 hover:bg-red-600 hover:text-white text-xs font-bold uppercase cursor-pointer"
+                                className="px-2 py-0.5 border border-[var(--color-danger)] bg-white text-[var(--color-danger)] hover:bg-[var(--color-paper-2)] hover:text-white text-xs font-bold uppercase cursor-pointer"
                               >
                                 [EDIT SOURCE IN SCRAPER →]
                               </button>

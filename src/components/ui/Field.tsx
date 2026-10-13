@@ -25,7 +25,7 @@ export function Field({
       )}
       {children}
       {error && (
-        <span className="text-xs font-mono text-[var(--color-cherry)]">
+        <span className="text-xs font-mono text-[var(--color-danger)]">
           {error}
         </span>
       )}

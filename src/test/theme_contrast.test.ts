@@ -2,11 +2,12 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const css = readFileSync(new URL("../styles/index.css", import.meta.url), "utf8");
-const tokens = (section: string) => Object.fromEntries(
-  [...section.matchAll(/--color-([\w-]+):\s*(#[\da-f]{6})/gi)].map((m) => [m[1], m[2]])
-);
-const paper = tokens(css.split('[data-theme="obsidian"]')[0]);
-const obsidian = { ...paper, ...tokens(css.split('[data-theme="obsidian"]')[1].split("}")[0]) };
+const tokens = (section: string) => Object.fromEntries([...section.matchAll(/--((?:color|palette)-[\w-]+):\s*(#[\da-f]{6}|var\(--[\w-]+\))/gi)].map(m => [m[1], m[2]]));
+const light = tokens(css.split('[data-theme="obsidian"]')[0]);
+const dark = { ...light, ...tokens(css.split('[data-theme="obsidian"]')[1].split("}")[0]) };
+const resolve = (values: Record<string, string>, name: string): string => { const value = values[name]; if (!value) throw new Error(`Missing theme token ${name}`); return value.startsWith("var(") ? resolve(values, value.slice(6, -1)) : value; };
+const paper = Object.fromEntries(Object.keys(light).filter(key => key.startsWith("color-")).map(key => [key.slice(6), resolve(light, key)]));
+const obsidian = Object.fromEntries(Object.keys(dark).filter(key => key.startsWith("color-")).map(key => [key.slice(6), resolve(dark, key)]));
 function luminance(hex: string) {
   const channels = [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255)
     .map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);

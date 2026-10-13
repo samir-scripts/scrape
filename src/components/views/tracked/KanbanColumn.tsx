@@ -1,3 +1,4 @@
+import { RemoveJobButton } from "../../ui/RemoveJobButton";
 import { useState, useRef, type DragEvent } from "react";
 import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
@@ -136,12 +137,11 @@ export function KanbanColumn({
                   setTimeout(() => onDragStartJob(job.id), 0);
                 }}
                 onDragEnd={onDragEndJob}
-                onClick={() => onSelectJob(job)}
-                className={`p-3 border border-[var(--color-ink)] cursor-pointer select-none transition-none flex flex-col gap-1.5 ${
+                className={`p-3 border border-[var(--color-ink)] select-text transition-none flex flex-col gap-1.5 ${
                   isDragging
                     ? "opacity-30 border-dashed"
                     : isSelected
-                    ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold"
+                    ? "bg-[var(--color-paper-2)] text-[var(--color-ink)] font-bold"
                     : "bg-[var(--color-paper)] text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
                 }`}
               >
@@ -149,9 +149,9 @@ export function KanbanColumn({
                   <div className="flex items-center gap-1.5 min-w-0">
                     {job.favorited && (
                       <svg
-                        className="w-3.5 h-3.5 text-[var(--color-lime)] shrink-0"
+                        className="w-3.5 h-3.5 text-[var(--color-success)] shrink-0"
                         viewBox="0 0 24 24"
-                        fill="var(--color-lime)"
+                        fill="currentColor"
                         stroke="currentColor"
                         strokeWidth="1.5"
                       >
@@ -169,38 +169,22 @@ export function KanbanColumn({
                   </div>
                   <Tag
                     label={job.role_type.toUpperCase()}
-                    variant={isSelected ? "outline" : "muted"}
-                    className={
-                      isSelected
-                        ? "border-[var(--color-paper)] text-[var(--color-paper)]"
-                        : ""
-                    }
+                    variant="muted"
+
                   />
                 </div>
 
-                <div className="text-xs truncate">{job.title}</div>
+                <div className="text-xs truncate"><button type="button" aria-label={`View ${job.title} at ${job.company}`} className="text-left normal-case cursor-pointer underline" onClick={() => onSelectJob(job)}>{job.title}</button></div>
 
                 <div className="flex items-center justify-between text-xs font-mono opacity-80 pt-1 border-t border-current">
-                  <span className="truncate max-w-[120px]">{job.location || "REMOTE"}</span>
+                  <span className="truncate max-w-[120px]">{job.location || "Location unknown"}</span>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {job.notes && (
                       <span className="font-bold truncate max-w-[80px]">
                         NOTE ▏
                       </span>
                     )}
-                    {onDelete && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDelete(job);
-                        }}
-                        title="Delete application record"
-                        className="opacity-60 hover:opacity-100 hover:text-[var(--color-cherry)] text-[9px] font-bold px-1 py-0 border border-current transition-opacity cursor-pointer"
-                      >
-                        DEL
-                      </button>
-                    )}
+                    {onDelete && <RemoveJobButton title={job.title} company={job.company} onClick={e => { e.stopPropagation(); onDelete(job); }} />}
                   </div>
                 </div>
               </div>

@@ -1,3 +1,4 @@
+import { RemoveJobButton } from "../../ui/RemoveJobButton";
 import type { MouseEvent } from "react";
 import type { Job } from "../../../bindings/Job";
 import { CompanyLogo } from "../../ui/CompanyLogo";
@@ -57,7 +58,7 @@ export function JobCard({
       } ${className}`}
     >
       {/* Top Line: Title + Status + Favorite */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <h2 className="text-sm font-bold text-[var(--color-ink)] group-hover:underline leading-snug line-clamp-2">
           <button type="button" onClick={onClick} className="normal-case text-left cursor-pointer" aria-label={`View ${job.title} at ${job.company}`}>
             {job.title}
@@ -90,27 +91,12 @@ export function JobCard({
               size="sm"
             />
           )}
-          {onDelete && (
-            <button
-              type="button"
-              onClick={(e: MouseEvent<HTMLButtonElement>) => {
-                e.stopPropagation();
-                onDelete(job);
-              }}
-              title="Remove saved job"
-              aria-label={`Remove ${job.title} at ${job.company}`}
-              className="inline-flex min-w-8 min-h-8 items-center justify-center border border-current text-[var(--color-danger)] hover:bg-[var(--color-paper-2)] cursor-pointer shrink-0"
-            >
-              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" />
-              </svg>
-            </button>
-          )}
+          {onDelete && <RemoveJobButton title={job.title} company={job.company} onClick={e => { e.stopPropagation(); onDelete(job); }} />}
         </div>
       </div>
 
       {/* Second Line: Company + Location on Left, Date on Right */}
-      <div className="flex items-center justify-between text-xs font-mono text-[var(--color-ink-mute)]">
+      <div className="flex flex-wrap gap-2 items-center justify-between text-xs font-mono text-[var(--color-ink-mute)]">
         <div className="flex items-center gap-2 min-w-0">
           <CompanyLogo
             company={job.company}
@@ -122,7 +108,7 @@ export function JobCard({
           </span>
           {job.location && (
             <>
-              <span className="opacity-40">·</span>
+              <span aria-hidden="true" className="opacity-40">·</span>
               <span className="truncate max-w-[160px]">
                 {job.location}
               </span>
@@ -218,7 +204,7 @@ export function JobCard({
 
       {/* Description Snippet Preview (2 lines) */}
       {job.description_text && (
-        <p className="text-xs text-[var(--color-ink-mute)] line-clamp-2 leading-relaxed mt-0.5 font-sans text-sm select-text">
+        <p className="text-[var(--color-ink-mute)] line-clamp-2 leading-relaxed mt-0.5 font-sans text-sm select-text">
           {job.description_text.replace(/\s+/g, " ").trim()}
         </p>
       )}

@@ -11,18 +11,18 @@ describe("Workflow Status Engine (getWorkflowStatus)", () => {
     };
     const status = getWorkflowStatus(disabledAndFailed, true);
     expect(status.label).toBe("RUNNING");
-    expect(status.colorClass).toContain("color-signal");
+    expect(status.colorClass).toContain("color-information");
     expect(status.bulletClass).toContain("animate-pulse");
     expect(status.isPulsing).toBe(true);
   });
 
-  it("returns PAUSED when workflow is disabled and not running", () => {
+  it("returns DISABLED when workflow is disabled and not running", () => {
     const disabledSource = {
       enabled: false,
       last_status: "ok",
     };
     const status = getWorkflowStatus(disabledSource, false);
-    expect(status.label).toBe("PAUSED");
+    expect(status.label).toBe("DISABLED");
     expect(status.bulletGlyph).toBe("□");
     expect(status.colorClass).toContain("color-ink-mute");
     expect(status.isPulsing).toBe(false);
@@ -36,7 +36,7 @@ describe("Workflow Status Engine (getWorkflowStatus)", () => {
     const status = getWorkflowStatus(failedSource, false);
     expect(status.label).toBe("FAILED");
     expect(status.bulletGlyph).toBe("■");
-    expect(status.colorClass).toContain("color-cherry");
+    expect(status.colorClass).toContain("color-danger");
     expect(status.isPulsing).toBe(false);
   });
 
@@ -47,7 +47,7 @@ describe("Workflow Status Engine (getWorkflowStatus)", () => {
     };
     const statusOk = getWorkflowStatus(okSource, false);
     expect(statusOk.label).toBe("SUCCESS");
-    expect(statusOk.colorClass).toContain("color-lime");
+    expect(statusOk.colorClass).toContain("color-success");
 
     const successSource = {
       enabled: true,
@@ -55,7 +55,7 @@ describe("Workflow Status Engine (getWorkflowStatus)", () => {
     };
     const statusSuccess = getWorkflowStatus(successSource, false);
     expect(statusSuccess.label).toBe("SUCCESS");
-    expect(statusSuccess.colorClass).toContain("color-lime");
+    expect(statusSuccess.colorClass).toContain("color-success");
   });
 
   it("returns UNTESTED when last_status is null or untested", () => {

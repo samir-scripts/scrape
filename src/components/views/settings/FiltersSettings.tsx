@@ -132,7 +132,7 @@ export function FiltersSettings({
                       kw
                     )
                   }
-                  className="hover:text-[var(--color-cherry)] cursor-pointer text-sm leading-none"
+                  className="hover:text-[var(--color-danger)] cursor-pointer text-sm leading-none"
                 >
                   ×
                 </button>
@@ -176,7 +176,7 @@ export function FiltersSettings({
             settings.filters_exclude_keywords.map((kw) => (
               <span
                 key={kw}
-                className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-[var(--color-cherry)] bg-[var(--color-paper-2)] text-[var(--color-cherry)] text-xs font-bold uppercase tracking-wider"
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-[var(--color-danger)] bg-[var(--color-paper-2)] text-[var(--color-danger)] text-xs font-bold uppercase tracking-wider"
               >
                 <span>{kw}</span>
                 <button
@@ -242,7 +242,7 @@ export function FiltersSettings({
                       loc
                     )
                   }
-                  className="hover:text-[var(--color-cherry)] cursor-pointer text-sm leading-none"
+                  className="hover:text-[var(--color-danger)] cursor-pointer text-sm leading-none"
                 >
                   ×
                 </button>

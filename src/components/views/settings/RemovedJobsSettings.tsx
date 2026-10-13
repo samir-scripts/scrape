@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openPostingUrl } from "../../../lib/postingUrl";
 import { api } from "../../../lib/api";
 import { notifyError } from "../../../lib/toast";
 
@@ -51,7 +51,7 @@ export function RemovedJobsSettings() {
           {posting.copies > 1 && ` · ${posting.copies} saved copies`}
         </p>
         {posting.url ? <a href={posting.url} onClick={(event) => {
-          event.preventDefault(); openUrl(posting.url!).catch((error) => notifyError(String(error), "OPEN FAILED"));
+          event.preventDefault(); openPostingUrl(posting.url!).catch((error) => notifyError(String(error), "OPEN FAILED"));
         }} className="underline break-all text-sm">{posting.url}</a> : <p className="text-sm">Legacy suppression: the original posting details are unavailable.</p>}
         <div className="flex flex-wrap gap-3 mt-3">
           {posting.copies > 0 && <button type="button" disabled={action.isPending} onClick={() => action.mutate({ identity: posting.identity, operation: "restore" })} className="border px-3 py-2">Restore saved job and unblock</button>}

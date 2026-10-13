@@ -1,3 +1,4 @@
+import { RemoveJobButton } from "../../ui/RemoveJobButton";
 import { useState, useEffect } from "react";
 import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
@@ -137,7 +138,7 @@ export function JobDetailDrawer({
               className="mt-0.5"
             />
             <div className="flex flex-col min-w-0 flex-1">
-              <h2 className="text-xl font-black uppercase tracking-tight text-[var(--color-ink)] leading-tight">
+              <h2 className="text-xl font-black tracking-tight text-[var(--color-ink)] leading-tight">
                 {job.title}
               </h2>
               <div className="text-xs font-mono font-bold text-[var(--color-ink-mute)] mt-0.5">
@@ -213,7 +214,7 @@ export function JobDetailDrawer({
               </span>
             )}
           </div>
-          <div className="p-3 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/20 font-sans text-xs leading-relaxed text-[var(--color-ink)] whitespace-pre-wrap max-h-56 overflow-y-auto select-text">
+          <div className="p-3 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/20 font-sans text-sm leading-relaxed text-[var(--color-ink)] whitespace-pre-wrap max-h-56 overflow-y-auto select-text">
             {job.description_text ? (
               job.description_text
             ) : (
@@ -276,13 +277,7 @@ export function JobDetailDrawer({
           <>
             <Rule />
             <div className="pt-1">
-              <button
-                type="button"
-                onClick={() => onDelete(job)}
-                className="w-full py-2 px-3 border border-[var(--color-cherry)] text-[var(--color-cherry)] hover:bg-[var(--color-cherry)] hover:text-white font-mono text-xs font-bold uppercase transition-colors cursor-pointer flex items-center justify-center gap-2"
-              >
-                <span>[DEL] REMOVE JOB</span>
-              </button>
+              <RemoveJobButton title={job.title} company={job.company} label="Remove job" onClick={() => onDelete(job)} />
             </div>
           </>
         )}

@@ -15,8 +15,8 @@
         "title": "SCRAPE",
         "width": 1280,
         "height": 800,
-        "minWidth": 960,
-        "minHeight": 600,
+        "minWidth": 360,
+        "minHeight": 480,
         "resizable": true,
         "fullscreen": false,
         "visible": false

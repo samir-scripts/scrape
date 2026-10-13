@@ -169,9 +169,9 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
         })
       );
 
-      expect(html).toContain("REMOVE JOB");
-      expect(html).toContain("DEL");
-      expect(html).toContain("text-[var(--color-cherry)]");
+      expect(html).toContain("Remove job");
+      expect(html).toContain(`Remove ${sampleJob.title} at ${sampleJob.company}`);
+      expect(html).toContain("text-[var(--color-danger)]");
     });
 
     it("omits REMOVE JOB button in JobDetail when onDelete is not provided", () => {
@@ -184,7 +184,7 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
         })
       );
 
-      expect(html).not.toContain("REMOVE JOB");
+      expect(html).not.toContain(`aria-label="Remove ${sampleJob.title} at ${sampleJob.company}"`);
     });
 
     it("renders a named SVG delete button in JobCard header cluster when onDelete is supplied", () => {
@@ -212,7 +212,7 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
         })
       );
 
-      expect(html).toContain("DEL");
+      expect(html).toContain(`Remove ${sampleJob.title} at ${sampleJob.company}`);
       expect(html).toContain("Remove saved job");
     });
   });
@@ -231,11 +231,11 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
         })
       );
 
-      expect(html).toContain("REMOVE JOB");
-      expect(html).toContain("border-[var(--color-cherry)]");
+      expect(html).toContain("Remove job");
+      expect(html).toContain("border-current");
     });
 
-    it("renders DEL button in TrackedList table action cell when onDelete is supplied", () => {
+    it("renders an accessible removal icon in TrackedList table action cell when onDelete is supplied", () => {
       const html = renderToStaticMarkup(
         React.createElement(TrackedList, {
           jobs: [sampleJob],
@@ -246,8 +246,8 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
         })
       );
 
-      expect(html).toContain("DEL");
-      expect(html).toContain("Delete application record");
+      expect(html).toContain(`Remove ${sampleJob.title} at ${sampleJob.company}`);
+      expect(html).toContain("Remove saved job");
     });
 
     it("renders DEL button in KanbanColumn card bottom row when onDelete is supplied", () => {
@@ -266,8 +266,8 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
         })
       );
 
-      expect(html).toContain("DEL");
-      expect(html).toContain("Delete application record");
+      expect(html).toContain(`Remove ${sampleJob.title} at ${sampleJob.company}`);
+      expect(html).toContain("Remove saved job");
     });
   });
 });

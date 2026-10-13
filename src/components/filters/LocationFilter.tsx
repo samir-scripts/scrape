@@ -177,7 +177,7 @@ export function LocationFilter({
                   includeUnknown,
                 })
               }
-              className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
+              className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-danger)] uppercase cursor-pointer"
             >
               [RESET]
             </button>
@@ -234,7 +234,7 @@ export function LocationFilter({
             <button
               type="button"
               onClick={() => handleCountryChange("ALL")}
-              className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
+              className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-danger)] uppercase cursor-pointer"
             >
               [ANY COUNTRY]
             </button>
@@ -270,7 +270,7 @@ export function LocationFilter({
             <button
               type="button"
               onClick={handleClearRegions}
-              className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
+              className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-danger)] uppercase cursor-pointer"
             >
               [CLEAR ({selectedRegions.length})]
             </button>
@@ -320,7 +320,7 @@ export function LocationFilter({
                   <button
                     type="button"
                     onClick={() => handleRemoveRegion(reg)}
-                    className="hover:text-[var(--color-cherry)] cursor-pointer text-xs leading-none"
+                    className="hover:text-[var(--color-danger)] cursor-pointer text-xs leading-none"
                     aria-label={`Remove ${reg}`}
                   >
                     ×

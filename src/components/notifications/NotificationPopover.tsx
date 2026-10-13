@@ -243,7 +243,7 @@ export function NotificationPopover({
             NOTIFICATIONS
           </span>
           {unreadNotificationCount > 0 && (
-            <span className="px-1.5 py-0.2 text-xs font-bold bg-[var(--color-cherry)] text-white leading-none">
+            <span className="px-1.5 py-0.2 text-xs font-bold bg-[var(--color-danger)] text-[var(--color-paper)] leading-none">
               {unreadNotificationCount} NEW
             </span>
           )}
@@ -353,7 +353,7 @@ export function NotificationPopover({
                         UPDATE READY — RESTARTING APPLICATION…
                       </span>
                     ) : updateError ? (
-                      <span className="text-xs text-[var(--color-cherry)]">
+                      <span className="text-xs text-[var(--color-danger)]">
                         {updateError}
                       </span>
                     ) : (

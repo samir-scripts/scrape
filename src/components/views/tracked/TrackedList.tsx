@@ -1,3 +1,4 @@
+import { RemoveJobButton } from "../../ui/RemoveJobButton";
 import type { JobSort } from "../../../bindings/JobSort";
 import { useState } from "react";
 import type { Job } from "../../../bindings/Job";
@@ -145,7 +146,6 @@ export function TrackedList({
             return (
               <TableRow
                 key={job.id}
-                onClick={() => onSelectJob(job)}
                 className={`cursor-pointer ${
                   isSelected ? "bg-[var(--color-paper-2)] font-bold" : ""
                 }`}
@@ -167,7 +167,7 @@ export function TrackedList({
                     <span>{job.company}</span>
                   </div>
                 </TableCell>
-                <TableCell>{job.title}</TableCell>
+                <TableCell><button type="button" className="text-left normal-case underline cursor-pointer" aria-label={`View ${job.title} at ${job.company}`} onClick={() => onSelectJob(job)}>{job.title}</button></TableCell>
                 <TableCell
                   className="text-xs font-mono text-[var(--color-ink-mute)] max-w-xs truncate select-text"
                   title={job.description_text || ""}
@@ -186,7 +186,7 @@ export function TrackedList({
                       ? "IN-OFFICE"
                       : job.workplace_type === "hybrid"
                       ? "HYBRID"
-                      : "REMOTE")}
+                      : "Location unknown")}
                 </TableCell>
                 <TableCell className="font-mono text-xs whitespace-nowrap">
                   {formatExperience(job)}
@@ -217,18 +217,7 @@ export function TrackedList({
                     >
                       OPEN ↗
                     </button>
-                    {onDelete && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDelete(job);
-                        }}
-                        className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-cherry)] hover:text-white text-xs font-mono font-bold uppercase cursor-pointer"
-                        title="Delete application record"
-                      >
-                        DEL
-                      </button>
-                    )}
+          {onDelete && <RemoveJobButton title={job.title} company={job.company} onClick={e => { e.stopPropagation(); onDelete(job); }} />}
                   </div>
                 </TableCell>
               </TableRow>

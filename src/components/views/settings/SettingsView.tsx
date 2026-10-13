@@ -29,16 +29,16 @@ export function SettingsView({
   const { settingsCategory, setSettingsCategory } = useUIStore();
 
   return (
-    <div className="flex-1 w-full h-full flex overflow-hidden bg-[var(--color-paper)]">
+    <div className="flex-1 w-full h-full flex flex-col sm:flex-row overflow-hidden bg-[var(--color-paper)]">
       {/* Left Sidebar: Categories */}
-      <aside className="w-56 shrink-0 h-full border-r border-[var(--color-ink)] bg-[var(--color-paper-2)]/20 flex flex-col py-3 select-none">
+      <aside className="w-full sm:w-56 shrink-0 h-auto sm:h-full border-r border-[var(--color-ink)] bg-[var(--color-paper-2)]/20 flex flex-col py-3 select-none">
         <div className="px-4 pb-2 mb-2 border-b border-[var(--color-ink)]">
           <span className="font-mono font-black text-xs uppercase tracking-wider text-[var(--color-ink)]">
             SETTINGS
           </span>
         </div>
 
-        <nav className="flex flex-col">
+        <nav className="flex sm:flex-col flex-wrap">
           {CATEGORIES.map((cat) => {
             const isActive = settingsCategory === cat.id;
 
@@ -71,7 +71,7 @@ export function SettingsView({
       </aside>
 
       {/* Right Content: Active Category Panel */}
-      <main className="flex-1 h-full overflow-y-auto p-6 bg-[var(--color-paper)]">
+      <main className="flex-1 min-w-0 overflow-y-auto p-3 sm:p-6 bg-[var(--color-paper)]">
         {settingsCategory === "removed" && <RemovedJobsSettings />}
         {settingsCategory === "appearance" && (
           <AppearanceSettings

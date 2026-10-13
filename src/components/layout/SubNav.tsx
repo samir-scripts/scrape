@@ -147,7 +147,7 @@ export function SubNav() {
                     search: e.target.value.trim() ? e.target.value : null,
                   }))
                 }
-                className="w-48 px-2 py-0.5 text-xs font-mono uppercase bg-[var(--color-paper)] text-[var(--color-ink)] border border-[var(--color-ink)] placeholder-[var(--color-ink-mute)] focus:outline-none focus:ring-1 focus:ring-[var(--color-ink)]"
+                className="w-48 px-2 py-0.5 text-xs font-mono normal-case bg-[var(--color-paper)] text-[var(--color-ink)] border border-[var(--color-ink)] placeholder-[var(--color-ink-mute)] focus:outline-none focus:ring-1 focus:ring-[var(--color-ink)]"
               />
               {filterSpec.search ? (
                 <button
@@ -161,7 +161,7 @@ export function SubNav() {
               ) : (
                 <KeyHint
                   keys="/"
-                  className="absolute right-1.5 opacity-60 text-[9px] pointer-events-none"
+                  className="absolute right-1.5 opacity-80 text-[9px] pointer-events-none"
                 />
               )}
             </div>

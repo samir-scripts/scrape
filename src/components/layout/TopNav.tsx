@@ -27,9 +27,9 @@ export function TopNav({
 
   return (
     <header className="flex flex-col w-full bg-[var(--color-paper)] shrink-0 select-none">
-      <div className="flex items-stretch justify-between h-10 px-3 border-b border-[var(--color-ink)]">
+      <div className="flex items-stretch justify-between min-h-10 px-3 gap-2 border-b border-[var(--color-ink)]">
         {/* Left: Tabs */}
-        <div className="flex items-stretch gap-1">
+        <div className="flex items-stretch gap-1 min-w-0 flex-1 overflow-x-auto">
           <nav className="flex items-stretch gap-1">
             {NAV_TABS.map((tab) => {
               const isActive = view === tab.id;
@@ -64,15 +64,15 @@ export function TopNav({
         </div>
 
         {/* Right: Status Indicator / Next Run / Scanning & Notification Bell */}
-        <div className="flex items-center gap-3 font-mono text-xs text-[var(--color-ink)] pl-4">
+        <div className="flex items-center gap-3 font-mono text-xs text-[var(--color-ink)] shrink-0">
           {isScanning ? (
             <div className="flex items-center gap-2 bg-[var(--color-signal)] text-white px-2.5 py-1 text-xs font-bold">
               <span className="animate-pulse">●</span>
               <span>{scanStatusText || "SCRAPING IN PROGRESS…"}</span>
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-[var(--color-ink-mute)] text-xs">
-              <span className="text-[var(--color-lime)]">●</span>
+            <div className="hidden sm:flex items-center gap-2 text-[var(--color-ink-mute)] text-xs">
+              <span className={nextRunText === "PAUSED" ? "text-[var(--color-ink-mute)]" : "text-[var(--color-success)]"}>{nextRunText === "PAUSED" ? "□" : "●"}</span>
               <span>{nextRunText || "IDLE"}</span>
             </div>
           )}
@@ -83,7 +83,7 @@ export function TopNav({
           <Tooltip content="Open Live System Console in Terminal.app">
             <button
               onClick={() => api.openTerminalConsole()}
-              className="p-1 border border-transparent hover:border-[var(--color-ink)] hover:bg-[var(--color-paper-2)] text-[var(--color-ink)] cursor-pointer flex items-center justify-center transition-none"
+              className="min-w-8 min-h-8 p-1 border border-transparent hover:border-[var(--color-ink)] hover:bg-[var(--color-paper-2)] text-[var(--color-ink)] cursor-pointer flex items-center justify-center transition-none"
               aria-label="Open Terminal Console"
               id="terminal-console-btn"
             >

@@ -30,13 +30,13 @@ function ToastItem({
   const isSuccess = toast.type === "success";
 
   const borderColor = isError
-    ? "border-[var(--color-cherry)]"
+    ? "border-[var(--color-danger)]"
     : isSuccess
     ? "border-[var(--color-lime)]"
     : "border-[var(--color-signal)]";
 
   const markerColor = isError
-    ? "text-[var(--color-cherry)]"
+    ? "text-[var(--color-danger)]"
     : isSuccess
     ? "text-[var(--color-lime)]"
     : "text-[var(--color-signal)]";

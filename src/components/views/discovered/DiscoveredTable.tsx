@@ -1,3 +1,4 @@
+import { RemoveJobButton } from "../../ui/RemoveJobButton";
 import { useState } from "react";
 import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
@@ -164,8 +165,7 @@ export function DiscoveredTable({
             return (
               <TableRow
                 key={job.id}
-                onClick={() => onSelectJob(job)}
-                className={`cursor-pointer ${
+                className={`${
                   isSelected ? "bg-[var(--color-paper-2)] font-bold" : ""
                 }`}
               >
@@ -186,7 +186,7 @@ export function DiscoveredTable({
                     <span>{job.company}</span>
                   </div>
                 </TableCell>
-                <TableCell className="font-bold">{job.title}</TableCell>
+                <TableCell className="font-bold"><button type="button" className="normal-case text-left hover:underline" onClick={() => onSelectJob?.(job)}>{job.title}</button></TableCell>
                 <TableCell
                   className="text-xs font-mono text-[var(--color-ink-mute)] max-w-xs truncate select-text"
                   title={job.description_text || "No description"}
@@ -232,7 +232,7 @@ export function DiscoveredTable({
                         e.stopPropagation();
                         onUpdateStatus(job.id, "applied");
                       }}
-                      className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-lime)] text-[var(--color-ink)] hover:opacity-90 text-xs font-mono font-bold uppercase cursor-pointer"
+                      className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-lime)] text-[var(--color-accent-ink)] hover:opacity-90 text-xs font-mono font-bold uppercase cursor-pointer"
                       title="Apply [A]"
                     >
                       APPLY
@@ -257,18 +257,7 @@ export function DiscoveredTable({
                     >
                       ↗
                     </button>
-                    {onDelete && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDelete(job);
-                        }}
-                        className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-cherry)] hover:text-white text-xs font-mono font-bold uppercase cursor-pointer"
-                        title="Remove saved job"
-                      >
-                        DEL
-                      </button>
-                    )}
+                    {onDelete && <RemoveJobButton title={job.title} company={job.company} onClick={e => { e.stopPropagation(); onDelete(job); }} />}
                   </div>
                 </TableCell>
               </TableRow>

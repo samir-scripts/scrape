@@ -13,6 +13,9 @@ import { NAV_TABS } from "../lib/constants";
 export function useGlobalHotkeys() {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      if (e.defaultPrevented) return;
+      const target = e.target instanceof Element ? e.target : document.activeElement;
+      if (e.key !== "Escape" && target?.closest("button, a, input, textarea, select, [contenteditable], [role='button'], [role='switch'], [role='checkbox']")) return;
       const activeEl = document.activeElement;
       const isInput =
         activeEl?.tagName === "INPUT" ||
@@ -124,6 +127,9 @@ export function useHotkeys(options: HotkeyOptions = {}) {
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      if (e.defaultPrevented) return;
+      const target = e.target instanceof Element ? e.target : document.activeElement;
+      if (e.key !== "Escape" && target?.closest("button, a, input, textarea, select, [contenteditable], [role='button'], [role='switch'], [role='checkbox']")) return;
       const activeEl = document.activeElement;
       const isInput =
         activeEl?.tagName === "INPUT" ||

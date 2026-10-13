@@ -31,7 +31,7 @@ export function MetricsView() {
   if (error || !metrics) {
     return (
       <div className="flex-1 w-full h-full p-6 bg-[var(--color-paper)] flex flex-col items-center justify-center gap-3 select-none">
-        <span className="font-mono text-xs uppercase tracking-wider text-[var(--color-cherry)]">
+        <span className="font-mono text-xs uppercase tracking-wider text-[var(--color-danger)]">
           FAILED TO LOAD METRICS
         </span>
       </div>

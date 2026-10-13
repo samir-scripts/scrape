@@ -34,7 +34,7 @@ export function Button({
       "border border-transparent hover:border-[var(--color-ink)] text-[var(--color-ink)] bg-transparent hover:bg-[var(--color-paper-2)]";
   } else if (variant === "danger") {
     variantClass =
-      "border border-[var(--color-cherry)] text-[var(--color-cherry)] bg-transparent hover:bg-[var(--color-cherry)] hover:text-white";
+      "border border-[var(--color-danger)] text-[var(--color-danger)] bg-transparent hover:bg-[var(--color-danger)] hover:text-[var(--color-paper)]";
   }
 
   const disabledClass = disabled

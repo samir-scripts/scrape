@@ -1,6 +1,5 @@
 import type { JobFilter } from "../../bindings/JobFilter";
 import { ROLE_TYPE_LABELS } from "../../lib/constants";
-import { toHourlyRate } from "../../lib/salary";
 
 export interface FilterChipsProps {
   filter: Partial<JobFilter>;
@@ -24,11 +23,11 @@ export function FilterChips({ filter, onUpdate, onClearAll }: FilterChipsProps) 
   if (filter.salary_min != null || filter.salary_max != null || filter.salary_interval) {
     if (filter.salary_interval === "hour") {
       const minHr = filter.salary_min != null
-        ? `$${toHourlyRate(filter.salary_min)}`
-        : "$0";
+        ? `${filter.salary_currency || "USD"} ${filter.salary_min}`
+        : "No minimum";
       const maxHr = filter.salary_max != null
-        ? `$${toHourlyRate(filter.salary_max)}`
-        : "250+";
+        ? `${filter.salary_currency || "USD"} ${filter.salary_max}`
+        : "No maximum";
       chips.push({
         id: "salary",
         label: `RATE: ${minHr} - ${maxHr}/HR`,
@@ -41,8 +40,8 @@ export function FilterChips({ filter, onUpdate, onClearAll }: FilterChipsProps) 
           })),
       });
     } else if (filter.salary_min != null || filter.salary_max != null) {
-      const minText = filter.salary_min != null ? `$${(filter.salary_min / 1000).toFixed(0)}K` : "$0";
-      const maxText = filter.salary_max != null ? `$${(filter.salary_max / 1000).toFixed(0)}K` : "500K+";
+      const minText = filter.salary_min != null ? `$${(filter.salary_min / 1000).toFixed(0)}K` : "No minimum";
+      const maxText = filter.salary_max != null ? `$${(filter.salary_max / 1000).toFixed(0)}K` : "No maximum";
       chips.push({
         id: "salary",
         label: `SALARY: ${minText} - ${maxText}`,
@@ -157,7 +156,7 @@ export function FilterChips({ filter, onUpdate, onClearAll }: FilterChipsProps) 
           <button
             type="button"
             onClick={chip.onRemove}
-            className="hover:text-[var(--color-cherry)] cursor-pointer text-xs leading-none font-bold"
+            className="hover:text-[var(--color-danger)] cursor-pointer text-xs leading-none font-bold"
           >
             ×
           </button>
@@ -166,7 +165,7 @@ export function FilterChips({ filter, onUpdate, onClearAll }: FilterChipsProps) 
       <button
         type="button"
         onClick={onClearAll}
-        className="px-2 py-0.5 text-xs font-mono uppercase text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] underline cursor-pointer ml-1"
+        className="px-2 py-0.5 text-xs font-mono uppercase text-[var(--color-ink-mute)] hover:text-[var(--color-danger)] underline cursor-pointer ml-1"
       >
         [RESET ALL]
       </button>

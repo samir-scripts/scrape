@@ -1,16 +1,36 @@
 @import "tailwindcss";
 
+:root {
+  --palette-paper: #F5F5DC;
+  --palette-obsidian: #262628;
+  --palette-ink: #1A1A1A;
+  --palette-cream: #FFF6EE;
+  --palette-lavender: #C6C2F2;
+  --palette-lime: #D6DC82;
+  --palette-cherry: #D86072;
+  --palette-signal: #1F1FE0;
+}
+
 @theme {
-  --color-paper: #F5F5DC;
-  --color-paper-2: #E6E2C8;
-  --color-ink: #1A1A1A;
-  --color-ink-mute: #676357;
-  --color-obsidian: #262628;
-  --color-cream: #FFF6EE;
-  --color-lavender: #C6C2F2;
-  --color-lime: #D6DC82;
-  --color-cherry: #D86072;
-  --color-signal: #1F1FE0;
+  --color-surface: var(--palette-paper);
+  --color-surface-raised: #E6E2C8;
+  --color-text: var(--palette-ink);
+  --color-text-muted: #676357;
+  --color-border: var(--color-text);
+  --color-focus: var(--color-text);
+  --color-selection: var(--palette-lavender);
+  --color-accent-ink: var(--palette-ink);
+  /* Compatibility aliases for existing primitives; semantic roles are authoritative. */
+  --color-paper: var(--color-surface);
+  --color-paper-2: var(--color-surface-raised);
+  --color-ink: var(--color-text);
+  --color-ink-mute: var(--color-text-muted);
+  --color-obsidian: var(--palette-obsidian);
+  --color-cream: var(--palette-cream);
+  --color-lavender: var(--palette-lavender);
+  --color-lime: var(--palette-lime);
+  --color-cherry: var(--palette-cherry);
+  --color-signal: var(--palette-signal);
   --color-danger: #A52A43;
   --color-success: #35602D;
   --color-warning: #765000;
@@ -21,12 +41,10 @@
 }
 
 [data-theme="obsidian"] {
-  --color-paper: #262628;
-  --color-paper-2: #36363a;
-  --color-ink: #FFF6EE;
-  --color-ink-mute: #B9B5AF;
-  --color-cream: #1A1A1A;
-  --color-obsidian: #F5F5DC;
+  --color-surface: var(--palette-obsidian);
+  --color-surface-raised: #36363a;
+  --color-text: var(--palette-cream);
+  --color-text-muted: #B9B5AF;
   --color-danger: #F08FA2;
   --color-success: #C4DA92;
   --color-warning: #F0CB80;
@@ -114,6 +132,7 @@
     background: var(--color-paper);
     color: var(--color-ink);
     font-family: var(--font-sans);
+    font-size: 14px;
     margin: 0;
     padding: 0;
     height: 100%;
@@ -121,6 +140,7 @@
     overflow: hidden;
     user-select: text;
   }
+  input, textarea { text-transform: none; }
   nav, label, th {
     text-transform: uppercase;
     letter-spacing: -0.02em;
@@ -129,11 +149,11 @@
     image-rendering: pixelated;
   }
   ::selection {
-    background: var(--color-ink);
-    color: var(--color-paper);
+    background: var(--color-selection);
+    color: var(--color-accent-ink);
   }
   :focus-visible {
-    outline: 1px solid var(--color-ink);
+    outline: 2px solid var(--color-focus);
     outline-offset: 2px;
   }
 
