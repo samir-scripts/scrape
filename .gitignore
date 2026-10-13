@@ -24,3 +24,7 @@ src-tauri/binaries/*
 .vscode/*
 !.vscode/extensions.json
 *.log
+
+# Browser verification artifacts
+playwright-report/
+test-results/

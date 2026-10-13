@@ -65,3 +65,31 @@ jobs:
         run: |
           cargo test --workspace export_bindings
           git diff --exit-code src/bindings || (echo "TypeScript bindings are out of sync with Rust models. Run 'npm run gen:types' and commit the changes." && exit 1)
+
+      - name: Install browser engine
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser interaction regressions
+        run: npx playwright test e2e/workflows.pw.ts e2e/jobs.pw.ts
+
+  native-and-visual:
+    name: Native and visual verification
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target'
+      - run: npm ci
+      - run: npm run build:sidecar
+      - run: cargo build -p scrape
+      - run: npx playwright install chromium
+      - name: Both-theme screenshot, contrast and keyboard checks
+        run: npm run test:browser
+      - name: Isolated native IPC, sidecar and opener verification
+        run: npm run test:native

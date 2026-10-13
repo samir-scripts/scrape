@@ -11,7 +11,9 @@
     "test:startup": "node scripts/test-app-startup.mjs",
     "tauri": "tauri",
     "build:sidecar": "node scripts/build-sidecar.mjs",
-    "gen:types": "cargo test --workspace export_bindings"
+    "gen:types": "cargo test --workspace export_bindings",
+    "test:browser": "playwright test",
+    "test:native": "node scripts/native-smoke.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.67.1",
@@ -30,6 +32,7 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@tailwindcss/vite": "^4.0.9",
     "@tauri-apps/cli": "^2.2.7",
     "@testing-library/react": "^16.3.3",
