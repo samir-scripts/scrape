@@ -199,6 +199,7 @@ impl SchedulerService {
     }
 
     pub async fn set_paused(&mut self, paused: bool) -> Result<()> {
+        SettingsRepo::set_value(&self.pool, "scraper.enabled", serde_json::json!(!paused)).await?;
         self.is_paused.store(paused, Ordering::SeqCst);
         if paused {
             if let Some(id) = self.job_id.take() {

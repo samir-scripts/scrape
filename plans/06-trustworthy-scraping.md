@@ -22,8 +22,8 @@ Status: implementation in progress. This specification supersedes conflicting be
 
 - [x] Inspect working tree, create branch and recoverable checkpoint.
 - [x] Save implementation specification and root instructions.
-- [ ] Separate mechanical Rust formatting commit.
-- [ ] Correct style guard to inspect production styles, allow rounded-none/shadow-none and ignore comments/test fixtures.
+- [x] Separate mechanical Rust formatting commit.
+- [x] Correct style guard to inspect production styles, allow rounded-none/shadow-none and ignore comments/test fixtures.
 
 ## Phase 1: data protection
 
@@ -88,3 +88,39 @@ Use deterministic local HTTP → actual worker → NDJSON → repository integra
 CI: Rust fmt, Clippy, workspace tests, generated binding drift, TypeScript, full frontend tests, production build, corrected style/accessibility checks, deterministic integration/browser tests. Build sidecar before dependent checks on clean checkout.
 
 Completion requires every high-priority defect regression-tested, preview/run parity, explicit-hourly matching, source links preserved, manageable reversible cross-workflow blocks, pause/timezone/per-workflow scheduling, migration/retention preservation, visual/keyboard QA, clean-checkout checks, truthful docs, small commits and recovery path. Do not mark complete while any requirement remains unverified.
+
+
+## Implementation checkpoint (2026-10-13)
+
+Implemented and committed:
+
+- Baseline preservation, instructions, formatting, production style guard and CI sidecar ordering/full frontend build.
+- Checksum/history refusal plus comparison against an independently built historical schema; consistent pre-upgrade SQLite snapshot; documented recovery. No automatic reconciliation of unknown historical states.
+- Retention protection for every tracked status, favorites and nonblank notes, legacy policy migration, normalized dates, tombstone/history preservation tests.
+- Worker query errors, complete CLI URL parsing, relative JSON-LD destinations, missing/unsafe destination errors, optional selector validation, provider URL preservation, unknown Greenhouse publication dates, neutral ATS icons.
+- Bound currency filtering with matching count/page behavior and quote-injection regression.
+- Explicit browser demonstration boundary, fictional destinations/IDs/company, coherent descriptions/pay and isolated storage; removed hardcoded-live-verification assertions.
+- Effective source filters in Run all and saved/transient previews, explicit-empty overrides and unsupported-value errors, generated boundary updates. Worker completion/exit/malformed-output checks; execution-owned timeout cleanup and partial-buffer preservation.
+- Shared automatic pause flag including delayed startup and per-source triggers; persisted pause; normalized due comparisons and next-run initialization/update. Automatic global triggers only run global-cadence sources; manual Run all includes enabled sources.
+- Native independent card buttons, named visible trash SVG, selectable description, semantic card colors, stronger muted text, no smoothing suppression. DOM keyboard regression and theme-token contrast tests.
+
+Verification on this working checkout: **201 Rust tests**, **353 frontend tests across
+44 files**, full `npm test` startup smoke, TypeScript (via build), production build,
+Clippy with denied warnings, rustfmt, binding drift, style guard and diff whitespace
+checks all passed. Local HTTP fixtures exercised actual worker processes. No live
+provider verification was claimed. No clean-checkout or native smoke was run.
+Computer-use inventory returned no browsers/apps and a native-pipe startup error,
+so screenshot, native UI, zoom and rendered-theme verification remain outstanding.
+
+The full specification is **not complete**. In particular:
+
+- No persistent shared posting identity, reversible removal, block management or legacy suppression migration yet. **Deletion remains permanent**; the card honestly says Delete. The 2,000-row list limit remains.
+- Salary fixed-point/native-unit migration and shared predicate/repository pagination work remain. Hourly matching is not yet repaired end to end.
+- WorkflowSpec versioning, lossless editor/YAML round trips, simplified creation, posting-date rules, stale-preview cancellation/counts and block-aware preview remain.
+- Per-workflow IANA scheduling, explicit DST behavior, unified queued dispatch, accurate trigger/count/effective-spec recording, and user cancellation remain. Pause checks do not cancel a run already started.
+- Bounded Greenhouse detail retrieval/pay-range preservation and complete selector/pattern validation remain. Invalid URL errors currently use existing error events, not a new stage-count contract.
+- Populated upgrade coverage currently proves notes/favorites/status and WAL snapshots; the full historical-fixture/state matrix remains.
+- UI changes cover the card and base tokens, not the complete application. DOM tests do not replace browser/native verification.
+
+Continue from this checkpoint without treating inherited test names containing
+“pipeline” as proof of the remaining end-to-end requirements.
