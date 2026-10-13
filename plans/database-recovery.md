@@ -63,3 +63,36 @@ filters, custom settings, native-hourly recovery and historical suppression.
 Changing a workflow board does not transfer saved user state to an unrelated
 posting with the same provider ID. Repository ingestion selects the shared
 posting identity and retains separate saved copies when the board changes.
+
+## Verified migration-12 repair (2026-10-13)
+
+Two immutable migration manifests are supported: the committed migration 12 and
+the exact earlier variant documented in [incident 25](errors/25-native-startup-migration-12.md).
+Selection requires the known checksum, full successful history prefix and exact
+independently reconstructed schema. Neither history is relabeled. Forward migration
+18 fills the historical schema's missing source snapshot column and legacy-block
+table/index; both manifests retain their own immutable 18 SQL and converge to the
+same supported fields. All prior migration records remain unchanged.
+
+Startup creates a consistent pre-upgrade snapshot before applying the forward
+repair. Failure rolls back that migration; restart can safely resume. Backfill
+retains source snapshots and legacy suppression mappings. Unknown checksums or
+schema variants still refuse migration. Native initialization failures now display
+recovery information or exit cleanly instead of unwinding through macOS callbacks.
+
+The authorized existing installation was upgraded to version 18 with integrity
+`ok` and independently compared protected-state fingerprints. Notes, favorites,
+tracking/removal state, history, workflows, settings, prior blocks, tombstones and
+all previous checksums were unchanged. The pre-repair snapshot is
+`scrape_data.db.pre-migration-0b579102-05e0-4581-8e4a-79c430503c59.db` beside the database.
+A second open succeeded without another migration/backup.
+
+For an explicitly authorized manual upgrade after preserving recovery options:
+
+```bash
+cargo run -p scrape --example repair_database -- /absolute/path/to/existing/database.db
+```
+
+This helper runs migrations/backfills and integrity checks without starting
+schedulers or changing application defaults. It refuses nonexistent paths.
+Required regression tests use synthetic temporary databases, never this live file.

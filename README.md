@@ -184,6 +184,7 @@ npm run test:browser
 # Debug native app; the harness uses only a temporary database and local HTTP.
 cargo build -p scrape
 npm run test:native
+npm run test:native-startup
 node scripts/check-style.mjs
 npm run gen:types
 git diff --exit-code src/bindings

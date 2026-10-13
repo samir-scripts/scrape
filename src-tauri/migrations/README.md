@@ -41,6 +41,7 @@ Additional forward migrations:
 | 0014 | Matching metadata used by shared worker/repository predicates. |
 | 0015 | Provider edit time separate from publication time. |
 | 0016 | Run-stage counts and effective execution specification. |
+| 0018 | Finalize posting-removal provenance; exact historical variant gets missing schema through a separate immutable manifest. |
 | 0017 | Recognized pre-0011 Greenhouse update timestamps preserved as edits, with false posting dates cleared. |
 
 The Rust backfills preserve source identities, uncertain legacy salary values and
@@ -48,3 +49,5 @@ unresolved suppression keys. Populated upgrade tests preserve all tracked states
 notes, favorites, status events, workflow rules, custom settings and tombstones.
 See [database recovery](../../plans/database-recovery.md); a Git revert does not
 reverse database schema changes. Never update `_sqlx_migrations` to bypass errors.
+
+`../historical-migrations/` contains verified immutable migration-12 and migration-18 variants. The runner accepts only matching histories and independently rebuilt schemas, then preserves their stored checksums. See incident 25 in the recovery documentation.

@@ -31,3 +31,8 @@ HTTP fixture, packaged sidecar and controlled failing processes. Build the sidec
 and debug host first. It verifies cancellation, persistence, block/restore,
 protocol failures, timeouts and the external opener without normal app startup
 side effects. Playwright browser checks live in `e2e/`.
+
+`test-native-startup.mjs` runs the actual configured Tauri development pipeline
+with isolated ports and temporary database fixtures. It verifies native readiness
+on fresh and both migration-12 histories, and controlled nonzero refusal of an
+unknown checksum without a panic or database mutation. Run `npm run test:native-startup`.

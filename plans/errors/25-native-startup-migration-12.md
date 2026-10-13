@@ -1,6 +1,6 @@
 # Incident 25: native startup rejects the previously applied migration 12
 
-Status: researched; repair proposed, not implemented. Reported 2026-10-13 after
+Status: repaired and applied to the authorized installation, 2026-10-13. Reported 2026-10-13 after
 completion claim `85a78b8`. Research performed on `implementation/trustworthy-scraping`.
 
 ## Reported error
@@ -127,3 +127,32 @@ startup proves native readiness rather than just HTML transformation.
 - Local SQLx 0.8.6 `migration.rs` hashes SQL with SHA-384; `migrator.rs` rejects a
   differing applied checksum.
 - [Database recovery](../database-recovery.md).
+
+## Applied repair and verification
+
+Commits `0134f4b` and `f9d3947` implement the forward-only historical manifests,
+migration 18, backup-before-upgrade, safe initialization handling and real native
+development startup tests. No applied SQL or stored checksums were rewritten.
+
+Verification passed:
+
+- 255 Rust workspace tests, including both populated version-12 histories,
+  protected state/checksum preservation, committed-WAL backup, rejected schema
+  drift, failed repair rollback, backup destination failure and restart/resume.
+- Actual `npm run tauri -- dev --no-watch` startup on fresh, historical and current
+  databases, with readiness IPC. Unknown checksum: controlled nonzero exit,
+  actionable `STARTUP_FAILED`, no panic/abort and byte-identical database.
+- 360 frontend tests and Vite transformation smoke; Rust format, Clippy with
+  warnings denied and generated-binding drift checks.
+
+The native harness uses isolated ports and temporary app directories, preserving
+any existing development server. GUI recovery display is implemented; the automated
+failure test verifies controlled process exit rather than manually inspecting that
+recovery window.
+
+The live upgrade completed at version 18, with `PRAGMA integrity_check` returning
+`ok`. Protected-state fingerprints and prior migration checksums matched before
+and after. Its consistent version-12 backup is named
+`scrape_data.db.pre-migration-0b579102-05e0-4581-8e4a-79c430503c59.db` beside the active file.
+The repaired live database reopened successfully. Live native UI was not launched
+as a test; native readiness is established against equivalent synthetic histories.

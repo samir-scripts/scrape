@@ -443,4 +443,4 @@ version of migration 12. Later additions were placed in the same migration.
 Read-only refusal is correct; native `.expect()` causes the non-unwinding abort.
 The fresh-database native harness missed this historical variant.
 See [research, error log and proposed repair](25-native-startup-migration-12.md).
-Repair has not been implemented; live data and migration checksums remain intact.
+Repair was applied through forward migration 18 with a consistent backup. Protected saved state and all previous migration checksums remained intact. See incident 25 for verification.

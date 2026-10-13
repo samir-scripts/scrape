@@ -1,12 +1,12 @@
 # Trustworthy scraping, simpler workflows, and consistent UI
 
-Status: implementation present, but completion reopened by the historical migration-12 native startup failure. See [incident 25 and repair plan](errors/25-native-startup-migration-12.md). This specification supersedes conflicting behavior in older plans, especially permanent deletion and implicit browser demonstration. Source: user-supplied implementation plan, 2026-10-13. This is its implementation checklist; unchecked items are requirements, not shipped capabilities.
+Status: implemented, with historical migration-12 startup repair applied and verified. See [incident 25 and repair evidence](errors/25-native-startup-migration-12.md). This specification supersedes conflicting behavior in older plans, especially permanent deletion and implicit browser demonstration. Source: user-supplied implementation plan, 2026-10-13. This is its implementation checklist; unchecked items are requirements, not shipped capabilities.
 
-## Reopened acceptance requirements
+## Resolved incident-25 acceptance requirements
 
-- [ ] Support the exact observed historical migration-12 history through a backed-up forward repair, retaining existing checksums and saved state.
-- [ ] Handle native initialization failures without a macOS abort.
-- [ ] Verify actual Tauri development startup on both migration-12 histories and safe refusal of unknown states.
+- [x] Support the exact observed historical migration-12 history through a backed-up forward repair, retaining existing checksums and saved state.
+- [x] Handle native initialization failures without a macOS abort.
+- [x] Verify actual Tauri development startup on both migration-12 histories and safe refusal of unknown states.
 
 ## Baseline
 
@@ -99,8 +99,9 @@ Completion requires every high-priority defect regression-tested, preview/run pa
 ## Prior completion claim and verification (2026-10-13)
 
 The passing checks below did not cover the exact earlier version-12 migration
-variant in the existing installation. Native startup currently fails for that
-recognized historical state; the new repair plan supersedes the completion claim.
+variant in the existing installation. That upgrade gap was subsequently repaired through migration 18 without rewriting
+existing checksums. Incident 25 records the actual development-startup checks and
+protected-state comparisons for the authorized live upgrade.
 
 The early partial checkpoint is superseded by the implemented phases above.
 All original work remains in baseline `02dc881`; behavior, tests, documentation
