@@ -276,7 +276,12 @@ mod tests {
 
         for s in samples {
             let res = classify_work_auth(s);
-            assert_eq!(res.value, WorkAuthRequirement::CitizenOnly, "Failed on: {}", s);
+            assert_eq!(
+                res.value,
+                WorkAuthRequirement::CitizenOnly,
+                "Failed on: {}",
+                s
+            );
             assert!(res.evidence.is_some());
         }
     }

@@ -1573,7 +1573,9 @@ mod tests {
                 sponsorship: TriState::No,
                 sponsorship_evidence: Some("No visa sponsorship".to_string()),
                 work_auth: WorkAuthRequirement::UsPerson,
-                work_auth_evidence: Some("Must be a US Person (US Citizen or Green Card holder)".to_string()),
+                work_auth_evidence: Some(
+                    "Must be a US Person (US Citizen or Green Card holder)".to_string(),
+                ),
                 clearance: TriState::Unknown,
                 clearance_level: None,
                 clearance_evidence: None,
@@ -2550,11 +2552,12 @@ mod tests {
         assert!(JobsRepo::get(&pool, job_id).await.is_err());
 
         // 4. Verify tombstone exists in deleted_jobs table
-        let tombstone: Option<String> = sqlx::query_scalar("SELECT dedupe_key FROM deleted_jobs WHERE dedupe_key = ?")
-            .bind("gh:testco:99999")
-            .fetch_optional(&pool)
-            .await
-            .unwrap();
+        let tombstone: Option<String> =
+            sqlx::query_scalar("SELECT dedupe_key FROM deleted_jobs WHERE dedupe_key = ?")
+                .bind("gh:testco:99999")
+                .fetch_optional(&pool)
+                .await
+                .unwrap();
         assert_eq!(tombstone, Some("gh:testco:99999".into()));
 
         // 5. Subsequent scrape with identical dedupe_key must be skipped
@@ -2563,7 +2566,11 @@ mod tests {
         assert_eq!(stats2.updated, 0);
 
         let jobs_after = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
-        assert_eq!(jobs_after.items.len(), 0, "Deleted job must not be resurrected");
+        assert_eq!(
+            jobs_after.items.len(),
+            0,
+            "Deleted job must not be resurrected"
+        );
 
         // 6. Non-existent job deletion returns false
         let deleted_again = JobsRepo::delete(&pool, "nonexistent-id").await.unwrap();

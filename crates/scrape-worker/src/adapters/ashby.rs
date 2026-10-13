@@ -132,11 +132,7 @@ fn parse_ashby_jobs(
         } else {
             job.workplace_type.as_deref()
         };
-        let workplace_type = classify_workplace(
-            explicit,
-            &location_str,
-            desc_text.as_deref(),
-        );
+        let workplace_type = classify_workplace(explicit, &location_str, desc_text.as_deref());
 
         // Compensation
         let mut salary = None;

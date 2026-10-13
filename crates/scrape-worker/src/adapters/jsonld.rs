@@ -3,9 +3,7 @@ use scrape_core::enrich::{
     classify_clearance, classify_sponsorship, classify_work_auth, classify_workplace,
     extract_experience, location as loc_enrich, to_plain_text, Salary,
 };
-use scrape_core::{
-    RoleType, TriState, WorkAuthRequirement, WorkerEvent, WorkerSource,
-};
+use scrape_core::{RoleType, TriState, WorkAuthRequirement, WorkerEvent, WorkerSource};
 use scraper::{Html, Selector};
 use serde_json::Value;
 use std::collections::HashSet;
@@ -162,11 +160,7 @@ fn parse_job_posting_map(
         .unwrap_or(false);
 
     let explicit = if is_telecommute { Some("Remote") } else { None };
-    let workplace_type = classify_workplace(
-        explicit,
-        &location,
-        desc_text.as_deref(),
-    );
+    let workplace_type = classify_workplace(explicit, &location, desc_text.as_deref());
 
     let text_for_enrich = desc_text.as_deref().unwrap_or("");
 
@@ -235,7 +229,8 @@ fn parse_job_posting_map(
         });
     let company_icon_url = logo_url.or_else(|| {
         Url::parse(page_url).ok().and_then(|u| {
-            u.host_str().map(|h| format!("https://www.google.com/s2/favicons?domain={h}&sz=64"))
+            u.host_str()
+                .map(|h| format!("https://www.google.com/s2/favicons?domain={h}&sz=64"))
         })
     });
 

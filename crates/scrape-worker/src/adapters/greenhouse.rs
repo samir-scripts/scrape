@@ -160,8 +160,14 @@ fn parse_greenhouse_jobs(
 
         let url = if job.absolute_url.contains("boards.greenhouse.io") {
             job.absolute_url
-                .replace("https://boards.greenhouse.io", "https://job-boards.greenhouse.io")
-                .replace("http://boards.greenhouse.io", "https://job-boards.greenhouse.io")
+                .replace(
+                    "https://boards.greenhouse.io",
+                    "https://job-boards.greenhouse.io",
+                )
+                .replace(
+                    "http://boards.greenhouse.io",
+                    "https://job-boards.greenhouse.io",
+                )
         } else {
             job.absolute_url
         };

@@ -120,19 +120,28 @@ mod tests {
         let col_res = sqlx::query("SELECT company_icon_url FROM jobs LIMIT 1")
             .fetch_optional(&pool)
             .await;
-        assert!(col_res.is_ok(), "company_icon_url column must exist on jobs table");
+        assert!(
+            col_res.is_ok(),
+            "company_icon_url column must exist on jobs table"
+        );
 
         // Verify that work_auth and work_auth_evidence columns exist on jobs
         let wa_res = sqlx::query("SELECT work_auth, work_auth_evidence FROM jobs LIMIT 1")
             .fetch_optional(&pool)
             .await;
-        assert!(wa_res.is_ok(), "work_auth and work_auth_evidence columns must exist on jobs table");
+        assert!(
+            wa_res.is_ok(),
+            "work_auth and work_auth_evidence columns must exist on jobs table"
+        );
 
         // Verify that deleted_jobs table exists
         let dj_res = sqlx::query("SELECT dedupe_key, deleted_at FROM deleted_jobs LIMIT 1")
             .fetch_optional(&pool)
             .await;
-        assert!(dj_res.is_ok(), "deleted_jobs table must exist on migrated DB");
+        assert!(
+            dj_res.is_ok(),
+            "deleted_jobs table must exist on migrated DB"
+        );
     }
 
     #[tokio::test]

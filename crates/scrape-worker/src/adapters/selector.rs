@@ -285,11 +285,7 @@ pub fn extract_jobs_with_selectors(
         }
 
         let locations = loc_enrich::parse(&location);
-        let workplace_type = classify_workplace(
-            None,
-            &location,
-            desc_text.as_deref(),
-        );
+        let workplace_type = classify_workplace(None, &location, desc_text.as_deref());
 
         let text_for_enrich = desc_text.as_deref().unwrap_or("");
         let sponsorship = if !text_for_enrich.is_empty() {
@@ -313,9 +309,9 @@ pub fn extract_jobs_with_selectors(
             .map(|e| e.is_new_grad)
             .unwrap_or(TriState::Unknown);
 
-        let company_icon_url = base_url.host_str().map(|h| {
-            format!("https://www.google.com/s2/favicons?domain={h}&sz=64")
-        });
+        let company_icon_url = base_url
+            .host_str()
+            .map(|h| format!("https://www.google.com/s2/favicons?domain={h}&sz=64"));
 
         events.push(WorkerEvent::Job {
             source_id: source.id.clone(),

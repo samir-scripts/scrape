@@ -168,10 +168,10 @@ pub enum ClearanceLevel {
 #[ts(export)]
 pub enum WorkAuthRequirement {
     CitizenOnly, // U.S. Citizenship strictly required (Green Card holders barred)
-    UsPerson,    // U.S. Person: U.S. Citizen or lawful Permanent Resident / Green Card holder (ITAR/EAR)
-    Open,        // Standard work authorization (open / no export control restriction)
+    UsPerson, // U.S. Person: U.S. Citizen or lawful Permanent Resident / Green Card holder (ITAR/EAR)
+    Open,     // Standard work authorization (open / no export control restriction)
     #[default]
-    Unknown,     // Not specified in posting
+    Unknown, // Not specified in posting
 }
 
 #[cfg(test)]
