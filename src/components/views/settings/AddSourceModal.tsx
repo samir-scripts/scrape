@@ -1,3 +1,4 @@
+import { openPostingUrl } from "../../../lib/postingUrl";
 import { useEffect, useRef, useState } from "react";
 import { parseDocument } from "yaml";
 import type { Source } from "../../../bindings/Source";
@@ -49,6 +50,7 @@ export function AddSourceModal({
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<Source | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const content = useRef<HTMLDivElement>(null);
   const revision = useRef(0);
   const request = useRef<string | null>(null);
   const cancel = () => {
@@ -132,6 +134,10 @@ export function AddSourceModal({
     }
   };
   const runPreview = async () => {
+    if (content.current?.querySelector("[aria-invalid=true]")) {
+      setError("Fix the highlighted inputs before previewing.");
+      return;
+    }
     const current = ++revision.current;
     const id = crypto.randomUUID();
     request.current = id;
@@ -166,6 +172,51 @@ export function AddSourceModal({
       setBusy(false);
     }
   };
+  const rules = draft.filters?.matching;
+  const advancedSettings = [
+    draft.filters?.query || draft.filters?.policy ? "expert rules" : null,
+    draft.filters?.include_keywords?.length ||
+    draft.filters?.exclude_keywords?.length
+      ? "imported keyword rules"
+      : null,
+    draft.filters?.role_types?.length || rules?.role_types?.length
+      ? "role restrictions"
+      : null,
+    rules?.compensation || draft.filters?.compensation
+      ? "native pay rules"
+      : null,
+    rules?.posting_date ? "posting dates" : null,
+    rules?.workplaces?.length ||
+    rules?.experience_min != null ||
+    rules?.experience_max != null ||
+    rules?.sponsorship?.length ||
+    rules?.work_auth?.length ||
+    rules?.clearance?.length ||
+    rules?.countries?.length ||
+    rules?.regions?.length ||
+    (rules?.new_grad && rules.new_grad !== "any")
+      ? "additional matching rules"
+      : null,
+    rules?.keywords?.all.length ||
+    rules?.keywords?.exclude.length ||
+    rules?.keywords?.fields.some((field) => field !== "title")
+      ? "additional keyword rules"
+      : null,
+    draft.extractor.kind === "selector" ||
+    Object.keys(draft.extractor.source_config || {}).some(
+      (key) => key !== "url",
+    )
+      ? "custom extraction"
+      : null,
+    draft.schedule?.weekdays?.length ||
+    (draft.schedule?.cadence &&
+      !["daily", "manual"].includes(draft.schedule.cadence))
+      ? "advanced schedule"
+      : null,
+    draft.retention?.days != null && draft.retention.days !== 30
+      ? "custom retention"
+      : null,
+  ].filter(Boolean);
   return (
     <Modal
       isOpen={isOpen}
@@ -173,7 +224,7 @@ export function AddSourceModal({
       title={initialSource ? "Edit workflow" : "Create workflow"}
       width="max-w-2xl"
     >
-      <div className="grid gap-4 text-sm">
+      <div ref={content} className="grid gap-4 text-sm">
         {isDemoMode() && (
           <p className="border p-2">
             Demonstration: previews contain fictional fixtures. Desktop previews
@@ -298,14 +349,16 @@ export function AddSourceModal({
                     ),
                   )}
                 </nav>
-                {(draft.filters?.query ||
-                  draft.filters?.policy ||
-                  draft.filters?.matching?.posting_date ||
-                  draft.extractor.source_config ||
-                  draft.filters?.matching?.keywords?.all.length) && (
+                {advancedSettings.length > 0 && (
                   <p>
-                    Advanced configuration is preserved. Open Advanced or YAML
-                    to review all active settings.
+                    Preserved: {advancedSettings.join(", ")}.{" "}
+                    <button
+                      type="button"
+                      className="underline cursor-pointer"
+                      onClick={() => setAdvanced(true)}
+                    >
+                      Review Advanced settings
+                    </button>
                   </p>
                 )}
               </>
@@ -388,7 +441,8 @@ export function AddSourceModal({
                     {preview.sampled && (
                       <p>
                         Showing the first {preview.jobs.length} eligible
-                        postings; counts cover the full preview.
+                        postings; counts describe fetched postings. Extraction
+                        errors may leave the board incomplete.
                       </p>
                     )}
                     {preview.jobs.map(
@@ -397,6 +451,12 @@ export function AddSourceModal({
                           <article key={identity} className="border-b py-2">
                             <a
                               href={job.url}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                openPostingUrl(job.url).catch((error) =>
+                                  setError(String(error)),
+                                );
+                              }}
                               target="_blank"
                               rel="noreferrer"
                               className="underline"

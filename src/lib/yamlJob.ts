@@ -2,31 +2,9 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { SourceKind } from "../bindings/SourceKind";
 import type { SourceCadence } from "../bindings/SourceCadence";
 
-export interface YamlJobSpec {
-  version?: number;
-  company: string;
-  url: string;
-  cadence?: {
-    type: SourceCadence;
-    cron?: string;
-  };
-  engine: {
-    kind: SourceKind;
-    selectors?: {
-      item?: string;
-      title?: string;
-      link?: string;
-      location?: string;
-      salary?: string;
-    };
-    regex?: {
-      title?: string;
-      link?: string;
-      location?: string;
-      salary?: string;
-    };
-  };
-}
+/** @deprecated Legacy v1 compatibility bridge. Production editing/import uses WorkflowSpec and the desktop validator. */
+export type { LegacyWorkflowSpec as YamlJobSpec } from "../bindings/LegacyWorkflowSpec";
+import type { LegacyWorkflowSpec as YamlJobSpec } from "../bindings/LegacyWorkflowSpec";
 
 export function sourceToYaml(source: {
   name: string;

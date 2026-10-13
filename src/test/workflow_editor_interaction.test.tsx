@@ -46,8 +46,8 @@ describe("one workflow draft", () => {
     await user.click(screen.getByRole("button", { name: "Edit YAML" }));
     expect((screen.getByRole("textbox", { name: "Workflow YAML" }) as HTMLTextAreaElement).value).toContain("5025");
     await user.click(screen.getByRole("button", { name: "Apply YAML to form" }));
-    await screen.findByRole("spinbutton", { name: "Pay minimum" });
-    expect((screen.getByRole("spinbutton", { name: "Pay minimum" }) as HTMLInputElement).value).toBe("50.25");
+    await screen.findByRole("textbox", { name: "Minimum per hour" });
+    expect((screen.getByRole("textbox", { name: "Minimum per hour" }) as HTMLInputElement).value).toBe("50.25");
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
     await user.type(screen.getByRole("textbox", { name: "Workflow name" }), " revised");
     expect(cancel).toHaveBeenCalled();

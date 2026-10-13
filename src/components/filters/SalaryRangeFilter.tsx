@@ -6,9 +6,10 @@ export { parseSalaryInput, parseHourlyInput };
 export interface SalaryRangeFilterProps {
   salaryMin: number | null; salaryMax: number | null; currency: string | null;
   interval?: SalaryInterval | null; includeUnknown: boolean;
+  onDraftChange?: () => void;
   onChange: (values: { salaryMin: number | null; salaryMax: number | null; currency: string | null; interval: SalaryInterval | null; includeUnknown: boolean }) => void;
 }
-export function SalaryRangeFilter({ salaryMin, salaryMax, currency, interval = null, includeUnknown, onChange }: SalaryRangeFilterProps) {
+export function SalaryRangeFilter({ salaryMin, salaryMax, currency, interval = null, includeUnknown, onChange, onDraftChange }: SalaryRangeFilterProps) {
   const [minText, setMinText] = useState(salaryMin?.toString() || "");
   const [maxText, setMaxText] = useState(salaryMax?.toString() || "");
   const [error, setError] = useState("");
@@ -35,10 +36,10 @@ export function SalaryRangeFilter({ salaryMin, salaryMax, currency, interval = n
     <p className="text-[var(--color-ink-mute)]">Matches explicitly {mode === "hour" ? "hourly" : "annual"} pay. Switching units clears the amount bounds.</p>
     <div className="flex gap-3">
       <label className="flex flex-col gap-1 min-w-0">Minimum {mode === "hour" ? "per hour" : "per year"}
-        <input inputMode="decimal" value={minText} onChange={(event) => setMinText(event.target.value)} onBlur={apply} aria-invalid={!!error} aria-describedby={error ? "salary-filter-error" : undefined} className="w-full border bg-[var(--color-paper)] p-2" />
+        <input inputMode="decimal" value={minText} onChange={(event) => { setMinText(event.target.value); onDraftChange?.(); }} onBlur={apply} aria-invalid={!!error} aria-describedby={error ? "salary-filter-error" : undefined} className="w-full border bg-[var(--color-paper)] p-2" />
       </label>
       <label className="flex flex-col gap-1 min-w-0">Maximum {mode === "hour" ? "per hour" : "per year"}
-        <input inputMode="decimal" value={maxText} onChange={(event) => setMaxText(event.target.value)} onBlur={apply} aria-invalid={!!error} aria-describedby={error ? "salary-filter-error" : undefined} className="w-full border bg-[var(--color-paper)] p-2" />
+        <input inputMode="decimal" value={maxText} onChange={(event) => { setMaxText(event.target.value); onDraftChange?.(); }} onBlur={apply} aria-invalid={!!error} aria-describedby={error ? "salary-filter-error" : undefined} className="w-full border bg-[var(--color-paper)] p-2" />
       </label>
     </div>
     {error && <p id="salary-filter-error" role="alert" className="text-[var(--color-danger)]">{error}</p>}

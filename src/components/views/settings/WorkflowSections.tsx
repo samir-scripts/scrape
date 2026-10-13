@@ -1,3 +1,4 @@
+import { SalaryRangeFilter } from "../../filters/SalaryRangeFilter";
 import type { WorkflowSpec } from "../../../bindings/WorkflowSpec";
 import type { PostingRules } from "../../../bindings/PostingRules";
 import { Input } from "../../ui/Input";
@@ -109,35 +110,36 @@ export function WorkflowSections({
                   },
                 }),
             )}
-            {[
-              "job_container",
-              "title_selector",
-              "url_selector",
-              "location_selector",
-              "salary_selector",
-              "description_selector",
-              "date_selector",
-              "title_regex",
-              "link_regex",
-              "location_regex",
-              "salary_regex",
-              "url_pattern",
-            ].map((key) =>
-              field(
-                key.replaceAll("_", " "),
-                String(
-                  draft.extractor[key as keyof typeof draft.extractor] || "",
+            {draft.extractor.kind === "selector" &&
+              [
+                "job_container",
+                "title_selector",
+                "url_selector",
+                "location_selector",
+                "salary_selector",
+                "description_selector",
+                "date_selector",
+                "title_regex",
+                "link_regex",
+                "location_regex",
+                "salary_regex",
+                "url_pattern",
+              ].map((key) =>
+                field(
+                  key.replaceAll("_", " "),
+                  String(
+                    draft.extractor[key as keyof typeof draft.extractor] || "",
+                  ),
+                  (value) =>
+                    change({
+                      ...draft,
+                      extractor: {
+                        ...draft.extractor,
+                        [key]: value || undefined,
+                      },
+                    }),
                 ),
-                (value) =>
-                  change({
-                    ...draft,
-                    extractor: {
-                      ...draft.extractor,
-                      [key]: value || undefined,
-                    },
-                  }),
-              ),
-            )}
+              )}
           </>
         )}
       </div>
@@ -146,9 +148,9 @@ export function WorkflowSections({
     return (
       <div className="grid gap-3">
         <p className="text-sm text-[var(--color-ink-mute)]">
-          Absent settings inherit global defaults. Empty keyword and location
-          lists explicitly remove those restrictions. Separate terms with
-          commas.
+          Absent fields inherit global defaults. Explicit empty arrays override
+          the corresponding field only; YAML exposes every inheritance setting.
+          Separate terms with commas.
         </p>
         {(["any", ...(advanced ? ["all", "exclude"] : [])] as const).map(
           (rule) =>
@@ -260,91 +262,45 @@ export function WorkflowSections({
                 </label>
               ))}
             </fieldset>
-            <label>
-              Pay interval
-              <Select
-                aria-label="Pay interval"
-                value={rules.compensation?.interval || ""}
-                options={[
-                  { value: "", label: "No pay restriction" },
-                  { value: "hour", label: "Explicitly hourly" },
-                  { value: "year", label: "Explicitly annual" },
-                ]}
-                onChange={(e) =>
-                  setRules({
-                    compensation: e.target.value
-                      ? {
-                          min_minor: null,
-                          max_minor: null,
-                          currency: "USD",
-                          interval: e.target.value as "hour" | "year",
-                          include_unknown: false,
-                        }
-                      : null,
-                  })
-                }
-              />
-            </label>
-            {rules.compensation && (
-              <>
-                {field(
-                  "Pay minimum",
-                  rules.compensation.min_minor == null
-                    ? ""
-                    : rules.compensation.min_minor / 100,
-                  (value) =>
-                    setRules({
-                      compensation: {
-                        ...rules.compensation!,
-                        min_minor:
-                          value === "" ? null : Math.round(Number(value) * 100),
-                      },
-                    }),
-                  "number",
-                )}
-                {field(
-                  "Pay maximum",
-                  rules.compensation.max_minor == null
-                    ? ""
-                    : rules.compensation.max_minor / 100,
-                  (value) =>
-                    setRules({
-                      compensation: {
-                        ...rules.compensation!,
-                        max_minor:
-                          value === "" ? null : Math.round(Number(value) * 100),
-                      },
-                    }),
-                  "number",
-                )}
-                {field(
-                  "Pay currency",
-                  rules.compensation.currency || "",
-                  (value) =>
-                    setRules({
-                      compensation: {
-                        ...rules.compensation!,
-                        currency: value.toUpperCase() || null,
-                      },
-                    }),
-                )}
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={rules.compensation.include_unknown}
-                    onChange={(e) =>
-                      setRules({
-                        compensation: {
-                          ...rules.compensation!,
-                          include_unknown: e.target.checked,
+            <SalaryRangeFilter
+              salaryMin={
+                rules.compensation?.min_minor == null
+                  ? null
+                  : rules.compensation.min_minor / 100
+              }
+              salaryMax={
+                rules.compensation?.max_minor == null
+                  ? null
+                  : rules.compensation.max_minor / 100
+              }
+              currency={rules.compensation?.currency ?? null}
+              interval={rules.compensation?.interval ?? null}
+              includeUnknown={rules.compensation?.include_unknown ?? false}
+              onDraftChange={() => change(draft)}
+              onChange={(values) =>
+                setRules({
+                  compensation:
+                    !values.interval &&
+                    !values.currency &&
+                    values.salaryMin == null &&
+                    values.salaryMax == null
+                      ? null
+                      : {
+                          min_minor:
+                            values.salaryMin == null
+                              ? null
+                              : Math.round(values.salaryMin * 100),
+                          max_minor:
+                            values.salaryMax == null
+                              ? null
+                              : Math.round(values.salaryMax * 100),
+                          currency: values.currency,
+                          interval: values.interval,
+                          include_unknown: values.includeUnknown,
                         },
-                      })
-                    }
-                  />{" "}
-                  Include unknown amounts (unit and currency must still match)
-                </label>
-              </>
-            )}
+                })
+              }
+            />
             {field(
               "Experience minimum (years)",
               rules.experience_min ?? "",

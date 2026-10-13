@@ -339,10 +339,31 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
   const sourceConfig = Object.fromEntries(
     Object.entries(config).filter(([key]) => !key.startsWith("__")),
   );
+  const selectors = {
+    job_container: "item",
+    title_selector: "title",
+    url_selector: "link",
+    location_selector: "location",
+    salary_selector: "salary",
+    description_selector: "description",
+    date_selector: "date",
+    title_regex: "title_regex",
+    link_regex: "link_regex",
+    location_regex: "location_regex",
+    salary_regex: "salary_regex",
+    url_pattern: "url_pattern",
+    url_patterns: "url_patterns",
+    exclude_url_patterns: "exclude_url_patterns",
+  };
+  const extractedFields = Object.fromEntries(
+    Object.entries(selectors)
+      .filter(([, key]) => key in sourceConfig)
+      .map(([field, key]) => [field, sourceConfig[key]]),
+  );
+  for (const key of Object.values(selectors)) delete sourceConfig[key];
   const filters = (source.filters || {}) as WorkflowSpec["filters"];
   const calendar = config.__schedule as
-    | { time?: string; weekdays?: number[]; timezone?: string }
-    | undefined;
+    { time?: string; weekdays?: number[]; timezone?: string } | undefined;
   return {
     ...snapshot,
     version: 3,
@@ -353,14 +374,16 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
     },
     extractor: {
       ...snapshot?.extractor,
+      ...extractedFields,
       kind: source.kind,
-      url: String(
-        config.url || canonicalizeAtsUrl(source.kind, source.identifier),
-      ),
+      url: String(canonicalizeAtsUrl(source.kind, source.identifier)),
       source_config: sourceConfig as WorkflowSpec["extractor"]["source_config"],
     },
     schedule: {
       ...snapshot?.schedule,
+      ...(typeof config.__cron_timezone === "string"
+        ? { timezone: config.__cron_timezone }
+        : {}),
       cadence: source.cadence,
       cron: source.cadence_cron ?? undefined,
       ...calendar,
