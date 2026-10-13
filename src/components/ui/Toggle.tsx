@@ -66,7 +66,7 @@ export function Toggle({
             </span>
           )}
           {description && (
-            <span className="text-[11px] text-[var(--color-ink-mute)]">
+            <span className="text-xs text-[var(--color-ink-mute)]">
               {description}
             </span>
           )}

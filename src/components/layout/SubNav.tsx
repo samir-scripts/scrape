@@ -28,13 +28,13 @@ export function SubNav() {
         <div className="flex items-center gap-4 text-xs font-mono">
           {view === "discovered" && (
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono uppercase tracking-wider text-[var(--color-ink-mute)]">
+              <span className="text-xs font-mono uppercase tracking-wider text-[var(--color-ink-mute)]">
                 DISCOVERED
               </span>
               {selectedJobId && (
                 <button
                   onClick={() => setSelectedJobId(null)}
-                  className="flex items-center gap-1 px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[10px] font-mono uppercase font-bold text-[var(--color-ink)] cursor-pointer"
+                  className="flex items-center gap-1 px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-xs font-mono uppercase font-bold text-[var(--color-ink)] cursor-pointer"
                   title="Close active job window [Esc]"
                 >
                   <span>✕ CLOSE WINDOW</span>
@@ -120,13 +120,13 @@ export function SubNav() {
           )}
 
           {view === "settings" && (
-            <span className="text-[11px] font-mono uppercase text-[var(--color-ink-mute)] tracking-wider">
+            <span className="text-xs font-mono uppercase text-[var(--color-ink-mute)] tracking-wider">
               SETTINGS
             </span>
           )}
 
           {view === "metrics" && (
-            <span className="text-[11px] font-mono uppercase text-[var(--color-ink-mute)] tracking-wider">
+            <span className="text-xs font-mono uppercase text-[var(--color-ink-mute)] tracking-wider">
               METRICS
             </span>
           )}

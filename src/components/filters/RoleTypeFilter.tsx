@@ -53,7 +53,7 @@ export function RoleTypeFilter({ selected, onChange }: RoleTypeFilterProps) {
         {currentList.length > 0 && (
           <button
             onClick={() => onChange(null)}
-            className="text-[10px] text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
+            className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
           >
             [ANY ROLE]
           </button>
@@ -69,7 +69,7 @@ export function RoleTypeFilter({ selected, onChange }: RoleTypeFilterProps) {
               key={role}
               type="button"
               onClick={() => handleToggle(role)}
-              className={`py-1 px-2 text-[11px] font-bold uppercase tracking-wider border cursor-pointer truncate ${
+              className={`py-1 px-2 text-xs font-bold uppercase tracking-wider border cursor-pointer truncate ${
                 active
                   ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
                   : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"

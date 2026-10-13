@@ -243,7 +243,7 @@ export function NotificationPopover({
             NOTIFICATIONS
           </span>
           {unreadNotificationCount > 0 && (
-            <span className="px-1.5 py-0.2 text-[10px] font-bold bg-[var(--color-cherry)] text-white leading-none">
+            <span className="px-1.5 py-0.2 text-xs font-bold bg-[var(--color-cherry)] text-white leading-none">
               {unreadNotificationCount} NEW
             </span>
           )}
@@ -253,7 +253,7 @@ export function NotificationPopover({
           {unreadNotificationCount > 0 && (
             <button
               onClick={handleMarkAllRead}
-              className="px-1.5 py-0.5 text-[10px] uppercase font-bold border border-[var(--color-ink)] bg-transparent text-[var(--color-ink)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] cursor-pointer"
+              className="px-1.5 py-0.5 text-xs uppercase font-bold border border-[var(--color-ink)] bg-transparent text-[var(--color-ink)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] cursor-pointer"
             >
               READ ALL
             </button>
@@ -262,7 +262,7 @@ export function NotificationPopover({
           {notifications.length > 0 && (
             <button
               onClick={handleClearAll}
-              className="px-1.5 py-0.5 text-[10px] uppercase font-bold border border-[var(--color-ink-mute)] bg-transparent text-[var(--color-ink-mute)] hover:border-[var(--color-ink)] hover:text-[var(--color-ink)] cursor-pointer"
+              className="px-1.5 py-0.5 text-xs uppercase font-bold border border-[var(--color-ink-mute)] bg-transparent text-[var(--color-ink-mute)] hover:border-[var(--color-ink)] hover:text-[var(--color-ink)] cursor-pointer"
             >
               CLEAR
             </button>
@@ -290,7 +290,7 @@ export function NotificationPopover({
             <span className="font-bold tracking-wider text-[var(--color-ink)] uppercase">
               NO NOTIFICATIONS
             </span>
-            <span className="text-[11px] text-[var(--color-ink-mute)]">
+            <span className="text-xs text-[var(--color-ink-mute)]">
               ALL PIPELINES & WORKFLOWS NOMINAL
             </span>
           </div>
@@ -310,7 +310,7 @@ export function NotificationPopover({
                 }`}
               >
                 {/* Meta row: Badge, Timestamp, Unread status */}
-                <div className="flex items-center justify-between text-[10px]">
+                <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-1.5">
                     <span
                       style={{
@@ -341,7 +341,7 @@ export function NotificationPopover({
                 </div>
 
                 {/* Message */}
-                <div className="text-[11px] text-[var(--color-ink)] whitespace-pre-wrap leading-relaxed">
+                <div className="text-xs text-[var(--color-ink)] whitespace-pre-wrap leading-relaxed">
                   {item.message}
                 </div>
 
@@ -349,11 +349,11 @@ export function NotificationPopover({
                 {isUpdate && (
                   <div className="mt-2 pt-2 border-t border-[var(--color-ink-mute)]/30 flex items-center justify-between gap-2">
                     {updateSuccess ? (
-                      <span className="text-[11px] font-bold text-[var(--color-lime)]">
+                      <span className="text-xs font-bold text-[var(--color-lime)]">
                         UPDATE READY — RESTARTING APPLICATION…
                       </span>
                     ) : updateError ? (
-                      <span className="text-[10px] text-[var(--color-cherry)]">
+                      <span className="text-xs text-[var(--color-cherry)]">
                         {updateError}
                       </span>
                     ) : (
@@ -363,7 +363,7 @@ export function NotificationPopover({
                           e.stopPropagation();
                           handleInstallUpdate();
                         }}
-                        className="px-2 py-1 text-[11px] font-bold uppercase tracking-wider bg-[var(--color-signal)] text-white border border-[var(--color-signal)] hover:opacity-90 disabled:opacity-50 cursor-pointer"
+                        className="px-2 py-1 text-xs font-bold uppercase tracking-wider bg-[var(--color-signal)] text-white border border-[var(--color-signal)] hover:opacity-90 disabled:opacity-50 cursor-pointer"
                       >
                         {isUpdating ? "DOWNLOADING & INSTALLING…" : "[INSTALL UPDATE]"}
                       </button>
@@ -377,7 +377,7 @@ export function NotificationPopover({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[var(--color-paper-2)] border-t border-[var(--color-ink)] text-[10px] shrink-0">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[var(--color-paper-2)] border-t border-[var(--color-ink)] text-xs shrink-0">
         <span className="text-[var(--color-ink-mute)] uppercase">
           SCRAPE v0.1.0
         </span>

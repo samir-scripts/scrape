@@ -180,7 +180,7 @@ function InnerChart({
                 x={x + barWidth / 2}
                 y={yMax + 16}
                 textAnchor="middle"
-                className={`font-mono text-[10px] select-none ${
+                className={`font-mono text-xs select-none ${
                   isSelected
                     ? "fill-[var(--color-ink)] font-black"
                     : "fill-[var(--color-ink-mute)]"
@@ -258,7 +258,7 @@ export function ApplicationsChart({
           <span className="font-mono text-xs font-bold uppercase tracking-wider text-[var(--color-ink)]">
             APPLICATIONS OVER TIME
           </span>
-          <span className="font-mono text-[10px] text-[var(--color-ink-mute)]">
+          <span className="font-mono text-xs text-[var(--color-ink-mute)]">
             [←/→ NAVIGATE]
           </span>
         </div>
@@ -270,7 +270,7 @@ export function ApplicationsChart({
             <button
               type="button"
               onClick={() => onGranularityChange("week")}
-              className={`px-2 py-0.5 font-mono text-[10px] font-bold uppercase transition-none cursor-pointer ${
+              className={`px-2 py-0.5 font-mono text-xs font-bold uppercase transition-none cursor-pointer ${
                 granularity === "week"
                   ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
                   : "bg-[var(--color-paper)] text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
@@ -281,7 +281,7 @@ export function ApplicationsChart({
             <button
               type="button"
               onClick={() => onGranularityChange("month")}
-              className={`px-2 py-0.5 font-mono text-[10px] font-bold uppercase transition-none border-l border-[var(--color-ink)] cursor-pointer ${
+              className={`px-2 py-0.5 font-mono text-xs font-bold uppercase transition-none border-l border-[var(--color-ink)] cursor-pointer ${
                 granularity === "month"
                   ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
                   : "bg-[var(--color-paper)] text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
@@ -296,7 +296,7 @@ export function ApplicationsChart({
             <button
               type="button"
               onClick={() => onPeriodsChange(12)}
-              className={`px-2 py-0.5 font-mono text-[10px] font-bold uppercase transition-none cursor-pointer ${
+              className={`px-2 py-0.5 font-mono text-xs font-bold uppercase transition-none cursor-pointer ${
                 periods === 12
                   ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
                   : "bg-[var(--color-paper)] text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
@@ -307,7 +307,7 @@ export function ApplicationsChart({
             <button
               type="button"
               onClick={() => onPeriodsChange(24)}
-              className={`px-2 py-0.5 font-mono text-[10px] font-bold uppercase transition-none border-l border-[var(--color-ink)] cursor-pointer ${
+              className={`px-2 py-0.5 font-mono text-xs font-bold uppercase transition-none border-l border-[var(--color-ink)] cursor-pointer ${
                 periods === 24
                   ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
                   : "bg-[var(--color-paper)] text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
@@ -338,15 +338,15 @@ export function ApplicationsChart({
       {/* NieR Fixed Readout Bar */}
       <div className="border-t border-[var(--color-ink)] pt-2 mt-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[11px] font-black uppercase text-[var(--color-ink)]">
+          <span className="font-mono text-xs font-black uppercase text-[var(--color-ink)]">
             READOUT:
           </span>
-          <span className="font-mono text-[11px] font-bold uppercase text-[var(--color-ink)] tracking-wider">
+          <span className="font-mono text-xs font-bold uppercase text-[var(--color-ink)] tracking-wider">
             {activeBucket ? formatReadout(activeBucket, granularity) : "NO DATA"}
           </span>
         </div>
         {activeBucket && (
-          <span className="font-mono text-[10px] text-[var(--color-ink-mute)]">
+          <span className="font-mono text-xs text-[var(--color-ink-mute)]">
             {activeBucket.count === 0 ? "ZERO APPLICATIONS" : `${activeBucket.count} FILED`}
           </span>
         )}

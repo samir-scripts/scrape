@@ -49,7 +49,7 @@ export function MetricsView() {
             METRICS
           </h1>
           {metrics.streak.current > 0 && (
-            <span className="border border-[var(--color-ink)] px-2 py-0.5 font-mono text-[10px] font-bold uppercase bg-[var(--color-paper-2)]">
+            <span className="border border-[var(--color-ink)] px-2 py-0.5 font-mono text-xs font-bold uppercase bg-[var(--color-paper-2)]">
               ACTIVE STREAK: {metrics.streak.current} {metrics.streak.current === 1 ? "DAY" : "DAYS"}
             </span>
           )}

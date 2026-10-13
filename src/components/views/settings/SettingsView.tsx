@@ -59,7 +59,7 @@ export function SettingsView({
                 >
                   <span>{cat.label}</span>
                   {isActive && (
-                    <span className="text-[10px] text-[var(--color-paper)]">
+                    <span className="text-xs text-[var(--color-paper)]">
                       ▸
                     </span>
                   )}

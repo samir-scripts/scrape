@@ -96,7 +96,7 @@ export function JobDetailDrawer({
           onClick={onClose}
           className="text-[var(--color-paper)] hover:opacity-75 cursor-pointer"
         >
-          <KeyHint keys="ESC" className="border-[var(--color-paper)] text-[10px]" />
+          <KeyHint keys="ESC" className="border-[var(--color-paper)] text-xs" />
         </button>
       </div>
 
@@ -118,7 +118,7 @@ export function JobDetailDrawer({
                   size="sm"
                 />
                 <span
-                  className={`text-[11px] font-bold ${
+                  className={`text-xs font-bold ${
                     job.favorited
                       ? "text-[var(--color-lime)]"
                       : "text-[var(--color-ink-mute)]"
@@ -164,7 +164,7 @@ export function JobDetailDrawer({
                 <button
                   key={stage}
                   onClick={() => onUpdateStatus(job.id, stage)}
-                  className={`px-2 py-1.5 uppercase font-bold text-[11px] border cursor-pointer ${
+                  className={`px-2 py-1.5 uppercase font-bold text-xs border cursor-pointer ${
                     isCurrent
                       ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
                       : "bg-transparent text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
@@ -190,14 +190,14 @@ export function JobDetailDrawer({
               onOpenUrl(job.url);
             }}
             title="Open job posting in browser"
-            className="truncate max-w-[240px] text-[var(--color-ink)] hover:underline hover:opacity-80 font-mono text-[11px] flex items-center gap-1.5 cursor-pointer"
+            className="truncate max-w-[240px] text-[var(--color-ink)] hover:underline hover:opacity-80 font-mono text-xs flex items-center gap-1.5 cursor-pointer"
           >
             <span className="truncate">{job.url}</span>
-            <span className="opacity-60 text-[10px] shrink-0 font-bold">[↗]</span>
+            <span className="opacity-60 text-xs shrink-0 font-bold">[↗]</span>
           </a>
           <button
             onClick={() => onOpenUrl(job.url)}
-            className="px-2 py-0.5 border border-[var(--color-ink)] font-bold text-[10px] uppercase hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] cursor-pointer shrink-0 ml-2"
+            className="px-2 py-0.5 border border-[var(--color-ink)] font-bold text-xs uppercase hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] cursor-pointer shrink-0 ml-2"
           >
             OPEN [↵]
           </button>
@@ -208,7 +208,7 @@ export function JobDetailDrawer({
           <div className="flex justify-between items-center font-bold uppercase tracking-wider">
             <span>JOB DESCRIPTION</span>
             {job.description_text && (
-              <span className="text-[10px] text-[var(--color-ink-mute)] font-normal">
+              <span className="text-xs text-[var(--color-ink-mute)] font-normal">
                 {job.description_text.length} CHARS
               </span>
             )}
@@ -228,7 +228,7 @@ export function JobDetailDrawer({
         <div className="flex flex-col gap-1.5 font-mono text-xs">
           <div className="flex justify-between items-center font-bold uppercase tracking-wider">
             <span>NOTES</span>
-            <span className="text-[10px] text-[var(--color-ink-mute)] font-normal">
+            <span className="text-xs text-[var(--color-ink-mute)] font-normal">
               AUTOSAVED
             </span>
           </div>
@@ -249,13 +249,13 @@ export function JobDetailDrawer({
             STAGE HISTORY
           </span>
           {events.length === 0 ? (
-            <span className="text-[11px] text-[var(--color-ink-mute)]">
+            <span className="text-xs text-[var(--color-ink-mute)]">
               NO HISTORY RECORDED
             </span>
           ) : (
             <div className="flex flex-col gap-2 border-l border-[var(--color-ink)] pl-3 ml-1 my-1">
               {events.map((ev) => (
-                <div key={ev.id} className="flex flex-col text-[11px]">
+                <div key={ev.id} className="flex flex-col text-xs">
                   <div className="flex items-center gap-1.5 font-bold uppercase">
                     <span className="text-[var(--color-ink-mute)]">
                       {ev.from_status || "NEW"}
@@ -263,7 +263,7 @@ export function JobDetailDrawer({
                     <span>→</span>
                     <span className="text-[var(--color-ink)]">{ev.to_status}</span>
                   </div>
-                  <span className="text-[10px] text-[var(--color-ink-mute)]">
+                  <span className="text-xs text-[var(--color-ink-mute)]">
                     {formatDate(ev.changed_at)}
                   </span>
                 </div>

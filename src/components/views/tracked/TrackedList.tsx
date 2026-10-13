@@ -169,7 +169,7 @@ export function TrackedList({
                 </TableCell>
                 <TableCell>{job.title}</TableCell>
                 <TableCell
-                  className="text-[11px] font-mono text-[var(--color-ink-mute)] max-w-xs truncate select-text"
+                  className="text-xs font-mono text-[var(--color-ink-mute)] max-w-xs truncate select-text"
                   title={job.description_text || ""}
                 >
                   {descSnippet}
@@ -213,7 +213,7 @@ export function TrackedList({
                         e.stopPropagation();
                         onOpenUrl(job.url);
                       }}
-                      className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] text-[10px] font-mono uppercase cursor-pointer"
+                      className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] text-xs font-mono uppercase cursor-pointer"
                     >
                       OPEN ↗
                     </button>
@@ -223,7 +223,7 @@ export function TrackedList({
                           e.stopPropagation();
                           onDelete(job);
                         }}
-                        className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-cherry)] hover:text-white text-[10px] font-mono font-bold uppercase cursor-pointer"
+                        className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-cherry)] hover:text-white text-xs font-mono font-bold uppercase cursor-pointer"
                         title="Delete application record"
                       >
                         DEL

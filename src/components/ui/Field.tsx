@@ -20,12 +20,12 @@ export function Field({
       {label && (
         <div className="flex justify-between items-center text-xs font-mono font-bold uppercase tracking-wider text-[var(--color-ink)]">
           <span>{label}</span>
-          {hint && <span className="text-[10px] text-[var(--color-ink-mute)] font-normal">{hint}</span>}
+          {hint && <span className="text-xs text-[var(--color-ink-mute)] font-normal">{hint}</span>}
         </div>
       )}
       {children}
       {error && (
-        <span className="text-[11px] font-mono text-[var(--color-cherry)]">
+        <span className="text-xs font-mono text-[var(--color-cherry)]">
           {error}
         </span>
       )}

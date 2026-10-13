@@ -30,7 +30,7 @@ export function TableHead({
 }: HTMLAttributes<HTMLTableSectionElement>) {
   return (
     <thead
-      className={`border-b border-[var(--color-ink)] bg-[var(--color-paper-2)] text-[var(--color-ink)] uppercase text-[11px] select-none ${className}`}
+      className={`border-b border-[var(--color-ink)] bg-[var(--color-paper-2)] text-[var(--color-ink)] uppercase text-xs select-none ${className}`}
       {...props}
     >
       {children}

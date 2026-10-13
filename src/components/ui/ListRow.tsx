@@ -28,7 +28,7 @@ export function ListRow({
       {...props}
     >
       {selected && (
-        <span className="absolute left-1 text-[var(--color-paper)] font-mono text-[10px] select-none">
+        <span className="absolute left-1 text-[var(--color-paper)] font-mono text-xs select-none">
           ▸
         </span>
       )}

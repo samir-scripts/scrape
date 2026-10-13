@@ -145,13 +145,13 @@ export function FilterChips({ filter, onUpdate, onClearAll }: FilterChipsProps) 
 
   return (
     <div className="flex items-center flex-wrap gap-1.5 px-3 py-1 bg-[var(--color-paper-2)]/30 border-b border-[var(--color-ink)]/30 select-none">
-      <span className="text-[10px] font-mono font-bold text-[var(--color-ink-mute)] uppercase tracking-wider mr-1">
+      <span className="text-xs font-mono font-bold text-[var(--color-ink-mute)] uppercase tracking-wider mr-1">
         ACTIVE:
       </span>
       {chips.map((chip) => (
         <span
           key={chip.id}
-          className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] text-[10px] font-mono font-bold uppercase tracking-wider"
+          className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] text-xs font-mono font-bold uppercase tracking-wider"
         >
           <span>{chip.label}</span>
           <button
@@ -166,7 +166,7 @@ export function FilterChips({ filter, onUpdate, onClearAll }: FilterChipsProps) 
       <button
         type="button"
         onClick={onClearAll}
-        className="px-2 py-0.5 text-[10px] font-mono uppercase text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] underline cursor-pointer ml-1"
+        className="px-2 py-0.5 text-xs font-mono uppercase text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] underline cursor-pointer ml-1"
       >
         [RESET ALL]
       </button>

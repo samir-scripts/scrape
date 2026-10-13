@@ -116,7 +116,7 @@ export function JobMetaPanel({
 
       {/* Compensation & Workplace */}
       <div className="flex flex-col gap-2">
-        <span className="text-[11px] font-bold text-[var(--color-ink-mute)] uppercase tracking-wider">
+        <span className="text-xs font-bold text-[var(--color-ink-mute)] uppercase tracking-wider">
           COMPENSATION & GEOGRAPHY
         </span>
         <div className="border border-[var(--color-ink)] bg-[var(--color-paper)] divide-y divide-[var(--color-ink)]">
@@ -136,14 +136,14 @@ export function JobMetaPanel({
           </div>
           {job.locations && job.locations.length > 0 && (
             <div className="px-3 py-1.5 flex flex-col gap-1">
-              <span className="text-[10px] text-[var(--color-ink-mute)] uppercase">
+              <span className="text-xs text-[var(--color-ink-mute)] uppercase">
                 LOCATIONS ({job.locations.length})
               </span>
               <div className="flex flex-wrap gap-1">
                 {job.locations.map((loc, idx) => (
                   <span
                     key={idx}
-                    className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper-2)] text-[10px]"
+                    className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper-2)] text-xs"
                   >
                     {[loc.city, loc.region_code, loc.country_code].filter(Boolean).join(", ") || loc.raw}
                   </span>
@@ -158,7 +158,7 @@ export function JobMetaPanel({
 
       {/* Eligibility & Experience */}
       <div className="flex flex-col gap-2">
-        <span className="text-[11px] font-bold text-[var(--color-ink-mute)] uppercase tracking-wider">
+        <span className="text-xs font-bold text-[var(--color-ink-mute)] uppercase tracking-wider">
           REQUIREMENTS & CLEARANCE
         </span>
         <div className="border border-[var(--color-ink)] bg-[var(--color-paper)] divide-y divide-[var(--color-ink)]">
@@ -194,11 +194,11 @@ export function JobMetaPanel({
           job.sponsorship_evidence ||
           job.clearance_evidence) && (
           <div className="flex flex-col gap-1.5 mt-1">
-            <span className="text-[10px] font-bold text-[var(--color-ink-mute)] uppercase tracking-wider">
+            <span className="text-xs font-bold text-[var(--color-ink-mute)] uppercase tracking-wider">
               EVIDENCE QUOTES
             </span>
             {job.experience_evidence && (
-              <div className="p-2 border border-dashed border-[var(--color-ink)]/60 bg-[var(--color-paper-2)]/30 text-[10px] italic leading-tight">
+              <div className="p-2 border border-dashed border-[var(--color-ink)]/60 bg-[var(--color-paper-2)]/30 text-xs italic leading-tight">
                 <span className="font-bold not-italic text-[9px] block text-[var(--color-ink-mute)]">
                   EXP QUOTE:
                 </span>
@@ -206,7 +206,7 @@ export function JobMetaPanel({
               </div>
             )}
             {job.sponsorship_evidence && (
-              <div className="p-2 border border-dashed border-[var(--color-ink)]/60 bg-[var(--color-paper-2)]/30 text-[10px] italic leading-tight">
+              <div className="p-2 border border-dashed border-[var(--color-ink)]/60 bg-[var(--color-paper-2)]/30 text-xs italic leading-tight">
                 <span className="font-bold not-italic text-[9px] block text-[var(--color-ink-mute)]">
                   SPONSORSHIP QUOTE:
                 </span>
@@ -214,7 +214,7 @@ export function JobMetaPanel({
               </div>
             )}
             {job.clearance_evidence && (
-              <div className="p-2 border border-dashed border-[var(--color-ink)]/60 bg-[var(--color-paper-2)]/30 text-[10px] italic leading-tight">
+              <div className="p-2 border border-dashed border-[var(--color-ink)]/60 bg-[var(--color-paper-2)]/30 text-xs italic leading-tight">
                 <span className="font-bold not-italic text-[9px] block text-[var(--color-ink-mute)]">
                   CLEARANCE QUOTE:
                 </span>
@@ -229,7 +229,7 @@ export function JobMetaPanel({
 
       {/* Triage Actions */}
       <div className="flex flex-col gap-2 pb-2">
-        <span className="text-[11px] font-bold text-[var(--color-ink-mute)] uppercase tracking-wider">
+        <span className="text-xs font-bold text-[var(--color-ink-mute)] uppercase tracking-wider">
           TRIAGE ACTIONS
         </span>
 

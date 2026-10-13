@@ -190,7 +190,7 @@ export function Tooltip({
                   ? "translate(-50%, -100%)"
                   : "translate(-50%, 0)",
             }}
-            className="fixed z-[9999] pointer-events-none px-2 py-1 bg-[var(--color-ink)] text-[var(--color-paper)] border border-[var(--color-paper-2)] font-mono text-[10px] uppercase tracking-wider select-none max-w-[280px] sm:max-w-[340px] whitespace-normal break-words text-center shadow-none leading-tight"
+            className="fixed z-[9999] pointer-events-none px-2 py-1 bg-[var(--color-ink)] text-[var(--color-paper)] border border-[var(--color-paper-2)] font-mono text-xs uppercase tracking-wider select-none max-w-[280px] sm:max-w-[340px] whitespace-normal break-words text-center shadow-none leading-tight"
           >
             {content}
           </div>,

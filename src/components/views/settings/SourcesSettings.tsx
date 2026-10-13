@@ -285,7 +285,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           <h2 className="text-base font-black uppercase tracking-tight text-[var(--color-ink)]">
             WORKFLOWS REGISTRY ({sources.length})
           </h2>
-          <span className="text-[11px] text-[var(--color-ink-mute)] uppercase">
+          <span className="text-xs text-[var(--color-ink-mute)] uppercase">
             AUTONOMOUS STATIC WORKFLOWS & CONSOLIDATED EXECUTION LOGS
           </span>
         </div>
@@ -453,22 +453,22 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       <span className="font-bold uppercase tracking-tight text-[var(--color-ink)] group-hover:underline">
                         {s.name}
                       </span>
-                      <span className="text-[10px] text-[var(--color-ink-mute)] truncate max-w-[240px]">
+                      <span className="text-xs text-[var(--color-ink-mute)] truncate max-w-[240px]">
                         {s.identifier}
                       </span>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className="px-1.5 py-0.5 text-[10px] font-mono uppercase border border-[var(--color-ink)] bg-[var(--color-paper-2)]">
+                    <span className="px-1.5 py-0.5 text-xs font-mono uppercase border border-[var(--color-ink)] bg-[var(--color-paper-2)]">
                       {s.kind}
                     </span>
                   </TableCell>
                   <TableCell>
-                    <span className="px-1.5 py-0.5 text-[10px] font-mono uppercase font-bold border border-[var(--color-ink)]">
+                    <span className="px-1.5 py-0.5 text-xs font-mono uppercase font-bold border border-[var(--color-ink)]">
                       {s.cadence === "cron" ? "CRON" : s.cadence.replace("_", " ")}
                     </span>
                   </TableCell>
-                  <TableCell className="text-[10px] font-mono whitespace-nowrap">
+                  <TableCell className="text-xs font-mono whitespace-nowrap">
                     {Number(s.retention_days) === 0
                       ? "FOREVER"
                       : `${s.retention_days}D (${s.retention_policy === "untracked_only" ? "SAFE" : "ALL"})`}
@@ -478,7 +478,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       <span className={`text-xs ${statusVisual.bulletClass}`}>
                         {statusVisual.bulletGlyph}
                       </span>
-                      <span className={`text-[10px] font-mono uppercase font-bold ${statusVisual.colorClass}`}>
+                      <span className={`text-xs font-mono uppercase font-bold ${statusVisual.colorClass}`}>
                         {statusVisual.label}
                       </span>
                     </div>
@@ -489,7 +489,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                         <button
                           onClick={() => handleRunSourceNow(s)}
                           disabled={isRunning}
-                          className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-80 text-[10px] font-mono uppercase cursor-pointer disabled:opacity-50"
+                          className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-80 text-xs font-mono uppercase cursor-pointer disabled:opacity-50"
                         >
                           {isRunning ? "RUNNING…" : "RUN"}
                         </button>
@@ -499,7 +499,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                         <button
                           onClick={() => handleTestSource(s.id)}
                           disabled={isTesting}
-                          className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[10px] font-mono uppercase cursor-pointer"
+                          className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-xs font-mono uppercase cursor-pointer"
                         >
                           {isTesting ? "…" : "TEST"}
                         </button>
@@ -508,7 +508,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       <Tooltip content="View run history, duration telemetry, and live execution logs">
                         <button
                           onClick={() => setInspectedSource(isInspected ? null : s)}
-                          className={`px-2 py-0.5 border text-[10px] font-mono uppercase cursor-pointer ${
+                          className={`px-2 py-0.5 border text-xs font-mono uppercase cursor-pointer ${
                             isInspected
                               ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] font-bold"
                               : "border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)]"
@@ -524,7 +524,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                             setEditingSource(s);
                             setIsAddModalOpen(true);
                           }}
-                          className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[10px] font-mono uppercase cursor-pointer"
+                          className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-xs font-mono uppercase cursor-pointer"
                         >
                           EDIT
                         </button>
@@ -533,7 +533,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       <Tooltip content="Delete scrape workflow">
                         <button
                           onClick={() => handleDeleteSource(s.id)}
-                          className="px-2 py-0.5 border border-[var(--color-cherry)] text-[var(--color-cherry)] hover:bg-[var(--color-cherry)] hover:text-white text-[10px] font-mono uppercase cursor-pointer"
+                          className="px-2 py-0.5 border border-[var(--color-cherry)] text-[var(--color-cherry)] hover:bg-[var(--color-cherry)] hover:text-white text-xs font-mono uppercase cursor-pointer"
                         >
                           DEL
                         </button>
@@ -556,10 +556,10 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
               <span className="text-sm uppercase tracking-tight text-[var(--color-ink)]">
                 {inspectedSource.name} // WORKFLOW OBSERVABILITY & EXECUTION LOGS
               </span>
-              <span className="px-1.5 py-0.5 text-[10px] border border-[var(--color-ink)] bg-[var(--color-paper)] uppercase">
+              <span className="px-1.5 py-0.5 text-xs border border-[var(--color-ink)] bg-[var(--color-paper)] uppercase">
                 {inspectedSource.kind}
               </span>
-              <span className="px-1.5 py-0.5 text-[10px] border border-[var(--color-ink)] bg-[var(--color-paper)] uppercase">
+              <span className="px-1.5 py-0.5 text-xs border border-[var(--color-ink)] bg-[var(--color-paper)] uppercase">
                 {inspectedSource.cadence}
               </span>
             </div>
@@ -567,13 +567,13 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
               <button
                 onClick={() => handleRunSourceNow(inspectedSource)}
                 disabled={runningSourceId === inspectedSource.id}
-                className="px-2.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-85 text-[10px] uppercase font-bold cursor-pointer disabled:opacity-50"
+                className="px-2.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-85 text-xs uppercase font-bold cursor-pointer disabled:opacity-50"
               >
                 {runningSourceId === inspectedSource.id ? "RUNNING WORKFLOW…" : "RUN WORKFLOW NOW"}
               </button>
               <button
                 onClick={() => handleViewInInbox(inspectedSource)}
-                className="px-2.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[10px] uppercase font-bold cursor-pointer"
+                className="px-2.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-xs uppercase font-bold cursor-pointer"
               >
                 VIEW JOBS IN INBOX →
               </button>
@@ -587,20 +587,20 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           </div>
 
           {/* Telemetry Row */}
-          <div className="grid grid-cols-4 gap-2 p-2 border border-[var(--color-ink)] bg-[var(--color-paper)] text-[11px]">
+          <div className="grid grid-cols-4 gap-2 p-2 border border-[var(--color-ink)] bg-[var(--color-paper)] text-xs">
             <div>
-              <span className="text-[10px] text-[var(--color-ink-mute)] uppercase">TARGET URL:</span>
+              <span className="text-xs text-[var(--color-ink-mute)] uppercase">TARGET URL:</span>
               <div className="font-mono truncate">{inspectedSource.identifier}</div>
             </div>
             <div>
-              <span className="text-[10px] text-[var(--color-ink-mute)] uppercase">CADENCE / NEXT RUN:</span>
+              <span className="text-xs text-[var(--color-ink-mute)] uppercase">CADENCE / NEXT RUN:</span>
               <div className="font-mono">
                 {inspectedSource.cadence.toUpperCase()}
                 {inspectedSource.next_run_at ? ` · ${inspectedSource.next_run_at.slice(0, 16)}` : ""}
               </div>
             </div>
             <div>
-              <span className="text-[10px] text-[var(--color-ink-mute)] uppercase">LAST DURATION:</span>
+              <span className="text-xs text-[var(--color-ink-mute)] uppercase">LAST DURATION:</span>
               <div className="font-mono">
                 {inspectedSource.last_run_duration_ms
                   ? `${(Number(inspectedSource.last_run_duration_ms) / 1000).toFixed(2)}s`
@@ -608,7 +608,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
               </div>
             </div>
             <div>
-              <span className="text-[10px] text-[var(--color-ink-mute)] uppercase">TTL RETENTION:</span>
+              <span className="text-xs text-[var(--color-ink-mute)] uppercase">TTL RETENTION:</span>
               <div className="font-mono">
                 {Number(inspectedSource.retention_days) === 0
                   ? "KEEP FOREVER"
@@ -621,14 +621,14 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           <div className="grid grid-cols-12 gap-3 pt-1">
             {/* Left 4 Cols: Recent Runs List */}
             <div className="col-span-4 flex flex-col gap-1.5 border border-[var(--color-ink)] bg-[var(--color-paper)] p-2">
-              <span className="font-bold text-[10px] uppercase tracking-wider text-[var(--color-ink)] border-b border-[var(--color-ink)]/30 pb-1">
+              <span className="font-bold text-xs uppercase tracking-wider text-[var(--color-ink)] border-b border-[var(--color-ink)]/30 pb-1">
                 EXECUTION RUNS (LAST 10)
               </span>
 
               {isLoadingRuns ? (
-                <span className="text-[var(--color-ink-mute)] text-[11px] p-2">LOADING RUNS…</span>
+                <span className="text-[var(--color-ink-mute)] text-xs p-2">LOADING RUNS…</span>
               ) : sourceRuns.length === 0 ? (
-                <span className="text-[var(--color-ink-mute)] text-[11px] p-2">
+                <span className="text-[var(--color-ink-mute)] text-xs p-2">
                   NO ISOLATED RUNS RECORDED YET. CLICK &quot;RUN WORKFLOW NOW&quot; TO TRIGGER.
                 </span>
               ) : (
@@ -639,7 +639,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       <div
                         key={r.id}
                         onClick={() => setSelectedRunId(r.id)}
-                        className={`p-2 flex flex-col gap-0.5 cursor-pointer text-[11px] transition-none ${
+                        className={`p-2 flex flex-col gap-0.5 cursor-pointer text-xs transition-none ${
                           isSelected
                             ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold"
                             : "hover:bg-[var(--color-paper-2)]"
@@ -658,16 +658,16 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                             >
                               {r.status}
                             </span>
-                            <span className="text-[10px]">
+                            <span className="text-xs">
                               {formatDateTime(r.started_at, settings)}
                             </span>
                           </div>
-                          <span className="text-[10px]">
+                          <span className="text-xs">
                             {r.status === "running" ? "RUNNING…" : `+${Number(r.jobs_new)}`}
                           </span>
                         </div>
                         {r.error && (
-                          <span className={`text-[10px] truncate ${isSelected ? "text-red-300" : "text-[var(--color-cherry)]"}`}>
+                          <span className={`text-xs truncate ${isSelected ? "text-red-300" : "text-[var(--color-cherry)]"}`}>
                             ERR: {r.error}
                           </span>
                         )}
@@ -682,7 +682,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
             <div className="col-span-8 flex flex-col gap-1.5 border border-[var(--color-ink)] bg-[var(--color-paper)] p-2">
               <div className="flex items-center justify-between border-b border-[var(--color-ink)]/30 pb-1">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-[10px] uppercase tracking-wider text-[var(--color-ink)]">
+                  <span className="font-bold text-xs uppercase tracking-wider text-[var(--color-ink)]">
                     TERMINAL LOG STREAM {selectedRun ? `· RUN ${selectedRun.id.slice(0, 8)}` : ""}
                   </span>
                   {selectedRun?.status === "running" && (
@@ -692,14 +692,14 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-[var(--color-ink-mute)] font-mono uppercase">
+                  <span className="text-xs text-[var(--color-ink-mute)] font-mono uppercase">
                     FILTER:
                   </span>
                   <select
                     value={logFilter}
                     onChange={(e) => setLogFilter(e.target.value as "all" | "successes" | "errors")}
                     aria-label="Filter execution logs"
-                    className="px-2 py-0.5 text-[10px] font-mono uppercase font-bold border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] focus:outline-none cursor-pointer"
+                    className="px-2 py-0.5 text-xs font-mono uppercase font-bold border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] focus:outline-none cursor-pointer"
                   >
                     <option value="all">ALL LOGS ({logCounts.all})</option>
                     <option value="successes">SUCCESSES ({logCounts.successes})</option>
@@ -709,26 +709,26 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
               </div>
 
               {isLoadingLogs ? (
-                <div className="p-4 text-center text-[11px] text-[var(--color-ink-mute)] font-mono">
+                <div className="p-4 text-center text-xs text-[var(--color-ink-mute)] font-mono">
                   STREAMING LOGS…
                 </div>
               ) : !selectedRunId ? (
-                <div className="p-4 text-center text-[11px] text-[var(--color-ink-mute)] font-mono">
+                <div className="p-4 text-center text-xs text-[var(--color-ink-mute)] font-mono">
                   SELECT AN EXECUTION RUN ON THE LEFT TO INSPECT ITS TERMINAL LOGS.
                 </div>
               ) : displayedLogs.length === 0 ? (
-                <div className="p-4 text-center text-[11px] text-[var(--color-ink-mute)] font-mono">
+                <div className="p-4 text-center text-xs text-[var(--color-ink-mute)] font-mono">
                   NO LOG EVENTS RECORDED FOR THIS RUN.
                 </div>
               ) : (
-                <div className="flex flex-col gap-1 max-h-64 overflow-y-auto font-mono text-[11px] p-1 bg-[var(--color-paper-2)]/20 border border-[var(--color-ink)]/20">
+                <div className="flex flex-col gap-1 max-h-64 overflow-y-auto font-mono text-xs p-1 bg-[var(--color-paper-2)]/20 border border-[var(--color-ink)]/20">
                   {displayedLogs.map((log) => {
                     const isError = log.level === "error";
                     const isWarn = log.level === "warn";
                     return (
                       <div
                         key={log.id}
-                        className={`p-1.5 border text-[11px] leading-relaxed ${
+                        className={`p-1.5 border text-xs leading-relaxed ${
                           isError
                             ? "border-red-600 bg-red-50/50 text-red-900"
                             : isWarn
@@ -736,7 +736,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                             : "border-[var(--color-ink)]/20 bg-[var(--color-paper)] text-[var(--color-ink)]"
                         }`}
                       >
-                        <div className="flex items-center justify-between text-[10px] opacity-80 mb-0.5 font-bold">
+                        <div className="flex items-center justify-between text-xs opacity-80 mb-0.5 font-bold">
                           <span className={isError ? "text-red-700" : isWarn ? "text-amber-700" : "text-[var(--color-ink)]"}>
                             [{log.level.toUpperCase()}]
                           </span>
@@ -776,7 +776,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
               </span>
             ) : (
               testEvents.map((ev, i) => (
-                <div key={i} className="text-[11px] truncate">
+                <div key={i} className="text-xs truncate">
                   {ev.type === "job" ? (
                     <span>
                       <strong className="text-[var(--color-ink)]">{ev.title}</strong> · {ev.company} · {ev.location || "REMOTE"} ({ev.role_type})

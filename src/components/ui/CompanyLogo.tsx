@@ -17,7 +17,7 @@ export function CompanyLogo({
 
   const sizeClasses = {
     sm: "w-[18px] h-[18px] text-[9px]",
-    md: "w-[24px] h-[24px] text-[11px]",
+    md: "w-[24px] h-[24px] text-xs",
     lg: "w-[32px] h-[32px] text-[13px]",
   }[size];
 

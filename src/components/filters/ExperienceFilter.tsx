@@ -101,7 +101,7 @@ export function ExperienceFilter({
                 includeUnknown,
               })
             }
-            className="text-[10px] text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
+            className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
           >
             [RESET]
           </button>
@@ -110,7 +110,7 @@ export function ExperienceFilter({
 
       {/* Preset Career Levels */}
       <div className="flex flex-col gap-1">
-        <span className="text-[10px] text-[var(--color-ink-mute)] uppercase font-bold">
+        <span className="text-xs text-[var(--color-ink-mute)] uppercase font-bold">
           CAREER LEVEL PRESETS
         </span>
         <div className="flex flex-wrap gap-1.5">
@@ -121,7 +121,7 @@ export function ExperienceFilter({
                 key={p.label}
                 type="button"
                 onClick={() => handlePresetClick(p.min, p.max)}
-                className={`px-2 py-1 text-[11px] font-bold uppercase tracking-wider border cursor-pointer ${
+                className={`px-2 py-1 text-xs font-bold uppercase tracking-wider border cursor-pointer ${
                   active
                     ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
                     : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
@@ -136,11 +136,11 @@ export function ExperienceFilter({
 
       {/* Custom Numerical Range */}
       <div className="flex items-center gap-2 pt-0.5">
-        <span className="text-[10px] text-[var(--color-ink-mute)] uppercase font-bold">
+        <span className="text-xs text-[var(--color-ink-mute)] uppercase font-bold">
           CUSTOM:
         </span>
         <div className="flex items-center border border-[var(--color-ink)] bg-[var(--color-paper)] px-2 py-0.5 w-24">
-          <span className="text-[10px] text-[var(--color-ink-mute)] mr-1">MIN</span>
+          <span className="text-xs text-[var(--color-ink-mute)] mr-1">MIN</span>
           <input
             type="number"
             min={0}
@@ -153,7 +153,7 @@ export function ExperienceFilter({
         </div>
         <span className="text-[var(--color-ink-mute)]">—</span>
         <div className="flex items-center border border-[var(--color-ink)] bg-[var(--color-paper)] px-2 py-0.5 w-24">
-          <span className="text-[10px] text-[var(--color-ink-mute)] mr-1">MAX</span>
+          <span className="text-xs text-[var(--color-ink-mute)] mr-1">MAX</span>
           <input
             type="number"
             min={0}
@@ -164,12 +164,12 @@ export function ExperienceFilter({
             className="w-full bg-transparent text-[var(--color-ink)] text-xs font-mono focus:outline-none"
           />
         </div>
-        <span className="text-[10px] text-[var(--color-ink-mute)] font-bold">YOE</span>
+        <span className="text-xs text-[var(--color-ink-mute)] font-bold">YOE</span>
       </div>
 
       {/* New Grad Qualification Eligibility */}
       <div className="flex flex-col gap-1 pt-0.5">
-        <span className="text-[10px] text-[var(--color-ink-mute)] uppercase font-bold">
+        <span className="text-xs text-[var(--color-ink-mute)] uppercase font-bold">
           NEW GRAD STATUS
         </span>
         <div className="flex gap-1.5">
@@ -180,7 +180,7 @@ export function ExperienceFilter({
                 key={opt.id}
                 type="button"
                 onClick={() => handleNewGradChange(opt.id)}
-                className={`flex-1 py-1 px-2 text-[10px] font-bold uppercase tracking-wider border cursor-pointer ${
+                className={`flex-1 py-1 px-2 text-xs font-bold uppercase tracking-wider border cursor-pointer ${
                   active
                     ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
                     : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
@@ -195,7 +195,7 @@ export function ExperienceFilter({
 
       {/* Include Unknown Toggle */}
       <div className="flex items-center gap-2 pt-0.5">
-        <label className="flex items-center gap-2 cursor-pointer text-[11px] text-[var(--color-ink)]">
+        <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--color-ink)]">
           <input
             type="checkbox"
             checked={includeUnknown}

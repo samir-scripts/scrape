@@ -213,7 +213,7 @@ export function FilterPanel({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1.5 font-mono text-[10px]">
+        <div className="flex items-center gap-1.5 font-mono text-xs">
           {activeCount > 0 && (
             <button
               type="button"
@@ -249,7 +249,7 @@ export function FilterPanel({
                 onClick={() =>
                   onUpdateFilter((prev) => ({ ...prev, search: null }))
                 }
-                className="text-[10px] text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
+                className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
               >
                 [RESET]
               </button>
@@ -380,7 +380,7 @@ export function FilterPanel({
       {/* Footer with Impact Preview and Buttons */}
       <div className="p-3 border-t border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 flex flex-col gap-2 font-mono shrink-0">
         {impact && (
-          <div className="flex justify-between items-center text-[11px]">
+          <div className="flex justify-between items-center text-xs">
             <span className="text-[var(--color-ink-mute)] uppercase">
               FILTER IMPACT:
             </span>

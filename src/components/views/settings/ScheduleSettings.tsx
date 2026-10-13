@@ -185,7 +185,7 @@ export function ScheduleSettings({
             </button>
           </div>
 
-          <span className="text-[10px] font-mono text-[var(--color-ink-mute)] pr-1">
+          <span className="text-xs font-mono text-[var(--color-ink-mute)] pr-1">
             ACTIVE CRON: <code className="font-bold text-[var(--color-ink)]">{settings.scraper_cron}</code>
           </span>
         </div>
@@ -202,7 +202,7 @@ export function ScheduleSettings({
 
             {/* Side Action & Validation Panel */}
             <div className="flex flex-col gap-3 w-full md:w-64 p-3 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/20">
-              <div className="flex justify-between items-center text-[10px] font-mono uppercase text-[var(--color-ink-mute)] pb-1 border-b border-[var(--color-ink)]">
+              <div className="flex justify-between items-center text-xs font-mono uppercase text-[var(--color-ink-mute)] pb-1 border-b border-[var(--color-ink)]">
                 <span>SCHEDULE SUMMARY</span>
                 <span className={cronInput === settings.scraper_cron ? "text-[var(--color-lime)] font-bold" : "text-[var(--color-signal)] font-bold"}>
                   {cronInput === settings.scraper_cron ? "CURRENT" : "UNSAVED"}
@@ -210,17 +210,17 @@ export function ScheduleSettings({
               </div>
 
               {isCustomCronOutOfSyncWithClock && (
-                <div className="p-2 border border-dashed border-[var(--color-cherry)] text-[10px] font-mono text-[var(--color-cherry)]">
+                <div className="p-2 border border-dashed border-[var(--color-cherry)] text-xs font-mono text-[var(--color-cherry)]">
                   ACTIVE SETTING USES A CUSTOM CRON FORMAT. APPLYING CLOCK SCHEDULE WILL REPLACE IT.
                 </div>
               )}
 
-              <div className="flex flex-col gap-1 text-[11px] font-mono">
-                <span className="text-[10px] text-[var(--color-ink-mute)] uppercase">CADENCE</span>
+              <div className="flex flex-col gap-1 text-xs font-mono">
+                <span className="text-xs text-[var(--color-ink-mute)] uppercase">CADENCE</span>
                 <span className="font-bold text-[var(--color-ink)]">
                   {CLOCK_CADENCE_OPTIONS.find((c) => c.id === clockState.cadence)?.label ?? clockState.cadence.toUpperCase()}
                 </span>
-                <span className="text-[10px] text-[var(--color-ink-mute)] mt-1 uppercase">EXPRESSION</span>
+                <span className="text-xs text-[var(--color-ink-mute)] mt-1 uppercase">EXPRESSION</span>
                 <code className="text-xs font-bold bg-[var(--color-paper)] p-1 border border-[var(--color-ink)] text-[var(--color-ink)]">
                   {cronInput}
                 </code>
@@ -239,14 +239,14 @@ export function ScheduleSettings({
               {validation && (
                 <div className="mt-1 pt-2 border-t border-[var(--color-ink)]/40 font-mono text-xs">
                   {validation.ok ? (
-                    <div className="flex flex-col gap-1 text-[11px]">
+                    <div className="flex flex-col gap-1 text-xs">
                       <span className="text-[var(--color-lime)] font-bold">
                         ✓ VALID SCHEDULE
                       </span>
-                      <span className="text-[10px] text-[var(--color-ink-mute)] uppercase">
+                      <span className="text-xs text-[var(--color-ink-mute)] uppercase">
                         NEXT RUNS:
                       </span>
-                      <ul className="list-disc list-inside pl-0.5 text-[10px] text-[var(--color-ink)] space-y-0.5">
+                      <ul className="list-disc list-inside pl-0.5 text-xs text-[var(--color-ink)] space-y-0.5">
                         {validation.next_runs.map((r, i) => (
                           <li key={i} className="truncate">
                             {r.slice(0, 19).replace("T", " ")}
@@ -255,7 +255,7 @@ export function ScheduleSettings({
                       </ul>
                     </div>
                   ) : (
-                    <span className="text-[var(--color-cherry)] text-[10px] font-bold">
+                    <span className="text-[var(--color-cherry)] text-xs font-bold">
                       ✗ {validation.error || "INVALID CRON"}
                     </span>
                   )}
@@ -273,7 +273,7 @@ export function ScheduleSettings({
                 <label className="text-xs font-mono font-bold uppercase tracking-wider text-[var(--color-ink)]">
                   CUSTOM CRON EXPRESSION
                 </label>
-                <span className="text-[10px] font-mono text-[var(--color-ink-mute)]">
+                <span className="text-xs font-mono text-[var(--color-ink-mute)]">
                   FORMAT: SEC MIN HOUR DOM MON DOW
                 </span>
               </div>
@@ -296,7 +296,7 @@ export function ScheduleSettings({
             </div>
 
             {/* Field Breakdown Guide */}
-            <div className="grid grid-cols-6 gap-1 p-2 bg-[var(--color-paper-2)]/30 border border-[var(--color-ink)] text-[10px] font-mono text-center">
+            <div className="grid grid-cols-6 gap-1 p-2 bg-[var(--color-paper-2)]/30 border border-[var(--color-ink)] text-xs font-mono text-center">
               <div>
                 <span className="text-[var(--color-ink-mute)] block">SEC</span>
                 <span className="font-bold">0</span>
@@ -327,7 +327,7 @@ export function ScheduleSettings({
             {validation && (
               <div className="mt-1 font-mono text-xs">
                 {validation.ok ? (
-                  <div className="flex flex-col gap-1 text-[11px] text-[var(--color-ink-mute)]">
+                  <div className="flex flex-col gap-1 text-xs text-[var(--color-ink-mute)]">
                     <span className="text-[var(--color-lime)] font-bold">
                       ✓ VALID EXPRESSION
                     </span>
@@ -339,7 +339,7 @@ export function ScheduleSettings({
                     </ul>
                   </div>
                 ) : (
-                  <span className="text-[var(--color-cherry)] text-[11px] font-bold">
+                  <span className="text-[var(--color-cherry)] text-xs font-bold">
                     ✗ {validation.error || "INVALID CRON EXPRESSION"}
                   </span>
                 )}
@@ -359,7 +359,7 @@ export function ScheduleSettings({
           </span>
           <button
             onClick={fetchRecentRuns}
-            className="text-[10px] font-mono uppercase text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] cursor-pointer"
+            className="text-xs font-mono uppercase text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] cursor-pointer"
           >
             REFRESH ↻
           </button>
@@ -388,7 +388,7 @@ export function ScheduleSettings({
                   </TableCell>
                   <TableCell>
                     <span
-                      className={`px-1.5 py-0.5 text-[10px] font-mono uppercase font-bold border ${
+                      className={`px-1.5 py-0.5 text-xs font-mono uppercase font-bold border ${
                         r.status === "success"
                           ? "bg-[var(--color-lime)] text-[var(--color-ink)] border-[var(--color-ink)]"
                           : r.status === "failed"

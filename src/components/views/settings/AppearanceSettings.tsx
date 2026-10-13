@@ -79,12 +79,12 @@ export function AppearanceSettings({
             <div className="flex justify-between items-center font-bold">
               <span>PAPER</span>
               {currentTheme === "paper" && (
-                <span className="bg-[#1A1A1A] text-[#F5F5DC] px-1.5 py-0.5 text-[10px]">
+                <span className="bg-[#1A1A1A] text-[#F5F5DC] px-1.5 py-0.5 text-xs">
                   ACTIVE
                 </span>
               )}
             </div>
-            <p className="text-[11px] opacity-80">
+            <p className="text-xs opacity-80">
               Light background with contrast ink rules.
             </p>
             <div className="flex gap-1.5 pt-2 border-t border-[#1A1A1A]">
@@ -117,12 +117,12 @@ export function AppearanceSettings({
             <div className="flex justify-between items-center font-bold">
               <span>OBSIDIAN</span>
               {currentTheme === "obsidian" && (
-                <span className="bg-[#FFF6EE] text-[#262628] px-1.5 py-0.5 text-[10px]">
+                <span className="bg-[#FFF6EE] text-[#262628] px-1.5 py-0.5 text-xs">
                   ACTIVE
                 </span>
               )}
             </div>
-            <p className="text-[11px] opacity-80">
+            <p className="text-xs opacity-80">
               Dark background with high-contrast text.
             </p>
             <div className="flex gap-1.5 pt-2 border-t border-[#FFF6EE]">
@@ -145,7 +145,7 @@ export function AppearanceSettings({
           <label className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
             TYPOGRAPHY & FONT FAMILY
           </label>
-          <span className="text-[10px] text-[var(--color-ink-mute)]">
+          <span className="text-xs text-[var(--color-ink-mute)]">
             ACTIVE: {FONT_OPTIONS.find((f) => f.id === currentFont)?.name || "DEFAULT"}
           </span>
         </div>
@@ -181,10 +181,10 @@ export function AppearanceSettings({
                       </span>
                     )}
                   </div>
-                  <span className="text-[10px] text-[var(--color-ink-mute)]">
+                  <span className="text-xs text-[var(--color-ink-mute)]">
                     {font.name} · {font.category === "readable" ? "READABLE SANS" : "MONOSPACE"}
                   </span>
-                  <p className="text-[11px] opacity-80 leading-snug pt-1">
+                  <p className="text-xs opacity-80 leading-snug pt-1">
                     {font.description}
                   </p>
                 </div>
@@ -201,7 +201,7 @@ export function AppearanceSettings({
                       {font.category === "readable" ? "ABC xyz" : "{ } => !="}
                     </span>
                   </div>
-                  <div className="text-[11px] leading-tight break-words">
+                  <div className="text-xs leading-tight break-words">
                     {font.previewText}
                   </div>
                 </div>
@@ -241,17 +241,17 @@ export function AppearanceSettings({
         </label>
         <div className="grid grid-cols-3 gap-3">
           <div className="border border-[var(--color-ink)] p-3 flex flex-col gap-2">
-            <span className="text-[11px] font-bold">
+            <span className="text-xs font-bold">
               RADIAL DOT MATRIX (4PX)
             </span>
             <Dither type="dots" height="40px" className="opacity-80" />
           </div>
           <div className="border border-[var(--color-ink)] p-3 flex flex-col gap-2">
-            <span className="text-[11px] font-bold">CONIC CHECKER (2PX)</span>
+            <span className="text-xs font-bold">CONIC CHECKER (2PX)</span>
             <Dither type="checker" height="40px" className="opacity-80" />
           </div>
           <div className="border border-[var(--color-ink)] p-3 flex flex-col gap-2">
-            <span className="text-[11px] font-bold">REPEATING 45° LINES</span>
+            <span className="text-xs font-bold">REPEATING 45° LINES</span>
             <Dither type="lines" height="40px" className="opacity-80" />
           </div>
         </div>

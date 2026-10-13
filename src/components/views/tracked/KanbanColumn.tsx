@@ -84,7 +84,7 @@ export function KanbanColumn({
       <div className="h-9 shrink-0 px-3 border-b border-[var(--color-ink)] bg-[var(--color-paper-2)]/40 flex items-center justify-between">
         <div className="flex items-center gap-2">
           {/* Stage index & status accent pip */}
-          <span className="font-mono text-[10px] text-[var(--color-ink-mute)]">
+          <span className="font-mono text-xs text-[var(--color-ink-mute)]">
             // 0{columnIndex + 1}
           </span>
           <span
@@ -98,7 +98,7 @@ export function KanbanColumn({
         </div>
 
         {/* Tabular Count Badge */}
-        <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] min-w-[28px] text-center">
+        <span className="font-mono text-xs font-bold px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] min-w-[28px] text-center">
           {String(jobs.length).padStart(2, "0")}
         </span>
       </div>
@@ -113,7 +113,7 @@ export function KanbanColumn({
                 : "bg-[var(--color-paper-2)]/20"
             }`}
           >
-            <span className="text-[10px] font-mono font-bold tracking-wider text-[var(--color-ink-mute)]">
+            <span className="text-xs font-mono font-bold tracking-wider text-[var(--color-ink-mute)]">
               [ + ] DROP TO STAGE
             </span>
             <span className="text-[9px] font-mono text-[var(--color-ink-mute)]/60 mt-1">
@@ -180,7 +180,7 @@ export function KanbanColumn({
 
                 <div className="text-xs truncate">{job.title}</div>
 
-                <div className="flex items-center justify-between text-[10px] font-mono opacity-80 pt-1 border-t border-current">
+                <div className="flex items-center justify-between text-xs font-mono opacity-80 pt-1 border-t border-current">
                   <span className="truncate max-w-[120px]">{job.location || "REMOTE"}</span>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {job.notes && (

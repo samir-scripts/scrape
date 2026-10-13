@@ -472,7 +472,7 @@ export function ClockPicker({
       aria-label="Clock Schedule Picker"
     >
       {/* Telemetry Header */}
-      <div className="flex items-center justify-between text-[10px] tracking-widest text-[var(--color-ink-mute)] border-b border-[var(--color-ink)] pb-1.5">
+      <div className="flex items-center justify-between text-xs tracking-widest text-[var(--color-ink-mute)] border-b border-[var(--color-ink)] pb-1.5">
         <span>SYS//TIME_PICKER_CLOCK {is24h ? "[24H]" : "[12H]"}</span>
         <span className="flex items-center gap-1 font-bold">
           <span className="inline-block w-1.5 h-1.5 bg-[var(--color-ink)]" />
@@ -698,7 +698,7 @@ export function ClockPicker({
                       y={ny}
                       textAnchor="middle"
                       dominantBaseline="central"
-                      className="font-mono text-[11px] font-bold pointer-events-none select-none"
+                      className="font-mono text-xs font-bold pointer-events-none select-none"
                       fill={isSelected ? "var(--color-paper)" : "var(--color-ink)"}
                     >
                       {pad2(h)}
@@ -763,7 +763,7 @@ export function ClockPicker({
                   y={ny}
                   textAnchor="middle"
                   dominantBaseline="central"
-                  className="font-mono text-[11px] font-bold pointer-events-none select-none"
+                  className="font-mono text-xs font-bold pointer-events-none select-none"
                   fill={isSelected ? "var(--color-paper)" : "var(--color-ink)"}
                 >
                   {pad2(m)}
@@ -779,7 +779,7 @@ export function ClockPicker({
               y={handTipY}
               textAnchor="middle"
               dominantBaseline="central"
-              className="font-mono text-[10px] font-bold pointer-events-none select-none"
+              className="font-mono text-xs font-bold pointer-events-none select-none"
               fill="var(--color-paper)"
             >
               {pad2(minute)}
@@ -791,7 +791,7 @@ export function ClockPicker({
       {/* Cadence Selection (Optionally hidden for simple mode exact daily time) */}
       {!hideCadenceOptions && (
         <div className="flex flex-col gap-2 pt-2 border-t border-[var(--color-ink)]">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-ink-mute)]">
+          <label className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink-mute)]">
             EXECUTION CADENCE
           </label>
           <div className="grid grid-cols-3 gap-1.5">
@@ -805,7 +805,7 @@ export function ClockPicker({
                     setCadence(opt.id);
                     notifyChange(hour12, minute, ampm, opt.id);
                   }}
-                  className={`px-2 py-1.5 text-[10px] font-bold uppercase border cursor-pointer text-center truncate transition-colors ${
+                  className={`px-2 py-1.5 text-xs font-bold uppercase border cursor-pointer text-center truncate transition-colors ${
                     isSel
                       ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
                       : "bg-transparent text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
@@ -818,14 +818,14 @@ export function ClockPicker({
           </div>
 
           {/* Live Target Cron & Description Readout */}
-          <div className="mt-1 p-2 bg-[var(--color-paper-2)]/30 border border-[var(--color-ink)] text-[11px]">
+          <div className="mt-1 p-2 bg-[var(--color-paper-2)]/30 border border-[var(--color-ink)] text-xs">
             <div className="flex justify-between items-center text-[var(--color-ink)] font-bold">
-              <span className="text-[10px] text-[var(--color-ink-mute)]">TARGET CRON:</span>
+              <span className="text-xs text-[var(--color-ink-mute)]">TARGET CRON:</span>
               <code className="bg-[var(--color-paper)] px-1.5 py-0.5 border border-[var(--color-ink)] text-xs">
                 {cronExpr}
               </code>
             </div>
-            <div className="text-[10px] text-[var(--color-ink-mute)] mt-1.5">
+            <div className="text-xs text-[var(--color-ink-mute)] mt-1.5">
               SCHEDULE:{" "}
               <span className="text-[var(--color-ink)] font-bold">
                 {activeDescription}

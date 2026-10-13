@@ -221,7 +221,7 @@ export function RoleTypeDonut({ data, className = "" }: RoleTypeDonutProps) {
         <span className="font-mono text-xs font-bold uppercase tracking-wider text-[var(--color-ink)]">
           JOB TYPES APPLIED
         </span>
-        <span className="font-mono text-[10px] text-[var(--color-ink-mute)]">
+        <span className="font-mono text-xs text-[var(--color-ink-mute)]">
           {totalApplied} TOTAL
         </span>
       </div>
@@ -256,7 +256,7 @@ export function RoleTypeDonut({ data, className = "" }: RoleTypeDonutProps) {
               key={`legend-${item.role_type}`}
               onClick={() => setSelectedRole(item.role_type)}
               onMouseEnter={() => setSelectedRole(item.role_type)}
-              className={`flex items-center justify-between px-1.5 py-0.5 cursor-pointer font-mono text-[11px] transition-none ${
+              className={`flex items-center justify-between px-1.5 py-0.5 cursor-pointer font-mono text-xs transition-none ${
                 isSelected
                   ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold"
                   : "hover:bg-[var(--color-paper-2)] text-[var(--color-ink)]"
@@ -293,10 +293,10 @@ export function RoleTypeDonut({ data, className = "" }: RoleTypeDonutProps) {
       {/* NieR Readout */}
       <div className="border-t border-[var(--color-ink)] pt-2 mt-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[11px] font-black uppercase text-[var(--color-ink)]">
+          <span className="font-mono text-xs font-black uppercase text-[var(--color-ink)]">
             READOUT:
           </span>
-          <span className="font-mono text-[11px] font-bold uppercase text-[var(--color-ink)]">
+          <span className="font-mono text-xs font-bold uppercase text-[var(--color-ink)]">
             {activeItem
               ? `${formatRoleType(activeItem.role_type)} · ${activeItem.count} APPLIED (${
                   totalApplied > 0

@@ -114,7 +114,7 @@ export function JobDetail({
           <button
             onClick={() => onOpenUrl(job.url)}
             title="Open in external browser [O]"
-            className="px-2.5 py-1 bg-[var(--color-ink)] text-[var(--color-paper)] font-bold text-[10px] uppercase tracking-wider cursor-pointer hover:opacity-90 shrink-0"
+            className="px-2.5 py-1 bg-[var(--color-ink)] text-[var(--color-paper)] font-bold text-xs uppercase tracking-wider cursor-pointer hover:opacity-90 shrink-0"
           >
             [↵] OPEN
           </button>
@@ -123,7 +123,7 @@ export function JobDetail({
             <button
               onClick={onClose}
               title="Close job window [ESC]"
-              className="px-2 py-1 border border-[var(--color-ink)] text-[var(--color-ink)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] font-bold text-[10px] uppercase tracking-wider cursor-pointer shrink-0 transition-colors"
+              className="px-2 py-1 border border-[var(--color-ink)] text-[var(--color-ink)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] font-bold text-xs uppercase tracking-wider cursor-pointer shrink-0 transition-colors"
             >
               [✕] CLOSE [ESC]
             </button>
@@ -133,7 +133,7 @@ export function JobDetail({
 
       {/* 2. Triage Actions Toolbar */}
       <div className="flex items-center flex-wrap gap-2 p-2 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/40 font-mono text-xs">
-        <span className="text-[10px] font-bold text-[var(--color-ink-mute)] uppercase mr-1">
+        <span className="text-xs font-bold text-[var(--color-ink-mute)] uppercase mr-1">
           TRIAGE:
         </span>
         <Button
@@ -223,14 +223,14 @@ export function JobDetail({
             onOpenUrl(job.url);
           }}
           title="Open job posting in browser"
-          className="truncate max-w-md text-[var(--color-ink)] hover:underline hover:opacity-80 font-mono text-[11px] flex items-center gap-1.5 cursor-pointer"
+          className="truncate max-w-md text-[var(--color-ink)] hover:underline hover:opacity-80 font-mono text-xs flex items-center gap-1.5 cursor-pointer"
         >
           <span className="truncate">{job.url}</span>
-          <span className="opacity-60 text-[10px] shrink-0 font-bold">[↗]</span>
+          <span className="opacity-60 text-xs shrink-0 font-bold">[↗]</span>
         </a>
         <button
           onClick={() => onOpenUrl(job.url)}
-          className="px-2 py-0.5 border border-[var(--color-ink)] font-bold text-[10px] uppercase hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] cursor-pointer shrink-0 ml-2"
+          className="px-2 py-0.5 border border-[var(--color-ink)] font-bold text-xs uppercase hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] cursor-pointer shrink-0 ml-2"
         >
           OPEN POSTING
         </button>
@@ -240,7 +240,7 @@ export function JobDetail({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs">
         {/* Box A: Compensation & Geography */}
         <div className="flex flex-col border border-[var(--color-ink)] bg-[var(--color-paper)] divide-y divide-[var(--color-ink)]">
-          <div className="px-3 py-1.5 bg-[var(--color-paper-2)]/50 font-bold uppercase tracking-wider text-[11px] text-[var(--color-ink)]">
+          <div className="px-3 py-1.5 bg-[var(--color-paper-2)]/50 font-bold uppercase tracking-wider text-xs text-[var(--color-ink)]">
             COMPENSATION & WORKPLACE
           </div>
           <div className="flex justify-between items-center px-3 py-1.5">
@@ -263,14 +263,14 @@ export function JobDetail({
           </div>
           {job.locations && job.locations.length > 0 && (
             <div className="px-3 py-1.5 flex flex-col gap-1">
-              <span className="text-[10px] text-[var(--color-ink-mute)] uppercase">
+              <span className="text-xs text-[var(--color-ink-mute)] uppercase">
                 LOCATIONS ({job.locations.length})
               </span>
               <div className="flex flex-wrap gap-1">
                 {job.locations.map((loc, idx) => (
                   <span
                     key={idx}
-                    className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper-2)] text-[10px]"
+                    className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper-2)] text-xs"
                   >
                     {[loc.city, loc.region_code, loc.country_code].filter(Boolean).join(", ") || loc.raw}
                   </span>
@@ -282,7 +282,7 @@ export function JobDetail({
 
         {/* Box B: Requirements & Eligibility */}
         <div className="flex flex-col border border-[var(--color-ink)] bg-[var(--color-paper)] divide-y divide-[var(--color-ink)]">
-          <div className="px-3 py-1.5 bg-[var(--color-paper-2)]/50 font-bold uppercase tracking-wider text-[11px] text-[var(--color-ink)]">
+          <div className="px-3 py-1.5 bg-[var(--color-paper-2)]/50 font-bold uppercase tracking-wider text-xs text-[var(--color-ink)]">
             REQUIREMENTS & CLEARANCE
           </div>
           <div className="flex justify-between items-center px-3 py-1.5">
@@ -319,20 +319,20 @@ export function JobDetail({
 
       {/* 6. Posting Telemetry & Dates */}
       <div className="border border-[var(--color-ink)] bg-[var(--color-paper)] divide-y divide-[var(--color-ink)] font-mono text-xs">
-        <div className="px-3 py-1.5 bg-[var(--color-paper-2)]/30 font-bold uppercase tracking-wider text-[11px] text-[var(--color-ink)]">
+        <div className="px-3 py-1.5 bg-[var(--color-paper-2)]/30 font-bold uppercase tracking-wider text-xs text-[var(--color-ink)]">
           POSTING TIMELINE
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[var(--color-ink)]">
           <div className="flex justify-between sm:flex-col gap-1 px-3 py-1.5">
-            <span className="text-[10px] text-[var(--color-ink-mute)] uppercase">POSTED DATE</span>
+            <span className="text-xs text-[var(--color-ink-mute)] uppercase">POSTED DATE</span>
             <span className="font-bold text-[var(--color-ink)]">{formatDate(job.date_posted)}</span>
           </div>
           <div className="flex justify-between sm:flex-col gap-1 px-3 py-1.5">
-            <span className="text-[10px] text-[var(--color-ink-mute)] uppercase">DISCOVERED AT</span>
+            <span className="text-xs text-[var(--color-ink-mute)] uppercase">DISCOVERED AT</span>
             <span className="font-bold text-[var(--color-ink)]">{formatDate(job.date_added)}</span>
           </div>
           <div className="flex justify-between sm:flex-col gap-1 px-3 py-1.5">
-            <span className="text-[10px] text-[var(--color-ink-mute)] uppercase">LAST SEEN</span>
+            <span className="text-xs text-[var(--color-ink-mute)] uppercase">LAST SEEN</span>
             <span className="font-bold text-[var(--color-ink)]">{formatDate(job.last_seen_at)}</span>
           </div>
         </div>
@@ -341,37 +341,37 @@ export function JobDetail({
       {/* 7. Evidence Snippets (if any) */}
       {(job.experience_evidence || job.sponsorship_evidence || job.work_auth_evidence || job.clearance_evidence) && (
         <div className="flex flex-col gap-2 font-mono text-xs">
-          <span className="text-[10px] font-bold text-[var(--color-ink-mute)] uppercase tracking-wider">
+          <span className="text-xs font-bold text-[var(--color-ink-mute)] uppercase tracking-wider">
             POLICY ENGINE EVIDENCE QUOTES
           </span>
           <div className="flex flex-col gap-1.5">
             {job.experience_evidence && (
-              <div className="p-2 border border-dashed border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 text-[11px] leading-tight">
-                <span className="font-bold text-[10px] block text-[var(--color-ink-mute)] uppercase mb-0.5">
+              <div className="p-2 border border-dashed border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 text-xs leading-tight">
+                <span className="font-bold text-xs block text-[var(--color-ink-mute)] uppercase mb-0.5">
                   EXPERIENCE QUOTE:
                 </span>
                 "{job.experience_evidence}"
               </div>
             )}
             {job.sponsorship_evidence && (
-              <div className="p-2 border border-dashed border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 text-[11px] leading-tight">
-                <span className="font-bold text-[10px] block text-[var(--color-ink-mute)] uppercase mb-0.5">
+              <div className="p-2 border border-dashed border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 text-xs leading-tight">
+                <span className="font-bold text-xs block text-[var(--color-ink-mute)] uppercase mb-0.5">
                   SPONSORSHIP QUOTE:
                 </span>
                 "{job.sponsorship_evidence}"
               </div>
             )}
             {job.work_auth_evidence && (
-              <div className="p-2 border border-dashed border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 text-[11px] leading-tight">
-                <span className="font-bold text-[10px] block text-[var(--color-ink-mute)] uppercase mb-0.5">
+              <div className="p-2 border border-dashed border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 text-xs leading-tight">
+                <span className="font-bold text-xs block text-[var(--color-ink-mute)] uppercase mb-0.5">
                   WORK AUTH / GREEN CARD QUOTE:
                 </span>
                 "{job.work_auth_evidence}"
               </div>
             )}
             {job.clearance_evidence && (
-              <div className="p-2 border border-dashed border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 text-[11px] leading-tight">
-                <span className="font-bold text-[10px] block text-[var(--color-ink-mute)] uppercase mb-0.5">
+              <div className="p-2 border border-dashed border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 text-xs leading-tight">
+                <span className="font-bold text-xs block text-[var(--color-ink-mute)] uppercase mb-0.5">
                   CLEARANCE QUOTE:
                 </span>
                 "{job.clearance_evidence}"
@@ -386,7 +386,7 @@ export function JobDetail({
         <div className="flex justify-between items-center text-xs font-mono font-bold uppercase tracking-wider text-[var(--color-ink)]">
           <span>JOB DESCRIPTION ▏</span>
           {job.description_text && (
-            <span className="text-[10px] text-[var(--color-ink-mute)] font-normal">
+            <span className="text-xs text-[var(--color-ink-mute)] font-normal">
               {job.description_text.length.toLocaleString()} CHARACTERS
             </span>
           )}
@@ -408,7 +408,7 @@ export function JobDetail({
       <div className="flex flex-col gap-2">
         <div className="flex justify-between items-center text-xs font-mono font-bold uppercase tracking-wider text-[var(--color-ink)]">
           <span>CANDIDATE NOTES ▏</span>
-          <span className="text-[10px] text-[var(--color-ink-mute)] font-normal">
+          <span className="text-xs text-[var(--color-ink-mute)] font-normal">
             AUTOSAVED (500MS)
           </span>
         </div>

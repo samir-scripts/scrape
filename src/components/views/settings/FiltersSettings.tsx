@@ -114,7 +114,7 @@ export function FiltersSettings({
         </div>
         <div className="flex flex-wrap gap-1.5 mt-1 min-h-6">
           {settings.filters_include_keywords.length === 0 ? (
-            <span className="text-[11px] text-[var(--color-ink-mute)]">
+            <span className="text-xs text-[var(--color-ink-mute)]">
               NO INCLUDE FILTERS (ALL POSTINGS MATCHED)
             </span>
           ) : (
@@ -169,7 +169,7 @@ export function FiltersSettings({
         </div>
         <div className="flex flex-wrap gap-1.5 mt-1 min-h-6">
           {settings.filters_exclude_keywords.length === 0 ? (
-            <span className="text-[11px] text-[var(--color-ink-mute)]">
+            <span className="text-xs text-[var(--color-ink-mute)]">
               NO EXCLUDE FILTERS CONFIGURED
             </span>
           ) : (
@@ -224,7 +224,7 @@ export function FiltersSettings({
         </div>
         <div className="flex flex-wrap gap-1.5 mt-1 min-h-6">
           {settings.filters_locations.length === 0 ? (
-            <span className="text-[11px] text-[var(--color-ink-mute)]">
+            <span className="text-xs text-[var(--color-ink-mute)]">
               NO LOCATION FILTERS (ANY LOCATION ACCEPTED)
             </span>
           ) : (
@@ -259,7 +259,7 @@ export function FiltersSettings({
         <label className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
           ADVANCED INGESTION & DATA RECLASSIFICATION
         </label>
-        <p className="text-[11px] text-[var(--color-ink-mute)]">
+        <p className="text-xs text-[var(--color-ink-mute)]">
           RE-EXTRACT ENRICHED SALARY, VISA SPONSORSHIP, SECURITY CLEARANCE, AND YOE ON ALL HISTORIC DATABASE POSTINGS.
         </p>
 
@@ -268,7 +268,7 @@ export function FiltersSettings({
             <div className="font-bold text-xs uppercase text-[var(--color-ink)]">
               RECLASSIFY HISTORIC POSTINGS
             </div>
-            <div className="text-[10px] text-[var(--color-ink-mute)] uppercase">
+            <div className="text-xs text-[var(--color-ink-mute)] uppercase">
               RUNS NATURAL LANGUAGE ENRICHMENT ENGINE ON EXISTING DESCRIPTIONS
             </div>
           </div>

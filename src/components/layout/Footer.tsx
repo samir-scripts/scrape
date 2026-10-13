@@ -46,7 +46,7 @@ export function Footer({ statusMessage }: FooterProps) {
       </div>
 
       {/* Right: Contextual Helper / Status */}
-      <div className="text-[11px] text-[var(--color-ink-mute)] uppercase tracking-wider shrink-0 pl-2">
+      <div className="text-xs text-[var(--color-ink-mute)] uppercase tracking-wider shrink-0 pl-2">
         {statusMessage || ""}
       </div>
     </footer>

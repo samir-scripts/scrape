@@ -66,12 +66,12 @@ export function TopNav({
         {/* Right: Status Indicator / Next Run / Scanning & Notification Bell */}
         <div className="flex items-center gap-3 font-mono text-xs text-[var(--color-ink)] pl-4">
           {isScanning ? (
-            <div className="flex items-center gap-2 bg-[var(--color-signal)] text-white px-2.5 py-1 text-[11px] font-bold">
+            <div className="flex items-center gap-2 bg-[var(--color-signal)] text-white px-2.5 py-1 text-xs font-bold">
               <span className="animate-pulse">●</span>
               <span>{scanStatusText || "SCRAPING IN PROGRESS…"}</span>
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-[var(--color-ink-mute)] text-[11px]">
+            <div className="flex items-center gap-2 text-[var(--color-ink-mute)] text-xs">
               <span className="text-[var(--color-lime)]">●</span>
               <span>{nextRunText || "IDLE"}</span>
             </div>

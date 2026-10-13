@@ -134,19 +134,19 @@ export function SystemSettings({
         </span>
         <div className="grid grid-cols-3 gap-4 pt-1">
           <div>
-            <span className="text-[11px] text-[var(--color-ink-mute)] block">
+            <span className="text-xs text-[var(--color-ink-mute)] block">
               SYSTEM LOCALE
             </span>
             <span className="font-bold">{settings.system_locale}</span>
           </div>
           <div>
-            <span className="text-[11px] text-[var(--color-ink-mute)] block">
+            <span className="text-xs text-[var(--color-ink-mute)] block">
               SYSTEM TIMEZONE
             </span>
             <span className="font-bold">{settings.system_timezone}</span>
           </div>
           <div>
-            <span className="text-[11px] text-[var(--color-ink-mute)] block">
+            <span className="text-xs text-[var(--color-ink-mute)] block">
               WEEK START DAY
             </span>
             <span className="font-bold uppercase">
@@ -162,14 +162,14 @@ export function SystemSettings({
           <span className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
             REGIONAL & TIME FORMAT
           </span>
-          <span className="text-[10px] text-[var(--color-ink-mute)]">
+          <span className="text-xs text-[var(--color-ink-mute)]">
             PREVIEW: {formatDateTime(new Date(), { timeFormat: settings.system_time_format, dateFormat: settings.system_date_format })}
           </span>
         </div>
 
         <div className="grid grid-cols-2 gap-4 pt-1">
           <div>
-            <span className="text-[11px] text-[var(--color-ink-mute)] block mb-1">
+            <span className="text-xs text-[var(--color-ink-mute)] block mb-1">
               TIME FORMAT
             </span>
             <div className="flex border border-[var(--color-ink)]">
@@ -199,7 +199,7 @@ export function SystemSettings({
           </div>
 
           <div>
-            <span className="text-[11px] text-[var(--color-ink-mute)] block mb-1">
+            <span className="text-xs text-[var(--color-ink-mute)] block mb-1">
               DATE FORMAT
             </span>
             <div className="flex border border-[var(--color-ink)]">
@@ -208,7 +208,7 @@ export function SystemSettings({
                   key={fmt}
                   type="button"
                   onClick={() => onUpdateSetting("system.date_format", fmt)}
-                  className={`flex-1 py-1 text-center font-bold text-[10px] cursor-pointer ${
+                  className={`flex-1 py-1 text-center font-bold text-xs cursor-pointer ${
                     settings.system_date_format === fmt
                       ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
                       : "hover:bg-[var(--color-paper-2)]"
@@ -266,7 +266,7 @@ export function SystemSettings({
         />
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-[11px] text-[var(--color-ink-mute)] font-mono">
+          <span className="text-xs text-[var(--color-ink-mute)] font-mono">
             UPDATE CHANNEL
           </span>
           <div className="flex max-w-sm border border-[var(--color-ink)]">
@@ -296,7 +296,7 @@ export function SystemSettings({
         </div>
 
         <div className="flex flex-col gap-2 pt-2 border-t border-[var(--color-ink-mute)]/30 text-xs">
-          <div className="flex items-center justify-between text-[11px] text-[var(--color-ink-mute)]">
+          <div className="flex items-center justify-between text-xs text-[var(--color-ink-mute)]">
             <span>CURRENT VERSION: v0.1.0</span>
             <span>
               LAST CHECKED:{" "}
@@ -315,7 +315,7 @@ export function SystemSettings({
               {isCheckingUpdate ? "CHECKING FOR UPDATES…" : "CHECK FOR UPDATES NOW"}
             </Button>
             {updateCheckStatus && (
-              <span className="text-[11px] font-bold text-[var(--color-ink)]">
+              <span className="text-xs font-bold text-[var(--color-ink)]">
                 {updateCheckStatus}
               </span>
             )}

@@ -33,7 +33,7 @@ export function MetricCard({
       </div>
 
       <div className="border-t border-[var(--color-ink-mute)]/30 pt-1.5 mt-auto">
-        <span className="font-mono text-[10px] text-[var(--color-ink-mute)] uppercase tracking-wider truncate block">
+        <span className="font-mono text-xs text-[var(--color-ink-mute)] uppercase tracking-wider truncate block">
           {subline}
         </span>
       </div>

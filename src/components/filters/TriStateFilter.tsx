@@ -56,7 +56,7 @@ export function TriStateFilter({
         {currentList.length > 0 && (
           <button
             onClick={() => onChange(null)}
-            className="text-[10px] text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
+            className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
           >
             [ANY]
           </button>
@@ -64,7 +64,7 @@ export function TriStateFilter({
       </div>
 
       {description && (
-        <span className="text-[10px] text-[var(--color-ink-mute)]">
+        <span className="text-xs text-[var(--color-ink-mute)]">
           {description}
         </span>
       )}
@@ -77,7 +77,7 @@ export function TriStateFilter({
               key={opt.val}
               type="button"
               onClick={() => handleToggle(opt.val)}
-              className={`flex-1 py-1 px-2 text-[11px] font-bold uppercase tracking-wider border cursor-pointer ${
+              className={`flex-1 py-1 px-2 text-xs font-bold uppercase tracking-wider border cursor-pointer ${
                 active
                   ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
                   : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"

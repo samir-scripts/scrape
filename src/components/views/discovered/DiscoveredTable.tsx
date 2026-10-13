@@ -188,7 +188,7 @@ export function DiscoveredTable({
                 </TableCell>
                 <TableCell className="font-bold">{job.title}</TableCell>
                 <TableCell
-                  className="text-[11px] font-mono text-[var(--color-ink-mute)] max-w-xs truncate select-text"
+                  className="text-xs font-mono text-[var(--color-ink-mute)] max-w-xs truncate select-text"
                   title={job.description_text || "No description"}
                 >
                   {descSnippet}
@@ -232,7 +232,7 @@ export function DiscoveredTable({
                         e.stopPropagation();
                         onUpdateStatus(job.id, "applied");
                       }}
-                      className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-lime)] text-[var(--color-ink)] hover:opacity-90 text-[10px] font-mono font-bold uppercase cursor-pointer"
+                      className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-lime)] text-[var(--color-ink)] hover:opacity-90 text-xs font-mono font-bold uppercase cursor-pointer"
                       title="Apply [A]"
                     >
                       APPLY
@@ -242,7 +242,7 @@ export function DiscoveredTable({
                         e.stopPropagation();
                         onUpdateStatus(job.id, "ignored");
                       }}
-                      className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] text-[10px] font-mono uppercase cursor-pointer"
+                      className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] text-xs font-mono uppercase cursor-pointer"
                       title="Ignore [X]"
                     >
                       IGN
@@ -252,7 +252,7 @@ export function DiscoveredTable({
                         e.stopPropagation();
                         onOpenUrl(job.url);
                       }}
-                      className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper-2)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] text-[10px] font-mono uppercase cursor-pointer"
+                      className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper-2)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] text-xs font-mono uppercase cursor-pointer"
                       title="Open URL [Enter]"
                     >
                       ↗
@@ -263,7 +263,7 @@ export function DiscoveredTable({
                           e.stopPropagation();
                           onDelete(job);
                         }}
-                        className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-cherry)] hover:text-white text-[10px] font-mono font-bold uppercase cursor-pointer"
+                        className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-cherry)] hover:text-white text-xs font-mono font-bold uppercase cursor-pointer"
                         title="Remove saved job"
                       >
                         DEL

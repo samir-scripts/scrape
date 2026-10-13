@@ -25,7 +25,7 @@ export function Tag({
           color: config.text,
           borderColor: config.border,
         }}
-        className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider border leading-none select-none ${
+        className={`inline-flex items-center px-1.5 py-0.5 text-xs font-mono uppercase tracking-wider border leading-none select-none ${
           isDither ? "dither-checker" : ""
         } ${className}`}
       >
@@ -43,7 +43,7 @@ export function Tag({
 
   return (
     <span
-      className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider leading-none select-none ${baseStyle} ${className}`}
+      className={`inline-flex items-center px-1.5 py-0.5 text-xs font-mono uppercase tracking-wider leading-none select-none ${baseStyle} ${className}`}
     >
       {label}
     </span>

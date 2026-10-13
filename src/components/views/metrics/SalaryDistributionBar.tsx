@@ -32,7 +32,7 @@ export function SalaryDistributionBar({
         <span className="font-mono text-xs font-bold uppercase tracking-wider text-[var(--color-ink)]">
           SALARY DISTRIBUTION
         </span>
-        <div className="flex items-center gap-3 font-mono text-[10px] text-[var(--color-ink-mute)]">
+        <div className="flex items-center gap-3 font-mono text-xs text-[var(--color-ink-mute)]">
           {medianSalary && (
             <span>MEDIAN: ${Math.round(medianSalary).toLocaleString()}</span>
           )}
@@ -49,7 +49,7 @@ export function SalaryDistributionBar({
 
           return (
             <div key={bucket.range_label} className="flex flex-col gap-0.5">
-              <div className="flex items-center justify-between font-mono text-[11px]">
+              <div className="flex items-center justify-between font-mono text-xs">
                 <span className="text-[var(--color-ink)] font-bold">
                   {bucket.range_label}
                 </span>
@@ -70,7 +70,7 @@ export function SalaryDistributionBar({
         })}
       </div>
 
-      <div className="border-t border-[var(--color-ink)] pt-2 mt-2 flex items-center justify-between font-mono text-[11px]">
+      <div className="border-t border-[var(--color-ink)] pt-2 mt-2 flex items-center justify-between font-mono text-xs">
         <span className="font-black uppercase text-[var(--color-ink)]">
           POSTINGS WITH SALARY:
         </span>

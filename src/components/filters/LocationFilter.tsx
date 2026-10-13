@@ -162,7 +162,7 @@ export function LocationFilter({
             type="button"
             onClick={handleAutoDetect}
             disabled={isDetecting}
-            className="text-[10px] text-[var(--color-ink)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] border border-[var(--color-ink)] px-1.5 py-0.5 uppercase cursor-pointer disabled:opacity-50"
+            className="text-xs text-[var(--color-ink)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] border border-[var(--color-ink)] px-1.5 py-0.5 uppercase cursor-pointer disabled:opacity-50"
             title="Auto-detect system/user location"
           >
             {isDetecting ? "DETECTING..." : "📍 AUTO-DETECT"}
@@ -177,7 +177,7 @@ export function LocationFilter({
                   includeUnknown,
                 })
               }
-              className="text-[10px] text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
+              className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
             >
               [RESET]
             </button>
@@ -186,14 +186,14 @@ export function LocationFilter({
       </div>
 
       {detectStatus && (
-        <div className="text-[10px] font-bold text-[var(--color-ink)] bg-[var(--color-paper-2)] border border-[var(--color-ink)] px-2 py-0.5 uppercase">
+        <div className="text-xs font-bold text-[var(--color-ink)] bg-[var(--color-paper-2)] border border-[var(--color-ink)] px-2 py-0.5 uppercase">
           {detectStatus}
         </div>
       )}
 
       {/* Workplace Mode (Remote / Hybrid / Onsite) */}
       <div className="flex flex-col gap-1">
-        <span className="text-[10px] text-[var(--color-ink-mute)] uppercase font-bold">
+        <span className="text-xs text-[var(--color-ink-mute)] uppercase font-bold">
           WORKPLACE POLICY
         </span>
         <div className="grid grid-cols-2 gap-1.5">
@@ -211,7 +211,7 @@ export function LocationFilter({
                     includeUnknown,
                   })
                 }
-                className={`py-1 px-2 text-[10px] font-bold uppercase tracking-wider border cursor-pointer ${
+                className={`py-1 px-2 text-xs font-bold uppercase tracking-wider border cursor-pointer ${
                   active
                     ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
                     : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
@@ -227,14 +227,14 @@ export function LocationFilter({
       {/* Target Country Dropdown */}
       <div className="flex flex-col gap-1 pt-1">
         <div className="flex justify-between items-center">
-          <span className="text-[10px] text-[var(--color-ink-mute)] uppercase font-bold">
+          <span className="text-xs text-[var(--color-ink-mute)] uppercase font-bold">
             COUNTRY
           </span>
           {selectedCountryCode !== "ALL" && (
             <button
               type="button"
               onClick={() => handleCountryChange("ALL")}
-              className="text-[10px] text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
+              className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
             >
               [ANY COUNTRY]
             </button>
@@ -262,7 +262,7 @@ export function LocationFilter({
       {/* Cascading States & Provinces Dropdown */}
       <div className="flex flex-col gap-1 pt-1">
         <div className="flex justify-between items-center">
-          <span className="text-[10px] text-[var(--color-ink-mute)] uppercase font-bold">
+          <span className="text-xs text-[var(--color-ink-mute)] uppercase font-bold">
             STATES & PROVINCES
             {selectedCountryCode !== "ALL" ? ` (${selectedCountryCode})` : ""}
           </span>
@@ -270,7 +270,7 @@ export function LocationFilter({
             <button
               type="button"
               onClick={handleClearRegions}
-              className="text-[10px] text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
+              className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-cherry)] uppercase cursor-pointer"
             >
               [CLEAR ({selectedRegions.length})]
             </button>
@@ -314,7 +314,7 @@ export function LocationFilter({
               return (
                 <span
                   key={reg}
-                  className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-mono font-bold uppercase border border-[var(--color-ink)] bg-[var(--color-paper-2)] text-[var(--color-ink)]"
+                  className="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-mono font-bold uppercase border border-[var(--color-ink)] bg-[var(--color-paper-2)] text-[var(--color-ink)]"
                 >
                   <span>{label}</span>
                   <button
@@ -334,7 +334,7 @@ export function LocationFilter({
 
       {/* Include Unknown Toggle */}
       <div className="flex items-center gap-2 pt-1">
-        <label className="flex items-center gap-2 cursor-pointer text-[11px] text-[var(--color-ink)]">
+        <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--color-ink)]">
           <input
             type="checkbox"
             checked={includeUnknown}

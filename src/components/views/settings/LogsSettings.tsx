@@ -146,7 +146,7 @@ export function LogsSettings() {
       <div className="grid grid-cols-12 gap-4 flex-1 min-h-[480px]">
         {/* Left Column: Runs List */}
         <div className="col-span-5 border border-[var(--color-ink)] bg-[var(--color-paper)] flex flex-col overflow-hidden">
-          <div className="px-3 py-2 bg-[var(--color-paper-2)]/40 border-b border-[var(--color-ink)] flex justify-between items-center text-[11px] font-bold uppercase tracking-wider text-[var(--color-ink)]">
+          <div className="px-3 py-2 bg-[var(--color-paper-2)]/40 border-b border-[var(--color-ink)] flex justify-between items-center text-xs font-bold uppercase tracking-wider text-[var(--color-ink)]">
             <span>RUNS ({displayedRuns.length})</span>
             <span className="text-[var(--color-ink-mute)]">STATUS · JOBS</span>
           </div>
@@ -195,12 +195,12 @@ export function LogsSettings() {
                           {formatDateTime(run.started_at)}
                         </span>
                       </div>
-                      <span className="text-[10px] uppercase font-bold tracking-wider opacity-80">
+                      <span className="text-xs uppercase font-bold tracking-wider opacity-80">
                         {run.trigger.toUpperCase()}
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between text-[11px] opacity-80 pt-0.5">
+                    <div className="flex items-center justify-between text-xs opacity-80 pt-0.5">
                       <span className="uppercase">
                         STATUS:{" "}
                         <strong
@@ -247,7 +247,7 @@ export function LogsSettings() {
                         RUN: {selectedRun.id.slice(0, 8)}…
                       </span>
                     </div>
-                    <span className="text-[11px] text-[var(--color-ink-mute)]">
+                    <span className="text-xs text-[var(--color-ink-mute)]">
                       STARTED: {formatDateTime(selectedRun.started_at)} · DURATION:{" "}
                       {formatDuration(selectedRun.started_at, selectedRun.finished_at)}
                     </span>
@@ -282,7 +282,7 @@ export function LogsSettings() {
 
               {/* Log Event Stream */}
               <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
-                <div className="flex justify-between items-center pb-1 border-b border-[var(--color-ink)]/20 text-[10px] text-[var(--color-ink-mute)] font-bold uppercase tracking-wider">
+                <div className="flex justify-between items-center pb-1 border-b border-[var(--color-ink)]/20 text-xs text-[var(--color-ink-mute)] font-bold uppercase tracking-wider">
                   <span>EXECUTION LOG EVENTS ({logs.length})</span>
                   <span>TIMESTAMP · LEVEL</span>
                 </div>
@@ -296,7 +296,7 @@ export function LogsSettings() {
                     NO LOG EVENTS RECORDED FOR THIS RUN.
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-1.5 font-mono text-[11px]">
+                  <div className="flex flex-col gap-1.5 font-mono text-xs">
                     {logs.map((log: ScrapeLogEntry) => {
                       const isError = log.level === "error";
                       const isWarn = log.level === "warn";
@@ -312,7 +312,7 @@ export function LogsSettings() {
                               : "border-[var(--color-ink)]/30 bg-[var(--color-paper-2)]/20 text-[var(--color-ink)]"
                           }`}
                         >
-                          <div className="flex items-center justify-between text-[10px] mb-1 opacity-80">
+                          <div className="flex items-center justify-between text-xs mb-1 opacity-80">
                             <div className="flex items-center gap-1.5 font-bold uppercase">
                               {isError && (
                                 <span className="inline-block w-2 h-2 bg-red-600" />
@@ -344,7 +344,7 @@ export function LogsSettings() {
                                   setView("scraper");
                                   setScraperCategory("sources");
                                 }}
-                                className="px-2 py-0.5 border border-red-600 bg-white text-red-700 hover:bg-red-600 hover:text-white text-[10px] font-bold uppercase cursor-pointer"
+                                className="px-2 py-0.5 border border-red-600 bg-white text-red-700 hover:bg-red-600 hover:text-white text-xs font-bold uppercase cursor-pointer"
                               >
                                 [EDIT SOURCE IN SCRAPER →]
                               </button>
