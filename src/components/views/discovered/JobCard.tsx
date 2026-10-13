@@ -50,25 +50,18 @@ export function JobCard({
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick?.();
-        }
-      }}
-      className={`group relative flex flex-col gap-2 p-4 border border-[var(--color-ink)]/20 hover:border-[var(--color-ink)]/50 transition-colors cursor-pointer select-none focus:outline-none focus:ring-1 focus:ring-[var(--color-ink)] ${
+      className={`group relative flex flex-col gap-2 p-4 border border-[var(--color-ink)]/20 hover:border-[var(--color-ink)]/50 transition-colors select-text ${
         selected
-          ? "bg-[var(--color-paper-2)]/80 border-l-4 border-l-[var(--color-lime)] pl-3 border-[var(--color-ink)]/60"
+          ? "bg-[var(--color-paper-2)]/80 border-l-4 border-l-[var(--color-ink)] pl-3 border-[var(--color-ink)]/60"
           : "bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)]/40"
       } ${className}`}
     >
       {/* Top Line: Title + Status + Favorite */}
       <div className="flex items-start justify-between gap-3">
         <h2 className="text-sm font-bold text-[var(--color-ink)] group-hover:underline leading-snug line-clamp-2">
-          {job.title}
+          <button type="button" onClick={onClick} className="normal-case text-left cursor-pointer" aria-label={`View ${job.title} at ${job.company}`}>
+            {job.title}
+          </button>
         </h2>
 
         <div className="flex items-center gap-2 shrink-0 pt-0.5">
@@ -81,7 +74,8 @@ export function JobCard({
                 onOpenUrl(job.url);
               }}
               title="Open job posting in browser"
-              className="px-1.5 py-0.5 border border-[var(--color-ink)]/30 hover:border-[var(--color-ink)] text-[10px] font-mono font-bold text-[var(--color-ink)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] transition-colors cursor-pointer shrink-0"
+              aria-label={`Open ${job.title} at ${job.company} in browser`}
+              className="px-1.5 py-0.5 border border-[var(--color-ink)]/30 hover:border-[var(--color-ink)] text-xs font-mono font-bold text-[var(--color-ink)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] transition-colors cursor-pointer shrink-0"
             >
               [↗]
             </button>
@@ -104,9 +98,12 @@ export function JobCard({
                 onDelete(job);
               }}
               title="Delete job posting"
-              className="px-1.5 py-0.5 border border-[var(--color-ink)]/30 hover:border-[var(--color-cherry)] hover:text-[var(--color-cherry)] text-[10px] font-mono font-bold text-[var(--color-ink-mute)] hover:bg-[var(--color-cherry)]/10 transition-colors cursor-pointer shrink-0"
+              aria-label={`Delete ${job.title} at ${job.company}`}
+              className="inline-flex min-w-8 min-h-8 items-center justify-center border border-current text-[var(--color-danger)] hover:bg-[var(--color-paper-2)] cursor-pointer shrink-0"
             >
-              [DEL]
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" />
+              </svg>
             </button>
           )}
         </div>
@@ -126,7 +123,7 @@ export function JobCard({
           {job.location && (
             <>
               <span className="opacity-40">·</span>
-              <span className="truncate max-w-[160px] opacity-80">
+              <span className="truncate max-w-[160px]">
                 {job.location}
               </span>
             </>
@@ -134,17 +131,17 @@ export function JobCard({
         </div>
 
         {formattedDate && (
-          <span className="shrink-0 text-[11px] opacity-75">
-            {formattedDate}
+          <span className="shrink-0 text-xs">
+            {job.date_posted ? "Posted " : "Found "}{formattedDate}
           </span>
         )}
       </div>
 
       {/* Badges Row */}
-      <div className="flex items-center flex-wrap gap-1.5 mt-0.5 text-[10px] font-mono">
+      <div className="flex items-center flex-wrap gap-1.5 mt-0.5 text-xs font-mono">
         {/* Remote Pill Tag (styled with green accent matching reference screenshot) */}
         {isRemote ? (
-          <span className="inline-flex items-center px-2 py-0.5 font-bold uppercase rounded-none bg-emerald-950/40 text-emerald-400 border border-emerald-800/40">
+          <span className="inline-flex items-center px-2 py-0.5 font-bold uppercase rounded-none text-[var(--color-success)] border border-current">
             Remote
           </span>
         ) : job.workplace_type === "onsite" ? (
@@ -152,11 +149,11 @@ export function JobCard({
             IN-OFFICE
           </span>
         ) : job.workplace_type === "hybrid" ? (
-          <span className="inline-flex items-center px-1.5 py-0.5 uppercase border border-current opacity-80 font-bold">
+          <span className="inline-flex items-center px-1.5 py-0.5 uppercase border border-current font-bold">
             HYBRID
           </span>
         ) : job.workplace_type !== "unknown" ? (
-          <span className="inline-flex items-center px-1.5 py-0.5 uppercase border border-current opacity-80 font-bold">
+          <span className="inline-flex items-center px-1.5 py-0.5 uppercase border border-current font-bold">
             {job.workplace_type}
           </span>
         ) : null}
@@ -177,43 +174,43 @@ export function JobCard({
 
         {/* Experience */}
         {expText !== "—" && (
-          <span className="inline-flex items-center px-1.5 py-0.5 border border-current opacity-70">
+          <span className="inline-flex items-center px-1.5 py-0.5 border border-current">
             {expText}
           </span>
         )}
 
         {/* Role Type */}
-        <span className="inline-flex items-center px-1.5 py-0.5 uppercase border border-current opacity-60">
+        <span className="inline-flex items-center px-1.5 py-0.5 uppercase border border-current">
           {job.role_type.replace("_", " ")}
         </span>
 
         {/* Sponsorship */}
         {job.sponsorship === "yes" && (
-          <span className="inline-flex items-center px-1.5 py-0.5 border border-current opacity-75 text-emerald-400">
+          <span className="inline-flex items-center px-1.5 py-0.5 border border-current text-[var(--color-success)]">
             SPONSORS
           </span>
         )}
         {job.sponsorship === "no" && (
-          <span className="inline-flex items-center px-1.5 py-0.5 border border-current opacity-50">
+          <span className="inline-flex items-center px-1.5 py-0.5 border border-current">
             NO VISA
           </span>
         )}
 
         {/* Work Authorization / Green Card */}
         {job.work_auth === "us_person" && (
-          <span className="inline-flex items-center px-1.5 py-0.5 font-bold border border-cyan-800/50 text-cyan-400 bg-cyan-950/30">
+          <span className="inline-flex items-center px-1.5 py-0.5 font-bold border border-current text-[var(--color-information)]">
             GC / US PERSON
           </span>
         )}
         {job.work_auth === "citizen_only" && (
-          <span className="inline-flex items-center px-1.5 py-0.5 font-bold border border-amber-800/50 text-amber-400 bg-amber-950/30">
+          <span className="inline-flex items-center px-1.5 py-0.5 font-bold border border-current text-[var(--color-warning)]">
             CITIZEN ONLY
           </span>
         )}
 
         {/* Clearance */}
         {job.clearance === "yes" && (
-          <span className="inline-flex items-center px-1.5 py-0.5 font-bold border border-[var(--color-cherry)] text-[var(--color-cherry)]">
+          <span className="inline-flex items-center px-1.5 py-0.5 font-bold border border-[var(--color-danger)] text-[var(--color-danger)]">
             CLR REQ
           </span>
         )}
@@ -221,7 +218,7 @@ export function JobCard({
 
       {/* Description Snippet Preview (2 lines) */}
       {job.description_text && (
-        <p className="text-[11px] text-[var(--color-ink-mute)] line-clamp-2 leading-relaxed mt-0.5 font-sans opacity-85 select-none">
+        <p className="text-xs text-[var(--color-ink-mute)] line-clamp-2 leading-relaxed mt-0.5 font-sans text-sm select-text">
           {job.description_text.replace(/\s+/g, " ").trim()}
         </p>
       )}

@@ -189,7 +189,7 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
       expect(html).not.toContain("DELETE POSTING");
     });
 
-    it("renders [DEL] button in JobCard header cluster when onDelete is supplied", () => {
+    it("renders a named SVG delete button in JobCard header cluster when onDelete is supplied", () => {
       const html = renderToStaticMarkup(
         React.createElement(JobCard, {
           job: sampleJob,
@@ -197,8 +197,9 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
         })
       );
 
-      expect(html).toContain("[DEL]");
-      expect(html).toContain("Delete job posting");
+      expect(html).toContain(`aria-label="Delete ${sampleJob.title} at ${sampleJob.company}"`);
+      expect(html).toContain('aria-hidden="true"');
+      expect(html).toContain("min-w-8 min-h-8");
     });
 
     it("renders DEL button in DiscoveredTable row actions when onDelete is supplied", () => {

@@ -4,13 +4,17 @@
   --color-paper: #F5F5DC;
   --color-paper-2: #E6E2C8;
   --color-ink: #1A1A1A;
-  --color-ink-mute: #8C887A;
+  --color-ink-mute: #676357;
   --color-obsidian: #262628;
   --color-cream: #FFF6EE;
   --color-lavender: #C6C2F2;
   --color-lime: #D6DC82;
   --color-cherry: #D86072;
   --color-signal: #1F1FE0;
+  --color-danger: #A52A43;
+  --color-success: #35602D;
+  --color-warning: #765000;
+  --color-information: #3030B0;
 
   --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-mono: "SF Mono", Menlo, Monaco, Consolas, monospace;
@@ -20,9 +24,13 @@
   --color-paper: #262628;
   --color-paper-2: #36363a;
   --color-ink: #FFF6EE;
-  --color-ink-mute: #99958F;
+  --color-ink-mute: #B9B5AF;
   --color-cream: #1A1A1A;
   --color-obsidian: #F5F5DC;
+  --color-danger: #F08FA2;
+  --color-success: #C4DA92;
+  --color-warning: #F0CB80;
+  --color-information: #B8B5FA;
 }
 
 /* Typography & Font Family Switches */
@@ -111,10 +119,9 @@
     height: 100%;
     width: 100%;
     overflow: hidden;
-    user-select: none;
-    -webkit-font-smoothing: none;
+    user-select: text;
   }
-  h1, h2, h3, nav, label, th, button {
+  nav, label, th {
     text-transform: uppercase;
     letter-spacing: -0.02em;
   }

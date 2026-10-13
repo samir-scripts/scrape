@@ -51,7 +51,7 @@ const mockJob: Job = {
 
 describe("Discovered Tab Card View and Consolidated Job Window", () => {
   describe("JobCard Component", () => {
-    it("renders job title, company name, formatted date, and green remote badge", () => {
+    it("renders job title, company name, formatted date, and semantic remote badge", () => {
       const html = renderToStaticMarkup(
         React.createElement(JobCard, {
           job: mockJob,
@@ -67,10 +67,10 @@ describe("Discovered Tab Card View and Consolidated Job Window", () => {
       // 2. Formatted date on card: Aug 5, 2026
       expect(html).toContain("Aug 5, 2026");
 
-      // 3. Emerald green Remote pill tag matching reference design
+      // 3. Remote badge uses semantic theme colors
       expect(html).toContain("Remote");
-      expect(html).toContain("text-emerald-400");
-      expect(html).toContain("bg-emerald-950/40");
+      expect(html).toContain("text-[var(--color-success)]");
+      expect(html).toContain("border-current");
 
       // 4. Badges row
       expect(html).toContain("$190K - $260K");
@@ -95,7 +95,7 @@ describe("Discovered Tab Card View and Consolidated Job Window", () => {
       );
 
       expect(html).toContain("border-l-4");
-      expect(html).toContain("border-l-[var(--color-lime)]");
+      expect(html).toContain("border-l-[var(--color-ink)]");
     });
   });
 

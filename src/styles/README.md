@@ -20,3 +20,11 @@ The `src/styles` directory defines the styling foundation for Scrape. It impleme
 2. **Hairline 1px Rules**: Crisp, high-contrast borders between columns, cards, and headers.
 3. **Monochrome Dominance**: High contrast base palette (Paper `#F5F5DC` and Ink `#1A1A1A`) with sparse, meaningful signal accents (lime for applied, blue for interviewing, cherry for rejected).
 4. **Uppercase Typography**: Headers, labels, tags, and status badges are rendered in uppercase tracking.
+
+Semantic danger/success/warning/information colors now have separate Paper and
+Obsidian values. Muted foregrounds were darkened/lightened for text contrast;
+global font-smoothing suppression was removed. Token-pair tests check 4.5:1 on
+both base surfaces, but do not constitute rendered-state accessibility QA.
+JobCard uses independent native buttons, selectable descriptions, a named trash
+SVG, and semantic badges. Its deletion backend remains permanent until the
+reversible-removal phase is implemented; the control therefore still says Delete.
