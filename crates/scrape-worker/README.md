@@ -69,3 +69,14 @@ cat config.json | cargo run -p scrape-worker
 # Run a specific source ID with custom filter SQL
 cargo run -p scrape-worker -- --source-id "src-stripe" --filter-sql "role = 'swe'" < config.json
 ```
+
+## Extraction integrity
+
+Invalid queries fail worker startup before extraction. `--source` splits only the
+first colon, so JSON-LD and selector identifiers can be complete URLs.
+Provider destinations are retained; Greenhouse URLs are not rewritten. Its update
+time is not a posting date: publication stays unknown when `first_published` is
+absent (detail fetching is still pending). ATS board slugs are not company domains.
+JSON-LD relative destinations resolve against their extraction page; missing or
+unsafe destinations emit errors rather than borrowing the listing URL. Worker
+HTTP fixtures and process tests are deterministic and do not verify live providers.

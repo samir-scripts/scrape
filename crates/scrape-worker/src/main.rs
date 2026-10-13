@@ -89,19 +89,11 @@ async fn run_stdin_config(dry_run: bool) -> Result<(), Box<dyn std::error::Error
 }
 
 async fn run_single_source(spec: &str, dry_run: bool) -> Result<(), Box<dyn std::error::Error>> {
-    let parts: Vec<&str> = spec.splitn(3, ':').collect();
-    if parts.len() < 2 {
-        eprintln!("Invalid --source format. Expected <kind>:<identifier> (e.g. greenhouse:stripe)");
-        std::process::exit(1);
-    }
-
-    let kind_str = parts[0];
-    let identifier = parts[1];
-    let name = if parts.len() >= 3 {
-        parts[2]
-    } else {
-        identifier
-    };
+    let (kind_str, identifier) = spec
+        .split_once(':')
+        .filter(|(_, identifier)| !identifier.trim().is_empty())
+        .ok_or("Invalid --source format. Expected <kind>:<identifier>")?;
+    let name = identifier;
 
     let kind = match kind_str.to_lowercase().as_str() {
         "greenhouse" => SourceKind::Greenhouse,
@@ -142,7 +134,8 @@ async fn execute_worker(
         config.limits.request_timeout_s,
         config.limits.per_host_delay_ms,
     );
-    let matcher = FilterMatcher::new(&config.filters);
+    let matcher = FilterMatcher::new(&config.filters)
+        .map_err(|e| format!("Invalid workflow filters: {e}"))?;
 
     let mut stats = WorkerStats::default();
     let mut total_emitted = 0u64;
@@ -162,6 +155,11 @@ async fn execute_worker(
                 let mut matched_count = 0u64;
 
                 for event in events {
+                    if let WorkerEvent::Error { .. } = &event {
+                        stats.sources_failed += 1;
+                        emit_event(&event)?;
+                        continue;
+                    }
                     if let WorkerEvent::Job {
                         ref title,
                         ref location,

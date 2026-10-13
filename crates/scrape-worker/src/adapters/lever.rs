@@ -194,10 +194,7 @@ fn parse_lever_postings(
                 .map(|dt| dt.to_rfc3339_opts(SecondsFormat::Millis, true))
         });
 
-        let company_icon_url = Some(format!(
-            "https://www.google.com/s2/favicons?domain={}.com&sz=64",
-            source.identifier.trim().to_lowercase().replace(' ', "-")
-        ));
+        let company_icon_url = None;
 
         events.push(WorkerEvent::Job {
             source_id: source.id.clone(),

@@ -247,6 +247,7 @@ fn test_jsonld_enrichment() {
   "@context": "https://schema.org",
   "@type": "JobPosting",
   "title": "Principal Cyber Operations Engineer",
+  "url": "https://careers.example.test/jobs/req-99001",
   "description": "Looking for senior talent with 8+ years of engineering experience.",
   "identifier": {
     "@type": "PropertyValue",

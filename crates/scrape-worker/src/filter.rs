@@ -6,9 +6,9 @@ pub struct FilterMatcher<'a> {
 }
 
 impl<'a> FilterMatcher<'a> {
-    pub fn new(filters: &'a WorkerFilters) -> Self {
-        let expr = filters.to_expr().unwrap_or(FilterExpr::AlwaysTrue);
-        Self { filters, expr }
+    pub fn new(filters: &'a WorkerFilters) -> Result<Self, String> {
+        let expr = filters.to_expr()?;
+        Ok(Self { filters, expr })
     }
 
     pub fn matches(&self, title: &str, location: &str, role_type: RoleType) -> bool {
@@ -32,6 +32,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn invalid_query_is_an_error() {
+        let filters = WorkerFilters {
+            query: Some("title LIKE".into()),
+            ..Default::default()
+        };
+        assert!(FilterMatcher::new(&filters).is_err());
+    }
+
+    #[test]
     fn test_filter_matcher() {
         let filters = WorkerFilters {
             include_keywords: vec!["Engineer".to_string(), "Developer".to_string()],
@@ -42,7 +51,7 @@ mod tests {
             policy: None,
         };
 
-        let matcher = FilterMatcher::new(&filters);
+        let matcher = FilterMatcher::new(&filters).unwrap();
 
         // Matches
         assert!(matcher.matches("Software Engineer", "Remote - US", RoleType::FullTime));
@@ -74,7 +83,7 @@ mod tests {
             policy: None,
         };
 
-        let matcher = FilterMatcher::new(&filters);
+        let matcher = FilterMatcher::new(&filters).unwrap();
 
         let ctx_match = JobFilterContext {
             title: "Software Engineer",

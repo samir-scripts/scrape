@@ -19,7 +19,7 @@ struct GreenhouseJob {
     absolute_url: String,
     location: Option<GreenhouseLocation>,
     offices: Option<Vec<GreenhouseOffice>>,
-    updated_at: Option<String>,
+    first_published: Option<String>,
     content: Option<String>,
     pay_input_ranges: Option<Vec<GreenhousePayRange>>,
 }
@@ -153,24 +153,8 @@ fn parse_greenhouse_jobs(
             .map(|e| e.is_new_grad)
             .unwrap_or(TriState::Unknown);
 
-        let company_icon_url = Some(format!(
-            "https://www.google.com/s2/favicons?domain={}.com&sz=64",
-            source.identifier.trim().to_lowercase().replace(' ', "-")
-        ));
-
-        let url = if job.absolute_url.contains("boards.greenhouse.io") {
-            job.absolute_url
-                .replace(
-                    "https://boards.greenhouse.io",
-                    "https://job-boards.greenhouse.io",
-                )
-                .replace(
-                    "http://boards.greenhouse.io",
-                    "https://job-boards.greenhouse.io",
-                )
-        } else {
-            job.absolute_url
-        };
+        let company_icon_url = None;
+        let url = job.absolute_url;
 
         events.push(WorkerEvent::Job {
             source_id: source.id.clone(),
@@ -180,7 +164,7 @@ fn parse_greenhouse_jobs(
             role_type,
             location: effective_location_str,
             url,
-            date_posted: job.updated_at,
+            date_posted: job.first_published,
             salary,
             locations,
             workplace_type,
@@ -223,6 +207,42 @@ mod tests {
         assert_eq!(job.title, "Software Engineer, Data Intern");
         let role_type = RoleType::infer(&job.title, None);
         assert_eq!(role_type, RoleType::Internship);
+    }
+
+    #[test]
+    fn custom_destination_and_publication_are_preserved() {
+        let source = WorkerSource {
+            id: "workflow".into(),
+            kind: scrape_core::SourceKind::Greenhouse,
+            name: "Acme".into(),
+            identifier: "acme".into(),
+            config: serde_json::Value::Null,
+        };
+        for published in [None, Some("2026-09-01T00:00:00Z")] {
+            let payload = serde_json::json!({"jobs": [{
+                "id": 42, "title": "Engineer", "absolute_url": "https://careers.acme.test/detail?gh_jid=42",
+                "updated_at": "2026-10-01T00:00:00Z", "first_published": published,
+                "location": {"name": "Remote"}
+            }]}).to_string();
+            let events = parse_greenhouse_payload(&payload, &source).unwrap();
+            match &events[0] {
+                WorkerEvent::Job {
+                    external_id,
+                    title,
+                    url,
+                    date_posted,
+                    company_icon_url,
+                    ..
+                } => {
+                    assert_eq!(external_id, "42");
+                    assert_eq!(title, "Engineer");
+                    assert_eq!(url, "https://careers.acme.test/detail?gh_jid=42");
+                    assert_eq!(date_posted.as_deref(), published);
+                    assert!(company_icon_url.is_none());
+                }
+                _ => panic!("Expected posting"),
+            }
+        }
     }
 
     #[test]
@@ -269,7 +289,7 @@ mod tests {
             ..
         } = &events[0]
         {
-            assert_eq!(url, "https://job-boards.greenhouse.io/acme/jobs/999123");
+            assert_eq!(url, "https://boards.greenhouse.io/acme/jobs/999123");
             let sal = salary
                 .as_ref()
                 .expect("Salary should be extracted from pay_input_ranges");

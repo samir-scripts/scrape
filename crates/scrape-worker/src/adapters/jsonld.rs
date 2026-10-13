@@ -28,6 +28,12 @@ pub async fn scrape_jsonld(
             .and_then(|v| v.as_u64())
             .unwrap_or(25) as usize;
 
+        Selector::parse(sel_str).map_err(|e| {
+            ClientError::HttpStatus(
+                reqwest::StatusCode::BAD_REQUEST,
+                format!("Invalid follow_links selector: {e}"),
+            )
+        })?;
         let links = find_links(&html_text, &base_url, sel_str, max_pages);
         for link in links {
             if let Ok(page_html) = client.fetch_text(link.as_str(), true).await {
@@ -121,11 +127,19 @@ fn parse_job_posting_map(
 
     let location = extract_location(map.get("jobLocation"));
 
-    let job_url = map
-        .get("url")
-        .and_then(|u| u.as_str())
-        .unwrap_or(page_url)
-        .to_string();
+    let raw_url = map.get("url").and_then(|u| u.as_str());
+    let job_url = raw_url
+        .filter(|s| !s.trim().is_empty())
+        .and_then(|s| Url::parse(page_url).ok()?.join(s).ok())
+        .filter(|u| matches!(u.scheme(), "http" | "https"));
+    let Some(job_url) = job_url else {
+        return Some(WorkerEvent::Error {
+            source_id: source.id.clone(),
+            message: format!("Posting '{title}' has no valid HTTP(S) detail URL on {page_url}"),
+            retryable: false,
+        });
+    };
+    let job_url = job_url.to_string();
 
     let external_id = map
         .get("identifier")
@@ -367,6 +381,9 @@ fn find_links(html_text: &str, base_url: &Url, selector_str: &str, max_links: us
         };
 
         if let Ok(resolved) = base_url.join(href) {
+            if !matches!(resolved.scheme(), "http" | "https") {
+                continue;
+            }
             let s = resolved.as_str().to_string();
             if !visited.contains(&s) {
                 visited.insert(s);

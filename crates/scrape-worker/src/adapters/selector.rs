@@ -160,9 +160,17 @@ pub fn extract_jobs_with_selectors(
         .map_err(|e| ClientError::HttpStatus(reqwest::StatusCode::BAD_REQUEST, e.to_string()))?;
     let link_sel = Selector::parse(link_sel_str)
         .map_err(|e| ClientError::HttpStatus(reqwest::StatusCode::BAD_REQUEST, e.to_string()))?;
-    let loc_sel = loc_sel_str.and_then(|s| Selector::parse(s).ok());
-    let sal_sel = sal_sel_str.and_then(|s| Selector::parse(s).ok());
-    let desc_sel = desc_sel_str.and_then(|s| Selector::parse(s).ok());
+    let optional_selector = |key: &str, value: Option<&str>| {
+        value.map(Selector::parse).transpose().map_err(|e| {
+            ClientError::HttpStatus(
+                reqwest::StatusCode::BAD_REQUEST,
+                format!("Invalid {key} selector: {e}"),
+            )
+        })
+    };
+    let loc_sel = optional_selector("location", loc_sel_str)?;
+    let sal_sel = optional_selector("salary", sal_sel_str)?;
+    let desc_sel = optional_selector("description", desc_sel_str)?;
 
     let document = Html::parse_document(html_text);
     let mut events = Vec::new();
@@ -219,8 +227,15 @@ pub fn extract_jobs_with_selectors(
         };
 
         let job_url = match base_url.join(&clean_href) {
-            Ok(u) => u.to_string(),
-            Err(_) => continue,
+            Ok(u) if matches!(u.scheme(), "http" | "https") => u.to_string(),
+            _ => {
+                events.push(WorkerEvent::Error {
+                    source_id: source.id.clone(),
+                    message: format!("Posting '{title}' has an invalid HTTP(S) destination"),
+                    retryable: false,
+                });
+                continue;
+            }
         };
 
         if !include_patterns.is_empty() {

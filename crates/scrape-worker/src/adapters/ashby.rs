@@ -183,10 +183,7 @@ fn parse_ashby_jobs(
             .map(|e| e.is_new_grad)
             .unwrap_or(TriState::Unknown);
 
-        let company_icon_url = Some(format!(
-            "https://www.google.com/s2/favicons?domain={}.com&sz=64",
-            source.identifier.trim().to_lowercase().replace(' ', "-")
-        ));
+        let company_icon_url = None;
 
         events.push(WorkerEvent::Job {
             source_id: source.id.clone(),
