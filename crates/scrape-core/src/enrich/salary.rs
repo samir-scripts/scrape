@@ -520,6 +520,13 @@ pub enum CompensationSqlValue {
 impl CompensationFilter {
     /// Compile the same native-range model used by worker evaluation to SQLite.
     pub fn sqlite_predicate(&self) -> (String, Vec<CompensationSqlValue>) {
+        if self.min_minor.is_none()
+            && self.max_minor.is_none()
+            && self.currency.is_none()
+            && self.interval.is_none()
+        {
+            return ("1".into(), vec![]);
+        }
         let mut clauses = Vec::new();
         let mut values = Vec::new();
         if let Some(interval) = self.interval {

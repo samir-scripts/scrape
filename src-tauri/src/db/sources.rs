@@ -144,25 +144,20 @@ impl SourcesRepo {
         cadence: SourceCadence,
         cron: Option<&str>,
         enabled: bool,
+        config: &serde_json::Value,
     ) -> Result<Option<String>> {
-        if !enabled || matches!(cadence, SourceCadence::Global | SourceCadence::Manual) {
-            return Ok(None);
-        }
-        let expression = if cadence == SourceCadence::Cron {
-            cron
-        } else {
-            cadence.default_cron()
-        }
-        .ok_or_else(|| {
-            AppError::Validation("A custom schedule requires a cron expression".into())
-        })?;
         let timezone: String =
             crate::db::settings::SettingsRepo::get_value(pool, "system.timezone")
                 .await?
                 .unwrap_or_else(|| "UTC".into());
-        crate::services::scheduler::calculate_next_run(expression, &timezone)
-            .map(Some)
-            .ok_or_else(|| AppError::Validation("Schedule has no valid future occurrence".into()))
+        crate::services::calendar::next_for_source(
+            cadence,
+            cron,
+            config,
+            enabled,
+            &timezone,
+            chrono::Utc::now(),
+        )
     }
 
     pub async fn create(pool: &SqlitePool, input: CreateSourceInput) -> Result<Source> {
@@ -196,6 +191,7 @@ impl SourcesRepo {
             cadence,
             input.cadence_cron.as_deref(),
             enabled_val == 1,
+            input.config.as_ref().unwrap_or(&serde_json::Value::Null),
         )
         .await?;
         crate::services::runner::resolve_worker_filters(
@@ -254,7 +250,8 @@ impl SourcesRepo {
             scrape_core::WorkerFilters::default(),
         )?;
         let next_run =
-            Self::next_run_for_schedule(pool, cadence, cadence_cron.as_deref(), enabled).await?;
+            Self::next_run_for_schedule(pool, cadence, cadence_cron.as_deref(), enabled, &config)
+                .await?;
 
         sqlx::query(
             r#"

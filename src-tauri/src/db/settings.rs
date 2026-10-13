@@ -413,6 +413,29 @@ impl SettingsRepo {
             )));
         }
 
+        if key == Self::KEY_TIMEZONE
+            && value
+                .as_str()
+                .and_then(|v| v.parse::<chrono_tz::Tz>().ok())
+                .is_none()
+        {
+            return Err(AppError::Validation(
+                "Timezone must be a valid IANA timezone".into(),
+            ));
+        }
+        if key == Self::KEY_SCRAPER_CRON {
+            let timezone: String = Self::get_value(pool, Self::KEY_TIMEZONE)
+                .await?
+                .unwrap_or_else(|| "UTC".into());
+            let expression = value
+                .as_str()
+                .ok_or_else(|| AppError::Validation("Cron expression must be a string".into()))?;
+            if crate::services::scheduler::calculate_next_run(expression, &timezone).is_none() {
+                return Err(AppError::Validation(
+                    "Invalid cron expression or timezone".into(),
+                ));
+            }
+        }
         Self::set_value(pool, key, value).await?;
         Self::get_all(pool).await
     }

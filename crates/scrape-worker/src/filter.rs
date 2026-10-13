@@ -50,6 +50,7 @@ mod tests {
             query: None,
             policy: None,
             compensation: None,
+            matching: None,
         };
 
         let matcher = FilterMatcher::new(&filters).unwrap();
@@ -83,6 +84,7 @@ mod tests {
             ),
             policy: None,
             compensation: None,
+            matching: None,
         };
 
         let matcher = FilterMatcher::new(&filters).unwrap();

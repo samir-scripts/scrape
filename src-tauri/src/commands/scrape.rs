@@ -114,6 +114,7 @@ async fn execute_dry_run_worker(
 ) -> Result<Vec<WorkerEvent>> {
     let config = WorkerConfig {
         version: PROTOCOL_VERSION,
+        run_started_at: Some(scrape_core::now_iso()),
         filters_by_source: Default::default(),
         sources: vec![worker_source],
         filters,

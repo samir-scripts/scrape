@@ -19,3 +19,4 @@ regex.workspace = true
 sqlx = { workspace = true, optional = true }
 
 url = "2"
+chrono-tz = "0.10"

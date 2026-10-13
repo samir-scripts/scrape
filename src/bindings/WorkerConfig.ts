@@ -6,4 +6,4 @@ import type { WorkerSource } from "./WorkerSource";
 /**
  * Configuration payload passed from Tauri host to scrape-worker via stdin JSON.
  */
-export type WorkerConfig = { version: number, sources: Array<WorkerSource>, filters: WorkerFilters, filters_by_source: { [key in string]?: WorkerFilters }, limits: WorkerLimits, };
+export type WorkerConfig = { version: number, sources: Array<WorkerSource>, filters: WorkerFilters, filters_by_source: { [key in string]?: WorkerFilters }, run_started_at: string | null, limits: WorkerLimits, };

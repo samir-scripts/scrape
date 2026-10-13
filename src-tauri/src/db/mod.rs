@@ -171,8 +171,13 @@ mod tests {
 
         assert_eq!(cnt as usize, sqlx::migrate!("./migrations").iter().count());
         assert_eq!(
-            max_v, 13,
-            "Expected migration version 13 to be highest version"
+            max_v,
+            sqlx::migrate!("./migrations")
+                .iter()
+                .last()
+                .unwrap()
+                .version,
+            "Expected latest migration to be highest version"
         );
 
         // Verify that app_notifications allows 'error'

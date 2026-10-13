@@ -6,14 +6,14 @@ use crate::{RoleType, SourceKind, TriState, WorkplaceType};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 
 fn default_protocol_version() -> u32 {
     PROTOCOL_VERSION
 }
 
 fn default_concurrency() -> usize {
-    4
+    1
 }
 
 fn default_per_host_delay_ms() -> u64 {
@@ -35,6 +35,8 @@ pub struct WorkerConfig {
     pub filters: WorkerFilters,
     #[serde(default)]
     pub filters_by_source: std::collections::HashMap<String, WorkerFilters>,
+    #[serde(default)]
+    pub run_started_at: Option<String>,
     #[serde(default)]
     pub limits: WorkerLimits,
 }
@@ -68,11 +70,16 @@ pub struct WorkerFilters {
     pub policy: Option<serde_json::Value>,
     #[serde(default)]
     pub compensation: Option<crate::enrich::CompensationFilter>,
+    #[serde(default)]
+    pub matching: Option<crate::matching::PostingRules>,
 }
 
 impl WorkerFilters {
     pub fn to_expr(&self) -> Result<crate::filter::FilterExpr, String> {
         use crate::filter::{FilterExpr, FilterField, FilterOp};
+        if let Some(matching) = &self.matching {
+            matching.validate()?;
+        }
         if let Some(pay) = &self.compensation {
             pay.validate()?;
         }

@@ -1,21 +1,21 @@
 use crate::db::runs::TriggerType;
 use crate::db::settings::SettingsRepo;
+use crate::db::sources::{Source, SourcesRepo};
 use crate::error::{AppError, Result};
 use crate::services::runner::ScrapeRunner;
-use chrono::SecondsFormat;
+use chrono::{DateTime, SecondsFormat, Utc};
 use chrono_tz::Tz;
 use cron::Schedule;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
+use std::collections::{HashSet, VecDeque};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::AppHandle;
 use tokio::sync::Mutex;
-use tokio_cron_scheduler::{Job, JobScheduler};
 use ts_rs::TS;
-use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -24,7 +24,6 @@ pub struct CronValidationResult {
     pub next_runs: Vec<String>,
     pub error: Option<String>,
 }
-
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct SchedulerStatus {
@@ -33,220 +32,245 @@ pub struct SchedulerStatus {
     pub running: bool,
 }
 
-pub struct SchedulerService {
-    scheduler: JobScheduler,
-    job_id: Option<Uuid>,
-    is_paused: Arc<AtomicBool>,
-    pool: SqlitePool,
-    runner: ScrapeRunner,
-    app: AppHandle,
+#[derive(Default)]
+struct DispatchQueue {
+    entries: VecDeque<(String, TriggerType)>,
+    pending: HashSet<String>,
+}
+impl DispatchQueue {
+    fn add(&mut self, id: String, trigger: TriggerType) {
+        if self.pending.insert(id.clone()) {
+            self.entries.push_back((id, trigger));
+        }
+    }
+    fn enqueue_due(&mut self, sources: &[Source], now: DateTime<Utc>, paused: bool) {
+        if paused {
+            return;
+        }
+        for source in sources {
+            if is_due(source, now) {
+                self.add(source.id.clone(), TriggerType::Schedule);
+            }
+        }
+    }
+    fn pop(&mut self) -> Option<(String, TriggerType)> {
+        let entry = self.entries.pop_front()?;
+        self.pending.remove(&entry.0);
+        Some(entry)
+    }
+}
+fn is_due(source: &Source, now: DateTime<Utc>) -> bool {
+    source.enabled
+        && !matches!(
+            source.cadence,
+            scrape_core::SourceCadence::Manual | scrape_core::SourceCadence::Global
+        )
+        && source
+            .next_run_at
+            .as_deref()
+            .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+            .is_some_and(|next| next.with_timezone(&Utc) <= now)
 }
 
+pub struct SchedulerService {
+    is_paused: Arc<AtomicBool>,
+    next_global: Arc<Mutex<Option<DateTime<Utc>>>>,
+    pool: SqlitePool,
+    runner: ScrapeRunner,
+}
 impl SchedulerService {
     pub async fn init(
         pool: SqlitePool,
         runner: ScrapeRunner,
         app: AppHandle,
     ) -> Result<Arc<Mutex<Self>>> {
-        let scheduler = JobScheduler::new()
-            .await
-            .map_err(|e| AppError::Internal(format!("Failed to create scheduler: {}", e)))?;
-
+        let enabled: bool = SettingsRepo::get_value(&pool, "scraper.enabled")
+            .await?
+            .unwrap_or(true);
+        let cron: String = SettingsRepo::get_value(&pool, "scraper.cron")
+            .await?
+            .unwrap_or_else(|| "0 0 12 * * *".into());
+        let timezone: String = SettingsRepo::get_value(&pool, "system.timezone")
+            .await?
+            .unwrap_or_else(|| "UTC".into());
+        let saved_next: Option<String> =
+            SettingsRepo::get_value(&pool, "scraper.next_run_at").await?;
+        let next = saved_next
+            .as_deref()
+            .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+            .map(|dt| dt.with_timezone(&Utc))
+            .or_else(|| {
+                calculate_next_run(&cron, &timezone)
+                    .and_then(|value| DateTime::parse_from_rfc3339(&value).ok())
+                    .map(|dt| dt.with_timezone(&Utc))
+            });
+        let paused = Arc::new(AtomicBool::new(!enabled));
+        let next_global = Arc::new(Mutex::new(next));
         let service = Arc::new(Mutex::new(Self {
-            scheduler,
-            job_id: None,
-            is_paused: Arc::new(AtomicBool::new(true)),
+            is_paused: paused.clone(),
+            next_global: next_global.clone(),
             pool: pool.clone(),
             runner: runner.clone(),
-            app: app.clone(),
         }));
-
-        // Read settings
-        let enabled: bool = SettingsRepo::get_value(&pool, "scraper.enabled")
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or(true);
-        let cron_expr: String = SettingsRepo::get_value(&pool, "scraper.cron")
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| "0 0 12 * * *".to_string());
-        let run_on_startup: bool = SettingsRepo::get_value(&pool, "scraper.run_on_startup")
-            .await
-            .ok()
-            .flatten()
+        let startup: bool = SettingsRepo::get_value(&pool, "scraper.run_on_startup")
+            .await?
             .unwrap_or(false);
-
-        service
-            .lock()
-            .await
-            .is_paused
-            .store(!enabled, Ordering::SeqCst);
-        if enabled {
-            let mut s = service.lock().await;
-            if let Err(e) = s.schedule_job(&cron_expr).await {
-                tracing::warn!("Failed to schedule scrape job with '{}': {}", cron_expr, e);
-            }
-        }
-
-        // Start scheduler loop
-        {
-            let s = service.lock().await;
-            s.scheduler
-                .start()
-                .await
-                .map_err(|e| AppError::Internal(format!("Failed to start scheduler: {}", e)))?;
-        }
-
-        // Run on startup delay (~10s) if enabled
-        if enabled && run_on_startup {
-            let paused = service.lock().await.is_paused.clone();
-            let app_clone = app.clone();
-            let runner_clone = runner.clone();
-            tokio::spawn(async move {
-                tokio::time::sleep(Duration::from_secs(10)).await;
-                if paused.load(Ordering::SeqCst) {
-                    return;
-                }
-                tracing::info!("Executing startup scrape trigger...");
-                let _ = runner_clone.trigger(&app_clone, TriggerType::Startup).await;
-            });
-        }
-
-        // Background ticker for custom cadence sources (checks every 60 seconds)
-        let paused = service.lock().await.is_paused.clone();
-        let ticker_pool = pool.clone();
-        let ticker_runner = runner.clone();
-        let ticker_app = app.clone();
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            let mut startup_at =
+                (startup && enabled).then(|| Utc::now() + chrono::Duration::seconds(10));
+            let mut interval = tokio::time::interval(Duration::from_secs(5));
+            let mut queue = DispatchQueue::default();
             loop {
                 interval.tick().await;
+                let now = Utc::now();
                 if paused.load(Ordering::SeqCst) {
+                    if startup_at.is_some_and(|at| at <= now) {
+                        startup_at = None;
+                    }
                     continue;
                 }
-                if let Ok(due_sources) =
-                    crate::db::sources::SourcesRepo::get_due_sources(&ticker_pool).await
-                {
-                    for source in due_sources {
-                        if paused.load(Ordering::SeqCst) {
+                let sources = match SourcesRepo::list(&pool).await {
+                    Ok(sources) => sources,
+                    Err(error) => {
+                        tracing::error!("Could not load scheduled workflows: {error}");
+                        continue;
+                    }
+                };
+                queue.enqueue_due(&sources, now, false);
+                let mut global = next_global.lock().await;
+                let global_due = global.is_some_and(|next| next <= now);
+                let startup_due = startup_at.is_some_and(|at| at <= now);
+                if global_due || startup_due {
+                    for source in sources
+                        .iter()
+                        .filter(|s| s.enabled && s.cadence == scrape_core::SourceCadence::Global)
+                    {
+                        queue.add(
+                            source.id.clone(),
+                            if startup_due {
+                                TriggerType::Startup
+                            } else {
+                                TriggerType::Schedule
+                            },
+                        );
+                    }
+                    startup_at = None;
+                    let cron: String = SettingsRepo::get_value(&pool, "scraper.cron")
+                        .await
+                        .ok()
+                        .flatten()
+                        .unwrap_or_else(|| "0 0 12 * * *".into());
+                    let timezone: String = SettingsRepo::get_value(&pool, "system.timezone")
+                        .await
+                        .ok()
+                        .flatten()
+                        .unwrap_or_else(|| "UTC".into());
+                    *global = calculate_next_run_at(&cron, &timezone, now)
+                        .and_then(|value| DateTime::parse_from_rfc3339(&value).ok())
+                        .map(|dt| dt.with_timezone(&Utc));
+                    let _ = SettingsRepo::set_value(
+                        &pool,
+                        "scraper.next_run_at",
+                        serde_json::json!(
+                            global.map(|dt| dt.to_rfc3339_opts(SecondsFormat::Millis, true))
+                        ),
+                    )
+                    .await;
+                }
+                drop(global);
+                // One worker at a time. Failed overlap acquisition retains this
+                // distinct pending trigger for the next dispatcher tick.
+                while !paused.load(Ordering::SeqCst) && !runner.is_running() {
+                    let Some((id, trigger)) = queue.pop() else {
+                        break;
+                    };
+                    let source = match SourcesRepo::get(&pool, &id).await {
+                        Ok(source) => source,
+                        Err(_) => continue,
+                    };
+                    if !source.enabled || source.cadence == scrape_core::SourceCadence::Manual {
+                        continue;
+                    }
+                    if source.cadence != scrape_core::SourceCadence::Global
+                        && !is_due(&source, Utc::now())
+                    {
+                        continue;
+                    }
+                    match runner.trigger_single_source_as(&app, &id, trigger).await {
+                        Err(AppError::AlreadyRunning) => {
+                            queue.add(id, trigger);
                             break;
                         }
-                        tracing::info!(
-                            "Custom cadence trigger for source {} ({})",
-                            source.name,
-                            source.id
-                        );
-                        let _ = ticker_runner
-                            .trigger_single_source(&ticker_app, &source.id)
-                            .await;
+                        Err(error) => tracing::error!("Scheduled workflow failed: {error}"),
+                        Ok(_) => {}
                     }
                 }
             }
         });
-
         Ok(service)
     }
-
-    pub async fn schedule_job(&mut self, cron_expr: &str) -> Result<()> {
-        if let Some(id) = self.job_id.take() {
-            let _ = self.scheduler.remove(&id).await;
-        }
-
-        let tz_str: String = SettingsRepo::get_value(&self.pool, "system.timezone")
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| "UTC".to_string());
-        let tz = Tz::from_str(&tz_str).unwrap_or(chrono_tz::UTC);
-
-        if self.is_paused.load(Ordering::SeqCst) {
-            return Ok(());
-        }
-        let paused = self.is_paused.clone();
-        let runner = self.runner.clone();
-        let app = self.app.clone();
-
-        let job = Job::new_async_tz(cron_expr, tz, move |_uuid, _lock| {
-            let paused = paused.clone();
-            let runner = runner.clone();
-            let app = app.clone();
-            Box::pin(async move {
-                if paused.load(Ordering::SeqCst) {
-                    return;
-                }
-                tracing::info!("Scheduler tick: triggering scrape...");
-                let _ = runner.trigger(&app, TriggerType::Schedule).await;
-            })
-        })
-        .map_err(|e| {
-            AppError::Validation(format!("Invalid cron expression '{}': {}", cron_expr, e))
-        })?;
-
-        let id = self
-            .scheduler
-            .add(job)
-            .await
-            .map_err(|e| AppError::Internal(format!("Failed to add scheduled job: {}", e)))?;
-
-        self.job_id = Some(id);
+    pub async fn schedule_job(&mut self, cron: &str) -> Result<()> {
+        let timezone: String = SettingsRepo::get_value(&self.pool, "system.timezone")
+            .await?
+            .unwrap_or_else(|| "UTC".into());
+        let next = calculate_next_run(cron, &timezone)
+            .ok_or_else(|| AppError::Validation("Invalid schedule or timezone".into()))?;
+        *self.next_global.lock().await = Some(
+            DateTime::parse_from_rfc3339(&next)
+                .unwrap()
+                .with_timezone(&Utc),
+        );
+        SettingsRepo::set_value(&self.pool, "scraper.next_run_at", serde_json::json!(next)).await?;
         Ok(())
     }
-
-    pub async fn reschedule(&mut self, cron_expr: &str) -> Result<()> {
-        self.schedule_job(cron_expr).await
+    pub async fn reschedule(&mut self, cron: &str) -> Result<()> {
+        self.schedule_job(cron).await
     }
-
     pub async fn set_paused(&mut self, paused: bool) -> Result<()> {
         SettingsRepo::set_value(&self.pool, "scraper.enabled", serde_json::json!(!paused)).await?;
         self.is_paused.store(paused, Ordering::SeqCst);
-        if paused {
-            if let Some(id) = self.job_id.take() {
-                let _ = self.scheduler.remove(&id).await;
-            }
-        } else {
-            let cron_expr: String = SettingsRepo::get_value(&self.pool, "scraper.cron")
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| "0 0 12 * * *".to_string());
-            self.schedule_job(&cron_expr).await?;
-        }
         Ok(())
     }
-
     pub async fn get_status(&self) -> Result<SchedulerStatus> {
         let enabled = !self.is_paused.load(Ordering::SeqCst);
-        let running = self.runner.is_running();
-
-        let cron_expr: String = SettingsRepo::get_value(&self.pool, "scraper.cron")
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| "0 0 12 * * *".to_string());
-        let tz_str: String = SettingsRepo::get_value(&self.pool, "system.timezone")
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| "UTC".to_string());
-
-        let next_run_at = if enabled {
-            calculate_next_run(&cron_expr, &tz_str)
-        } else {
-            None
-        };
-
+        let mut candidates = Vec::new();
+        if enabled {
+            if let Some(global) = *self.next_global.lock().await {
+                candidates.push(global);
+            }
+            for source in SourcesRepo::list(&self.pool)
+                .await?
+                .into_iter()
+                .filter(|s| s.enabled && s.cadence != scrape_core::SourceCadence::Manual)
+            {
+                if let Some(next) = source
+                    .next_run_at
+                    .as_deref()
+                    .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+                {
+                    candidates.push(next.with_timezone(&Utc));
+                }
+            }
+        }
         Ok(SchedulerStatus {
             enabled,
-            next_run_at,
-            running,
+            running: self.runner.is_running(),
+            next_run_at: candidates
+                .into_iter()
+                .min()
+                .map(|dt| dt.to_rfc3339_opts(SecondsFormat::Millis, true)),
         })
     }
 }
 
 pub fn validate_cron_expression(expr: &str, tz_str: &str) -> CronValidationResult {
-    let tz = Tz::from_str(tz_str).unwrap_or(chrono_tz::UTC);
+    let Ok(tz) = Tz::from_str(tz_str) else {
+        return CronValidationResult {
+            ok: false,
+            next_runs: vec![],
+            error: Some("Invalid IANA timezone".into()),
+        };
+    };
     match Schedule::from_str(expr) {
         Ok(schedule) => {
             let now = chrono::Utc::now().with_timezone(&tz);
@@ -273,10 +297,17 @@ pub fn validate_cron_expression(expr: &str, tz_str: &str) -> CronValidationResul
 }
 
 pub fn calculate_next_run(cron_expr: &str, tz_str: &str) -> Option<String> {
-    let tz = Tz::from_str(tz_str).unwrap_or(chrono_tz::UTC);
+    calculate_next_run_at(cron_expr, tz_str, chrono::Utc::now())
+}
+
+pub fn calculate_next_run_at(
+    cron_expr: &str,
+    tz_str: &str,
+    after: chrono::DateTime<chrono::Utc>,
+) -> Option<String> {
+    let tz = Tz::from_str(tz_str).ok()?;
     let schedule = Schedule::from_str(cron_expr).ok()?;
-    let now = chrono::Utc::now().with_timezone(&tz);
-    schedule.after(&now).next().map(|dt| {
+    schedule.after(&after.with_timezone(&tz)).next().map(|dt| {
         dt.with_timezone(&chrono::Utc)
             .to_rfc3339_opts(SecondsFormat::Millis, true)
     })
@@ -286,13 +317,16 @@ pub fn calculate_next_run_for_source(
     source: &crate::db::sources::Source,
     tz_str: &str,
 ) -> Option<String> {
-    use scrape_core::SourceCadence;
-    let cron_str = match source.cadence {
-        SourceCadence::Global | SourceCadence::Manual => return None,
-        SourceCadence::Cron => source.cadence_cron.as_deref()?,
-        other => other.default_cron()?,
-    };
-    calculate_next_run(cron_str, tz_str)
+    super::calendar::next_for_source(
+        source.cadence,
+        source.cadence_cron.as_deref(),
+        &source.config,
+        source.enabled,
+        tz_str,
+        chrono::Utc::now(),
+    )
+    .ok()
+    .flatten()
 }
 
 #[cfg(test)]
@@ -384,14 +418,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_scheduler_lifecycle() {
-        let sched = JobScheduler::new().await.unwrap();
-        sched.start().await.unwrap();
-
-        let tz = chrono_tz::UTC;
-        let job = Job::new_async_tz("0 0 12 * * *", tz, |_uuid, _lock| Box::pin(async {})).unwrap();
-
-        let id = sched.add(job).await.unwrap();
-        assert!(sched.remove(&id).await.is_ok());
+    async fn dispatcher_pause_manual_exclusion_and_duplicate_coalescing() {
+        let pool = crate::db::init_memory_db().await.unwrap();
+        for (id, cadence, enabled) in [
+            ("due-a", "daily", true),
+            ("due-b", "weekly", true),
+            ("manual", "manual", true),
+            ("disabled", "daily", false),
+        ] {
+            sqlx::query("INSERT INTO sources (id, kind, name, identifier, created_at, cadence, enabled, next_run_at) VALUES (?1, 'greenhouse', ?1, ?1, '2020-01-01', ?2, ?3, '2026-10-01T09:00:00Z')")
+                .bind(id).bind(cadence).bind(enabled).execute(&pool).await.unwrap();
+        }
+        let sources = SourcesRepo::list(&pool).await.unwrap();
+        let clock = DateTime::parse_from_rfc3339("2026-10-13T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut queue = DispatchQueue::default();
+        queue.enqueue_due(&sources, clock, true);
+        assert!(queue.entries.is_empty());
+        queue.enqueue_due(&sources, clock, false);
+        queue.enqueue_due(&sources, clock, false);
+        assert_eq!(queue.entries.len(), 2);
+        let ids: HashSet<_> = [queue.pop().unwrap().0, queue.pop().unwrap().0]
+            .into_iter()
+            .collect();
+        assert_eq!(ids, ["due-a".into(), "due-b".into()].into_iter().collect());
+        assert!(queue.pop().is_none());
     }
 }

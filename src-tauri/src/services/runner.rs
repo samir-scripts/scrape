@@ -64,6 +64,7 @@ pub async fn load_global_filters(pool: &SqlitePool) -> Result<WorkerFilters> {
         query: None,
         policy: None,
         compensation: None,
+        matching: None,
     })
 }
 
@@ -202,6 +203,7 @@ impl ScrapeRunner {
 
         let config = WorkerConfig {
             version: PROTOCOL_VERSION,
+            run_started_at: Some(run.started_at.clone()),
             sources: enabled_sources,
             filters: globals,
             filters_by_source,
@@ -339,14 +341,22 @@ impl ScrapeRunner {
         app: &AppHandle,
         source_id: &str,
     ) -> Result<ScrapeRun> {
+        self.trigger_single_source_as(app, source_id, TriggerType::SingleSource)
+            .await
+    }
+
+    pub async fn trigger_single_source_as(
+        &self,
+        app: &AppHandle,
+        source_id: &str,
+        trigger: TriggerType,
+    ) -> Result<ScrapeRun> {
         let _guard = self.try_acquire_lock()?;
 
         let source = SourcesRepo::get(&self.pool, source_id).await?;
         let filters =
             resolve_worker_filters(&source.filters, load_global_filters(&self.pool).await?)?;
-        let run =
-            RunsRepo::start_with_source(&self.pool, TriggerType::SingleSource, Some(source_id))
-                .await?;
+        let run = RunsRepo::start_with_source(&self.pool, trigger, Some(source_id)).await?;
         let _ = app.emit(
             "scrape://started",
             serde_json::json!({ "run_id": run.id, "source_id": source_id }),
@@ -366,6 +376,7 @@ impl ScrapeRunner {
 
         let config = WorkerConfig {
             version: PROTOCOL_VERSION,
+            run_started_at: Some(run.started_at.clone()),
             filters_by_source: Default::default(),
             sources: vec![WorkerSource {
                 id: source.id.clone(),
@@ -987,6 +998,7 @@ mod tests {
             query: Some("title LIKE '%Global%'".to_string()),
             policy: None,
             compensation: None,
+            matching: None,
         };
 
         let source_filters = serde_json::json!({
@@ -1039,6 +1051,7 @@ mod tests {
             query: None,
             policy: None,
             compensation: None,
+            matching: None,
         };
 
         let null_filters = serde_json::Value::Null;
@@ -1356,6 +1369,7 @@ mod tests {
         let discovered_page = JobsRepo::list(
             &pool,
             JobFilter {
+                matching: None,
                 statuses: Some(vec![JobStatus::Scraped, JobStatus::Viewed]),
                 role_types: None,
                 search: None,
@@ -1399,6 +1413,7 @@ mod tests {
         let tracked_page = JobsRepo::list(
             &pool,
             JobFilter {
+                matching: None,
                 statuses: Some(vec![
                     JobStatus::Applied,
                     JobStatus::Interviewing,
@@ -1445,6 +1460,7 @@ mod tests {
         let discovered_after = JobsRepo::list(
             &pool,
             JobFilter {
+                matching: None,
                 statuses: Some(vec![JobStatus::Scraped, JobStatus::Viewed]),
                 role_types: None,
                 search: None,

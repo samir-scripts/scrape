@@ -117,6 +117,7 @@ async fn run_single_source(spec: &str, dry_run: bool) -> Result<(), Box<dyn std:
 
     let config = WorkerConfig {
         version: PROTOCOL_VERSION,
+        run_started_at: Some(scrape_core::now_iso()),
         filters_by_source: Default::default(),
         sources: vec![source],
         filters: WorkerFilters::default(),
@@ -130,6 +131,9 @@ async fn execute_worker(
     config: WorkerConfig,
     dry_run: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if config.limits.concurrency != 1 {
+        return Err("Worker concurrency currently supports one source at a time".into());
+    }
     let start_time = Instant::now();
     let client = HttpClient::new(
         config.limits.request_timeout_s,
@@ -141,6 +145,13 @@ async fn execute_worker(
         FilterMatcher::new(filters).map_err(|e| format!("Invalid workflow filters: {e}"))?;
     }
 
+    let started = config
+        .run_started_at
+        .as_deref()
+        .map(chrono::DateTime::parse_from_rfc3339)
+        .transpose()?
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .unwrap_or_else(chrono::Utc::now);
     let mut stats = WorkerStats::default();
     let mut total_emitted = 0u64;
     let max_dry_run_jobs = 10u64;
@@ -187,6 +198,10 @@ async fn execute_worker(
                             role_type,
                         };
                         if matcher.matches_context(&ctx)
+                            && filters
+                                .matching
+                                .as_ref()
+                                .is_none_or(|rules| rules.matches_event_at(&event, started))
                             && filters.compensation.as_ref().is_none_or(|pay| {
                                 pay.matches(
                                     salary.as_ref().map(|s| s.ranges.as_slice()).unwrap_or(&[]),

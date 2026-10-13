@@ -108,6 +108,8 @@ pub enum JobSort {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct JobFilter {
+    #[ts(optional = nullable)]
+    pub matching: Option<scrape_core::matching::PostingRules>,
     pub statuses: Option<Vec<JobStatus>>,
     pub role_types: Option<Vec<RoleType>>,
     pub search: Option<String>,
@@ -449,6 +451,13 @@ impl JobsRepo {
     }
 
     pub async fn list(pool: &SqlitePool, filter: JobFilter) -> Result<Page<Job>> {
+        Self::list_at(pool, filter, chrono::Utc::now()).await
+    }
+    pub async fn list_at(
+        pool: &SqlitePool,
+        filter: JobFilter,
+        started: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Page<Job>> {
         super::compensation::backfill(pool).await?;
         let limit = filter.limit.unwrap_or(50).clamp(1, 200);
         let offset = filter.offset.unwrap_or(0).max(0);
@@ -479,12 +488,6 @@ impl JobsRepo {
         choices(
             "status",
             filter.statuses.as_deref().unwrap_or(&[]),
-            &mut conditions,
-            &mut bindings,
-        )?;
-        choices(
-            "role_type",
-            filter.role_types.as_deref().unwrap_or(&[]),
             &mut conditions,
             &mut bindings,
         )?;
@@ -536,105 +539,71 @@ impl JobsRepo {
         };
         pay.validate().map_err(AppError::Validation)?;
 
-        if pay.min_minor.is_some()
+        let compensation = (pay.min_minor.is_some()
             || pay.max_minor.is_some()
             || pay.currency.is_some()
-            || pay.interval.is_some()
-        {
-            let (predicate, values) = pay.sqlite_predicate();
-            conditions.push(predicate);
-            bindings.extend(values);
-        }
-
-        if filter.experience_min.is_some_and(|v| v < 0)
-            || filter.experience_max.is_some_and(|v| v < 0)
-            || matches!((filter.experience_min, filter.experience_max), (Some(lo), Some(hi)) if lo > hi)
-        {
-            return Err(AppError::Validation("Invalid experience range".into()));
-        }
-        if filter.experience_min.is_some() || filter.experience_max.is_some() {
-            let mut overlap = Vec::new();
-            if let Some(lo) = filter.experience_min {
-                overlap.push("(experience_max IS NULL OR experience_max >= ?)");
-                bindings.push(Bind::Integer(lo));
-            }
-            if let Some(hi) = filter.experience_max {
-                overlap.push("(experience_min IS NULL OR experience_min <= ?)");
-                bindings.push(Bind::Integer(hi));
-            }
-            let known = "(experience_min IS NOT NULL OR experience_max IS NOT NULL)";
-            let overlap = overlap.join(" AND ");
-            conditions.push(if filter.experience_include_unknown.unwrap_or(false) {
-                format!("(NOT {known} OR ({overlap}))")
-            } else {
-                format!("({known} AND ({overlap}))")
-            });
-        }
-        match filter.new_grad.as_deref() {
-            None | Some("any") => {}
-            Some("only" | "new_grad_only") => conditions.push("is_new_grad = 'yes'".into()),
-            Some("exclude" | "exclude_new_grad") => conditions.push("is_new_grad != 'yes'".into()),
+            || pay.interval.is_some())
+        .then_some(pay);
+        let new_grad = match filter.new_grad.as_deref() {
+            None | Some("any") => None,
+            Some("only" | "new_grad_only") => Some("only".to_string()),
+            Some("exclude" | "exclude_new_grad") => Some("exclude".to_string()),
             Some(other) => {
                 return Err(AppError::Validation(format!(
-                    "Invalid new-graduate filter: {other}"
+                    "Invalid new-grad filter: {other}"
                 )))
             }
-        }
-        choices(
-            "sponsorship",
-            filter.sponsorship.as_deref().unwrap_or(&[]),
-            &mut conditions,
-            &mut bindings,
-        )?;
-        choices(
-            "work_auth",
-            filter.work_auth.as_deref().unwrap_or(&[]),
-            &mut conditions,
-            &mut bindings,
-        )?;
-        choices(
-            "clearance",
-            filter.clearance.as_deref().unwrap_or(&[]),
-            &mut conditions,
-            &mut bindings,
-        )?;
-        match filter.remote.as_deref() {
-            None | Some("any" | "all") => {}
-            Some("remote" | "remote_only") => conditions.push("workplace_type = 'remote'".into()),
-            Some("exclude_remote") => conditions.push("workplace_type != 'remote'".into()),
-            Some("hybrid" | "hybrid_only") => conditions.push("workplace_type = 'hybrid'".into()),
-            Some("onsite" | "onsite_only") => conditions.push("workplace_type = 'onsite'".into()),
+        };
+        let workplaces = match filter.remote.as_deref() {
+            None | Some("all" | "any") => vec![],
+            Some("remote" | "remote_only") => vec![WorkplaceType::Remote],
+            Some("hybrid" | "hybrid_only") => vec![WorkplaceType::Hybrid],
+            Some("onsite" | "onsite_only") => vec![WorkplaceType::Onsite],
+            Some("exclude_remote") => vec![
+                WorkplaceType::Hybrid,
+                WorkplaceType::Onsite,
+                WorkplaceType::Unknown,
+            ],
             Some(other) => {
                 return Err(AppError::Validation(format!(
                     "Invalid workplace filter: {other}"
                 )))
             }
-        }
-        let countries = filter.countries.as_deref().unwrap_or(&[]);
-        let regions = filter.regions.as_deref().unwrap_or(&[]);
-        if !countries.is_empty() || !regions.is_empty() {
-            let mut geo = Vec::new();
-            if !countries.is_empty() {
-                geo.push(format!(
-                    "upper(jl.country_code) IN ({})",
-                    vec!["?"; countries.len()].join(",")
-                ));
-                bindings.extend(countries.iter().map(|c| Bind::Text(c.to_ascii_uppercase())));
-            }
-            if !regions.is_empty() {
-                let mut parts = Vec::new();
-                for region in regions {
-                    parts.push("(upper(jl.region_code) = ? OR substr(upper(jl.region_code), instr(jl.region_code, '-') + 1) = ?)");
-                    bindings.push(Bind::Text(region.to_ascii_uppercase()));
-                    bindings.push(Bind::Text(region.to_ascii_uppercase()));
+        };
+        let rules = scrape_core::matching::PostingRules {
+            keywords: None,
+            posting_date: None,
+            compensation,
+            role_types: filter.role_types.clone().unwrap_or_default(),
+            workplaces,
+            experience_min: filter.experience_min,
+            experience_max: filter.experience_max,
+            experience_include_unknown: filter.experience_include_unknown.unwrap_or(false),
+            new_grad,
+            sponsorship: filter.sponsorship.clone().unwrap_or_default(),
+            work_auth: filter.work_auth.clone().unwrap_or_default(),
+            clearance: filter.clearance.clone().unwrap_or_default(),
+            countries: filter.countries.clone().unwrap_or_default(),
+            regions: filter.regions.clone().unwrap_or_default(),
+            location_include_unknown: filter.location_include_unknown.unwrap_or(false),
+        };
+        for rules in [&rules].into_iter().chain(filter.matching.as_ref()) {
+            rules.validate().map_err(AppError::Validation)?;
+            if let Some(date) = &rules.posting_date {
+                let dates: Vec<String> = sqlx::query_scalar("SELECT DISTINCT date_posted FROM jobs WHERE date_posted IS NOT NULL AND date_posted NOT IN (SELECT date_text FROM posting_date_cache WHERE timezone = ?)")
+                    .bind(&date.timezone).fetch_all(pool).await?;
+                for value in dates {
+                    if let Some(instant) =
+                        scrape_core::posting_date::posting_instant(&value, &date.timezone)
+                    {
+                        sqlx::query("INSERT OR IGNORE INTO posting_date_cache (date_text, timezone, instant) VALUES (?, ?, ?)")
+                            .bind(value).bind(&date.timezone).bind(instant.to_rfc3339()).execute(pool).await?;
+                    }
                 }
-                geo.push(format!("({})", parts.join(" OR ")));
             }
-            let match_geo = format!(
-                "EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id = jobs.id AND ({}))",
-                geo.join(" AND ")
-            );
-            conditions.push(if filter.location_include_unknown.unwrap_or(false) { format!("({match_geo} OR NOT EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id = jobs.id))") } else { match_geo });
+            let (clauses, values) = rules.sqlite_predicates_at(started);
+            conditions.extend(clauses);
+            bindings.extend(values);
         }
 
         let where_clause = if conditions.is_empty() {
@@ -1549,6 +1518,7 @@ mod tests {
         let page = JobsRepo::list(
             &pool,
             JobFilter {
+                matching: None,
                 salary_min: Some(150_000.0),
                 salary_max: Some(200_000.0),
                 ..Default::default()
@@ -1562,6 +1532,7 @@ mod tests {
         let page = JobsRepo::list(
             &pool,
             JobFilter {
+                matching: None,
                 salary_min: Some(200_000.0),
                 salary_max: Some(250_000.0),
                 salary_include_unknown: Some(false),
@@ -1577,6 +1548,7 @@ mod tests {
         let page = JobsRepo::list(
             &pool,
             JobFilter {
+                matching: None,
                 new_grad: Some("new_grad_only".to_string()),
                 ..Default::default()
             },
@@ -1590,6 +1562,7 @@ mod tests {
         let page = JobsRepo::list(
             &pool,
             JobFilter {
+                matching: None,
                 experience_min: Some(4),
                 experience_max: Some(10),
                 experience_include_unknown: Some(false),
@@ -1605,6 +1578,7 @@ mod tests {
         let page = JobsRepo::list(
             &pool,
             JobFilter {
+                matching: None,
                 sponsorship: Some(vec![TriState::Yes]),
                 ..Default::default()
             },
@@ -1618,6 +1592,7 @@ mod tests {
         let page = JobsRepo::list(
             &pool,
             JobFilter {
+                matching: None,
                 regions: Some(vec!["US-CA".to_string()]),
                 location_include_unknown: Some(false),
                 ..Default::default()
@@ -1632,6 +1607,7 @@ mod tests {
         let page = JobsRepo::list(
             &pool,
             JobFilter {
+                matching: None,
                 remote: Some("remote_only".to_string()),
                 ..Default::default()
             },
@@ -1650,6 +1626,7 @@ mod tests {
         let preview = JobsRepo::preview_filter_impact(
             &pool,
             JobFilter {
+                matching: None,
                 new_grad: Some("new_grad_only".to_string()),
                 ..Default::default()
             },
@@ -1971,6 +1948,7 @@ mod tests {
 
         // Query with 5 filters combined simultaneously
         let combined_filter = JobFilter {
+            matching: None,
             salary_min: Some(150_000.0),
             salary_max: Some(220_000.0),
             salary_include_unknown: Some(false),
@@ -1989,6 +1967,7 @@ mod tests {
 
         // Test work_auth filter explicitly
         let wa_filter = JobFilter {
+            matching: None,
             work_auth: Some(vec![WorkAuthRequirement::CitizenOnly]),
             ..Default::default()
         };
@@ -1998,6 +1977,7 @@ mod tests {
 
         // Mutate one dimension (e.g. require clearance) and ensure empty result without SQL syntax errors
         let non_matching_filter = JobFilter {
+            matching: None,
             clearance: Some(vec![TriState::Yes]),
             remote: Some("remote".to_string()),
             ..Default::default()
@@ -2098,6 +2078,7 @@ mod tests {
 
         // 1. Filter by country US
         let us_filter = JobFilter {
+            matching: None,
             countries: Some(vec!["US".to_string()]),
             location_include_unknown: Some(false),
             ..Default::default()
@@ -2108,6 +2089,7 @@ mod tests {
 
         // 2. Filter by region code suffix "CA" (should match "US-CA")
         let ca_suffix_filter = JobFilter {
+            matching: None,
             regions: Some(vec!["CA".to_string()]),
             location_include_unknown: Some(false),
             ..Default::default()
@@ -2118,6 +2100,7 @@ mod tests {
 
         // 3. Filter by full ISO region code "CA-ON"
         let on_filter = JobFilter {
+            matching: None,
             regions: Some(vec!["CA-ON".to_string()]),
             location_include_unknown: Some(false),
             ..Default::default()
@@ -2284,6 +2267,7 @@ mod tests {
         let fav_res = JobsRepo::list(
             &pool,
             JobFilter {
+                matching: None,
                 favorited_only: Some(true),
                 ..Default::default()
             },
@@ -2410,6 +2394,7 @@ mod tests {
         let page = JobsRepo::list(
             &pool,
             JobFilter {
+                matching: None,
                 offset: Some(2000),
                 limit: Some(50),
                 ..Default::default()
@@ -2422,6 +2407,7 @@ mod tests {
         let result = JobsRepo::list(
             &pool,
             JobFilter {
+                matching: None,
                 search: Some("100%".into()),
                 ..Default::default()
             },
@@ -2438,6 +2424,7 @@ mod tests {
             JobsRepo::list(
                 &pool,
                 JobFilter {
+                    matching: None,
                     search: Some("Needle".into()),
                     ..Default::default()
                 }
@@ -2482,6 +2469,7 @@ mod tests {
             let page = JobsRepo::list(
                 &pool,
                 JobFilter {
+                    matching: None,
                     salary_currency: Some(currency.into()),
                     salary_include_unknown: Some(true),
                     ..Default::default()

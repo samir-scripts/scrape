@@ -7,6 +7,8 @@
 pub mod enrich;
 pub mod filter;
 pub mod identity;
+pub mod matching;
+pub mod posting_date;
 pub use identity::PostingIdentity;
 pub mod protocol;
 mod role;

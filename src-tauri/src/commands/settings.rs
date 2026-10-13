@@ -20,14 +20,30 @@ pub async fn update_setting(
     if key == "scraper.cron" {
         if let Some(cron_str) = value.as_str() {
             let mut sched = state.scheduler.lock().await;
-            if let Err(e) = sched.reschedule(cron_str).await {
-                tracing::warn!("Failed to reschedule cron to '{}': {}", cron_str, e);
-            }
+            sched.reschedule(cron_str).await?;
         }
     } else if key == "scraper.enabled" {
         if let Some(enabled) = value.as_bool() {
             let mut sched = state.scheduler.lock().await;
             let _ = sched.set_paused(!enabled).await;
+        }
+    } else if key == "system.timezone" {
+        state
+            .scheduler
+            .lock()
+            .await
+            .reschedule(&settings.scraper_cron)
+            .await?;
+        for source in crate::db::sources::SourcesRepo::list(&state.db).await? {
+            let next = crate::services::scheduler::calculate_next_run_for_source(
+                &source,
+                &settings.system_timezone,
+            );
+            sqlx::query("UPDATE sources SET next_run_at = ? WHERE id = ?")
+                .bind(next)
+                .bind(source.id)
+                .execute(&state.db)
+                .await?;
         }
     } else if key == "app.launch_at_login" {
         use tauri_plugin_autostart::ManagerExt;

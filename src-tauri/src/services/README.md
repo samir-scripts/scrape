@@ -42,3 +42,20 @@ Run all sends effective filters per source; preview accepts the same draft filte
 All automatic scheduler paths share a pause flag, including delayed startup and
 per-source dispatch. Due-date comparisons use parsed instants. Per-workflow IANA
 calendar scheduling, DST policy, and the unified dispatcher remain pending.
+
+Calendar scheduling and a single dispatcher are now implemented. Daily/weekly
+sources can carry generated `CalendarSchedule` settings in their configuration:
+local time, ISO weekdays and IANA timezone. Creation, edits and post-run updates
+use the same calculation. Gaps run at the first valid instant; overlaps use their
+first occurrence once. UTC instants are stored consistently. One queue coalesces
+due workflows and waits through manual-run overlap; missed occurrences become one
+catch-up run before the next future date. All automatic paths share persisted
+pause, and actual schedule/startup triggers are recorded for per-workflow runs.
+
+`PostingRules` is shared by worker evaluation and repository query compilation.
+It supports any/all/exclude keywords by explicit field, native compensation,
+experience, role/workplace, eligibility and geography. Posting-date rules use one
+captured run-start instant and explicit IANA timezone; date-only upper bounds end
+at the following midnight. Missing dates are never replaced with discovery/update
+time. The repository caches normalized date evidence without changing originals.
+Worker protocol 2 prevents an older sidecar from silently ignoring these rules.
