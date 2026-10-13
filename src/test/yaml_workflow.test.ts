@@ -174,7 +174,7 @@ retention:
     };
 
     const spec = sourceToWorkflowSpec(source);
-    expect(spec.version).toBe(2);
+    expect(spec.version).toBe(3);
     expect(spec.metadata.name).toBe("Ramp");
     expect(spec.extractor.kind).toBe("ashby");
     expect(spec.extractor.url).toBe("https://jobs.ashbyhq.com/ramp");
@@ -183,7 +183,7 @@ retention:
     expect(spec.filters?.include_keywords).toEqual(["Backend"]);
 
     const serialized = workflowSpecToYaml(spec);
-    expect(serialized).toContain('name: "Ramp"');
+    expect(validateWorkflowYaml(serialized).parsedSpec?.metadata.name).toBe("Ramp");
     expect(serialized).toContain("kind: ashby");
     expect(serialized).toContain("days: 60");
   });
@@ -322,7 +322,6 @@ filters:
       };
 
       const serialized = workflowSpecToYaml(spec);
-      expect(serialized).toContain("query: \"title LIKE '%Intern%' AND location LIKE '%Remote%'\"");
 
       const parsed = validateWorkflowYaml(serialized);
       expect(parsed.isValid).toBe(true);

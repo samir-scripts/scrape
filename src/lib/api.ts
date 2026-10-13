@@ -1,3 +1,6 @@
+import type { WorkflowSpec } from "../bindings/WorkflowSpec";
+import type { WorkflowPreview } from "../bindings/WorkflowPreview";
+import { workflowSpecToCreateInput, workflowSpecToYaml, validateWorkflowYaml } from "./yamlWorkflow";
 import { matchesJob } from "./filter";
 import type { RemovedPosting } from "../bindings/RemovedPosting";
 import type { RemovalResult } from "../bindings/RemovalResult";
@@ -120,7 +123,7 @@ let devSources: Source[] = (() => {
   try {
     if (typeof localStorage !== "undefined") {
       const saved = localStorage.getItem("scrape:demo:v1:sources");
-      if (saved) return JSON.parse(saved);
+      if (saved) return JSON.parse(saved, (key, value) => ["retention_days", "duration_ms"].includes(key) && typeof value === "number" ? BigInt(value) : value);
     }
   } catch {}
   return [{ ...SAMPLE_SWE_SOURCE }];
@@ -129,7 +132,7 @@ let devSources: Source[] = (() => {
 function saveDevSources() {
   try {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("scrape:demo:v1:sources", JSON.stringify(devSources));
+      localStorage.setItem("scrape:demo:v1:sources", JSON.stringify(devSources, (_, value) => typeof value === "bigint" ? Number(value) : value));
     }
   } catch {}
 }
@@ -138,7 +141,7 @@ let devJobs: Job[] = (() => {
   try {
     if (typeof localStorage !== "undefined") {
       const saved = localStorage.getItem("scrape:demo:v1:jobs");
-      if (saved) return JSON.parse(saved);
+      if (saved) return JSON.parse(saved, (key, value) => ["retention_days", "duration_ms"].includes(key) && typeof value === "number" ? BigInt(value) : value);
     }
   } catch {}
   return [];
@@ -156,7 +159,7 @@ let devSourceRuns: ScrapeRun[] = (() => {
   try {
     if (typeof localStorage !== "undefined") {
       const saved = localStorage.getItem("scrape:demo:v1:runs");
-      if (saved) return JSON.parse(saved);
+      if (saved) return JSON.parse(saved, (key, value) => ["retention_days", "duration_ms"].includes(key) && typeof value === "number" ? BigInt(value) : value);
     }
   } catch {}
   return [];
@@ -165,7 +168,7 @@ let devSourceRuns: ScrapeRun[] = (() => {
 function saveDevSourceRuns() {
   try {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("scrape:demo:v1:runs", JSON.stringify(devSourceRuns));
+      localStorage.setItem("scrape:demo:v1:runs", JSON.stringify(devSourceRuns, (_, value) => typeof value === "bigint" ? Number(value) : value));
     }
   } catch {}
 }
@@ -174,7 +177,7 @@ let devLogs: Record<string, ScrapeLogEntry[]> = (() => {
   try {
     if (typeof localStorage !== "undefined") {
       const saved = localStorage.getItem("scrape:demo:v1:logs");
-      if (saved) return JSON.parse(saved);
+      if (saved) return JSON.parse(saved, (key, value) => ["retention_days", "duration_ms"].includes(key) && typeof value === "number" ? BigInt(value) : value);
     }
   } catch {}
   return {};
@@ -761,6 +764,7 @@ const apiImplementation = {
       if (existing) return Promise.resolve(existing);
       const newSource = { ...SAMPLE_SWE_SOURCE, id: `sample-${Date.now()}` };
       devSources.push(newSource);
+      saveDevSources();
       return Promise.resolve(newSource);
     }
     return invoke<Source>("seed_sample_workflow");
@@ -799,6 +803,7 @@ const apiImplementation = {
         filters: (input.filters || {}) as any,
       };
       devSources.push(newSource);
+      saveDevSources();
       return Promise.resolve(newSource);
     }
     return invoke<Source>("create_source", {
@@ -832,6 +837,8 @@ const apiImplementation = {
       if (idx >= 0) {
         devSources[idx] = {
           ...devSources[idx],
+          ...(input.config !== undefined ? { config: input.config as Source["config"] } : {}),
+          ...(input.filters !== undefined ? { filters: input.filters as Source["filters"] } : {}),
           ...(input.name !== undefined && input.name !== null ? { name: input.name } : {}),
           ...(input.identifier !== undefined && input.identifier !== null ? { identifier: input.identifier } : {}),
           ...(input.enabled !== undefined && input.enabled !== null ? { enabled: input.enabled } : {}),
@@ -840,6 +847,7 @@ const apiImplementation = {
           ...(input.retention_days !== undefined && input.retention_days !== null ? { retention_days: BigInt(input.retention_days) } : {}),
           ...(input.retention_policy !== undefined && input.retention_policy !== null ? { retention_policy: input.retention_policy } : {}),
         };
+        saveDevSources();
         return Promise.resolve(devSources[idx]);
       }
       return Promise.reject(new Error(`Source ${input.id} not found`));
@@ -1110,8 +1118,55 @@ const apiImplementation = {
   setSchedulerPaused: (paused: boolean) =>
     invoke<void>("set_scheduler_paused", { paused }),
 
-  detectSource: (url: string) =>
-    invoke<DetectResult>("detect_source", { url }),
+  detectSource: async (url: string): Promise<DetectResult> => {
+    if (isTauri()) return invoke<DetectResult>("detect_source", { url });
+    const parsed = new URL(url);
+    if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("Use an HTTP(S) source URL");
+    const kind = parsed.hostname.includes("greenhouse.io") ? "greenhouse" : parsed.hostname === "jobs.lever.co" ? "lever" : parsed.hostname === "jobs.ashbyhq.com" ? "ashby" : "jsonld";
+    const identifier = kind === "jsonld" ? url : parsed.pathname.split("/").filter(Boolean)[0];
+    if (!identifier) throw new Error("The URL must identify a board. Advanced supports custom selectors.");
+    return { kind, identifier, name: kind === "jsonld" ? parsed.hostname : identifier };
+  },
+  validateWorkflow: async (spec: unknown): Promise<WorkflowSpec> => {
+    if (isTauri()) return invoke("validate_workflow", { spec });
+    const result = validateWorkflowYaml(workflowSpecToYaml(spec as WorkflowSpec));
+    if (!result.isValid) throw new Error(result.errors.map(e => e.message).join("; "));
+    // Demonstration validates the form shape; expert syntax requires the desktop validator.
+    if (result.parsedSpec?.filters?.query || result.parsedSpec?.filters?.policy) throw new Error("Expert queries and policies require desktop validation.");
+    return { ...result.parsedSpec!, version: 3 };
+  },
+  saveWorkflow: async (spec: WorkflowSpec, id?: string): Promise<Source> => {
+    if (isTauri()) return invoke("save_workflow", { spec, id: id ?? null });
+    const validated = await api.validateWorkflow(spec);
+    const input = workflowSpecToCreateInput(validated);
+    return id ? api.updateSource({ ...input, id }) : api.createSource({ ...input, enabled: input.enabled ?? true, cadence: input.cadence ?? "global" });
+  },
+  cancelWorkflowPreview: (requestId: string): Promise<boolean> => isTauri() ? invoke("cancel_workflow_preview", { requestId }) : Promise.resolve(true),
+  previewWorkflow: async (spec: WorkflowSpec, requestId: string): Promise<WorkflowPreview> => {
+    if (isTauri()) return invoke("preview_workflow", { spec, requestId });
+    const validated = await api.validateWorkflow(spec);
+    const input = workflowSpecToCreateInput(validated);
+    const source = { ...SAMPLE_SWE_SOURCE, ...input, id: "demo-preview", created_at: new Date().toISOString() } as Source;
+    const events = await api.testSourceTransient({ kind: source.kind, name: source.name, identifier: source.identifier, config: source.config, filters: source.filters });
+    const rules = validated.filters?.matching;
+    if (rules?.posting_date || rules?.sponsorship?.length || rules?.work_auth?.length || rules?.clearance?.length) throw new Error("Date and eligibility previews require desktop extraction. Demonstration cannot verify these fields.");
+    const matched = events.filter(event => {
+      if (event.type !== "job") return false;
+      const kw = rules?.keywords;
+      const text = (kw?.fields || ["title"]).map(field => String(event[field as keyof typeof event] || "")).join(" ").toLowerCase();
+      const contains = (word: string) => text.includes(word.toLowerCase());
+      if (kw && ((kw.any.length > 0 && !kw.any.some(contains)) || !kw.all.every(contains) || kw.exclude.some(contains))) return false;
+      if (validated.filters?.locations?.length && !validated.filters.locations.some(loc => (event.location || "").toLowerCase().includes(loc.toLowerCase()))) return false;
+      const pay = rules?.compensation || validated.filters?.compensation;
+      return matchesJob({ ...generateScrapedJobsForSource(source).find(j => j.external_id === event.external_id)! }, {
+        role_types: rules?.role_types?.length ? rules.role_types : validated.filters?.role_types || undefined,
+        experience_min: rules?.experience_min ?? undefined, experience_max: rules?.experience_max ?? undefined,
+        salary_min: pay?.min_minor == null ? undefined : pay.min_minor / 100, salary_max: pay?.max_minor == null ? undefined : pay.max_minor / 100,
+        salary_interval: pay?.interval, salary_currency: pay?.currency, salary_include_unknown: pay?.include_unknown,
+      });
+    });
+    return { spec: validated, jobs: matched.slice(0, 10).map(job => ({ identity: job.type === "job" ? `demo:${source.identifier}:${job.external_id}` : "", job })), fetched: events.length, matched: matched.length, rejected: events.length - matched.length, blocked: 0, invalid: 0, sampled: matched.length > 10, errors: [], next_run_at: null };
+  },
 
   testSource: (id: string): Promise<WorkerEvent[]> => {
     if (!isTauri()) {

@@ -18,6 +18,7 @@ export function Modal({
   width = "max-w-lg",
 }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -25,11 +26,13 @@ export function Modal({
 
     if (isOpen) {
       if (!dialog.open) {
+        previousFocus.current = document.activeElement as HTMLElement;
         dialog.showModal();
       }
     } else {
       if (dialog.open) {
         dialog.close();
+        previousFocus.current?.focus();
       }
     }
   }, [isOpen]);
@@ -73,6 +76,7 @@ export function Modal({
   return (
     <dialog
       ref={dialogRef}
+      aria-label={title}
       onClick={handleBackdropClick}
       className={`fixed inset-0 m-auto p-0 bg-transparent backdrop:bg-[var(--color-ink)]/70 backdrop:backdrop-blur-none backdrop:dither-checker ${
         isOpen ? "block" : "hidden"
@@ -88,10 +92,11 @@ export function Modal({
           </h2>
           <button
             type="button"
+            aria-label="Close dialog"
             onClick={onClose}
             className="text-[var(--color-paper)] hover:opacity-70 cursor-pointer flex items-center gap-1.5"
           >
-            <KeyHint keys="ESC" className="border-[var(--color-paper)] text-[10px]" />
+            <KeyHint keys="ESC" className="border-[var(--color-paper)] text-xs" />
           </button>
         </div>
 

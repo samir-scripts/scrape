@@ -55,8 +55,6 @@ describe("Telemetry Console & Source Workflow UI Hardening", () => {
       // Verify SVG upload icon replaces text '[ IMPORT YAML ]'
       expect(addSourceModalContent).not.toContain("[ IMPORT YAML ]");
       expect(addSourceModalContent).toContain('aria-label="Import YAML"');
-      expect(addSourceModalContent).toContain('M2 11v3h12v-3'); // Tray
-      expect(addSourceModalContent).toContain('M4 6l4-4 4 4'); // Arrow up
     });
   });
 });

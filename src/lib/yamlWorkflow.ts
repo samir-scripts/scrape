@@ -5,61 +5,13 @@ import type { RoleType } from "../bindings/RoleType";
 import type { CreateSourceInput } from "../bindings/CreateSourceInput";
 import type { Source } from "../bindings/Source";
 
-export interface WorkflowMetadata {
-  name: string;
-  company?: string;
-  enabled?: boolean;
-}
-
-export interface WorkflowExtractor {
-  kind: SourceKind;
-  url: string;
-  job_container?: string;
-  title_selector?: string;
-  url_selector?: string;
-  location_selector?: string;
-  date_selector?: string;
-  salary_selector?: string;
-  description_selector?: string;
-  salary_regex?: string;
-  experience_regex?: string;
-  clearance_regex?: string;
-  sponsorship_regex?: string;
-  url_pattern?: string;
-  url_patterns?: string[];
-  exclude_url_patterns?: string[];
-}
-
-export interface WorkflowSchedule {
-  cadence?: SourceCadence;
-  time?: string;
-  cron?: string;
-}
-
-export interface WorkflowFilters {
-  role_types?: RoleType[];
-  include_keywords?: string[];
-  exclude_keywords?: string[];
-  locations?: string[];
-  query?: string;
-  policy?: Record<string, unknown>;
-  experience_min?: number;
-  experience_max?: number;
-}
-
-export interface WorkflowRetention {
-  days?: number;
-  policy?: "untracked_only" | "all";
-}
-
-export interface WorkflowSpec {
-  version: 2;
-  metadata: WorkflowMetadata;
-  extractor: WorkflowExtractor;
-  schedule?: WorkflowSchedule;
-  filters?: WorkflowFilters;
-  retention?: WorkflowRetention;
-}
+import type { WorkflowSpec } from "../bindings/WorkflowSpec";
+export type { WorkflowSpec } from "../bindings/WorkflowSpec";
+export type { WorkflowMetadata } from "../bindings/WorkflowMetadata";
+export type { WorkflowExtractor } from "../bindings/WorkflowExtractor";
+export type { WorkflowSchedule } from "../bindings/WorkflowSchedule";
+export type { WorkflowFilters } from "../bindings/WorkflowFilters";
+export type { WorkflowRetention } from "../bindings/WorkflowRetention";
 
 export const SAMPLE_SWE_INTERNSHIP_YAML = `version: 2
 metadata:
@@ -174,8 +126,8 @@ export function validateWorkflowYaml(yamlContent: string): YamlValidationResult 
   }
 
   // Version check
-  if (json.version !== undefined && json.version !== 2) {
-    errors.push({ message: `Unsupported workflow version ${json.version}. Expected version: 2` });
+  if (json.version !== undefined && ![2, 3].includes(json.version)) {
+    errors.push({ message: `Unsupported workflow version ${json.version}. Expected supported version: 2 or 3` });
   }
 
   // Metadata check
@@ -238,7 +190,7 @@ export function validateWorkflowYaml(yamlContent: string): YamlValidationResult 
 
   // Filters check
   if (json.filters && typeof json.filters === "object") {
-    if (json.filters.role_types !== undefined) {
+    if (json.filters.role_types != null) {
       if (!Array.isArray(json.filters.role_types)) {
         errors.push({ message: "filters.role_types must be an array" });
       } else {
@@ -250,7 +202,7 @@ export function validateWorkflowYaml(yamlContent: string): YamlValidationResult 
       }
     }
 
-    if (json.filters.query !== undefined) {
+    if (json.filters.query != null) {
       if (typeof json.filters.query !== "string") {
         errors.push({ message: "filters.query must be a string expression" });
       } else {
@@ -303,158 +255,36 @@ export function validateWorkflowYaml(yamlContent: string): YamlValidationResult 
 }
 
 export function workflowSpecToYaml(spec: WorkflowSpec): string {
-  const lines: string[] = [];
-
-  lines.push("version: 2");
-  lines.push("metadata:");
-  lines.push(`  name: "${spec.metadata.name.replace(/"/g, '\\"')}"`);
-  if (spec.metadata.company) {
-    lines.push(`  company: "${spec.metadata.company.replace(/"/g, '\\"')}"`);
-  }
-  lines.push(`  enabled: ${spec.metadata.enabled ?? true}`);
-
-  lines.push("extractor:");
-  lines.push(`  kind: ${spec.extractor.kind}`);
-  lines.push(`  url: "${spec.extractor.url}"`);
-  if (spec.extractor.job_container) lines.push(`  job_container: "${spec.extractor.job_container}"`);
-  if (spec.extractor.title_selector) lines.push(`  title_selector: "${spec.extractor.title_selector}"`);
-  if (spec.extractor.url_selector) lines.push(`  url_selector: "${spec.extractor.url_selector}"`);
-  if (spec.extractor.location_selector) lines.push(`  location_selector: "${spec.extractor.location_selector}"`);
-  if (spec.extractor.salary_selector) lines.push(`  salary_selector: "${spec.extractor.salary_selector}"`);
-  if (spec.extractor.url_pattern) lines.push(`  url_pattern: "${spec.extractor.url_pattern}"`);
-  if (spec.extractor.url_patterns && spec.extractor.url_patterns.length > 0) {
-    lines.push(`  url_patterns: [${spec.extractor.url_patterns.map((p) => `"${p}"`).join(", ")}]`);
-  }
-  if (spec.extractor.exclude_url_patterns && spec.extractor.exclude_url_patterns.length > 0) {
-    lines.push(`  exclude_url_patterns: [${spec.extractor.exclude_url_patterns.map((p) => `"${p}"`).join(", ")}]`);
-  }
-
-  lines.push("schedule:");
-  lines.push(`  cadence: ${spec.schedule?.cadence ?? "global"}`);
-  if (spec.schedule?.time) lines.push(`  time: "${spec.schedule.time}"`);
-  if (spec.schedule?.cron) lines.push(`  cron: "${spec.schedule.cron}"`);
-
-  lines.push("filters:");
-  if (spec.filters?.role_types && spec.filters.role_types.length > 0) {
-    lines.push(`  role_types: [${spec.filters.role_types.join(", ")}]`);
-  } else {
-    lines.push("  role_types: []");
-  }
-  if (spec.filters?.query) {
-    lines.push(`  query: "${spec.filters.query.replace(/"/g, '\\"')}"`);
-  }
-  if (spec.filters?.policy && typeof spec.filters.policy === "object") {
-    const policyBlock = stringify({ policy: spec.filters.policy }).trim();
-    for (const pLine of policyBlock.split("\n")) {
-      lines.push(`  ${pLine}`);
-    }
-  }
-  if (spec.filters?.include_keywords && spec.filters.include_keywords.length > 0) {
-    lines.push(`  include_keywords: [${spec.filters.include_keywords.map((k) => `"${k}"`).join(", ")}]`);
-  }
-  if (spec.filters?.exclude_keywords && spec.filters.exclude_keywords.length > 0) {
-    lines.push(`  exclude_keywords: [${spec.filters.exclude_keywords.map((k) => `"${k}"`).join(", ")}]`);
-  }
-  if (spec.filters?.locations && spec.filters.locations.length > 0) {
-    lines.push(`  locations: [${spec.filters.locations.map((l) => `"${l}"`).join(", ")}]`);
-  }
-
-  lines.push("retention:");
-  lines.push(`  days: ${spec.retention?.days ?? 30}`);
-  lines.push(`  policy: ${spec.retention?.policy ?? "untracked_only"}`);
-
-  return lines.join("\n") + "\n";
+  return stringify(spec, { indent: 2, lineWidth: 0 });
 }
 
 export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
-  const config = (typeof source.config === "object" && source.config !== null ? source.config : {}) as Record<string, unknown>;
-  const filters = (typeof source.filters === "object" && source.filters !== null ? source.filters : {}) as Record<string, unknown>;
-
-  const url = (config.url as string) || (source.kind === "greenhouse" ? `https://boards.greenhouse.io/${source.identifier}` : source.identifier);
-
+  const config = (source.config && typeof source.config === "object" && !Array.isArray(source.config) ? source.config : {}) as Record<string, unknown>;
+  const snapshot = config.__workflow_spec as WorkflowSpec | undefined;
+  const sourceConfig = Object.fromEntries(Object.entries(config).filter(([key]) => !key.startsWith("__")));
+  const filters = (source.filters || {}) as WorkflowSpec["filters"];
+  const calendar = config.__schedule as { time?: string; weekdays?: number[]; timezone?: string } | undefined;
   return {
-    version: 2,
-    metadata: {
-      name: source.name,
-      company: source.name,
-      enabled: source.enabled,
-    },
-    extractor: {
-      kind: source.kind,
-      url,
-      job_container: config.job_container as string | undefined,
-      title_selector: config.title_selector as string | undefined,
-      url_selector: config.url_selector as string | undefined,
-      location_selector: config.location_selector as string | undefined,
-      salary_selector: config.salary_selector as string | undefined,
-      url_pattern: config.url_pattern as string | undefined,
-      url_patterns: config.url_patterns as string[] | undefined,
-      exclude_url_patterns: config.exclude_url_patterns as string[] | undefined,
-    },
-    schedule: {
-      cadence: source.cadence,
-      cron: source.cadence_cron ?? undefined,
-    },
-    filters: {
-      role_types: filters.role_types as RoleType[] | undefined,
-      include_keywords: filters.include_keywords as string[] | undefined,
-      exclude_keywords: filters.exclude_keywords as string[] | undefined,
-      locations: filters.locations as string[] | undefined,
-      query: (filters.query as string) || undefined,
-      policy: (filters.policy as Record<string, unknown>) || undefined,
-    },
-    retention: {
-      days: Number(source.retention_days ?? 30),
-      policy: (source.retention_policy as "untracked_only" | "all") ?? "untracked_only",
-    },
+    ...snapshot, version: 3,
+    metadata: { ...snapshot?.metadata, name: source.name, enabled: source.enabled },
+    extractor: { ...snapshot?.extractor, kind: source.kind, url: String(config.url || canonicalizeAtsUrl(source.kind, source.identifier)), source_config: sourceConfig as WorkflowSpec["extractor"]["source_config"] },
+    schedule: { ...snapshot?.schedule, cadence: source.cadence, cron: source.cadence_cron ?? undefined, ...calendar },
+    filters,
+    retention: { days: Number(source.retention_days), policy: source.retention_policy },
   };
 }
-
 export function workflowSpecToCreateInput(spec: WorkflowSpec): CreateSourceInput {
   let identifier = spec.extractor.url;
-  if (spec.extractor.kind === "greenhouse") {
-    const match = spec.extractor.url.match(/boards\.greenhouse\.io\/([^/?#]+)/i);
-    if (match) identifier = match[1];
-  } else if (spec.extractor.kind === "lever") {
-    const match = spec.extractor.url.match(/jobs\.lever\.co\/([^/?#]+)/i);
-    if (match) identifier = match[1];
-  } else if (spec.extractor.kind === "ashby") {
-    const match = spec.extractor.url.match(/jobs\.ashbyhq\.com\/([^/?#]+)/i);
-    if (match) identifier = match[1];
+  if (["greenhouse", "lever", "ashby"].includes(spec.extractor.kind) && identifier.includes("://")) identifier = new URL(identifier).pathname.split("/").filter(Boolean)[0] || "";
+  const config: Record<string, unknown> = { ...(spec.extractor.source_config as Record<string, unknown> || {}), url: spec.extractor.url, __workflow_spec: spec };
+  const mapping = { job_container: "item", title_selector: "title", url_selector: "link", location_selector: "location", salary_selector: "salary", description_selector: "description", date_selector: "date", title_regex: "title_regex", link_regex: "link_regex", location_regex: "location_regex", salary_regex: "salary_regex", url_pattern: "url_pattern", url_patterns: "url_patterns", exclude_url_patterns: "exclude_url_patterns" } as const;
+  for (const [field, key] of Object.entries(mapping)) {
+    const value = spec.extractor[field as keyof typeof mapping]; if (value != null) config[key] = value;
   }
-
-  const configObj: Record<string, unknown> = {
-    url: spec.extractor.url,
-  };
-  if (spec.extractor.job_container) configObj.job_container = spec.extractor.job_container;
-  if (spec.extractor.title_selector) configObj.title_selector = spec.extractor.title_selector;
-  if (spec.extractor.url_selector) configObj.url_selector = spec.extractor.url_selector;
-  if (spec.extractor.location_selector) configObj.location_selector = spec.extractor.location_selector;
-  if (spec.extractor.salary_selector) configObj.salary_selector = spec.extractor.salary_selector;
-  if (spec.extractor.url_pattern) configObj.url_pattern = spec.extractor.url_pattern;
-  if (spec.extractor.url_patterns) configObj.url_patterns = spec.extractor.url_patterns;
-  if (spec.extractor.exclude_url_patterns) configObj.exclude_url_patterns = spec.extractor.exclude_url_patterns;
-
-  const filtersObj: Record<string, unknown> = {};
-  if (spec.filters?.role_types) filtersObj.role_types = spec.filters.role_types;
-  if (spec.filters?.query) filtersObj.query = spec.filters.query;
-  if (spec.filters?.policy) filtersObj.policy = spec.filters.policy;
-  if (spec.filters?.include_keywords) filtersObj.include_keywords = spec.filters.include_keywords;
-  if (spec.filters?.exclude_keywords) filtersObj.exclude_keywords = spec.filters.exclude_keywords;
-  if (spec.filters?.locations) filtersObj.locations = spec.filters.locations;
-
-  return {
-    kind: spec.extractor.kind,
-    name: spec.metadata.name,
-    identifier,
-    config: configObj as unknown as CreateSourceInput["config"],
-    enabled: spec.metadata.enabled ?? true,
-    cadence: spec.schedule?.cadence ?? "global",
-    cadence_cron: spec.schedule?.cron ?? null,
-    retention_days: BigInt(spec.retention?.days ?? 30),
-    retention_policy: spec.retention?.policy ?? "untracked_only",
-    filters: filtersObj as unknown as CreateSourceInput["filters"],
-  };
+  const cadence = spec.schedule?.cadence || "global";
+  if (["daily", "weekly"].includes(cadence)) config.__schedule = { time: spec.schedule?.time || "09:00", weekdays: spec.schedule?.weekdays || (cadence === "weekly" ? [1] : []), timezone: spec.schedule?.timezone || "UTC" };
+  if (spec.metadata.company) config.__company = spec.metadata.company;
+  return { kind: spec.extractor.kind, name: spec.metadata.name, identifier, config: config as CreateSourceInput["config"], enabled: spec.metadata.enabled ?? true, cadence, cadence_cron: spec.schedule?.cron ?? null, retention_days: BigInt(spec.retention?.days ?? 30), retention_policy: spec.retention?.policy || "untracked_only", filters: (spec.filters || {}) as CreateSourceInput["filters"] };
 }
 
 export function canonicalizeAtsUrl(kind: string, urlOrSlug: string): string {
