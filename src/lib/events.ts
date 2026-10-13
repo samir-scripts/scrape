@@ -32,6 +32,7 @@ export async function setupAppEventListeners(
   const unlistenJobs = await listen("jobs://changed", () => {
     queryClient.invalidateQueries({ queryKey: ["jobs"] });
     queryClient.invalidateQueries({ queryKey: ["job_counts"] });
+    queryClient.invalidateQueries({ queryKey: ["job_counts"] });
     queryClient.invalidateQueries({ queryKey: ["job_status_events"] });
     queryClient.invalidateQueries({ queryKey: ["metrics"] });
   });
@@ -83,6 +84,7 @@ export async function setupAppEventListeners(
       queryClient.invalidateQueries({ queryKey: ["sources"] });
       queryClient.invalidateQueries({ queryKey: ["scrape_runs"] });
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
+    queryClient.invalidateQueries({ queryKey: ["job_counts"] });
       queryClient.invalidateQueries({ queryKey: ["job_counts"] });
       queryClient.invalidateQueries({ queryKey: ["metrics"] });
     }
@@ -95,6 +97,7 @@ export async function setupAppEventListeners(
     queryClient.invalidateQueries({ queryKey: ["scrape_runs"] });
     queryClient.invalidateQueries({ queryKey: ["sources"] });
     queryClient.invalidateQueries({ queryKey: ["jobs"] });
+    queryClient.invalidateQueries({ queryKey: ["job_counts"] });
     queryClient.invalidateQueries({ queryKey: ["scheduler_status"] });
     queryClient.invalidateQueries({ queryKey: ["metrics"] });
   });

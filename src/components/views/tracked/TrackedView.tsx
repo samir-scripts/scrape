@@ -35,6 +35,8 @@ export function TrackedView({
 }: TrackedViewProps) {
   const {
     trackedViewMode,
+    setFilterSpec,
+    filterSpec,
     selectedJobId,
     setSelectedJobId,
     drawerJobId,
@@ -174,6 +176,8 @@ export function TrackedView({
         />
       ) : (
         <TrackedList
+          repositorySort={filterSpec.sort || "date_added_desc"}
+          onRepositorySort={(sort) => setFilterSpec({ sort })}
           jobs={filteredJobs}
           selectedJobId={selectedJobId}
           onSelectJob={handleSelectJob}

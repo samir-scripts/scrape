@@ -1,3 +1,4 @@
+import { matchesJob } from "./filter";
 import type { RemovedPosting } from "../bindings/RemovedPosting";
 import type { RemovalResult } from "../bindings/RemovalResult";
 import { needsDesktop } from "./runtime";
@@ -520,31 +521,29 @@ const apiImplementation = {
   // Jobs
   listJobs: (filter?: ApiJobFilter): Promise<Page<Job>> => {
     if (!isTauri()) {
-      let items = devJobs.filter((j) => !j.removed_at);
-      if (filter) {
-        if (filter.statuses && filter.statuses.length > 0) {
-          items = items.filter((j) => filter.statuses!.includes(j.status));
+      let items = devJobs.filter((job) => !job.removed_at && matchesJob(job, filter || {}));
+      const sort = filter?.sort || "date_added_desc";
+      const compare = (a: Job, b: Job) => {
+        switch (sort) {
+          case "company_desc": return b.company.localeCompare(a.company);
+          case "title_desc": return b.title.localeCompare(a.title);
+          case "status_asc": return a.status.localeCompare(b.status);
+          case "status_desc": return b.status.localeCompare(a.status);
+          case "favorited_asc": return Number(a.favorited) - Number(b.favorited);
+          case "company_asc": return a.company.localeCompare(b.company);
+          case "title_asc": return a.title.localeCompare(b.title);
+          case "date_added_asc": return a.date_added.localeCompare(b.date_added);
+          case "date_posted_asc": return (a.date_posted || "").localeCompare(b.date_posted || "");
+          case "date_posted_desc": return (b.date_posted || "").localeCompare(a.date_posted || "");
+          case "salary_asc": return (a.salary_annual_min ?? a.salary_min ?? -1) - (b.salary_annual_min ?? b.salary_min ?? -1);
+          case "salary_desc": return (b.salary_annual_max ?? b.salary_max ?? -1) - (a.salary_annual_max ?? a.salary_max ?? -1);
+          case "favorited_desc": return Number(b.favorited) - Number(a.favorited);
+          case "experience_asc": return (a.experience_min ?? -1) - (b.experience_min ?? -1);
+          case "experience_desc": return (b.experience_min ?? -1) - (a.experience_min ?? -1);
+          default: return b.date_added.localeCompare(a.date_added);
         }
-        if (filter.role_types && filter.role_types.length > 0) {
-          items = items.filter((j) => filter.role_types!.includes(j.role_type));
-        }
-        if (filter.source_id) {
-          items = items.filter((j) => j.source_id === filter.source_id);
-        }
-        if (filter.favorited_only) {
-          items = items.filter((j) => j.favorited);
-        }
-        if (filter.search && filter.search.trim()) {
-          const q = filter.search.toLowerCase().trim();
-          items = items.filter(
-            (j) =>
-              j.title.toLowerCase().includes(q) ||
-              j.company.toLowerCase().includes(q) ||
-              (j.location && j.location.toLowerCase().includes(q)) ||
-              (j.description_text && j.description_text.toLowerCase().includes(q))
-          );
-        }
-      }
+      };
+      items = items.sort((a, b) => compare(a, b) || a.id.localeCompare(b.id));
       const total = items.length;
       const offset = Number(filter?.offset || 0);
       const limit = Number(filter?.limit || 2000);

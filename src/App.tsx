@@ -7,6 +7,7 @@ import { useUIStore } from "./lib/store";
 import { setupAppEventListeners } from "./lib/events";
 import type { Job } from "./bindings/Job";
 import type { JobStatus } from "./bindings/JobStatus";
+import type { JobFilter } from "./bindings/JobFilter";
 import type { Page } from "./bindings/Page";
 import type { Settings } from "./bindings/Settings";
 import { Shell } from "./components/layout/Shell";
@@ -17,7 +18,6 @@ import { ScraperView } from "./components/views/scraper/ScraperView";
 import { SettingsView } from "./components/views/settings/SettingsView";
 import { FilterPanel } from "./components/filters/FilterPanel";
 import { DeleteJobModal } from "./components/ui/DeleteJobModal";
-import { matchesJob } from "./lib/filter";
 import { useGlobalHotkeys } from "./hooks/useHotkeys";
 
 export default function App() {
@@ -47,6 +47,19 @@ export default function App() {
     };
   }, [queryClient]);
 
+  const pageKey = JSON.stringify({ view, filterSpec });
+  const [pageState, setPageState] = useState({ key: pageKey, offset: 0 });
+  const offset = pageState.key === pageKey ? pageState.offset : 0;
+  const pageSize = 50;
+  const pageStatuses: JobStatus[] = view === "tracked" ? ["applied", "interviewing", "offer", "rejected"] : ["scraped", "viewed"];
+  const effectiveFilter: Partial<JobFilter> = { ...filterSpec, statuses: filterSpec.statuses?.length ? pageStatuses.filter((status) => filterSpec.statuses!.includes(status)) : pageStatuses, limit: pageSize, offset };
+  const { data: counts } = useQuery({
+    queryKey: ["job_counts"],
+    queryFn: async () => {
+      const [discovered, tracked] = await Promise.all([api.listJobs({ statuses: ["scraped", "viewed"], limit: 1 }), api.listJobs({ statuses: ["applied", "interviewing", "offer", "rejected"], limit: 1 })]);
+      return { discovered: Number(discovered.total), tracked: Number(tracked.total) };
+    },
+  });
   // 2. Query application data
   const {
     data: jobsPage,
@@ -54,8 +67,9 @@ export default function App() {
     error: jobsError,
     refetch: refetchJobs,
   } = useQuery<Page<Job>>({
-    queryKey: ["jobs"],
-    queryFn: () => api.listJobs({ limit: 2000 }),
+    queryKey: ["jobs", pageKey, offset],
+    queryFn: () => effectiveFilter.statuses?.length === 0 ? Promise.resolve({ items: [], total: 0n, limit: BigInt(pageSize), offset: BigInt(offset) }) : api.listJobs(effectiveFilter),
+    enabled: view === "discovered" || view === "tracked",
   });
 
   const {
@@ -124,49 +138,16 @@ export default function App() {
 
   const allJobs = useMemo(() => jobsPage?.items || [], [jobsPage]);
 
-  // 4. Status transition mutation with optimistic updates
   const updateStatusMutation = useMutation({
-    mutationFn: async ({
-      jobId,
-      status,
-    }: {
-      jobId: string;
-      status: JobStatus;
-    }) => {
-      return api.updateJobStatus(jobId, status);
+    mutationFn: ({ jobId, status }: { jobId: string; status: JobStatus }) => api.updateJobStatus(jobId, status),
+    onSuccess: (_job, { jobId }) => {
+      const previous = allJobs.find((job) => job.id === jobId);
+      if (previous) pushUndo({ jobId, previousStatus: previous.status });
     },
-    onMutate: async ({ jobId, status }) => {
-      await queryClient.cancelQueries({ queryKey: ["jobs"] });
-      const previousJobs = queryClient.getQueryData<Page<Job>>(["jobs"]);
-
-      if (previousJobs) {
-        const targetJob = previousJobs.items.find((j) => j.id === jobId);
-        if (targetJob) {
-          // Push to undo stack
-          pushUndo({
-            jobId: targetJob.id,
-            previousStatus: targetJob.status,
-          });
-
-          // Optimistically update
-          queryClient.setQueryData<Page<Job>>(["jobs"], {
-            ...previousJobs,
-            items: previousJobs.items.map((j) =>
-              j.id === jobId ? { ...j, status } : j
-            ),
-          });
-        }
-      }
-
-      return { previousJobs };
-    },
-    onError: (_err, _vars, context) => {
-      if (context?.previousJobs) {
-        queryClient.setQueryData(["jobs"], context.previousJobs);
-      }
-    },
+    onError: (error) => notifyError(String(error), "STATUS UPDATE FAILED"),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["job_counts"] });
       queryClient.invalidateQueries({ queryKey: ["job_status_events"] });
     },
   });
@@ -180,36 +161,13 @@ export default function App() {
     },
   });
 
-  // 5b. Favorite toggle mutation with optimistic updates
   const toggleFavoriteMutation = useMutation({
     mutationFn: (jobId: string) => api.toggleJobFavorite(jobId),
-    onMutate: async (jobId) => {
-      await queryClient.cancelQueries({ queryKey: ["jobs"] });
-      const prevData = queryClient.getQueryData<Page<Job>>(["jobs"]);
-      if (prevData) {
-        queryClient.setQueryData<Page<Job>>(["jobs"], {
-          ...prevData,
-          items: prevData.items.map((j) =>
-            j.id === jobId
-              ? {
-                  ...j,
-                  favorited: !j.favorited,
-                  favorited_at: !j.favorited ? new Date().toISOString() : null,
-                }
-              : j
-          ),
-        });
-      }
-      return { prevData };
-    },
-    onError: (_err, _jobId, context) => {
-      if (context?.prevData) {
-        queryClient.setQueryData(["jobs"], context.prevData);
-      }
-    },
+    onError: (error) => notifyError(String(error), "FAVORITE UPDATE FAILED"),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
       queryClient.invalidateQueries({ queryKey: ["metrics"] });
+      queryClient.invalidateQueries({ queryKey: ["job_counts"] });
     },
   });
 
@@ -255,6 +213,7 @@ export default function App() {
         action: { label: "Undo", run: () => { api.restorePosting(result.identity).then(() => {
           queryClient.invalidateQueries({ queryKey: ["jobs"] });
           queryClient.invalidateQueries({ queryKey: ["metrics"] });
+      queryClient.invalidateQueries({ queryKey: ["job_counts"] });
           queryClient.invalidateQueries({ queryKey: ["removed_postings"] });
         }).catch((error) => notifyError(String(error), "RESTORE FAILED")); } } });
     },
@@ -262,6 +221,7 @@ export default function App() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
       queryClient.invalidateQueries({ queryKey: ["metrics"] });
+      queryClient.invalidateQueries({ queryKey: ["job_counts"] });
       queryClient.invalidateQueries({ queryKey: ["removed_postings"] });
     },
   });
@@ -277,8 +237,9 @@ export default function App() {
     try {
       await api.updateJobStatus(item.jobId, item.previousStatus);
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["job_counts"] });
     } catch (e) {
-      console.error("Undo error:", e);
+      notifyError(String(e), "UNDO FAILED");
     }
   };
 
@@ -298,26 +259,12 @@ export default function App() {
     }
   };
 
-  // 9. Separate discovered vs tracked jobs with active filter spec applied
-  const filteredAllJobs = useMemo(() => {
-    return allJobs.filter((j) => matchesJob(j, filterSpec));
-  }, [allJobs, filterSpec]);
-
-  const discoveredJobs = useMemo(() => {
-    return filteredAllJobs.filter(
-      (j) => j.status === "scraped" || j.status === "viewed"
-    );
-  }, [filteredAllJobs]);
-
-  const trackedJobs = useMemo(() => {
-    return filteredAllJobs.filter(
-      (j) =>
-        j.status === "applied" ||
-        j.status === "interviewing" ||
-        j.status === "offer" ||
-        j.status === "rejected"
-    );
-  }, [filteredAllJobs]);
+  const discoveredJobs = view === "discovered" ? allJobs : [];
+  const trackedJobs = view === "tracked" ? allJobs : [];
+  useEffect(() => {
+    const total = Number(jobsPage?.total || 0);
+    if (offset > 0 && jobsPage && offset >= total) setPageState({ key: pageKey, offset: Math.max(0, Math.floor((total - 1) / pageSize) * pageSize) });
+  }, [jobsPage, offset, pageKey]);
 
   const nextRunText = useMemo(() => {
     if (!schedulerStatus?.enabled) return "PAUSED";
@@ -335,8 +282,8 @@ export default function App() {
   }, [schedulerStatus]);
 
   // 10. Subsystem readiness gate
-  const isInitializing = settingsLoading || jobsLoading;
-  const initError = settingsError || jobsError;
+  const isInitializing = settingsLoading;
+  const initError = settingsError;
 
   if (isInitializing) {
     return (
@@ -357,7 +304,7 @@ export default function App() {
               INITIALIZING SUBSYSTEMS…
             </div>
             <p className="font-mono text-xs text-[var(--color-ink-mute)] leading-relaxed">
-              Establishing IPC link with Scrape engine, loading database schema, and reading configuration registry.
+              Loading your settings and saved jobs.
             </p>
           </div>
 
@@ -426,11 +373,20 @@ export default function App() {
 
   return (
     <Shell
-      discoveredCount={discoveredJobs.length}
-      trackedCount={trackedJobs.length}
+      discoveredCount={counts?.discovered ?? 0}
+      trackedCount={counts?.tracked ?? 0}
       nextRunText={nextRunText}
     >
-      {view === "discovered" && (
+      {(view === "discovered" || view === "tracked") && <div className="flex flex-wrap items-center gap-3 border-b px-4 py-2 text-sm">
+        <button type="button" disabled={offset === 0 || jobsLoading} onClick={() => setPageState({ key: pageKey, offset: Math.max(0, offset - pageSize) })} className="border px-3 py-1">Previous page</button>
+        <span role="status">{jobsLoading ? "Loading jobs…" : `${Number(jobsPage?.total || 0) === 0 ? 0 : offset + 1}–${Math.min(offset + pageSize, Number(jobsPage?.total || 0))} of ${jobsPage?.total ?? 0}`}</span>
+        <button type="button" disabled={jobsLoading || offset + pageSize >= Number(jobsPage?.total || 0)} onClick={() => setPageState({ key: pageKey, offset: offset + pageSize })} className="border px-3 py-1">Next page</button>
+        <label>Sort <select aria-label="Sort jobs" value={filterSpec.sort || "date_added_desc"} onChange={(event) => setFilterSpec({ sort: event.target.value as JobFilter["sort"] })} className="border bg-[var(--color-paper)] p-1">
+          <option value="date_added_desc">Newest discoveries</option><option value="date_added_asc">Oldest discoveries</option><option value="date_posted_desc">Newest postings</option><option value="company_asc">Company</option><option value="title_asc">Title</option><option value="salary_desc">Derived annual pay</option><option value="favorited_desc">Favorites first</option>
+        </select></label>
+        {jobsError && <p role="alert">Could not load this page: {String(jobsError)} <button onClick={() => refetchJobs()}>Retry</button></p>}
+      </div>}
+      {view === "discovered" && !jobsLoading && (
         <DiscoveredView
           jobs={discoveredJobs}
           onUpdateStatus={(jobId, status) =>
@@ -446,7 +402,7 @@ export default function App() {
         />
       )}
 
-      {view === "tracked" && (
+      {view === "tracked" && !jobsLoading && (
         <TrackedView
           jobs={trackedJobs}
           onUpdateStatus={(jobId, status) =>

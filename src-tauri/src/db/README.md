@@ -23,3 +23,11 @@ pending disk upgrades receive a consistent SQLite snapshot. See
 [database recovery](../../../plans/database-recovery.md). Both retention policies
 protect tracked jobs, favorites, and nonblank notes. Currency filters use bound
 parameters and require a known matching currency even if unknown pay is allowed.
+
+Saved-job lists now filter, sort, count and paginate in the repository. All values
+in text, eligibility, experience and geographic predicates are bound parameters;
+search treats percent/underscore literally and includes saved notes. Native
+compensation predicates use the shared Rust range model. Missing bounds are open,
+new-graduate aliases agree, explicit workplace data controls remote matching, and
+country/region restrictions must match the same parsed location. Page ties sort
+by ID. A 2,105-record regression verifies search/counts beyond the old client cap.

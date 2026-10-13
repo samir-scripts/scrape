@@ -83,10 +83,10 @@ export function matchesJob(job: Job, filter: Partial<JobFilter>): boolean {
 
   // 8. New Grad tri-toggle
   if (filter.new_grad && filter.new_grad !== "any") {
-    if (filter.new_grad === "only" && job.is_new_grad !== "yes") {
+    if ((filter.new_grad === "only" || filter.new_grad === "new_grad_only") && job.is_new_grad !== "yes") {
       return false;
     }
-    if (filter.new_grad === "exclude" && job.is_new_grad === "yes") {
+    if ((filter.new_grad === "exclude" || filter.new_grad === "exclude_new_grad") && job.is_new_grad === "yes") {
       return false;
     }
   }
@@ -112,45 +112,16 @@ export function matchesJob(job: Job, filter: Partial<JobFilter>): boolean {
     }
   }
 
-  // 11. Workplace type / Remote
-  if (filter.remote && filter.remote !== "all") {
-    if (job.workplace_type !== filter.remote) {
-      return false;
-    }
+  if (filter.remote && !["all", "any"].includes(filter.remote)) {
+    const mode = filter.remote.replace("_only", "");
+    if (mode === "exclude_remote" ? job.workplace_type === "remote" : job.workplace_type !== mode) return false;
   }
-
-  // 12. Countries
-  if (filter.countries && filter.countries.length > 0) {
-    const hasLocations = job.locations && job.locations.length > 0;
-    if (!hasLocations) {
-      if (!filter.location_include_unknown) return false;
-    } else {
-      const match = job.locations.some((loc) => {
-        if (!loc.country_code) return false;
-        return filter.countries!.some(
-          (c) => c.toLowerCase() === loc.country_code?.toLowerCase()
-        );
-      });
-      if (!match) return false;
-    }
-  }
-
-  // 13. Regions (e.g. US states / CA provinces)
-  if (filter.regions && filter.regions.length > 0) {
-    const hasLocations = job.locations && job.locations.length > 0;
-    if (!hasLocations) {
-      if (!filter.location_include_unknown) return false;
-    } else {
-      const match = job.locations.some((loc) => {
-        if (!loc.region_code) return false;
-        const regLow = loc.region_code.toLowerCase();
-        return filter.regions!.some((r) => {
-          const rLow = r.toLowerCase();
-          return regLow === rLow || regLow.endsWith(`-${rLow}`) || rLow.endsWith(`-${regLow}`);
-        });
-      });
-      if (!match) return false;
-    }
+  const countries = filter.countries || [], regions = filter.regions || [];
+  if (countries.length || regions.length) {
+    const locations = job.locations || [];
+    if (!locations.length) { if (!filter.location_include_unknown) return false; }
+    else if (!locations.some((loc) => (!countries.length || countries.some((c) => c.toUpperCase() === loc.country_code?.toUpperCase())) &&
+      (!regions.length || regions.some((r) => loc.region_code?.toUpperCase() === r.toUpperCase() || loc.region_code?.toUpperCase().endsWith(`-${r.toUpperCase()}`))))) return false;
   }
 
   return true;

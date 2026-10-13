@@ -25,3 +25,9 @@ The `src/lib` directory contains the client-side domain logic, state management,
 | [`toast.ts`](toast.ts) | **Toast Dispatch API**: Lightweight imperatively-callable notification dispatcher (`toast.success()`, `toast.error()`, `toast.info()`). |
 | [`yamlJob.ts`](yamlJob.ts) | **YAML Job Bridge**: Transforms job listings to and from YAML workflow representations. |
 | [`yamlWorkflow.ts`](yamlWorkflow.ts) | **Workflow Specification Parser**: Parses, validates, and serializes Version 2 declarative YAML workflow specifications using the `yaml` library. |
+
+App list queries now use view/filter/page keys and repository pages rather than
+fetching a capped set for client filtering. Changing filters resets to the first
+page; older responses populate their own query keys and cannot overwrite newer
+results. Navigation counts use independent repository totals. Native filter values
+are persisted under a versioned storage key, including hourly cents and interval.

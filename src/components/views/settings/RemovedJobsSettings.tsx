@@ -22,6 +22,7 @@ export function RemovedJobsSettings() {
       queryClient.invalidateQueries({ queryKey: ["removed_postings"] });
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
       queryClient.invalidateQueries({ queryKey: ["metrics"] });
+      queryClient.invalidateQueries({ queryKey: ["job_counts"] });
     },
   });
   return <section className="max-w-4xl">

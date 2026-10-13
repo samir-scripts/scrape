@@ -92,12 +92,17 @@ pub enum JobSort {
     DatePostedDesc,
     DatePostedAsc,
     CompanyAsc,
+    CompanyDesc,
     TitleAsc,
+    TitleDesc,
+    StatusAsc,
+    StatusDesc,
     SalaryDesc,
     SalaryAsc,
     ExperienceDesc,
     ExperienceAsc,
     FavoritedDesc,
+    FavoritedAsc,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
@@ -448,60 +453,59 @@ impl JobsRepo {
         let limit = filter.limit.unwrap_or(50).clamp(1, 200);
         let offset = filter.offset.unwrap_or(0).max(0);
 
+        use scrape_core::enrich::salary::CompensationSqlValue as Bind;
         let mut conditions = vec!["removed_at IS NULL".to_string()];
-
-        // Statuses
-        if let Some(statuses) = &filter.statuses {
-            if !statuses.is_empty() {
-                let status_strs: Vec<String> = statuses
-                    .iter()
-                    .map(|s| {
-                        serde_json::to_string(s)
-                            .unwrap()
-                            .trim_matches('"')
-                            .to_string()
-                    })
-                    .collect();
-                let placeholders = vec!["?"; status_strs.len()].join(",");
-                conditions.push(format!("status IN ({})", placeholders));
+        let mut bindings = Vec::new();
+        fn choices<T: Serialize>(
+            column: &str,
+            options: &[T],
+            conditions: &mut Vec<String>,
+            bindings: &mut Vec<Bind>,
+        ) -> Result<()> {
+            if options.is_empty() {
+                return Ok(());
             }
-        }
-
-        // Role types
-        if let Some(role_types) = &filter.role_types {
-            if !role_types.is_empty() {
-                let role_strs: Vec<String> = role_types
-                    .iter()
-                    .map(|r| {
-                        serde_json::to_string(r)
-                            .unwrap()
-                            .trim_matches('"')
-                            .to_string()
-                    })
-                    .collect();
-                let placeholders = vec!["?"; role_strs.len()].join(",");
-                conditions.push(format!("role_type IN ({})", placeholders));
+            conditions.push(format!(
+                "{column} IN ({})",
+                vec!["?"; options.len()].join(",")
+            ));
+            for option in options {
+                bindings.push(Bind::Text(
+                    serde_json::to_value(option)?.as_str().unwrap().into(),
+                ));
             }
+            Ok(())
         }
-
-        // Source ID
-        if filter.source_id.is_some() {
-            conditions.push("source_id = ?".to_string());
+        choices(
+            "status",
+            filter.statuses.as_deref().unwrap_or(&[]),
+            &mut conditions,
+            &mut bindings,
+        )?;
+        choices(
+            "role_type",
+            filter.role_types.as_deref().unwrap_or(&[]),
+            &mut conditions,
+            &mut bindings,
+        )?;
+        if let Some(source) = &filter.source_id {
+            conditions.push("source_id = ?".into());
+            bindings.push(Bind::Text(source.clone()));
         }
-
-        // Favorited only filter
         if filter.favorited_only == Some(true) {
-            conditions.push("favorited = 1".to_string());
+            conditions.push("favorited = 1".into());
         }
-
-        // Search term (searches title, company, location, and description_text)
-        if filter.search.is_some() {
-            conditions.push(
-                "(title LIKE ? OR company LIKE ? OR location LIKE ? OR description_text LIKE ?)"
-                    .to_string(),
-            );
+        if let Some(search) = filter.search.as_ref().filter(|s| !s.trim().is_empty()) {
+            conditions.push(r"(title LIKE ? ESCAPE '\' OR company LIKE ? ESCAPE '\' OR location LIKE ? ESCAPE '\' OR description_text LIKE ? ESCAPE '\' OR notes LIKE ? ESCAPE '\')".into());
+            let escaped = search
+                .trim()
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_");
+            for _ in 0..5 {
+                bindings.push(Bind::Text(format!("%{escaped}%")));
+            }
         }
-
         let amount = |value: Option<f64>| -> Result<Option<i64>> {
             value
                 .map(|v| {
@@ -531,7 +535,7 @@ impl JobsRepo {
             include_unknown: filter.salary_include_unknown.unwrap_or(false),
         };
         pay.validate().map_err(AppError::Validation)?;
-        let mut pay_values = Vec::new();
+
         if pay.min_minor.is_some()
             || pay.max_minor.is_some()
             || pay.currency.is_some()
@@ -539,175 +543,98 @@ impl JobsRepo {
         {
             let (predicate, values) = pay.sqlite_predicate();
             conditions.push(predicate);
-            pay_values = values;
+            bindings.extend(values);
         }
 
-        // Experience (YOE) bounds: [min_yoe, max_yoe]
-        let exp_min = filter.experience_min;
-        let exp_max = filter.experience_max;
-        let exp_inc_unknown = filter.experience_include_unknown.unwrap_or(true);
-
-        if exp_min.is_some() || exp_max.is_some() {
-            let min_y = exp_min.unwrap_or(0);
-            let max_y = exp_max.unwrap_or(30);
-
-            if exp_inc_unknown {
-                conditions.push(format!(
-                    "((experience_min IS NULL) OR (experience_min <= {} AND (experience_max IS NULL OR experience_max >= {})))",
-                    max_y, min_y
-                ));
+        if filter.experience_min.is_some_and(|v| v < 0)
+            || filter.experience_max.is_some_and(|v| v < 0)
+            || matches!((filter.experience_min, filter.experience_max), (Some(lo), Some(hi)) if lo > hi)
+        {
+            return Err(AppError::Validation("Invalid experience range".into()));
+        }
+        if filter.experience_min.is_some() || filter.experience_max.is_some() {
+            let mut overlap = Vec::new();
+            if let Some(lo) = filter.experience_min {
+                overlap.push("(experience_max IS NULL OR experience_max >= ?)");
+                bindings.push(Bind::Integer(lo));
+            }
+            if let Some(hi) = filter.experience_max {
+                overlap.push("(experience_min IS NULL OR experience_min <= ?)");
+                bindings.push(Bind::Integer(hi));
+            }
+            let known = "(experience_min IS NOT NULL OR experience_max IS NOT NULL)";
+            let overlap = overlap.join(" AND ");
+            conditions.push(if filter.experience_include_unknown.unwrap_or(false) {
+                format!("(NOT {known} OR ({overlap}))")
             } else {
-                conditions.push(format!(
-                    "(experience_min IS NOT NULL AND (experience_min <= {} AND (experience_max IS NULL OR experience_max >= {})))",
-                    max_y, min_y
+                format!("({known} AND ({overlap}))")
+            });
+        }
+        match filter.new_grad.as_deref() {
+            None | Some("any") => {}
+            Some("only" | "new_grad_only") => conditions.push("is_new_grad = 'yes'".into()),
+            Some("exclude" | "exclude_new_grad") => conditions.push("is_new_grad != 'yes'".into()),
+            Some(other) => {
+                return Err(AppError::Validation(format!(
+                    "Invalid new-graduate filter: {other}"
+                )))
+            }
+        }
+        choices(
+            "sponsorship",
+            filter.sponsorship.as_deref().unwrap_or(&[]),
+            &mut conditions,
+            &mut bindings,
+        )?;
+        choices(
+            "work_auth",
+            filter.work_auth.as_deref().unwrap_or(&[]),
+            &mut conditions,
+            &mut bindings,
+        )?;
+        choices(
+            "clearance",
+            filter.clearance.as_deref().unwrap_or(&[]),
+            &mut conditions,
+            &mut bindings,
+        )?;
+        match filter.remote.as_deref() {
+            None | Some("any" | "all") => {}
+            Some("remote" | "remote_only") => conditions.push("workplace_type = 'remote'".into()),
+            Some("exclude_remote") => conditions.push("workplace_type != 'remote'".into()),
+            Some("hybrid" | "hybrid_only") => conditions.push("workplace_type = 'hybrid'".into()),
+            Some("onsite" | "onsite_only") => conditions.push("workplace_type = 'onsite'".into()),
+            Some(other) => {
+                return Err(AppError::Validation(format!(
+                    "Invalid workplace filter: {other}"
+                )))
+            }
+        }
+        let countries = filter.countries.as_deref().unwrap_or(&[]);
+        let regions = filter.regions.as_deref().unwrap_or(&[]);
+        if !countries.is_empty() || !regions.is_empty() {
+            let mut geo = Vec::new();
+            if !countries.is_empty() {
+                geo.push(format!(
+                    "upper(jl.country_code) IN ({})",
+                    vec!["?"; countries.len()].join(",")
                 ));
+                bindings.extend(countries.iter().map(|c| Bind::Text(c.to_ascii_uppercase())));
             }
-        }
-
-        // New Grad filter: any | new_grad_only | exclude_new_grad
-        if let Some(ng) = &filter.new_grad {
-            match ng.as_str() {
-                "new_grad_only" => {
-                    conditions.push("(is_new_grad = 'yes' OR experience_min = 0)".to_string());
+            if !regions.is_empty() {
+                let mut parts = Vec::new();
+                for region in regions {
+                    parts.push("(upper(jl.region_code) = ? OR substr(upper(jl.region_code), instr(jl.region_code, '-') + 1) = ?)");
+                    bindings.push(Bind::Text(region.to_ascii_uppercase()));
+                    bindings.push(Bind::Text(region.to_ascii_uppercase()));
                 }
-                "exclude_new_grad" => {
-                    conditions.push("(is_new_grad = 'no' OR experience_min >= 2)".to_string());
-                }
-                _ => {}
+                geo.push(format!("({})", parts.join(" OR ")));
             }
-        }
-
-        // Sponsorship tri-state list
-        if let Some(spon_list) = &filter.sponsorship {
-            if !spon_list.is_empty() && spon_list.len() < 3 {
-                let spon_strs: Vec<String> = spon_list
-                    .iter()
-                    .map(|s| {
-                        serde_json::to_string(s)
-                            .unwrap()
-                            .trim_matches('"')
-                            .to_string()
-                    })
-                    .collect();
-                let joined = spon_strs
-                    .iter()
-                    .map(|s| format!("'{}'", s))
-                    .collect::<Vec<_>>()
-                    .join(",");
-                conditions.push(format!("sponsorship IN ({})", joined));
-            }
-        }
-
-        // Work auth list
-        if let Some(wa_list) = &filter.work_auth {
-            if !wa_list.is_empty() && wa_list.len() < 4 {
-                let wa_strs: Vec<String> = wa_list
-                    .iter()
-                    .map(|w| {
-                        serde_json::to_string(w)
-                            .unwrap()
-                            .trim_matches('"')
-                            .to_string()
-                    })
-                    .collect();
-                let joined = wa_strs
-                    .iter()
-                    .map(|w| format!("'{}'", w))
-                    .collect::<Vec<_>>()
-                    .join(",");
-                conditions.push(format!("work_auth IN ({})", joined));
-            }
-        }
-
-        // Clearance tri-state list
-        if let Some(clr_list) = &filter.clearance {
-            if !clr_list.is_empty() && clr_list.len() < 3 {
-                let clr_strs: Vec<String> = clr_list
-                    .iter()
-                    .map(|s| {
-                        serde_json::to_string(s)
-                            .unwrap()
-                            .trim_matches('"')
-                            .to_string()
-                    })
-                    .collect();
-                let joined = clr_strs
-                    .iter()
-                    .map(|s| format!("'{}'", s))
-                    .collect::<Vec<_>>()
-                    .join(",");
-                conditions.push(format!("clearance IN ({})", joined));
-            }
-        }
-
-        // Remote policy
-        if let Some(rem) = &filter.remote {
-            match rem.as_str() {
-                "remote" | "remote_only" => {
-                    conditions.push("(workplace_type = 'remote' OR EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id = jobs.id AND jl.is_remote = 1))".to_string());
-                }
-                "exclude_remote" => {
-                    conditions.push("(workplace_type != 'remote' AND NOT EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id = jobs.id AND jl.is_remote = 1))".to_string());
-                }
-                "hybrid" | "hybrid_only" => {
-                    conditions.push("workplace_type = 'hybrid'".to_string());
-                }
-                "onsite" | "onsite_only" => {
-                    conditions.push("workplace_type = 'onsite'".to_string());
-                }
-                _ => {}
-            }
-        }
-
-        // Countries and Regions geo matching
-        let has_countries = filter
-            .countries
-            .as_ref()
-            .map(|c| !c.is_empty())
-            .unwrap_or(false);
-        let has_regions = filter
-            .regions
-            .as_ref()
-            .map(|r| !r.is_empty())
-            .unwrap_or(false);
-
-        if has_countries || has_regions {
-            let mut geo_sub = Vec::new();
-            if let Some(c_list) = &filter.countries {
-                if !c_list.is_empty() {
-                    let formatted = c_list
-                        .iter()
-                        .map(|c| format!("'{}'", c.replace('\'', "''")))
-                        .collect::<Vec<_>>()
-                        .join(",");
-                    geo_sub.push(format!("jl.country_code IN ({})", formatted));
-                }
-            }
-            if let Some(r_list) = &filter.regions {
-                if !r_list.is_empty() {
-                    let mut region_conditions = Vec::new();
-                    for r in r_list {
-                        let clean = r.replace('\'', "''");
-                        region_conditions.push(format!(
-                            "jl.region_code = '{clean}' OR jl.region_code LIKE '%-{clean}'"
-                        ));
-                    }
-                    geo_sub.push(format!("({})", region_conditions.join(" OR ")));
-                }
-            }
-
-            let geo_clause = geo_sub.join(" OR ");
-            if filter.location_include_unknown.unwrap_or(true) {
-                conditions.push(format!(
-                    "(EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id = jobs.id AND ({})) OR NOT EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id = jobs.id))",
-                    geo_clause
-                ));
-            } else {
-                conditions.push(format!(
-                    "EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id = jobs.id AND ({}))",
-                    geo_clause
-                ));
-            }
+            let match_geo = format!(
+                "EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id = jobs.id AND ({}))",
+                geo.join(" AND ")
+            );
+            conditions.push(if filter.location_include_unknown.unwrap_or(false) { format!("({match_geo} OR NOT EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id = jobs.id))") } else { match_geo });
         }
 
         let where_clause = if conditions.is_empty() {
@@ -722,51 +649,27 @@ impl JobsRepo {
             JobSort::DatePostedDesc => "date_posted DESC",
             JobSort::DatePostedAsc => "date_posted ASC",
             JobSort::CompanyAsc => "company ASC, date_added DESC",
+            JobSort::CompanyDesc => "company DESC, date_added DESC",
             JobSort::TitleAsc => "title ASC, date_added DESC",
+            JobSort::TitleDesc => "title DESC, date_added DESC",
+            JobSort::StatusAsc => "status ASC, date_added DESC",
+            JobSort::StatusDesc => "status DESC, date_added DESC",
             JobSort::SalaryDesc => "salary_max DESC, date_added DESC",
             JobSort::SalaryAsc => "salary_min ASC, date_added DESC",
             JobSort::ExperienceDesc => "experience_min DESC, date_added DESC",
             JobSort::ExperienceAsc => "experience_min ASC, date_added DESC",
             JobSort::FavoritedDesc => "favorited DESC, date_added DESC",
+            JobSort::FavoritedAsc => "favorited ASC, date_added DESC",
         };
 
         // Query total count
         let count_sql = format!("SELECT COUNT(*) as count FROM jobs {}", where_clause);
         let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
 
-        // Bind parameters in order: statuses, role_types, source_id, search
-        if let Some(statuses) = &filter.statuses {
-            for s in statuses {
-                let s_str = serde_json::to_string(&s)?;
-                count_query = count_query.bind(s_str.trim_matches('"').to_string());
-            }
-        }
-        if let Some(role_types) = &filter.role_types {
-            for r in role_types {
-                let r_str = serde_json::to_string(&r)?;
-                count_query = count_query.bind(r_str.trim_matches('"').to_string());
-            }
-        }
-        if let Some(src_id) = &filter.source_id {
-            count_query = count_query.bind(src_id.clone());
-        }
-        if let Some(search) = &filter.search {
-            let term = format!("%{}%", search.trim());
-            count_query = count_query
-                .bind(term.clone())
-                .bind(term.clone())
-                .bind(term.clone())
-                .bind(term);
-        }
-
-        for value in &pay_values {
+        for value in &bindings {
             count_query = match value {
-                scrape_core::enrich::salary::CompensationSqlValue::Integer(value) => {
-                    count_query.bind(*value)
-                }
-                scrape_core::enrich::salary::CompensationSqlValue::Text(value) => {
-                    count_query.bind(value)
-                }
+                Bind::Integer(value) => count_query.bind(*value),
+                Bind::Text(value) => count_query.bind(value),
             };
         }
         let (total,) = count_query.fetch_one(pool).await?;
@@ -786,44 +689,17 @@ impl JobsRepo {
                    company_icon_url, work_auth, work_auth_evidence
             FROM jobs
             {}
-            ORDER BY {}
+            ORDER BY {}, id ASC
             LIMIT ? OFFSET ?
             "#,
             where_clause, order_by
         );
 
         let mut data_query = sqlx::query(&select_sql);
-        if let Some(statuses) = &filter.statuses {
-            for s in statuses {
-                let s_str = serde_json::to_string(&s)?;
-                data_query = data_query.bind(s_str.trim_matches('"').to_string());
-            }
-        }
-        if let Some(role_types) = &filter.role_types {
-            for r in role_types {
-                let r_str = serde_json::to_string(&r)?;
-                data_query = data_query.bind(r_str.trim_matches('"').to_string());
-            }
-        }
-        if let Some(src_id) = &filter.source_id {
-            data_query = data_query.bind(src_id.clone());
-        }
-        if let Some(search) = &filter.search {
-            let term = format!("%{}%", search.trim());
-            data_query = data_query
-                .bind(term.clone())
-                .bind(term.clone())
-                .bind(term.clone())
-                .bind(term);
-        }
-        for value in &pay_values {
+        for value in &bindings {
             data_query = match value {
-                scrape_core::enrich::salary::CompensationSqlValue::Integer(value) => {
-                    data_query.bind(*value)
-                }
-                scrape_core::enrich::salary::CompensationSqlValue::Text(value) => {
-                    data_query.bind(value)
-                }
+                Bind::Integer(value) => data_query.bind(*value),
+                Bind::Text(value) => data_query.bind(value),
             };
         }
         data_query = data_query.bind(limit).bind(offset);
@@ -2523,6 +2399,53 @@ mod tests {
         assert!(
             JobsRepo::get(&pool, "j4").await.is_ok(),
             "Job 4 (applied) must be preserved"
+        );
+    }
+
+    #[tokio::test]
+    async fn searches_and_counts_more_than_two_thousand_jobs_and_treats_search_as_literal() {
+        let pool = init_memory_db().await.unwrap();
+        sqlx::query("WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<2105) INSERT INTO jobs (id, dedupe_key, title, company, url, date_added, last_seen_at, status_changed_at, compensation_migrated) SELECT printf('job-%04d',x), printf('key-%d',x), CASE WHEN x=2050 THEN 'Rare 100% Engineer' ELSE 'Engineer' END, 'Co', 'https://example.com/job', '2020-01-01', '2020-01-01', '2020-01-01', 1 FROM n")
+            .execute(&pool).await.unwrap();
+        let page = JobsRepo::list(
+            &pool,
+            JobFilter {
+                offset: Some(2000),
+                limit: Some(50),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(page.total, 2105);
+        assert_eq!(page.items.len(), 50);
+        let result = JobsRepo::list(
+            &pool,
+            JobFilter {
+                search: Some("100%".into()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.total, 1);
+        assert_eq!(result.items[0].id, "job-2050");
+        sqlx::query("UPDATE jobs SET notes='Needle in saved notes' WHERE id='job-2105'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            JobsRepo::list(
+                &pool,
+                JobFilter {
+                    search: Some("Needle".into()),
+                    ..Default::default()
+                }
+            )
+            .await
+            .unwrap()
+            .total,
+            1
         );
     }
 

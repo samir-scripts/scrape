@@ -1,3 +1,4 @@
+import type { JobSort } from "../../../bindings/JobSort";
 import { useState } from "react";
 import type { Job } from "../../../bindings/Job";
 import {
@@ -20,6 +21,8 @@ import {
 } from "../../../lib/filter";
 
 interface TrackedListProps {
+  onRepositorySort?: (sort: JobSort) => void;
+  repositorySort?: JobSort | null;
   jobs: Job[];
   selectedJobId: string | null;
   onSelectJob: (job: Job) => void;
@@ -62,11 +65,19 @@ export function TrackedList({
   onOpenUrl,
   onToggleFavorite,
   onDelete,
+  onRepositorySort,
+  repositorySort,
 }: TrackedListProps) {
-  const [sortField, setSortField] = useState<SortField>("date_added");
-  const [sortAsc, setSortAsc] = useState(false);
+  const [localSortField, setSortField] = useState<SortField>("date_added");
+  const [localSortAsc, setSortAsc] = useState(false);
 
+  const sortField = repositorySort ? repositorySort.replace(/_(asc|desc)$/, "") as SortField : localSortField;
+  const sortAsc = repositorySort ? repositorySort.endsWith("_asc") : localSortAsc;
   const handleSort = (field: SortField) => {
+    if (onRepositorySort) {
+      const ascending = sortField === field ? !sortAsc : true;
+      onRepositorySort(`${field}_${ascending ? "asc" : "desc"}` as JobSort);
+    }
     if (sortField === field) {
       setSortAsc(!sortAsc);
     } else {
@@ -75,7 +86,7 @@ export function TrackedList({
     }
   };
 
-  const sortedJobs = [...jobs].sort((a, b) =>
+  const sortedJobs = onRepositorySort ? jobs : [...jobs].sort((a, b) =>
     compareTrackedJobs(a, b, sortField, sortAsc)
   );
 

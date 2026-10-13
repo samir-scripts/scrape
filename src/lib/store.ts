@@ -162,15 +162,20 @@ export const useUIStore = create<UIState>((set, get) => ({
   toggleFilterPanel: () =>
     set((state) => ({ isFilterPanelOpen: !state.isFilterPanelOpen })),
 
-  filterSpec: { ...DEFAULT_FILTER_SPEC },
-  setFilterSpec: (updater) =>
-    set((state) => ({
-      filterSpec:
-        typeof updater === "function"
-          ? updater(state.filterSpec)
-          : { ...state.filterSpec, ...updater },
-    })),
-  resetFilterSpec: () => set({ filterSpec: { ...DEFAULT_FILTER_SPEC } }),
+  filterSpec: (() => {
+    try { const saved = JSON.parse(getStored("scrape:job_filters:v2") || "null");
+      return saved && typeof saved === "object" && !Array.isArray(saved) ? { ...DEFAULT_FILTER_SPEC, ...saved } : { ...DEFAULT_FILTER_SPEC };
+    } catch { return { ...DEFAULT_FILTER_SPEC }; }
+  })(),
+  setFilterSpec: (updater) => set((state) => {
+    const filterSpec = typeof updater === "function" ? updater(state.filterSpec) : { ...state.filterSpec, ...updater };
+    setStored("scrape:job_filters:v2", JSON.stringify(filterSpec));
+    return { filterSpec };
+  }),
+  resetFilterSpec: () => {
+    setStored("scrape:job_filters:v2", JSON.stringify(DEFAULT_FILTER_SPEC));
+    set({ filterSpec: { ...DEFAULT_FILTER_SPEC } });
+  },
 
   trackedViewMode:
     (getStored("scrape:trackedMode") as "kanban" | "list") || "kanban",
