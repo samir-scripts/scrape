@@ -257,6 +257,7 @@ fn parse_job_posting_map(
         role_type,
         location,
         url: job_url,
+        provider_updated_at: None,
         date_posted,
         salary,
         locations,

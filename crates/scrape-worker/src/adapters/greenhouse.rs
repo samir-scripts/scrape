@@ -20,7 +20,9 @@ struct GreenhouseJob {
     location: Option<GreenhouseLocation>,
     offices: Option<Vec<GreenhouseOffice>>,
     first_published: Option<String>,
+    updated_at: Option<String>,
     content: Option<String>,
+    company_name: Option<String>,
     pay_input_ranges: Option<Vec<GreenhousePayRange>>,
 }
 
@@ -48,13 +50,61 @@ pub async fn scrape_greenhouse(
     client: &HttpClient,
     source: &WorkerSource,
 ) -> Result<Vec<WorkerEvent>, ClientError> {
-    let url = format!(
-        "https://boards-api.greenhouse.io/v1/boards/{}/jobs?content=true",
-        source.identifier.trim()
-    );
+    scrape_greenhouse_at(client, source, "https://boards-api.greenhouse.io").await
+}
 
-    let resp: GreenhouseResponse = client.fetch_json(&url).await?;
-    parse_greenhouse_jobs(resp.jobs, source)
+async fn scrape_greenhouse_at(
+    client: &HttpClient,
+    source: &WorkerSource,
+    base: &str,
+) -> Result<Vec<WorkerEvent>, ClientError> {
+    let board_url = format!("{base}/v1/boards/{}/jobs", source.identifier.trim());
+    let mut resp: GreenhouseResponse = client
+        .fetch_json(&format!("{board_url}?content=true"))
+        .await?;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(45);
+    let mut diagnostics = vec![];
+    for (index, job) in resp.jobs.iter_mut().enumerate() {
+        if index >= 100 || tokio::time::Instant::now() >= deadline {
+            diagnostics.push(WorkerEvent::Error { source_id: source.id.clone(), message: "Greenhouse detail enrichment reached its bound; remaining posting dates and structured pay are unknown".into(), retryable: true, invalid_posting: Some(false) });
+            break;
+        }
+        let url = format!("{board_url}/{}?pay_transparency=true", job.id);
+        match tokio::time::timeout_at(deadline, client.fetch_json_cached::<GreenhouseJob>(&url))
+            .await
+        {
+            Ok(Ok(detail)) if detail.id == job.id => {
+                // Use provider fields without constructing a destination or publication date.
+                job.title = detail.title;
+                job.absolute_url = detail.absolute_url;
+                if detail.location.is_some() {
+                    job.location = detail.location;
+                }
+                if detail.offices.is_some() {
+                    job.offices = detail.offices;
+                }
+                job.first_published = detail.first_published;
+                job.updated_at = detail.updated_at;
+                job.pay_input_ranges = detail.pay_input_ranges;
+                job.company_name = detail.company_name;
+                if detail.content.is_some() {
+                    job.content = detail.content;
+                }
+            }
+            result => diagnostics.push(WorkerEvent::Error {
+                source_id: source.id.clone(),
+                message: format!(
+                    "Greenhouse detail {} unavailable or has a mismatched ID: {result:?}",
+                    job.id
+                ),
+                retryable: true,
+                invalid_posting: Some(false),
+            }),
+        }
+    }
+    let mut events = parse_greenhouse_jobs(resp.jobs, source)?;
+    events.extend(diagnostics);
+    Ok(events)
 }
 
 pub fn parse_greenhouse_payload(
@@ -181,10 +231,11 @@ fn parse_greenhouse_jobs(
             source_id: source.id.clone(),
             external_id: job.id.to_string(),
             title: job.title,
-            company: source.name.clone(),
+            company: job.company_name.unwrap_or_else(|| source.name.clone()),
             role_type,
             location: effective_location_str,
             url,
+            provider_updated_at: job.updated_at,
             date_posted: job.first_published,
             salary,
             locations,
@@ -206,6 +257,87 @@ fn parse_greenhouse_jobs(
 mod tests {
     use super::*;
     use scrape_core::WorkplaceType;
+
+    #[tokio::test]
+    async fn detail_fields_and_cache_preserve_provider_provenance() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let server = std::thread::spawn(move || {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            let mut requests = 0;
+            while requests < 3 && std::time::Instant::now() < deadline {
+                if let Ok((mut stream, _)) = listener.accept() {
+                    stream
+                        .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                        .unwrap();
+                    let mut buffer = [0; 4096];
+                    let count = stream.read(&mut buffer).unwrap();
+                    let request = String::from_utf8_lossy(&buffer[..count]);
+                    let body = if request
+                        .starts_with("GET /v1/boards/acme/jobs/42?pay_transparency=true ")
+                    {
+                        r#"{"id":42,"title":"Actual Engineer","company_name":"Actual Company","absolute_url":"https://careers.example.com/apply?gh_jid=42","first_published":"2026-01-02T09:00:00Z","updated_at":"2026-10-12T15:00:00Z","pay_input_ranges":[{"min_cents":5025,"max_cents":6075,"currency_type":"USD","title":"Hourly compensation"},{"min_cents":6500,"currency_type":"CAD","title":"Hourly compensation Canada"}]}"#
+                    } else {
+                        assert!(request.starts_with("GET /v1/boards/acme/jobs?content=true "));
+                        r#"{"jobs":[{"id":42,"title":"Older title","absolute_url":"https://boards.greenhouse.io/acme/jobs/42","updated_at":"2026-10-12T15:00:00Z"}]}"#
+                    };
+                    write!(
+                        stream,
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    )
+                    .unwrap();
+                    requests += 1;
+                } else {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+            }
+            assert_eq!(requests, 3, "the second detail request must use the cache");
+        });
+        let source = WorkerSource {
+            id: "workflow".into(),
+            name: "Workflow label".into(),
+            kind: scrape_core::SourceKind::Greenhouse,
+            identifier: "acme".into(),
+            config: serde_json::json!({}),
+        };
+        let client = HttpClient::new(3, 0);
+        for _ in 0..2 {
+            let events = scrape_greenhouse_at(&client, &source, &format!("http://{address}"))
+                .await
+                .unwrap();
+            match &events[0] {
+                WorkerEvent::Job {
+                    external_id,
+                    title,
+                    company,
+                    url,
+                    date_posted,
+                    provider_updated_at,
+                    salary,
+                    ..
+                } => {
+                    assert_eq!(external_id, "42");
+                    assert_eq!(title, "Actual Engineer");
+                    assert_eq!(company, "Actual Company");
+                    assert_eq!(url, "https://careers.example.com/apply?gh_jid=42");
+                    assert_eq!(date_posted.as_deref(), Some("2026-01-02T09:00:00Z"));
+                    assert_eq!(provider_updated_at.as_deref(), Some("2026-10-12T15:00:00Z"));
+                    let ranges = &salary.as_ref().unwrap().ranges;
+                    assert_eq!(ranges.len(), 2);
+                    assert_eq!(ranges[0].min_minor, Some(5025));
+                    assert_eq!(ranges[0].interval, Some(scrape_core::SalaryInterval::Hour));
+                    assert_eq!(ranges[1].currency.as_deref(), Some("CAD"));
+                }
+                _ => panic!("Expected actual extracted posting"),
+            }
+        }
+        server.join().unwrap();
+    }
 
     #[test]
     fn test_parse_greenhouse_json() {

@@ -531,6 +531,7 @@ mod tests {
             role_type,
             location: Some("Remote".to_string()),
             url: format!("https://example.com/{}", id),
+            provider_updated_at: None,
             date_posted: None,
             salary_min: salary.map(|(min, _)| min),
             salary_max: salary.map(|(_, max)| max),

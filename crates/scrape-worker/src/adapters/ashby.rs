@@ -195,6 +195,7 @@ fn parse_ashby_jobs(
             role_type,
             location: location_str,
             url: job.job_url,
+            provider_updated_at: None,
             date_posted: job.published_at,
             salary,
             locations,

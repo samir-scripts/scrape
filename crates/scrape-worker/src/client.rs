@@ -28,6 +28,7 @@ pub struct HttpClient {
     per_host_delay: Duration,
     host_locks: Mutex<HashMap<String, Arc<Mutex<Instant>>>>,
     robots_cache: Mutex<HashMap<String, Option<Arc<Robot>>>>,
+    json_cache: Mutex<HashMap<String, (Instant, serde_json::Value)>>,
 }
 
 impl HttpClient {
@@ -44,6 +45,7 @@ impl HttpClient {
             per_host_delay: Duration::from_millis(per_host_delay_ms),
             host_locks: Mutex::new(HashMap::new()),
             robots_cache: Mutex::new(HashMap::new()),
+            json_cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -181,6 +183,29 @@ impl HttpClient {
 
         let text = resp.text().await?;
         Ok(text)
+    }
+
+    /// Cache detail responses for this worker lifetime, with a bounded size and TTL.
+    pub async fn fetch_json_cached<T: serde::de::DeserializeOwned>(
+        &self,
+        url: &str,
+    ) -> Result<T, ClientError> {
+        let mut cache = self.json_cache.lock().await;
+        if let Some((fetched, value)) = cache.get(url) {
+            if fetched.elapsed() < Duration::from_secs(300) {
+                return Ok(serde_json::from_value(value.clone())?);
+            }
+        }
+        cache.remove(url);
+        drop(cache);
+        let value: serde_json::Value = self.fetch_json(url).await?;
+        let result = serde_json::from_value(value.clone())?;
+        let mut cache = self.json_cache.lock().await;
+        if cache.len() >= 256 {
+            cache.clear();
+        }
+        cache.insert(url.into(), (Instant::now(), value));
+        Ok(result)
     }
 
     pub async fn fetch_json<T: serde::de::DeserializeOwned>(

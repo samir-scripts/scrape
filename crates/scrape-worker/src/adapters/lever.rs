@@ -204,6 +204,7 @@ fn parse_lever_postings(
             role_type,
             location: location_str,
             url: posting.hosted_url,
+            provider_updated_at: None,
             date_posted,
             salary,
             locations,

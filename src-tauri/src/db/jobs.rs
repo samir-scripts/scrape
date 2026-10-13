@@ -27,6 +27,9 @@ pub struct Job {
     pub location: Option<String>,
     pub url: String,
     pub date_posted: Option<String>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub provider_updated_at: Option<String>,
     pub date_added: String,
     pub last_seen_at: String,
     pub status: JobStatus,
@@ -187,6 +190,9 @@ pub struct ScrapedJob {
     pub location: Option<String>,
     pub url: String,
     pub date_posted: Option<String>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub provider_updated_at: Option<String>,
 
     #[serde(default)]
     pub compensation: Vec<scrape_core::enrich::CompensationRange>,
@@ -235,7 +241,7 @@ impl JobsRepo {
         let r = sqlx::query(
             r#"
             SELECT id, dedupe_key, posting_identity, removed_at, compensation_json, source_id, external_id, title, company,
-                   role_type, location, url, date_posted, date_added,
+                   role_type, location, url, date_posted, provider_updated_at, date_added,
                    last_seen_at, status, status_changed_at, notes,
                    salary_min, salary_max, salary_currency, salary_interval,
                    salary_raw, salary_source, workplace_type, sponsorship,
@@ -411,6 +417,7 @@ impl JobsRepo {
             role_type,
             location: r.get("location"),
             url: r.get("url"),
+            provider_updated_at: r.get("provider_updated_at"),
             date_posted: r.get("date_posted"),
             date_added: r.get("date_added"),
             last_seen_at: r.get("last_seen_at"),
@@ -647,7 +654,7 @@ impl JobsRepo {
         let select_sql = format!(
             r#"
             SELECT id, dedupe_key, posting_identity, removed_at, compensation_json, source_id, external_id, title, company,
-                   role_type, location, url, date_posted, date_added,
+                   role_type, location, url, date_posted, provider_updated_at, date_added,
                    last_seen_at, status, status_changed_at, notes,
                    salary_min, salary_max, salary_currency, salary_interval,
                    salary_raw, salary_source, workplace_type, sponsorship,
@@ -1217,9 +1224,10 @@ impl JobsRepo {
                 }
             }
             sqlx::query(
-                "UPDATE jobs SET posting_identity = ?, removed_at = NULL, source_name_snapshot = COALESCE(source_name_snapshot, (SELECT name FROM sources WHERE id = jobs.source_id)) WHERE dedupe_key = ?",
+                "UPDATE jobs SET posting_identity = ?, provider_updated_at = ?, removed_at = NULL, source_name_snapshot = COALESCE(source_name_snapshot, (SELECT name FROM sources WHERE id = jobs.source_id)) WHERE dedupe_key = ?",
             )
             .bind(&identity)
+            .bind(&job.provider_updated_at)
             .bind(&job.dedupe_key)
             .execute(&mut *tx)
             .await?;
@@ -1426,6 +1434,7 @@ mod tests {
                 role_type: RoleType::FullTime,
                 location: Some("San Francisco, CA".to_string()),
                 url: "https://stripe.com/jobs/101".to_string(),
+                provider_updated_at: None,
                 date_posted: Some("2026-10-01T00:00:00Z".to_string()),
                 salary_min: Some(180_000),
                 salary_max: Some(240_000),
@@ -1470,6 +1479,7 @@ mod tests {
                 role_type: RoleType::FullTime,
                 location: Some("Remote".to_string()),
                 url: "https://figma.com/jobs/202".to_string(),
+                provider_updated_at: None,
                 date_posted: None,
                 salary_min: Some(130_000),
                 salary_max: Some(160_000),
@@ -1652,6 +1662,7 @@ mod tests {
             role_type: RoleType::FullTime,
             location: Some("San Francisco, CA".to_string()),
             url: "https://stripe.com/jobs/eng-1".to_string(),
+            provider_updated_at: None,
             date_posted: Some("2026-10-01T00:00:00Z".to_string()),
             salary_min: None,
             salary_max: None,
@@ -1719,6 +1730,7 @@ mod tests {
             role_type: RoleType::FullTime,
             location: Some("Seattle, WA".to_string()),
             url: "https://stripe.com/jobs/eng-1".to_string(),
+            provider_updated_at: None,
             date_posted: Some("2026-10-01T00:00:00Z".to_string()),
             salary_min: Some(210_000),
             salary_max: Some(275_000),
@@ -1793,6 +1805,7 @@ mod tests {
             role_type: RoleType::FullTime,
             location: Some("Washington, DC".to_string()),
             url: "https://example.com/01".to_string(),
+            provider_updated_at: None,
             date_posted: Some("2026-10-05T00:00:00Z".to_string()),
             salary_min: None,
             salary_max: None,
@@ -1872,6 +1885,7 @@ mod tests {
                 role_type: RoleType::FullTime,
                 location: Some("Remote".to_string()),
                 url: "https://vercel.com/1".to_string(),
+                provider_updated_at: None,
                 date_posted: Some("2026-10-01".to_string()),
                 salary_min: Some(160_000),
                 salary_max: Some(200_000),
@@ -1912,6 +1926,7 @@ mod tests {
                 role_type: RoleType::FullTime,
                 location: Some("Arlington, VA".to_string()),
                 url: "https://lockheed.com/2".to_string(),
+                provider_updated_at: None,
                 date_posted: Some("2026-10-02".to_string()),
                 salary_min: Some(130_000),
                 salary_max: Some(170_000),
@@ -2000,6 +2015,7 @@ mod tests {
             role_type: RoleType::FullTime,
             location: Some("San Francisco, CA".to_string()),
             url: "https://example.com/ca".to_string(),
+            provider_updated_at: None,
             date_posted: None,
             salary_min: None,
             salary_max: None,
@@ -2041,6 +2057,7 @@ mod tests {
             role_type: RoleType::FullTime,
             location: Some("Toronto, ON".to_string()),
             url: "https://example.com/on".to_string(),
+            provider_updated_at: None,
             date_posted: None,
             salary_min: None,
             salary_max: None,
@@ -2124,6 +2141,7 @@ mod tests {
             role_type: RoleType::FullTime,
             location: Some("Remote".to_string()),
             url: "https://example.com/fav/1".to_string(),
+            provider_updated_at: None,
             date_posted: None,
             salary_min: None,
             salary_max: None,
@@ -2186,6 +2204,7 @@ mod tests {
             role_type: RoleType::FullTime,
             location: None,
             url: "https://example.com/a".to_string(),
+            provider_updated_at: None,
             date_posted: None,
             salary_min: None,
             salary_max: None,
@@ -2221,6 +2240,7 @@ mod tests {
             role_type: RoleType::FullTime,
             location: None,
             url: "https://example.com/b".to_string(),
+            provider_updated_at: None,
             date_posted: None,
             salary_min: None,
             salary_max: None,
@@ -2552,6 +2572,7 @@ mod tests {
             location: Some("Remote".into()),
             locations: vec![],
             url: "https://example.com/job/99999".into(),
+            provider_updated_at: None,
             date_posted: None,
             salary_min: None,
             salary_max: None,

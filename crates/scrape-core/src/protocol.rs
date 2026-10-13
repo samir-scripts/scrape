@@ -235,6 +235,9 @@ pub enum WorkerEvent {
         #[serde(default)]
         date_posted: Option<String>,
         #[serde(default)]
+        #[ts(optional = nullable)]
+        provider_updated_at: Option<String>,
+        #[serde(default)]
         salary: Option<Salary>,
         #[serde(default)]
         locations: Vec<ParsedLocation>,
@@ -331,6 +334,7 @@ mod tests {
             role_type: RoleType::FullTime,
             location: "Remote".to_string(),
             url: "https://stripe.com/jobs/5012345".to_string(),
+            provider_updated_at: None,
             date_posted: Some("2026-10-01T00:00:00Z".to_string()),
             salary: None,
             locations: Vec::new(),

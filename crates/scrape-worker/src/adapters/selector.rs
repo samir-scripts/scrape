@@ -349,6 +349,7 @@ pub fn extract_jobs_with_selectors(
             role_type,
             location,
             url: job_url,
+            provider_updated_at: None,
             date_posted,
             salary,
             locations,
