@@ -37,6 +37,9 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Build required sidecar
+        run: npm run build:sidecar
+
       - name: Format check (Rust)
         run: cargo fmt --all --check
 
@@ -50,14 +53,13 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Frontend tests
-        run: npx vitest run
+        run: npm test
 
-      - name: Brutalist style guard
-        run: |
-          if grep -rnE "rounded-|shadow-|border-radius:\s*[1-9]" src/ 2>/dev/null; then
-            echo "Error: Brutalist styling rule violated! Found rounded corners or shadows in src/."
-            exit 1
-          fi
+      - name: Frontend production build
+        run: npm run build
+
+      - name: Production style guard
+        run: node scripts/check-style.mjs
 
       - name: Check bindings drift
         run: |

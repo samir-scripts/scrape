@@ -199,7 +199,7 @@ export function FilterPanel({
         width: `${coords.width}px`,
         maxHeight: `${coords.maxHeight}px`,
       }}
-      className="z-50 bg-[var(--color-paper)] border-2 border-[var(--color-ink)] shadow-[4px_4px_0px_0px_var(--color-ink)] flex flex-col select-none animate-none"
+      className="z-50 bg-[var(--color-paper)] border-2 border-[var(--color-ink)] shadow-none flex flex-col select-none animate-none"
     >
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-[var(--color-ink)] bg-[var(--color-paper-2)]/50 shrink-0">

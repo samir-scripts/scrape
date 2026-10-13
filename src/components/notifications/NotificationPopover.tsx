@@ -234,7 +234,7 @@ export function NotificationPopover({
         maxHeight: coords.maxHeight,
         zIndex: 9999,
       }}
-      className="flex flex-col bg-[var(--color-paper)] border border-[var(--color-ink)] shadow-[4px_4px_0px_0px_var(--color-ink)] font-mono text-xs select-none"
+      className="flex flex-col bg-[var(--color-paper)] border border-[var(--color-ink)] shadow-none font-mono text-xs select-none"
     >
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-[var(--color-paper-2)] border-b border-[var(--color-ink)] shrink-0">
