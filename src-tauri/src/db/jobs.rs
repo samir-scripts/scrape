@@ -503,21 +503,15 @@ impl JobsRepo {
             }
         }
 
-        // Salary currency
-        if let Some(curr) = &filter.salary_currency {
-            if !curr.trim().is_empty() {
-                if sal_inc_unknown {
-                    conditions.push(format!(
-                        "(salary_currency = '{}' OR salary_currency IS NULL)",
-                        curr.trim().to_uppercase()
-                    ));
-                } else {
-                    conditions.push(format!(
-                        "salary_currency = '{}'",
-                        curr.trim().to_uppercase()
-                    ));
-                }
-            }
+        // Currency is user input: bind it for both count and page queries.
+        // Unknown currencies cannot satisfy an explicit currency selection.
+        let salary_currency = filter
+            .salary_currency
+            .as_ref()
+            .map(|c| c.trim().to_uppercase())
+            .filter(|c| !c.is_empty());
+        if salary_currency.is_some() {
+            conditions.push("salary_currency = ?".to_string());
         }
 
         // Salary interval (e.g. "hour" or "year")
@@ -746,6 +740,9 @@ impl JobsRepo {
                 .bind(term);
         }
 
+        if let Some(currency) = &salary_currency {
+            count_query = count_query.bind(currency);
+        }
         let (total,) = count_query.fetch_one(pool).await?;
 
         // Query rows
@@ -792,6 +789,9 @@ impl JobsRepo {
                 .bind(term.clone())
                 .bind(term.clone())
                 .bind(term);
+        }
+        if let Some(currency) = &salary_currency {
+            data_query = data_query.bind(currency);
         }
         data_query = data_query.bind(limit).bind(offset);
 
@@ -2485,6 +2485,33 @@ mod tests {
             JobsRepo::get(&pool, "j4").await.is_ok(),
             "Job 4 (applied) must be preserved"
         );
+    }
+
+    #[tokio::test]
+    async fn currency_filter_binds_quotes_and_excludes_unknown_currency() {
+        let pool = init_memory_db().await.unwrap();
+        for (id, currency) in [
+            ("usd", Some("USD")),
+            ("unknown", None),
+            ("quoted", Some("X' OR 1=1 --")),
+        ] {
+            sqlx::query("INSERT INTO jobs (id, dedupe_key, title, company, url, date_added, last_seen_at, status_changed_at, salary_currency) VALUES (?1, ?1, 'Engineer', 'Co', 'https://example.com/job', '2000-01-01', '2000-01-01', '2000-01-01', ?2)")
+                .bind(id).bind(currency).execute(&pool).await.unwrap();
+        }
+        for (currency, expected) in [(" usd ", "usd"), ("X' OR 1=1 --", "quoted")] {
+            let page = JobsRepo::list(
+                &pool,
+                JobFilter {
+                    salary_currency: Some(currency.into()),
+                    salary_include_unknown: Some(true),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+            assert_eq!(page.total, 1);
+            assert_eq!(page.items[0].id, expected);
+        }
     }
 
     #[tokio::test]

@@ -17,3 +17,9 @@ The `src-tauri/src/db` directory encapsulates all data access logic, repository 
 | [`metrics.rs`](metrics.rs) | `jobs` | `compute_overview_metrics`, `get_daily_application_velocity`, `get_salary_distribution_buckets`. Executes aggregation queries calculating application funnel conversion rates, status distributions, and salary quartiles. |
 | [`settings.rs`](settings.rs) | `settings` | `get_settings`, `save_settings`. Serializes and retrieves global user preferences, crawl cadences, retention parameters, and filter presets. |
 | [`notifications.rs`](notifications.rs) | `notifications` | `insert_notification`, `list_notifications`, `mark_read`, `mark_all_read`, `clear_all`. Manages the in-app notification ledger, tracking crawl completions, scrape failures, and alerts. |
+
+Migration startup now refuses checksum mismatches instead of rewriting history;
+pending disk upgrades receive a consistent SQLite snapshot. See
+[database recovery](../../../plans/database-recovery.md). Both retention policies
+protect tracked jobs, favorites, and nonblank notes. Currency filters use bound
+parameters and require a known matching currency even if unknown pay is allowed.
