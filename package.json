@@ -13,7 +13,8 @@
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "gen:types": "cargo test --workspace export_bindings",
     "test:browser": "playwright test",
-    "test:native": "node scripts/native-smoke.mjs"
+    "test:native": "node scripts/native-smoke.mjs",
+    "test:native-startup": "node scripts/test-native-startup.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.67.1",

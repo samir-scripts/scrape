@@ -93,3 +93,6 @@ jobs:
         run: npm run test:browser
       - name: Isolated native IPC, sidecar and opener verification
         run: npm run test:native
+
+      - name: Actual Tauri development startup and historical upgrades
+        run: npm run test:native-startup

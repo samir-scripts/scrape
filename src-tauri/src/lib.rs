@@ -18,7 +18,7 @@ pub async fn bootstrap_database_and_services(
 }
 
 pub fn run() {
-    tauri::Builder::default()
+    let outcome = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
@@ -44,28 +44,38 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            let app_dir = services::native_smoke::directory().unwrap_or_else(|| {
-                app.path()
-                    .app_data_dir()
-                    .expect("Failed to resolve app data directory")
-            });
-
+            let app_dir = match services::native_smoke::directory()
+                .map(Ok)
+                .unwrap_or_else(|| app.path().app_data_dir())
+            {
+                Ok(directory) => directory,
+                Err(error) => {
+                    services::startup::failure(app, &error.to_string());
+                    return Ok(());
+                }
+            };
             let db_path = app_dir.join("scrape_data.db");
-            let (pool, runner) = tauri::async_runtime::block_on(async {
-                bootstrap_database_and_services(&db_path)
-                    .await
-                    .expect("Failed to initialize database and core services")
-            });
-
-            let scheduler = tauri::async_runtime::block_on(async {
-                services::scheduler::SchedulerService::init(
+            let (pool, runner) =
+                match tauri::async_runtime::block_on(bootstrap_database_and_services(&db_path)) {
+                    Ok(services) => services,
+                    Err(error) => {
+                        services::startup::failure(app, &error.to_string());
+                        return Ok(());
+                    }
+                };
+            let scheduler =
+                match tauri::async_runtime::block_on(services::scheduler::SchedulerService::init(
                     pool.clone(),
                     runner.clone(),
                     app.handle().clone(),
-                )
-                .await
-                .expect("Failed to initialize scheduler service")
-            });
+                )) {
+                    Ok(scheduler) => scheduler,
+                    Err(error) => {
+                        tauri::async_runtime::block_on(pool.close());
+                        services::startup::failure(app, &error.to_string());
+                        return Ok(());
+                    }
+                };
 
             app.manage(state::AppState {
                 db: pool.clone(),
@@ -95,8 +105,10 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            services::tray::setup_tray(app.handle(), &pool)
-                .expect("Failed to initialize system tray");
+            if let Err(error) = services::tray::setup_tray(app.handle(), &pool) {
+                services::startup::failure(app, &error.to_string());
+                return Ok(());
+            }
 
             // Sync autostart setting on app startup
             tauri::async_runtime::block_on(async {
@@ -172,8 +184,11 @@ pub fn run() {
             commands::notifications::install_app_update,
             commands::scrape::open_terminal_console,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .run(tauri::generate_context!());
+    if let Err(error) = outcome {
+        eprintln!("STARTUP_FAILED: {error}");
+        std::process::exit(1);
+    }
 }
 
 #[cfg(test)]
