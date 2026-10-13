@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 test("create a workflow through actual controls without an implicit scrape", async ({
   page,
 }) => {

@@ -190,7 +190,7 @@ git diff --exit-code src/bindings
 ```
 
 Browser checks exercise the explicitly labeled fictional demonstration, real DOM
-controls, both themes, contrast, keyboard focus and narrow/zoom-equivalent reflow.
+controls, both themes, contrast, keyboard focus narrow reflow and actual 200% browser zoom.
 Screenshot baselines target macOS Chromium; Linux CI runs interaction tests.
 The separate native harness exercises real Tauri IPC and the packaged sidecar,
 including cancellation, malformed output, timeout, partial-result recovery and

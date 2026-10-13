@@ -1,4 +1,5 @@
-import { test, expect, type Page, type Locator } from "@playwright/test";
+import { test, expect } from "./fixtures";
+import type { Page, Locator } from "@playwright/test";
 
 async function contrastFailures(page: Page) {
   return page.evaluate(() => {
