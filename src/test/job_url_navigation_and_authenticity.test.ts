@@ -114,8 +114,8 @@ describe("Job URL Navigation & Authenticity Engine", () => {
     });
   });
 
-  describe("Authentic Job IDs in Dev/Seed Workflow Generator", () => {
-    it("generates authentic job-boards.greenhouse.io URLs with verified IDs instead of dummy 1000 indices", () => {
+  describe("Explicit fictional demonstration fixtures", () => {
+    it("keeps fictional identity, destination, description and pay coherent", () => {
       const source: Source = {
         id: "src-cf",
         kind: "greenhouse",
@@ -140,48 +140,19 @@ describe("Job URL Navigation & Authenticity Engine", () => {
       expect(jobs.length).toBeGreaterThan(0);
 
       for (const job of jobs) {
-        // Must never generate dummy /jobs/1000 that redirects to cloudflare.com/careers
-        expect(job.url).not.toContain("/jobs/1000");
-        expect(job.url).not.toContain("/jobs/1001");
-        expect(job.url).not.toContain("/jobs/1002");
-        expect(job.url).not.toContain("/jobs/1003");
-
-        // Must point to job-boards.greenhouse.io or config base with real external id
-        expect(job.url).toContain("cloudflare");
-        expect(job.url).toContain(job.external_id!);
+        expect(job.company).toBe("Demo Company");
+        expect(job.external_id).toMatch(/^demo-\d+$/);
+        expect(job.url).toBe(`https://example.com/demo/jobs/${job.external_id}`);
+        expect(job.description_text).toContain("FICTIONAL DEMONSTRATION POSTING");
+        expect(job.description_text).toContain(job.title);
+        expect(job.description_text).toContain(job.salary_raw!);
+        expect(job.company_icon_url).toBeNull();
       }
-
-      // Verify specific active job IDs are present
-      const externalIds = jobs.map((j) => j.external_id);
-      expect(externalIds).toContain("8199958");
-      expect(externalIds).toContain("8245197");
-      expect(externalIds).toContain("8097321");
-      expect(externalIds).toContain("7742773");
-      expect(externalIds).toContain("8247492");
-
-      // Verify authentic title matches actual Greenhouse board for ID 8247492
-      const marketingJob = jobs.find((j) => j.external_id === "8247492");
-      expect(marketingJob).toBeDefined();
-      expect(marketingJob?.title).toBe("Technical Product Marketing Manager");
-      expect(marketingJob?.url).toBe(
-        "https://boards.greenhouse.io/cloudflare/jobs/8247492?gh_jid=8247492"
-      );
-      expect(marketingJob?.workplace_type).toBe("remote");
-
-      // Verify In-Office internship roles are classified as onsite (not hybrid or remote)
-      const austinIntern = jobs.find((j) => j.external_id === "8199958");
+      const austinIntern = jobs.find((j) => j.external_id === "demo-1");
       expect(austinIntern?.workplace_type).toBe("onsite");
+      expect(austinIntern?.salary_interval).toBe("hour");
       expect(austinIntern?.description_text).toContain("In-Office");
 
-      const lisbonIntern = jobs.find((j) => j.external_id === "8245197");
-      expect(lisbonIntern?.workplace_type).toBe("onsite");
-
-      const londonIntern = jobs.find((j) => j.external_id === "8245211");
-      expect(londonIntern?.workplace_type).toBe("onsite");
-
-      // Verify hybrid engineering role
-      const hybridEng = jobs.find((j) => j.external_id === "8187404");
-      expect(hybridEng?.workplace_type).toBe("hybrid");
     });
 
     it("renders IN-OFFICE tag on JobCard when workplace_type is onsite, never Remote", () => {
@@ -228,16 +199,16 @@ describe("Job URL Navigation & Authenticity Engine", () => {
       const externalIds = filteredJobs.map((j) => j.external_id);
 
       // 8247492 (Technical Product Marketing Manager) must be excluded
-      expect(externalIds).not.toContain("8247492");
+      expect(externalIds).not.toContain("demo-5");
       // 7695702 (Account Executive, FedCiv) doesn't have Marketing/Sales in title, but let's check titles:
       for (const job of filteredJobs) {
         expect(job.title.toLowerCase()).not.toContain("marketing");
         expect(job.title.toLowerCase()).not.toContain("sales");
       }
 
-      // Authentic engineering jobs are retained
-      expect(externalIds).toContain("8199958");
-      expect(externalIds).toContain("8245197");
+      // Matching fictional engineering jobs are retained
+      expect(externalIds).toContain("demo-1");
+      expect(externalIds).toContain("demo-2");
     });
   });
 });

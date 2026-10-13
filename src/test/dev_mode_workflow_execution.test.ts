@@ -54,11 +54,11 @@ describe("Dev-Mode Scrape Workflow Execution & Discovered Pipeline", () => {
     expect(titles).not.toContain("Account Executive, FedCiv");
 
     for (const job of discovered.items) {
-      expect(job.company).toBe("Cloudflare");
+      expect(job.company).toBe("Demo Company");
       expect(job.status).toBe("scraped");
       expect(job.source_id).toBe(SAMPLE_SWE_SOURCE.id);
       expect(job.role_type).toBe("internship");
-      expect(job.url).toContain("cloudflare");
+      expect(job.url).toContain("https://example.com/demo/jobs/demo-");
       expect(job.salary_min).toBeGreaterThan(0);
     }
 

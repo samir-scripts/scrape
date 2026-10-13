@@ -1,3 +1,4 @@
+import { isDemoMode } from "../../lib/runtime";
 import type { ReactNode } from "react";
 import { TopNav } from "./TopNav";
 import { SubNav } from "./SubNav";
@@ -21,6 +22,9 @@ export function Shell({
 }: ShellProps) {
   return (
     <div className="flex flex-col w-screen h-screen overflow-hidden bg-[var(--color-paper)] text-[var(--color-ink)] select-none">
+      {isDemoMode() && <div role="status" className="px-4 py-2 bg-[var(--color-lime)] text-[#1A1A1A] text-sm font-bold">
+        DEMONSTRATION · Fictional postings, simulated runs, browser-only storage.
+      </div>}
       <TopNav
         discoveredCount={discoveredCount}
         trackedCount={trackedCount}

@@ -141,3 +141,12 @@ npx tsc --noEmit
 # Compile production frontend bundle
 npm run build
 ```
+
+### Browser demonstration versus desktop execution
+
+Opening Vite in a browser shows a desktop-required screen. Choose the demonstration
+link (`?demo=1`) explicitly to explore fictional postings and simulated runs. A
+persistent banner identifies that mode. Demo storage uses its own versioned keys;
+previous browser fallback records are not loaded into it. Fixture IDs and URLs
+are not live-provider verification. Use the desktop application for real extraction
+and database-backed workflows.

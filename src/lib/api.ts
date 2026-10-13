@@ -1,3 +1,4 @@
+import { needsDesktop } from "./runtime";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { Job } from "../bindings/Job";
 import type { JobStatus } from "../bindings/JobStatus";
@@ -59,7 +60,7 @@ export const DEFAULT_SETTINGS: Settings = {
 let devSettings: Settings = (() => {
   try {
     if (typeof localStorage !== "undefined") {
-      const saved = localStorage.getItem("scrape:dev_settings");
+      const saved = localStorage.getItem("scrape:demo:v1:settings");
       if (saved) {
         const parsed = JSON.parse(saved) as Record<string, unknown>;
         const normalized: Record<string, unknown> = {};
@@ -115,7 +116,7 @@ export const SAMPLE_SWE_SOURCE: Source = {
 let devSources: Source[] = (() => {
   try {
     if (typeof localStorage !== "undefined") {
-      const saved = localStorage.getItem("scrape:dev_sources");
+      const saved = localStorage.getItem("scrape:demo:v1:sources");
       if (saved) return JSON.parse(saved);
     }
   } catch {}
@@ -125,7 +126,7 @@ let devSources: Source[] = (() => {
 function saveDevSources() {
   try {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("scrape:dev_sources", JSON.stringify(devSources));
+      localStorage.setItem("scrape:demo:v1:sources", JSON.stringify(devSources));
     }
   } catch {}
 }
@@ -133,7 +134,7 @@ function saveDevSources() {
 let devJobs: Job[] = (() => {
   try {
     if (typeof localStorage !== "undefined") {
-      const saved = localStorage.getItem("scrape:dev_jobs");
+      const saved = localStorage.getItem("scrape:demo:v1:jobs");
       if (saved) return JSON.parse(saved);
     }
   } catch {}
@@ -143,7 +144,7 @@ let devJobs: Job[] = (() => {
 function saveDevJobs() {
   try {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("scrape:dev_jobs", JSON.stringify(devJobs));
+      localStorage.setItem("scrape:demo:v1:jobs", JSON.stringify(devJobs));
     }
   } catch {}
 }
@@ -151,7 +152,7 @@ function saveDevJobs() {
 let devSourceRuns: ScrapeRun[] = (() => {
   try {
     if (typeof localStorage !== "undefined") {
-      const saved = localStorage.getItem("scrape:dev_runs");
+      const saved = localStorage.getItem("scrape:demo:v1:runs");
       if (saved) return JSON.parse(saved);
     }
   } catch {}
@@ -161,7 +162,7 @@ let devSourceRuns: ScrapeRun[] = (() => {
 function saveDevSourceRuns() {
   try {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("scrape:dev_runs", JSON.stringify(devSourceRuns));
+      localStorage.setItem("scrape:demo:v1:runs", JSON.stringify(devSourceRuns));
     }
   } catch {}
 }
@@ -169,7 +170,7 @@ function saveDevSourceRuns() {
 let devLogs: Record<string, ScrapeLogEntry[]> = (() => {
   try {
     if (typeof localStorage !== "undefined") {
-      const saved = localStorage.getItem("scrape:dev_logs");
+      const saved = localStorage.getItem("scrape:demo:v1:logs");
       if (saved) return JSON.parse(saved);
     }
   } catch {}
@@ -179,7 +180,7 @@ let devLogs: Record<string, ScrapeLogEntry[]> = (() => {
 function saveDevLogs() {
   try {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("scrape:dev_logs", JSON.stringify(devLogs));
+      localStorage.setItem("scrape:demo:v1:logs", JSON.stringify(devLogs));
     }
   } catch {}
 }
@@ -187,7 +188,7 @@ function saveDevLogs() {
 let devDeletedJobKeys: Set<string> = (() => {
   try {
     if (typeof localStorage !== "undefined") {
-      const saved = localStorage.getItem("scrape:dev_deleted_jobs");
+      const saved = localStorage.getItem("scrape:demo:v1:deleted_jobs");
       if (saved) return new Set(JSON.parse(saved));
     }
   } catch {}
@@ -197,7 +198,7 @@ let devDeletedJobKeys: Set<string> = (() => {
 function saveDevDeletedJobKeys() {
   try {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("scrape:dev_deleted_jobs", JSON.stringify([...devDeletedJobKeys]));
+      localStorage.setItem("scrape:demo:v1:deleted_jobs", JSON.stringify([...devDeletedJobKeys]));
     }
   } catch {}
 }
@@ -230,11 +231,12 @@ export function __seedDevJobs(jobs: Job[]) {
 export function generateScrapedJobsForSource(source: Source): Job[] {
   const now = new Date().toISOString();
   const sourceName = source.name || "Target Company";
-  const company =
+  const sourceCompany =
     sourceName.split(" — ")[0].split(" - ")[0].trim() ||
     source.identifier ||
     "Cloudflare";
-  const isCloudflare = company.toLowerCase().includes("cloudflare");
+  const isCloudflare = sourceCompany.toLowerCase().includes("cloudflare");
+  const company = "Demo Company";
 
   const rawSampleRoles = isCloudflare
     ? [
@@ -244,6 +246,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
           location: "Austin, TX",
           salary_min: 50,
           salary_max: 60,
+          salary_interval: "hour" as const,
           role_type: "internship" as const,
           workplace_type: "onsite" as const,
         },
@@ -253,6 +256,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
           location: "Lisbon, Portugal",
           salary_min: 50,
           salary_max: 60,
+          salary_interval: "hour" as const,
           role_type: "internship" as const,
           workplace_type: "onsite" as const,
         },
@@ -262,6 +266,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
           location: "London, UK",
           salary_min: 52,
           salary_max: 62,
+          salary_interval: "hour" as const,
           role_type: "internship" as const,
           workplace_type: "onsite" as const,
         },
@@ -271,16 +276,18 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
           location: "Austin, TX",
           salary_min: 55,
           salary_max: 65,
+          salary_interval: "hour" as const,
           role_type: "internship" as const,
           workplace_type: "hybrid" as const,
         },
-        // Real Greenhouse postings from Cloudflare that exercise policy exclusion:
+        // Fictional roles used to exercise policy exclusion:
         {
           external_id: "8247492",
           title: "Technical Product Marketing Manager",
           location: "Remote",
           salary_min: 140000,
           salary_max: 180000,
+          salary_interval: "year" as const,
           role_type: "full_time" as const,
           workplace_type: "remote" as const,
         },
@@ -290,6 +297,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
           location: "Washington DC, US",
           salary_min: 130000,
           salary_max: 170000,
+          salary_interval: "year" as const,
           role_type: "full_time" as const,
           workplace_type: "hybrid" as const,
         },
@@ -299,6 +307,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
           location: "San Francisco, CA",
           salary_min: 165000,
           salary_max: 215000,
+          salary_interval: "year" as const,
           role_type: "full_time" as const,
           workplace_type: "hybrid" as const,
         },
@@ -308,6 +317,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
           location: "Austin, TX",
           salary_min: 150000,
           salary_max: 190000,
+          salary_interval: "year" as const,
           role_type: "full_time" as const,
           workplace_type: "hybrid" as const,
         },
@@ -319,6 +329,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
           location: "San Francisco, CA",
           salary_min: 145000,
           salary_max: 185000,
+          salary_interval: "year" as const,
           role_type: ((source.filters as any)?.role_types?.[0] as any) || "full_time",
           workplace_type: "hybrid" as const,
         },
@@ -328,6 +339,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
           location: "Remote",
           salary_min: 155000,
           salary_max: 195000,
+          salary_interval: "year" as const,
           role_type: ((source.filters as any)?.role_types?.[0] as any) || "full_time",
           workplace_type: "remote" as const,
         },
@@ -337,6 +349,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
           location: "New York, NY",
           salary_min: 140000,
           salary_max: 175000,
+          salary_interval: "year" as const,
           role_type: ((source.filters as any)?.role_types?.[0] as any) || "full_time",
           workplace_type: "onsite" as const,
         },
@@ -346,32 +359,22 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
           location: "Remote",
           salary_min: 45,
           salary_max: 55,
+          salary_interval: "hour" as const,
           role_type: ((source.filters as any)?.role_types?.[0] as any) || "internship",
           workplace_type: "remote" as const,
         },
       ];
 
   const prefix = source.identifier || "src";
-  const companySlug = company.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-  const companyIconUrl = `https://www.google.com/s2/favicons?domain=${
-    companySlug.includes("cloudflare")
-      ? "cloudflare.com"
-      : companySlug.includes("stripe")
-      ? "stripe.com"
-      : `${companySlug}.com`
-  }&sz=64`;
+  const companyIconUrl = null;
 
   const candidates: Job[] = rawSampleRoles.map((role, idx) => {
-    const activeExternalId = (role as any).external_id || `${8097320 + idx}`;
+    const activeExternalId = `demo-${idx + 1}`;
     const jobId = `dev-job-${prefix}-${activeExternalId}`;
     const dedupeKey = `${prefix}:${activeExternalId}`;
     const externalId = activeExternalId;
-    const url =
-      typeof (source.config as any)?.url === "string" && (source.config as any).url.startsWith("http")
-        ? `${(source.config as any).url.replace(/\/$/, "")}/jobs/${activeExternalId}?gh_jid=${activeExternalId}`
-        : `https://job-boards.greenhouse.io/${prefix}/jobs/${activeExternalId}?gh_jid=${activeExternalId}`;
-
-    const isHourly = role.salary_min < 1000;
+    const url = `https://example.com/demo/jobs/${externalId}`;
+    const isHourly = role.salary_interval === "hour";
     const salaryRaw = isHourly
       ? `$${role.salary_min} - $${role.salary_max} / hr`
       : `$${role.salary_min.toLocaleString()} - $${role.salary_max.toLocaleString()}`;
@@ -387,7 +390,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
         ? "Fully Remote"
         : `Hybrid in ${role.location}`;
 
-    const description = `Position Overview:\nAs a ${role.title} at ${company}, you will work alongside our engineering teams to architect, deploy, and scale high-reliability systems and services. You will participate in architecture reviews, build telemetry monitoring, and write production-grade code.\n\nKey Responsibilities:\n- Collaborate with cross-functional teams to design, test, and ship resilient backend services.\n- Measure and optimize system performance, network latency, and availability.\n- Implement automated CI/CD pipelines and comprehensive integration testing.\n\nMinimum Qualifications:\n- Degree in Computer Science, Software Engineering, or equivalent practical experience.\n- Experience with one or more languages such as Rust, Go, Python, TypeScript, or C++.\n- Solid understanding of data structures, algorithms, and distributed systems fundamentals.\n\nCompensation & Benefits:\n- Competitive compensation (${salaryRaw}).\n- Workplace model: ${workplaceDesc}.\n- Mentorship from senior engineering staff and comprehensive learning stipends.`;
+    const description = `FICTIONAL DEMONSTRATION POSTING ${externalId}\n\nPosition Overview:\nAs a ${role.title} at ${company}, you will work alongside our engineering teams to architect, deploy, and scale high-reliability systems and services. You will participate in architecture reviews, build telemetry monitoring, and write production-grade code.\n\nKey Responsibilities:\n- Collaborate with cross-functional teams to design, test, and ship resilient backend services.\n- Measure and optimize system performance, network latency, and availability.\n- Implement automated CI/CD pipelines and comprehensive integration testing.\n\nMinimum Qualifications:\n- Degree in Computer Science, Software Engineering, or equivalent practical experience.\n- Experience with one or more languages such as Rust, Go, Python, TypeScript, or C++.\n- Solid understanding of data structures, algorithms, and distributed systems fundamentals.\n\nCompensation & Benefits:\n- Competitive compensation (${salaryRaw}).\n- Workplace model: ${workplaceDesc}.\n- Mentorship from senior engineering staff and comprehensive learning stipends.`;
 
     return {
       id: jobId,
@@ -483,7 +486,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
   });
 }
 
-export const api = {
+const apiImplementation = {
   // Jobs
   listJobs: (filter?: ApiJobFilter): Promise<Page<Job>> => {
     if (!isTauri()) {
@@ -656,7 +659,7 @@ export const api = {
       (devSettings as unknown as Record<string, unknown>)[key] = value;
       try {
         if (typeof localStorage !== "undefined") {
-          localStorage.setItem("scrape:dev_settings", JSON.stringify(devSettings));
+          localStorage.setItem("scrape:demo:v1:settings", JSON.stringify(devSettings));
         }
       } catch {}
       return Promise.resolve({ ...devSettings });
@@ -1272,3 +1275,17 @@ export const api = {
     return invoke<void>("open_terminal_console");
   },
 };
+
+
+// Browser execution is an explicit demo, never a silent production fallback.
+export const api: typeof apiImplementation = new Proxy(apiImplementation, {
+  get(target, key: keyof typeof apiImplementation) {
+    const method = target[key];
+    return (...args: unknown[]) => {
+      if (needsDesktop()) return Promise.reject(new Error(
+        "This action requires the desktop application. Open ?demo=1 for fictional demonstration data."
+      ));
+      return Reflect.apply(method, target, args);
+    };
+  },
+});
