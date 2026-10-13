@@ -25,3 +25,26 @@ impl Drop for ChildGuard {
         let _ = self.kill();
     }
 }
+
+pub fn worker_command(
+    app: &tauri::AppHandle,
+) -> crate::error::Result<tauri_plugin_shell::process::Command> {
+    use tauri_plugin_shell::ShellExt;
+    if let Some(directory) = super::native_smoke::directory() {
+        let fixture = directory.join("worker-fixture");
+        if fixture.is_file() {
+            return Ok(app.shell().command(fixture));
+        }
+    }
+    app.shell().sidecar("scrape-worker").map_err(|error| {
+        crate::error::AppError::Internal(format!("Failed to find sidecar: {error}"))
+    })
+}
+
+pub fn execution_seconds(default: u64) -> u64 {
+    super::native_smoke::directory()
+        .and_then(|directory| std::fs::read_to_string(directory.join("timeout-seconds")).ok())
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .filter(|value| (1..=5).contains(value))
+        .unwrap_or(default)
+}

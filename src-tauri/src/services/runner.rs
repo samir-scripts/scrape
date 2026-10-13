@@ -14,7 +14,6 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_shell::process::CommandEvent;
-use tauri_plugin_shell::ShellExt;
 use tokio::time::{timeout_at, Instant};
 
 pub struct RunLockGuard {
@@ -160,6 +159,9 @@ impl ScrapeRunner {
                         || s.cadence == scrape_core::SourceCadence::Global)
             })
             .collect();
+        for source in &sources {
+            super::workflow::validated_stored_config(source.kind, &source.config)?;
+        }
         let globals = load_global_filters(&self.pool).await?;
         let filters_by_source = sources
             .iter()
@@ -179,7 +181,7 @@ impl ScrapeRunner {
                     .config
                     .get("__company")
                     .and_then(|v| v.as_str())
-                    .unwrap_or(&s.name)
+                    .unwrap_or("Unknown company")
                     .to_owned(),
                 identifier: s.identifier,
                 config: s.config,
@@ -369,6 +371,7 @@ impl ScrapeRunner {
         let _guard = self.try_acquire_lock()?;
 
         let source = SourcesRepo::get(&self.pool, source_id).await?;
+        super::workflow::validated_stored_config(source.kind, &source.config)?;
         let filters =
             resolve_worker_filters(&source.filters, load_global_filters(&self.pool).await?)?;
         let run = RunsRepo::start_with_source(&self.pool, trigger, Some(source_id)).await?;
@@ -400,7 +403,7 @@ impl ScrapeRunner {
                     .config
                     .get("__company")
                     .and_then(|v| v.as_str())
-                    .unwrap_or(&source.name)
+                    .unwrap_or("Unknown company")
                     .to_owned(),
                 identifier: source.identifier.clone(),
                 config: source.config.clone(),
@@ -565,10 +568,7 @@ impl ScrapeRunner {
         RunsRepo::record_config(&self.pool, run_id, &config).await?;
         let mut counts = RunCounts::default();
         let mut invalid = 0i64;
-        let (mut rx, child) = app
-            .shell()
-            .sidecar("scrape-worker")
-            .map_err(|e| AppError::Internal(format!("Failed to find sidecar: {}", e)))?
+        let (mut rx, child) = crate::services::process::worker_command(app)?
             .args(["--stdin"])
             .spawn()
             .map_err(|e| AppError::Internal(format!("Failed to spawn sidecar: {}", e)))?;
@@ -611,8 +611,10 @@ impl ScrapeRunner {
         let mut sidecar_err: Option<String> = None;
 
         let mut saw_done = false;
-        let deadline =
-            Instant::now() + Duration::from_secs(if config.sources.len() == 1 { 180 } else { 600 });
+        let deadline = Instant::now()
+            + Duration::from_secs(super::process::execution_seconds(
+                if config.sources.len() == 1 { 180 } else { 600 },
+            ));
         loop {
             let received = tokio::select! {
                 event = timeout_at(deadline, rx.recv()) => Some(event),
@@ -649,7 +651,14 @@ impl ScrapeRunner {
             };
             match event {
                 CommandEvent::Stdout(bytes) => {
-                    let text = String::from_utf8_lossy(&bytes);
+                    let text = match std::str::from_utf8(&bytes) {
+                        Ok(text) => text,
+                        Err(error) => {
+                            sidecar_err =
+                                Some(format!("Worker output is not valid UTF-8: {error}"));
+                            continue;
+                        }
+                    };
                     for line in text.lines() {
                         let trimmed = line.trim();
                         if trimmed.is_empty() {
@@ -666,6 +675,18 @@ impl ScrapeRunner {
                                 continue;
                             }
                         };
+                        if let WorkerEvent::Job { source_id, .. }
+                        | WorkerEvent::Progress { source_id, .. }
+                        | WorkerEvent::Error { source_id, .. } = &worker_event
+                        {
+                            if !config.sources.iter().any(|source| &source.id == source_id) {
+                                sidecar_err = Some(format!(
+                                    "Worker emitted an unknown workflow ID: {source_id}"
+                                ));
+                                counts.failed += 1;
+                                continue;
+                            }
+                        }
                         {
                             match worker_event {
                                 event @ WorkerEvent::Job { .. } => {
@@ -822,7 +843,7 @@ impl ScrapeRunner {
 
         // Terminal failures override earlier progress; partial rows remain recoverable.
         if let Some(message) = worker_failure(termination_code, saw_done, sidecar_err.as_deref()) {
-            counts.failed += 1;
+            counts.failed = counts.failed.max(1);
             for source in &config.sources {
                 source_statuses.insert(source.id.clone(), ("error".into(), Some(message.clone())));
             }
@@ -1018,7 +1039,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_single_source_workflow_execution_logs_pipeline() {
+    async fn source_run_log_records_remain_queryable_by_source() {
         let pool = crate::db::init_memory_db().await.unwrap();
 
         // 1. Create a test source
@@ -1124,7 +1145,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_failed_source_workflow_execution_logs_pipeline() {
+    async fn failed_source_run_log_records_preserve_errors() {
         let pool = crate::db::init_memory_db().await.unwrap();
 
         let source = crate::db::sources::SourcesRepo::create(
@@ -1133,7 +1154,9 @@ mod tests {
                 kind: scrape_core::SourceKind::Selector,
                 name: "Broken Careers".to_string(),
                 identifier: "https://invalid.example.com".to_string(),
-                config: None,
+                config: Some(
+                    serde_json::json!({"item":".job-item","title":".job-title","link":"a"}),
+                ),
                 enabled: Some(true),
                 cadence: Some(scrape_core::SourceCadence::Manual),
                 cadence_cron: None,
@@ -1197,7 +1220,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_scraped_jobs_creation_in_discovered_pipeline() {
+    async fn repository_ingestion_preserves_discovery_and_user_state() {
         use crate::db::jobs::{JobFilter, JobsRepo, ScrapedJob};
         use crate::db::sources::{CreateSourceInput, SourcesRepo};
         use scrape_core::{JobStatus, WorkplaceType};

@@ -31,11 +31,24 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .on_page_load(|webview, payload| {
+            if payload.event() == tauri::webview::PageLoadEvent::Finished {
+                if let Some(directory) = services::native_smoke::directory() {
+                    let script = std::fs::read_to_string(directory.join("smoke.js"))
+                        .expect("Read native smoke script");
+                    if let Err(error) = webview.eval(&script) {
+                        eprintln!("Native smoke injection failed: {error}");
+                        webview.app_handle().exit(1);
+                    }
+                }
+            }
+        })
         .setup(|app| {
-            let app_dir = app
-                .path()
-                .app_data_dir()
-                .expect("Failed to resolve app data directory");
+            let app_dir = services::native_smoke::directory().unwrap_or_else(|| {
+                app.path()
+                    .app_data_dir()
+                    .expect("Failed to resolve app data directory")
+            });
 
             let db_path = app_dir.join("scrape_data.db");
             let (pool, runner) = tauri::async_runtime::block_on(async {
@@ -59,6 +72,10 @@ pub fn run() {
                 runner,
                 scheduler,
             });
+
+            if services::native_smoke::install(app) {
+                return Ok(());
+            }
 
             // Prevent app quit on main window close; hide window instead
             if let Some(window) = app.get_webview_window("main") {

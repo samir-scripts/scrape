@@ -14,7 +14,6 @@ use std::sync::{
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_shell::process::CommandEvent;
-use tauri_plugin_shell::ShellExt;
 use ts_rs::TS;
 
 #[tauri::command]
@@ -73,10 +72,7 @@ pub async fn set_scheduler_paused(state: State<'_, AppState>, paused: bool) -> R
 
 #[tauri::command]
 pub async fn detect_source(app: AppHandle, url: String) -> Result<serde_json::Value> {
-    let output = app
-        .shell()
-        .sidecar("scrape-worker")
-        .map_err(|e| AppError::Internal(format!("Failed to find sidecar: {}", e)))?
+    let output = crate::services::process::worker_command(&app)?
         .args(["--detect", &url])
         .output()
         .await
@@ -155,10 +151,7 @@ async fn execute_dry_run_worker(
         limits: WorkerLimits::default(),
     };
 
-    let (mut rx, child) = app
-        .shell()
-        .sidecar("scrape-worker")
-        .map_err(|e| AppError::Internal(format!("Failed to find sidecar: {}", e)))?
+    let (mut rx, child) = crate::services::process::worker_command(app)?
         .args(if full_preview {
             vec!["--stdin"]
         } else {
@@ -181,7 +174,8 @@ async fn execute_dry_run_worker(
     let mut done = false;
     let mut exit = None;
     let mut failure = None;
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(60);
+    let deadline = tokio::time::Instant::now()
+        + std::time::Duration::from_secs(crate::services::process::execution_seconds(60));
     loop {
         if cancel
             .as_ref()
@@ -203,7 +197,13 @@ async fn execute_dry_run_worker(
         };
         match event {
             CommandEvent::Stdout(bytes) => {
-                let text = String::from_utf8_lossy(&bytes);
+                let text = match std::str::from_utf8(&bytes) {
+                    Ok(text) => text,
+                    Err(error) => {
+                        failure = Some(format!("Worker output is not valid UTF-8: {error}"));
+                        continue;
+                    }
+                };
                 for line in text.lines().filter(|line| !line.trim().is_empty()) {
                     if done {
                         failure = Some("Worker emitted data after completion".into());
@@ -325,6 +325,14 @@ pub async fn preview_workflow(
     spec: serde_json::Value,
     request_id: String,
 ) -> Result<WorkflowPreview> {
+    let _guard = state.runner.try_acquire_lock()?;
+    let cancel = Arc::new(AtomicBool::new(false));
+    PREVIEW_CANCEL
+        .lock()
+        .unwrap()
+        .insert(request_id.clone(), cancel.clone());
+    let _registration = PreviewRegistration(request_id);
+
     let timezone: String = SettingsRepo::get_value(&state.db, "system.timezone")
         .await?
         .unwrap_or_else(|| "UTC".into());
@@ -334,13 +342,6 @@ pub async fn preview_workflow(
         source.filters.as_ref().unwrap_or(&serde_json::Value::Null),
         crate::services::runner::load_global_filters(&state.db).await?,
     )?;
-    let _guard = state.runner.try_acquire_lock()?;
-    let cancel = Arc::new(AtomicBool::new(false));
-    PREVIEW_CANCEL
-        .lock()
-        .unwrap()
-        .insert(request_id.clone(), cancel.clone());
-    let _registration = PreviewRegistration(request_id);
 
     let events = execute_dry_run_worker(
         &app,
@@ -351,7 +352,7 @@ pub async fn preview_workflow(
                 .metadata
                 .company
                 .clone()
-                .unwrap_or_else(|| source.name.clone()),
+                .unwrap_or_else(|| "Unknown company".into()),
             identifier: source.identifier.clone(),
             config: source.config.clone().unwrap_or(serde_json::Value::Null),
         },
