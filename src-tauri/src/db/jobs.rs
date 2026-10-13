@@ -15,6 +15,10 @@ use uuid::Uuid;
 pub struct Job {
     pub id: String,
     pub dedupe_key: String,
+    #[ts(optional)]
+    pub posting_identity: Option<String>,
+    #[ts(optional)]
+    pub removed_at: Option<String>,
     pub source_id: Option<String>,
     pub external_id: Option<String>,
     pub title: String,
@@ -214,7 +218,7 @@ impl JobsRepo {
     pub async fn get(pool: &SqlitePool, id: &str) -> Result<Job> {
         let r = sqlx::query(
             r#"
-            SELECT id, dedupe_key, source_id, external_id, title, company,
+            SELECT id, dedupe_key, posting_identity, removed_at, source_id, external_id, title, company,
                    role_type, location, url, date_posted, date_added,
                    last_seen_at, status, status_changed_at, notes,
                    salary_min, salary_max, salary_currency, salary_interval,
@@ -382,6 +386,8 @@ impl JobsRepo {
         Ok(Job {
             id: r.get("id"),
             dedupe_key: r.get("dedupe_key"),
+            posting_identity: r.get("posting_identity"),
+            removed_at: r.get("removed_at"),
             source_id: r.get("source_id"),
             external_id: r.get("external_id"),
             title: r.get("title"),
@@ -427,7 +433,7 @@ impl JobsRepo {
         let limit = filter.limit.unwrap_or(50).clamp(1, 200);
         let offset = filter.offset.unwrap_or(0).max(0);
 
-        let mut conditions = Vec::new();
+        let mut conditions = vec!["removed_at IS NULL".to_string()];
 
         // Statuses
         if let Some(statuses) = &filter.statuses {
@@ -748,7 +754,7 @@ impl JobsRepo {
         // Query rows
         let select_sql = format!(
             r#"
-            SELECT id, dedupe_key, source_id, external_id, title, company,
+            SELECT id, dedupe_key, posting_identity, removed_at, source_id, external_id, title, company,
                    role_type, location, url, date_posted, date_added,
                    last_seen_at, status, status_changed_at, notes,
                    salary_min, salary_max, salary_currency, salary_interval,
@@ -952,38 +958,12 @@ impl JobsRepo {
         Self::get(pool, id).await
     }
 
+    /// Compatibility entry point: ordinary removal does not block discovery.
     pub async fn delete(pool: &SqlitePool, id: &str) -> Result<bool> {
-        use sqlx::Row;
-        let mut tx = pool.begin().await?;
-
-        let row = sqlx::query("SELECT dedupe_key FROM jobs WHERE id = ?")
-            .bind(id)
-            .fetch_optional(&mut *tx)
-            .await?;
-
-        if let Some(r) = row {
-            let dedupe_key: String = r.get("dedupe_key");
-            let now = now_iso();
-
-            // 1. Tombstone dedupe_key so subsequent scrapes never re-insert it
-            sqlx::query(
-                "INSERT OR REPLACE INTO deleted_jobs (dedupe_key, deleted_at) VALUES (?1, ?2)",
-            )
-            .bind(&dedupe_key)
-            .bind(&now)
-            .execute(&mut *tx)
-            .await?;
-
-            // 2. Delete job (cascades to job_status_events and job_locations)
-            sqlx::query("DELETE FROM jobs WHERE id = ?")
-                .bind(id)
-                .execute(&mut *tx)
-                .await?;
-
-            tx.commit().await?;
-            Ok(true)
-        } else {
-            Ok(false)
+        match super::postings::remove(pool, id, false).await {
+            Ok(result) => Ok(result.copies > 0),
+            Err(AppError::NotFound(_)) => Ok(false),
+            Err(error) => Err(error),
         }
     }
 
@@ -1009,6 +989,7 @@ impl JobsRepo {
         let query_str = r#"
             DELETE FROM jobs
             WHERE source_id = ?1
+              AND removed_at IS NULL
               AND status IN ('scraped', 'viewed', 'ignored')
               AND favorited = 0
               AND (notes IS NULL OR trim(notes, char(9) || char(10) || char(13) || ' ') = '')
@@ -1085,17 +1066,22 @@ impl JobsRepo {
 
         let mut tx = pool.begin().await?;
 
+        sqlx::query("UPDATE jobs SET removed_at = removed_at WHERE 0")
+            .execute(&mut *tx)
+            .await?;
         for job in batch {
             stats.total += 1;
 
-            // Check if posting has been deleted (tombstoned) by user
-            let is_deleted: Option<String> =
-                sqlx::query_scalar("SELECT dedupe_key FROM deleted_jobs WHERE dedupe_key = ?")
-                    .bind(&job.dedupe_key)
-                    .fetch_optional(&mut *tx)
-                    .await?;
-
-            if is_deleted.is_some() {
+            let identity = super::postings::identity_in_transaction(
+                &mut tx,
+                job.source_id.as_deref(),
+                job.external_id.as_deref(),
+                &job.url,
+            )
+            .await?;
+            let blocked: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM blocked_postings WHERE identity = ? OR legacy_key = ?)")
+                .bind(&identity).bind(&job.dedupe_key).fetch_one(&mut *tx).await?;
+            if blocked {
                 continue;
             }
 
@@ -1358,6 +1344,13 @@ impl JobsRepo {
                     }
                 }
             }
+            sqlx::query(
+                "UPDATE jobs SET posting_identity = ?, removed_at = NULL, source_name_snapshot = COALESCE(source_name_snapshot, (SELECT name FROM sources WHERE id = jobs.source_id)) WHERE dedupe_key = ?",
+            )
+            .bind(&identity)
+            .bind(&job.dedupe_key)
+            .execute(&mut *tx)
+            .await?;
         }
 
         tx.commit().await?;
@@ -2568,12 +2561,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_job_and_tombstone_prevention() {
+    async fn removal_rediscovery_and_explicit_blocking() {
         use scrape_core::RoleType;
 
         let pool = init_memory_db().await.unwrap();
 
-        let scraped = vec![ScrapedJob {
+        let mut scraped = vec![ScrapedJob {
             source_id: None,
             external_id: Some("99999".into()),
             dedupe_key: "gh:testco:99999".into(),
@@ -2607,6 +2600,9 @@ mod tests {
             company_icon_url: None,
         }];
 
+        sqlx::query("INSERT INTO sources (id, kind, name, identifier, created_at) VALUES ('original-workflow', 'greenhouse', 'TestCo', 'testco', '2026-01-01')").execute(&pool).await.unwrap();
+        scraped[0].source_id = Some("original-workflow".into());
+        scraped[0].dedupe_key = "original-workflow:99999".into();
         // 1. Initial upsert
         let stats = JobsRepo::upsert_scraped(&pool, &scraped).await.unwrap();
         assert_eq!(stats.inserted, 1);
@@ -2615,36 +2611,61 @@ mod tests {
         assert_eq!(jobs.items.len(), 1);
         let job_id = &jobs.items[0].id;
 
-        // 2. Delete job
-        let deleted = JobsRepo::delete(&pool, job_id).await.unwrap();
-        assert!(deleted);
-
-        // 3. Verify job is gone
-        assert!(JobsRepo::get(&pool, job_id).await.is_err());
-
-        // 4. Verify tombstone exists in deleted_jobs table
-        let tombstone: Option<String> =
-            sqlx::query_scalar("SELECT dedupe_key FROM deleted_jobs WHERE dedupe_key = ?")
-                .bind("gh:testco:99999")
-                .fetch_optional(&pool)
-                .await
-                .unwrap();
-        assert_eq!(tombstone, Some("gh:testco:99999".into()));
-
-        // 5. Subsequent scrape with identical dedupe_key must be skipped
-        let stats2 = JobsRepo::upsert_scraped(&pool, &scraped).await.unwrap();
-        assert_eq!(stats2.inserted, 0);
-        assert_eq!(stats2.updated, 0);
-
-        let jobs_after = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+        // Ordinary removal retains saved state and permits later ingestion.
+        let removed = super::super::postings::remove(&pool, job_id, false)
+            .await
+            .unwrap();
+        assert_eq!(removed.copies, 1);
+        assert!(JobsRepo::get(&pool, job_id)
+            .await
+            .unwrap()
+            .removed_at
+            .is_some());
         assert_eq!(
-            jobs_after.items.len(),
-            0,
-            "Deleted job must not be resurrected"
+            JobsRepo::list(&pool, JobFilter::default())
+                .await
+                .unwrap()
+                .total,
+            0
         );
-
-        // 6. Non-existent job deletion returns false
-        let deleted_again = JobsRepo::delete(&pool, "nonexistent-id").await.unwrap();
-        assert!(!deleted_again);
+        let rediscovered = JobsRepo::upsert_scraped(&pool, &scraped).await.unwrap();
+        assert_eq!(rediscovered.updated, 1);
+        assert!(JobsRepo::get(&pool, job_id)
+            .await
+            .unwrap()
+            .removed_at
+            .is_none());
+        // Explicit blocking suppresses in-flight/later discovery until restoration.
+        super::super::postings::remove(&pool, job_id, true)
+            .await
+            .unwrap();
+        let blocked = JobsRepo::upsert_scraped(&pool, &scraped).await.unwrap();
+        assert_eq!(blocked.updated + blocked.inserted, 0);
+        // Recreating a workflow and changing provider destination must not bypass the block.
+        sqlx::query("DELETE FROM sources WHERE id='original-workflow'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO sources (id, kind, name, identifier, created_at) VALUES ('recreated-workflow', 'greenhouse', 'TestCo', 'testco', '2026-01-01')").execute(&pool).await.unwrap();
+        scraped[0].source_id = Some("recreated-workflow".into());
+        scraped[0].dedupe_key = "recreated-workflow:99999".into();
+        scraped[0].url = "https://careers.example.com/?gh_jid=99999".into();
+        let recreated = JobsRepo::upsert_scraped(&pool, &scraped).await.unwrap();
+        assert_eq!(recreated.updated + recreated.inserted, 0);
+        super::super::postings::restore(&pool, &removed.identity)
+            .await
+            .unwrap();
+        assert!(JobsRepo::get(&pool, job_id)
+            .await
+            .unwrap()
+            .removed_at
+            .is_none());
+        assert_eq!(
+            JobsRepo::get_status_events(&pool, job_id)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
     }
 }

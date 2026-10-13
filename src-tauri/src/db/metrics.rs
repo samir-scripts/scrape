@@ -92,12 +92,12 @@ impl MetricsRepo {
         let week_starts_on_monday = settings.system_week_start.to_lowercase() == "monday";
 
         // 1. Totals
-        let scraped: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM jobs")
+        let scraped: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM jobs WHERE removed_at IS NULL")
             .fetch_one(pool)
             .await?;
 
         let applied: i64 = sqlx::query_scalar(
-            "SELECT COUNT(DISTINCT id) FROM jobs
+            "SELECT COUNT(DISTINCT id) FROM (SELECT * FROM jobs WHERE removed_at IS NULL) jobs
              WHERE status IN ('applied', 'interviewing', 'offer', 'rejected')
                 OR id IN (SELECT job_id FROM job_status_events WHERE to_status = 'applied')",
         )
@@ -105,7 +105,7 @@ impl MetricsRepo {
         .await?;
 
         let interviewing: i64 = sqlx::query_scalar(
-            "SELECT COUNT(DISTINCT id) FROM jobs
+            "SELECT COUNT(DISTINCT id) FROM (SELECT * FROM jobs WHERE removed_at IS NULL) jobs
              WHERE status IN ('interviewing', 'offer')
                 OR id IN (SELECT job_id FROM job_status_events WHERE to_status = 'interviewing')",
         )
@@ -113,7 +113,7 @@ impl MetricsRepo {
         .await?;
 
         let offers: i64 = sqlx::query_scalar(
-            "SELECT COUNT(DISTINCT id) FROM jobs
+            "SELECT COUNT(DISTINCT id) FROM (SELECT * FROM jobs WHERE removed_at IS NULL) jobs
              WHERE status = 'offer'
                 OR id IN (SELECT job_id FROM job_status_events WHERE to_status = 'offer')",
         )
@@ -121,7 +121,7 @@ impl MetricsRepo {
         .await?;
 
         let responded: i64 = sqlx::query_scalar(
-            "SELECT COUNT(DISTINCT id) FROM jobs
+            "SELECT COUNT(DISTINCT id) FROM (SELECT * FROM jobs WHERE removed_at IS NULL) jobs
              WHERE status IN ('interviewing', 'offer')
                 OR id IN (SELECT job_id FROM job_status_events WHERE to_status IN ('interviewing', 'offer'))"
         )
@@ -134,14 +134,16 @@ impl MetricsRepo {
             0.0
         };
 
-        let favorited: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM jobs WHERE favorited = 1")
-            .fetch_one(pool)
-            .await
-            .unwrap_or(0);
+        let favorited: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM jobs WHERE removed_at IS NULL AND favorited = 1",
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
 
         // 2. Salary calculations
         let salary_rows: Vec<(Option<i64>, Option<i64>)> = sqlx::query_as(
-            "SELECT salary_min, salary_max FROM jobs
+            "SELECT salary_min, salary_max FROM (SELECT * FROM jobs WHERE removed_at IS NULL) jobs
              WHERE salary_min IS NOT NULL OR salary_max IS NOT NULL",
         )
         .fetch_all(pool)
@@ -214,7 +216,7 @@ impl MetricsRepo {
         // 3. By Role Type (jobs ever applied)
         let role_rows: Vec<(String, i64)> = sqlx::query_as(
             "SELECT role_type, COUNT(*) as count
-             FROM jobs
+             FROM (SELECT * FROM jobs WHERE removed_at IS NULL) jobs
              WHERE status IN ('applied', 'interviewing', 'offer', 'rejected')
                 OR id IN (SELECT job_id FROM job_status_events WHERE to_status = 'applied')
              GROUP BY role_type",
@@ -255,7 +257,7 @@ impl MetricsRepo {
                 status_changed_at,
                 date_added
              ) as applied_at
-             FROM jobs
+             FROM (SELECT * FROM jobs WHERE removed_at IS NULL) jobs
              WHERE status IN ('applied', 'interviewing', 'offer', 'rejected')
                 OR id IN (SELECT job_id FROM job_status_events WHERE to_status = 'applied')"
         )

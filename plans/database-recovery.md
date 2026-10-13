@@ -36,3 +36,12 @@ its follow-up 0007 remains separate. This implementation does not rewrite either
 Migration 0011 converts legacy retention policy `all` to `untracked_only`.
 Both accepted runtime policy names now preserve applied/interviewing/offer/rejected
 jobs, favorites, and nonblank notes. Retention does not touch tombstones.
+
+Migration 0012 adds persistent posting identities, soft removal, block metadata,
+and a mapping for every historical suppression key. Backfill uses the shared Rust
+identity implementation. Unresolved keys remain blocked as “Legacy posting” with
+unknown destination/details; they are never dropped. Unblocking clears their
+historical keys as well as the new identity block so startup cannot recreate them.
+Soft removal retains notes, favorites, status events and source-name snapshots.
+Automatic retention excludes removed records. Restore clears suppression and
+restores saved copies atomically; ordinary removal permits later rediscovery.

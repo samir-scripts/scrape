@@ -18,3 +18,4 @@ ts-rs.workspace = true
 regex.workspace = true
 sqlx = { workspace = true, optional = true }
 
+url = "2"

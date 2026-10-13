@@ -6,6 +6,8 @@
 
 pub mod enrich;
 pub mod filter;
+pub mod identity;
+pub use identity::PostingIdentity;
 pub mod protocol;
 mod role;
 mod types;

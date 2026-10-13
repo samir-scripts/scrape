@@ -4125,6 +4125,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "ts-rs",
+ "url",
 ]
 
 [[package]]

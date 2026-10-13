@@ -138,3 +138,56 @@ pub async fn delete_job(app: AppHandle, state: State<'_, AppState>, id: String) 
     }
     Ok(deleted)
 }
+
+#[tauri::command]
+pub async fn remove_job(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    block: bool,
+) -> Result<crate::db::postings::RemovalResult> {
+    let result = crate::db::postings::remove(&state.db, &id, block).await?;
+    let _ = app.emit("jobs://changed", ());
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn restore_posting(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    identity: String,
+) -> Result<()> {
+    crate::db::postings::restore(&state.db, &identity).await?;
+    let _ = app.emit("jobs://changed", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_posting_blocked(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    identity: String,
+    blocked: bool,
+) -> Result<()> {
+    crate::db::postings::set_blocked(&state.db, &identity, blocked).await?;
+    let _ = app.emit("jobs://changed", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn list_removed_postings(
+    state: State<'_, AppState>,
+    search: String,
+    view: String,
+    offset: i64,
+    limit: i64,
+) -> Result<Page<crate::db::postings::RemovedPosting>> {
+    crate::db::postings::list(&state.db, &search, &view, offset, limit).await
+}
+
+#[tauri::command]
+pub async fn posting_saved_copies(state: State<'_, AppState>, id: String) -> Result<i64> {
+    crate::db::postings::backfill(&state.db).await?;
+    Ok(sqlx::query_scalar("SELECT count(*) FROM jobs WHERE removed_at IS NULL AND posting_identity = (SELECT posting_identity FROM jobs WHERE id = ?)")
+        .bind(id).fetch_one(&state.db).await?)
+}
