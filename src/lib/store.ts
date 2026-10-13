@@ -13,7 +13,8 @@ export type ScraperCategory =
 
 export type SettingsCategory =
   | "appearance"
-  | "system";
+  | "system"
+  | "removed";
 
 export interface UndoItem {
   jobId: string;

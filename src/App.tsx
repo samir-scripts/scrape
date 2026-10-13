@@ -1,3 +1,4 @@
+import { notifyError, useToastStore } from "./lib/toast";
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -240,58 +241,33 @@ export default function App() {
     },
   });
 
-  // 6b. Delete job mutation with optimistic updates
+  const [jobPendingDelete, setJobPendingDelete] = useState<Job | null>(null);
+  const { data: removalCopies } = useQuery({
+    queryKey: ["removal_copies", jobPendingDelete?.id],
+    queryFn: () => api.postingSavedCopies(jobPendingDelete!.id),
+    enabled: !!jobPendingDelete,
+  });
   const deleteJobMutation = useMutation({
-    mutationFn: async (jobId: string) => {
-      return api.deleteJob(jobId);
+    mutationFn: ({ id, block }: { id: string; block: boolean }) => api.removeJob(id, block),
+    onSuccess: (result) => {
+      setJobPendingDelete(null);
+      useToastStore.getState().addToast({ type: "success", message: `${result.copies} saved ${result.copies === 1 ? "copy" : "copies"} removed.`, duration: 10000,
+        action: { label: "Undo", run: () => { api.restorePosting(result.identity).then(() => {
+          queryClient.invalidateQueries({ queryKey: ["jobs"] });
+          queryClient.invalidateQueries({ queryKey: ["metrics"] });
+          queryClient.invalidateQueries({ queryKey: ["removed_postings"] });
+        }).catch((error) => notifyError(String(error), "RESTORE FAILED")); } } });
     },
-    onMutate: async (jobId: string) => {
-      await queryClient.cancelQueries({ queryKey: ["jobs"] });
-      const prevData = queryClient.getQueryData<Page<Job>>(["jobs"]);
-      if (prevData) {
-        queryClient.setQueryData<Page<Job>>(["jobs"], {
-          ...prevData,
-          items: prevData.items.filter((j) => j.id !== jobId),
-          total:
-            typeof prevData.total === "bigint"
-              ? (prevData.total > 0n ? prevData.total - 1n : 0n)
-              : BigInt(Math.max(0, Number(prevData.total) - 1)),
-        });
-      }
-      return { prevData };
-    },
-    onError: (_err, _jobId, context) => {
-      if (context?.prevData) {
-        queryClient.setQueryData(["jobs"], context.prevData);
-      }
-    },
+    onError: (error) => notifyError(String(error), "REMOVAL FAILED"),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
       queryClient.invalidateQueries({ queryKey: ["metrics"] });
+      queryClient.invalidateQueries({ queryKey: ["removed_postings"] });
     },
   });
-
-  const [jobPendingDelete, setJobPendingDelete] = useState<Job | null>(null);
-
-  const handleRequestDelete = (job: Job) => {
-    if (settings?.app_confirm_job_deletion ?? true) {
-      setJobPendingDelete(job);
-    } else {
-      deleteJobMutation.mutate(job.id);
-    }
-  };
-
-  const handleConfirmDelete = (dontAskAgain: boolean) => {
-    if (!jobPendingDelete) return;
-    const targetId = jobPendingDelete.id;
-    if (dontAskAgain) {
-      updateSettingMutation.mutate({
-        key: "app.confirm_job_deletion",
-        value: false,
-      });
-    }
-    deleteJobMutation.mutate(targetId);
-    setJobPendingDelete(null);
+  const handleRequestDelete = (job: Job) => setJobPendingDelete(job);
+  const handleConfirmDelete = (block: boolean) => {
+    if (jobPendingDelete) deleteJobMutation.mutate({ id: jobPendingDelete.id, block });
   };
 
   // 7. Undo handler
@@ -519,6 +495,8 @@ export default function App() {
       <DeleteJobModal
         isOpen={jobPendingDelete !== null}
         job={jobPendingDelete}
+        copies={removalCopies}
+        pending={deleteJobMutation.isPending}
         onClose={() => setJobPendingDelete(null)}
         onConfirm={handleConfirmDelete}
       />

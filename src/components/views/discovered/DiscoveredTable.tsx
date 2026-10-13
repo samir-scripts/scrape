@@ -264,7 +264,7 @@ export function DiscoveredTable({
                           onDelete(job);
                         }}
                         className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-cherry)] hover:text-white text-[10px] font-mono font-bold uppercase cursor-pointer"
-                        title="Delete posting"
+                        title="Remove saved job"
                       >
                         DEL
                       </button>

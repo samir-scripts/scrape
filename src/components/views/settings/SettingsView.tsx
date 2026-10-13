@@ -1,3 +1,4 @@
+import { RemovedJobsSettings } from "./RemovedJobsSettings";
 import type { Settings } from "../../../bindings/Settings";
 import { useUIStore, type SettingsCategory } from "../../../lib/store";
 import { AppearanceSettings } from "./AppearanceSettings";
@@ -12,9 +13,11 @@ interface SettingsViewProps {
 const CATEGORIES: { id: SettingsCategory; label: string }[] = [
   { id: "appearance", label: "APPEARANCE" },
   { id: "system", label: "SYSTEM" },
+  { id: "removed", label: "REMOVED & BLOCKED JOBS" },
 ];
 
 const CATEGORY_TOOLTIPS: Record<SettingsCategory, string> = {
+  removed: "Restore saved postings and manage future discovery blocks",
   appearance: "Theme, motion, dither patterns, and interface tooltips",
   system: "Locale, timezone, time formats, and data export",
 };
@@ -69,6 +72,7 @@ export function SettingsView({
 
       {/* Right Content: Active Category Panel */}
       <main className="flex-1 h-full overflow-y-auto p-6 bg-[var(--color-paper)]">
+        {settingsCategory === "removed" && <RemovedJobsSettings />}
         {settingsCategory === "appearance" && (
           <AppearanceSettings
             settings={settings}

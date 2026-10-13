@@ -1,3 +1,5 @@
+import type { RemovedPosting } from "../bindings/RemovedPosting";
+import type { RemovalResult } from "../bindings/RemovalResult";
 import { needsDesktop } from "./runtime";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { Job } from "../bindings/Job";
@@ -203,6 +205,29 @@ function saveDevDeletedJobKeys() {
   } catch {}
 }
 
+let demoBlocks: RemovedPosting[] = (() => {
+  try { return JSON.parse(localStorage.getItem("scrape:demo:v1:blocks") || "[]"); } catch { return []; }
+})();
+function saveDemoBlocks() {
+  try { localStorage.setItem("scrape:demo:v1:blocks", JSON.stringify(demoBlocks)); } catch {}
+}
+const demoIdentity = (job: Job) => job.posting_identity || job.dedupe_key;
+function removeDemoJob(id: string, block: boolean): RemovalResult {
+  const job = devJobs.find((j) => j.id === id);
+  if (!job) throw new Error("Posting not found");
+  const identity = demoIdentity(job);
+  const date = new Date().toISOString();
+  let copies = 0;
+  devJobs.forEach((j) => { if (demoIdentity(j) === identity && !j.removed_at) { j.removed_at = date; copies++; } });
+  if (block && !demoBlocks.some((b) => b.identity === identity)) {
+    demoBlocks.push({ identity, title: job.title, company: job.company, url: job.url,
+      source_name: devSources.find((s) => s.id === job.source_id)?.name || null,
+      removed_at: date, blocked: true, blocked_at: date, copies });
+  }
+  saveDevJobs(); saveDemoBlocks();
+  return { identity, copies };
+}
+
 const executionDelayStep = () => {
   if (typeof process !== "undefined" && process.env?.NODE_ENV === "test") {
     return 15;
@@ -216,6 +241,8 @@ export function __resetDevData() {
   devSourceRuns = [];
   devLogs = {};
   devDeletedJobKeys.clear();
+  demoBlocks = [];
+  saveDemoBlocks();
   saveDevSources();
   saveDevJobs();
   saveDevSourceRuns();
@@ -395,6 +422,8 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
     return {
       id: jobId,
       dedupe_key: dedupeKey,
+      posting_identity: `demo:${prefix}:${externalId}`,
+      removed_at: null,
       source_id: source.id,
       external_id: externalId,
       title: role.title,
@@ -490,7 +519,7 @@ const apiImplementation = {
   // Jobs
   listJobs: (filter?: ApiJobFilter): Promise<Page<Job>> => {
     if (!isTauri()) {
-      let items = [...devJobs];
+      let items = devJobs.filter((j) => !j.removed_at);
       if (filter) {
         if (filter.statuses && filter.statuses.length > 0) {
           items = items.filter((j) => filter.statuses!.includes(j.status));
@@ -620,7 +649,7 @@ const apiImplementation = {
       const prevLength = devJobs.length;
       devJobs = devJobs.filter((j) => {
         if (sourceId && j.source_id !== sourceId) return true;
-        if (j.favorited || j.status !== "scraped") return true;
+        if (j.removed_at || j.notes?.trim() || j.favorited || j.status !== "scraped") return true;
         return false;
       });
       const pruned = prevLength - devJobs.length;
@@ -632,18 +661,63 @@ const apiImplementation = {
 
   deleteJob: (id: string): Promise<boolean> => {
     if (!isTauri()) {
-      const idx = devJobs.findIndex((j) => j.id === id);
-      if (idx !== -1) {
-        const deleted = devJobs[idx];
-        devDeletedJobKeys.add(deleted.dedupe_key);
-        saveDevDeletedJobKeys();
-        devJobs.splice(idx, 1);
-        saveDevJobs();
-        return Promise.resolve(true);
-      }
-      return Promise.resolve(false);
+      if (!devJobs.some((j) => j.id === id)) return Promise.resolve(false);
+      return Promise.resolve(removeDemoJob(id, false).copies > 0);
     }
     return invoke<boolean>("delete_job", { id });
+  },
+  removeJob: (id: string, block: boolean): Promise<RemovalResult> => {
+    if (!isTauri()) return Promise.resolve(removeDemoJob(id, block));
+    return invoke<RemovalResult>("remove_job", { id, block });
+  },
+  postingSavedCopies: (id: string): Promise<number> => {
+    if (!isTauri()) {
+      const job = devJobs.find((j) => j.id === id);
+      return Promise.resolve(job ? devJobs.filter((j) => !j.removed_at && demoIdentity(j) === demoIdentity(job)).length : 0);
+    }
+    return invoke<number>("posting_saved_copies", { id });
+  },
+  restorePosting: (identity: string): Promise<void> => {
+    if (!isTauri()) {
+      devJobs.forEach((j) => { if (demoIdentity(j) === identity) j.removed_at = null; });
+      demoBlocks = demoBlocks.filter((b) => b.identity !== identity);
+      devDeletedJobKeys.delete(identity);
+      saveDevJobs(); saveDemoBlocks(); saveDevDeletedJobKeys();
+      return Promise.resolve();
+    }
+    return invoke<void>("restore_posting", { identity });
+  },
+  setPostingBlocked: (identity: string, blocked: boolean): Promise<void> => {
+    if (!isTauri()) {
+      const job = devJobs.find((j) => demoIdentity(j) === identity);
+      if (blocked && job && !demoBlocks.some((b) => b.identity === identity)) {
+        demoBlocks.push({ identity, title: job.title, company: job.company, url: job.url,
+          source_name: devSources.find((s) => s.id === job.source_id)?.name || null,
+          removed_at: job.removed_at || null, copies: 1, blocked: true, blocked_at: new Date().toISOString() });
+      }
+      if (!blocked) { demoBlocks = demoBlocks.filter((b) => b.identity !== identity); devDeletedJobKeys.delete(identity); }
+      saveDemoBlocks(); saveDevDeletedJobKeys();
+      return Promise.resolve();
+    }
+    return invoke<void>("set_posting_blocked", { identity, blocked });
+  },
+  listRemovedPostings: (search = "", view = "all", offset = 0, limit = 25): Promise<Page<RemovedPosting>> => {
+    if (!isTauri()) {
+      const grouped = new Map<string, RemovedPosting>();
+      for (const job of devJobs.filter((j) => j.removed_at)) {
+        const identity = demoIdentity(job), block = demoBlocks.find((b) => b.identity === identity);
+        const entry = grouped.get(identity);
+        if (entry) { entry.copies++; continue; }
+        grouped.set(identity, { identity, title: job.title, company: job.company, url: job.url,
+          source_name: devSources.find((s) => s.id === job.source_id)?.name || null,
+          removed_at: job.removed_at || null, blocked: !!block, blocked_at: block?.blocked_at || null, copies: 1 });
+      }
+      demoBlocks.forEach((block) => { if (!grouped.has(block.identity)) grouped.set(block.identity, block); });
+      const items = [...grouped.values()].filter((p) => (view === "all" || (view === "blocked" ? p.blocked : !!p.removed_at)) &&
+        `${p.title} ${p.company} ${p.source_name || ""}`.toLowerCase().includes(search.toLowerCase()));
+      return Promise.resolve({ items: items.slice(offset, offset + limit), total: BigInt(items.length), offset: BigInt(offset), limit: BigInt(limit) });
+    }
+    return invoke<Page<RemovedPosting>>("list_removed_postings", { search, view, offset, limit });
   },
 
   // Settings
@@ -927,7 +1001,7 @@ const apiImplementation = {
       const nowIso = new Date().toISOString();
 
       for (const candidate of newJobs) {
-        if (devDeletedJobKeys.has(candidate.dedupe_key)) {
+        if (devDeletedJobKeys.has(candidate.dedupe_key) || demoBlocks.some((b) => b.identity === demoIdentity(candidate))) {
           continue;
         }
         const existingIdx = devJobs.findIndex(
@@ -938,6 +1012,7 @@ const apiImplementation = {
           devJobs[existingIdx] = {
             ...devJobs[existingIdx],
             last_seen_at: nowIso,
+            removed_at: null,
             salary_min: candidate.salary_min ?? devJobs[existingIdx].salary_min,
             salary_max: candidate.salary_max ?? devJobs[existingIdx].salary_max,
             salary_raw: candidate.salary_raw ?? devJobs[existingIdx].salary_raw,

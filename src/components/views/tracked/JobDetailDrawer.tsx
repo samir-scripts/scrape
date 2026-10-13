@@ -281,7 +281,7 @@ export function JobDetailDrawer({
                 onClick={() => onDelete(job)}
                 className="w-full py-2 px-3 border border-[var(--color-cherry)] text-[var(--color-cherry)] hover:bg-[var(--color-cherry)] hover:text-white font-mono text-xs font-bold uppercase transition-colors cursor-pointer flex items-center justify-center gap-2"
               >
-                <span>[DEL] DELETE APPLICATION RECORD</span>
+                <span>[DEL] REMOVE JOB</span>
               </button>
             </div>
           </>

@@ -31,3 +31,9 @@ The `src/components/ui` directory contains atomic, reusable UI components implem
 | **Toast** | [`Toast.tsx`](Toast.tsx) | Floating alert notification item displaying progress countdown, status icon, and dismiss button. |
 | **Toggle** | [`Toggle.tsx`](Toggle.tsx) | Binary toggle switch with brutalist square indicator and custom checked styling. |
 | **Tooltip** | [`Tooltip.tsx`](Tooltip.tsx) | Instant hover tooltip computing geometric coordinates via `src/lib/positioning.ts` to prevent window edge overflow. |
+
+Job removal uses a compact dialog with an initially unchecked future-discovery
+block option. Native dialog focus begins on Cancel; Enter activates the focused
+control and Escape restores focus. All saved copies of the posting are removed
+softly, and the success toast offers Undo. Settings → Removed & blocked jobs
+provides paginated search, restoration, blocking and unblocking.

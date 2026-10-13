@@ -26,5 +26,5 @@ Obsidian values. Muted foregrounds were darkened/lightened for text contrast;
 global font-smoothing suppression was removed. Token-pair tests check 4.5:1 on
 both base surfaces, but do not constitute rendered-state accessibility QA.
 JobCard uses independent native buttons, selectable descriptions, a named trash
-SVG, and semantic badges. Its deletion backend remains permanent until the
-reversible-removal phase is implemented; the control therefore still says Delete.
+SVG, and semantic badges. Its removal backend now preserves saved state and uses explicit, reversible
+blocking; the control is named Remove.

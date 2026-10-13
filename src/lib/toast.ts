@@ -7,6 +7,7 @@ export interface Toast {
   message: string;
   duration?: number;
   createdAt: number;
+  action?: { label: string; run: () => void };
 }
 
 interface ToastState {

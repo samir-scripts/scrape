@@ -67,17 +67,14 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
         })
       );
 
-      expect(html).toContain("Are you sure you want to delete?");
-      expect(html).toContain("Principal Security Architect");
-      expect(html).toContain("CyberArmor");
-      expect(html).toContain("CONFIRM DELETION // DANGER");
-      expect(html).toContain(
-        "THIS POSTING WILL BE TOMBSTONED AND EXCLUDED FROM ALL FUTURE SCRAPES"
-      );
-      expect(html).toContain("DON&#x27;T ASK AGAIN");
-      expect(html).toContain("[DEL] DELETE");
-      expect(html).toContain("[ESC] CANCEL");
-      expect(html).toContain("bg-[var(--color-cherry)]");
+      expect(html).toContain("Remove saved job");
+      expect(html).toContain(sampleJob.title);
+      expect(html).toContain(sampleJob.company);
+      expect(html).toContain("Keep this job out of future scrapes");
+      expect(html).toContain("remain recoverable");
+      expect(html).toContain("Remove job");
+      expect(html).toContain("Cancel");
+      expect(html).toContain("var(--color-danger)");
     });
 
     it("renders nothing when isOpen is false", () => {
@@ -113,15 +110,18 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
       expect(deleted).toBe(false);
     });
 
-    it("prevents deleted job from resurrecting during workflow execution", async () => {
-      __seedDevJobs([{ ...sampleJob, id: "job-to-delete", dedupe_key: "cloudflare:8199958" }]);
-      const deleted = await api.deleteJob("job-to-delete");
-      expect(deleted).toBe(true);
-
-      // Trigger workflow run - candidate with dedupe_key "cloudflare:8199958" should be ignored
-      await api.runSourceNow("sample-swe-internships-1");
-      const list = await api.listJobs();
-      expect(list.items.some((j) => j.dedupe_key === "cloudflare:8199958")).toBe(false);
+    it("only explicit blocking prevents rediscovery, and restore preserves saved state", async () => {
+      const fixture = { ...sampleJob, posting_identity: "fixture-posting" };
+      __seedDevJobs([fixture]);
+      const removed = await api.removeJob(fixture.id, true);
+      expect((await api.listJobs()).total).toBe(0n);
+      expect((await api.listRemovedPostings("", "blocked")).items[0].identity).toBe(removed.identity);
+      await api.setPostingBlocked(removed.identity, false);
+      expect((await api.listJobs()).total).toBe(0n);
+      await api.restorePosting(removed.identity);
+      const restored = (await api.listJobs()).items[0];
+      expect(restored.notes).toBe(sampleJob.notes);
+      expect(restored.status).toBe(sampleJob.status);
     });
   });
 
@@ -152,15 +152,13 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
         })
       );
 
-      expect(html).toContain("CONFIRM BEFORE DELETING JOBS");
-      expect(html).toContain(
-        "PROMPT FOR CONFIRMATION BEFORE DELETING JOBS FROM DISCOVERED OR TRACKED"
-      );
+      expect(html).toContain("Job removal always asks");
+      expect(html).not.toContain("CONFIRM BEFORE DELETING JOBS");
     });
   });
 
   describe("Discovered View Deletion Trigger Elements", () => {
-    it("renders DELETE POSTING button in JobDetail triage toolbar when onDelete is supplied", () => {
+    it("renders REMOVE JOB button in JobDetail triage toolbar when onDelete is supplied", () => {
       const html = renderToStaticMarkup(
         React.createElement(JobDetail, {
           job: sampleJob,
@@ -171,12 +169,12 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
         })
       );
 
-      expect(html).toContain("DELETE POSTING");
+      expect(html).toContain("REMOVE JOB");
       expect(html).toContain("DEL");
       expect(html).toContain("text-[var(--color-cherry)]");
     });
 
-    it("omits DELETE POSTING button in JobDetail when onDelete is not provided", () => {
+    it("omits REMOVE JOB button in JobDetail when onDelete is not provided", () => {
       const html = renderToStaticMarkup(
         React.createElement(JobDetail, {
           job: sampleJob,
@@ -186,7 +184,7 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
         })
       );
 
-      expect(html).not.toContain("DELETE POSTING");
+      expect(html).not.toContain("REMOVE JOB");
     });
 
     it("renders a named SVG delete button in JobCard header cluster when onDelete is supplied", () => {
@@ -197,7 +195,7 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
         })
       );
 
-      expect(html).toContain(`aria-label="Delete ${sampleJob.title} at ${sampleJob.company}"`);
+      expect(html).toContain(`aria-label="Remove ${sampleJob.title} at ${sampleJob.company}"`);
       expect(html).toContain('aria-hidden="true"');
       expect(html).toContain("min-w-8 min-h-8");
     });
@@ -215,12 +213,12 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
       );
 
       expect(html).toContain("DEL");
-      expect(html).toContain("Delete posting");
+      expect(html).toContain("Remove saved job");
     });
   });
 
   describe("Tracked View Deletion Trigger Elements", () => {
-    it("renders DELETE APPLICATION RECORD in JobDetailDrawer when onDelete is supplied", () => {
+    it("renders REMOVE JOB in JobDetailDrawer when onDelete is supplied", () => {
       const html = renderToStaticMarkup(
         React.createElement(JobDetailDrawer, {
           isOpen: true,
@@ -233,7 +231,7 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
         })
       );
 
-      expect(html).toContain("DELETE APPLICATION RECORD");
+      expect(html).toContain("REMOVE JOB");
       expect(html).toContain("border-[var(--color-cherry)]");
     });
 

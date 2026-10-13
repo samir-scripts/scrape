@@ -17,7 +17,7 @@ describe("independent card keyboard controls", () => {
     await user.keyboard("{Enter}");
     expect(open).toHaveBeenCalledExactlyOnceWith(job.url);
     expect(details).not.toHaveBeenCalled();
-    screen.getByRole("button", { name: /^Delete / }).focus();
+    screen.getByRole("button", { name: /^Remove / }).focus();
     await user.keyboard(" ");
     expect(remove).toHaveBeenCalledExactlyOnceWith(job);
     expect(details).not.toHaveBeenCalled();
@@ -28,6 +28,6 @@ describe("independent card keyboard controls", () => {
     screen.getByRole("button", { name: /^View / }).focus();
     await user.keyboard("{Enter}");
     expect(details).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: /^Delete / }).querySelector("svg")).not.toBeNull();
+    expect(screen.getByRole("button", { name: /^Remove / }).querySelector("svg")).not.toBeNull();
   });
 });

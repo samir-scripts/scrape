@@ -179,7 +179,7 @@ export function JobDetail({
             shortcut="DEL"
             className="text-[var(--color-cherry)] hover:bg-[var(--color-cherry)] hover:text-white"
           >
-            DELETE POSTING
+            REMOVE JOB
           </Button>
         )}
       </div>

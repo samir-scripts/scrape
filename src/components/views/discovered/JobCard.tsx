@@ -97,8 +97,8 @@ export function JobCard({
                 e.stopPropagation();
                 onDelete(job);
               }}
-              title="Delete job posting"
-              aria-label={`Delete ${job.title} at ${job.company}`}
+              title="Remove saved job"
+              aria-label={`Remove ${job.title} at ${job.company}`}
               className="inline-flex min-w-8 min-h-8 items-center justify-center border border-current text-[var(--color-danger)] hover:bg-[var(--color-paper-2)] cursor-pointer shrink-0"
             >
               <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

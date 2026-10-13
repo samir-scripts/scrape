@@ -248,14 +248,7 @@ export function SystemSettings({
           label="DESKTOP NOTIFICATIONS"
         />
 
-        <Toggle
-          checked={settings.app_confirm_job_deletion}
-          onChange={(checked) =>
-            onUpdateSetting("app.confirm_job_deletion", checked)
-          }
-          label="CONFIRM BEFORE DELETING JOBS"
-          description="PROMPT FOR CONFIRMATION BEFORE DELETING JOBS FROM DISCOVERED OR TRACKED"
-        />
+        <p className="text-sm">Job removal always asks whether to block future discovery. Restore saved jobs in Removed &amp; blocked jobs.</p>
       </div>
 
       <Rule />

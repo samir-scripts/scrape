@@ -64,6 +64,7 @@ function ToastItem({
       <div className="text-[var(--color-ink)] select-text break-words whitespace-pre-wrap leading-relaxed font-mono">
         {toast.message}
       </div>
+      {toast.action && <button type="button" className="mt-3 border px-3 py-2 text-sm" onClick={() => { toast.action?.run(); onDismiss(toast.id); }}>{toast.action.label}</button>}
     </div>
   );
 }
