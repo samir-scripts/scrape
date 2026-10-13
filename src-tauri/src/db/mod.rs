@@ -4,6 +4,7 @@ use sqlx::SqlitePool;
 use std::path::Path;
 use std::time::Duration;
 
+pub mod compensation;
 pub mod jobs;
 pub mod metrics;
 pub mod notifications;
@@ -128,6 +129,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     has_pending_migrations(pool).await?;
     sqlx::migrate!("./migrations").run(pool).await?;
     postings::backfill(pool).await?;
+    compensation::backfill(pool).await?;
     Ok(())
 }
 
@@ -169,8 +171,8 @@ mod tests {
 
         assert_eq!(cnt as usize, sqlx::migrate!("./migrations").iter().count());
         assert_eq!(
-            max_v, 12,
-            "Expected migration version 12 to be highest version"
+            max_v, 13,
+            "Expected migration version 13 to be highest version"
         );
 
         // Verify that app_notifications allows 'error'

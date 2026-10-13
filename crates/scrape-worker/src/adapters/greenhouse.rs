@@ -117,13 +117,34 @@ fn parse_greenhouse_jobs(
 
         let mut salary = None;
         if let Some(ranges) = &job.pay_input_ranges {
-            if let Some(r) = ranges.first() {
-                let min = r.min_cents.map(|c| (c as f64) / 100.0);
-                let max = r.max_cents.map(|c| (c as f64) / 100.0);
-                let curr = r.currency_type.as_deref();
-                let interval_str = r.title.as_deref().or(r.blurb.as_deref());
-                salary = Salary::from_structured(min, max, curr, interval_str, None);
-            }
+            let extracted = ranges
+                .iter()
+                .flat_map(|r| {
+                    let evidence = format!(
+                        "{} {}",
+                        r.title.as_deref().unwrap_or(""),
+                        r.blurb.as_deref().unwrap_or("")
+                    );
+                    Salary::from_structured(
+                        r.min_cents.map(|c| c as f64 / 100.0),
+                        r.max_cents.map(|c| c as f64 / 100.0),
+                        r.currency_type.as_deref(),
+                        Some(&evidence),
+                        Some(&evidence),
+                    )
+                    .map(|s| {
+                        s.ranges
+                            .into_iter()
+                            .map(|mut range| {
+                                range.location = r.title.clone();
+                                range
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
+                })
+                .collect();
+            salary = Salary::from_ranges(extracted);
         }
         if salary.is_none() {
             if let Some(text) = &desc_text {
@@ -260,7 +281,7 @@ mod tests {
                         {
                             "min_cents": 16000000,
                             "max_cents": 21000000,
-                            "currency": "USD"
+                            "currency_type": "USD", "title": "Annual base salary"
                         }
                     ]
                 }

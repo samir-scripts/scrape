@@ -1,7 +1,7 @@
 import type { Job } from "../bindings/Job";
 import type { JobFilter } from "../bindings/JobFilter";
 import type { TriState } from "../bindings/TriState";
-import { toHourlyRate } from "./salary";
+import type { CompensationRange } from "../bindings/CompensationRange";
 
 /**
  * Checks whether a job satisfies the given filter specification.
@@ -45,41 +45,18 @@ export function matchesJob(job: Job, filter: Partial<JobFilter>): boolean {
     return false;
   }
 
-  // 5. Salary range overlap
-  const hasSalaryFilter =
-    filter.salary_min != null || filter.salary_max != null;
-  if (hasSalaryFilter) {
-    const minBound = filter.salary_min ?? 0;
-    const maxBound = filter.salary_max ?? Number.POSITIVE_INFINITY;
-
-    if (job.salary_min == null && job.salary_max == null) {
-      if (!filter.salary_include_unknown) {
-        return false;
-      }
-    } else {
-      const jMin = job.salary_min ?? 0;
-      const jMax = job.salary_max ?? Number.POSITIVE_INFINITY;
-      if (!(jMax >= minBound && jMin <= maxBound)) {
-        return false;
-      }
-    }
-  }
-
-  // 6. Salary currency
-  if (filter.salary_currency && filter.salary_currency !== "ALL") {
-    if (
-      job.salary_currency &&
-      job.salary_currency.toUpperCase() !== filter.salary_currency.toUpperCase()
-    ) {
-      return false;
-    }
-  }
-
-  // 6b. Salary interval (e.g. "hour" or "year")
-  if (filter.salary_interval) {
-    if (job.salary_interval !== filter.salary_interval) {
-      return false;
-    }
+  const ranges = jobCompensation(job);
+  const salaryActive = filter.salary_min != null || filter.salary_max != null || !!filter.salary_interval || !!(filter.salary_currency && filter.salary_currency !== "ALL");
+  if (salaryActive) {
+    const currency = filter.salary_currency && filter.salary_currency !== "ALL" ? filter.salary_currency.toUpperCase() : null;
+    const matched = ranges.some((range) => {
+      if (filter.salary_interval && range.interval !== filter.salary_interval) return false;
+      if (currency && range.currency?.toUpperCase() !== currency) return false;
+      if (range.min_minor == null && range.max_minor == null) return !!filter.salary_include_unknown;
+      return (filter.salary_min == null || range.max_minor == null || range.max_minor >= Math.round(filter.salary_min * 100)) &&
+        (filter.salary_max == null || range.min_minor == null || range.min_minor <= Math.round(filter.salary_max * 100));
+    });
+    if (!matched && !(ranges.length === 0 && filter.salary_include_unknown && !filter.salary_interval && !currency)) return false;
   }
 
   // 7. Experience (YOE) overlap
@@ -197,56 +174,33 @@ export function triStateToLabel(value: TriState): "Yes" | "No" | "N/A" {
 /**
  * Format salary into human-readable compact string.
  */
+export function jobCompensation(job: Job): CompensationRange[] {
+  if (job.compensation) return job.compensation;
+  // The annual legacy contract is unambiguous. Legacy hourly values require
+  // backend migration; client code never guesses their unit from magnitude.
+  if (job.salary_interval === "year" && (job.salary_min != null || job.salary_max != null)) return [{
+    min_minor: job.salary_min == null ? null : Math.round(job.salary_min * 100),
+    max_minor: job.salary_max == null ? null : Math.round(job.salary_max * 100),
+    currency: job.salary_currency, interval: "year", raw: job.salary_raw || "", source: job.salary_source || "structured", derived: true, location: null,
+  }];
+  return [];
+}
 export function formatSalary(job: Job): string {
-  if (job.salary_min == null && job.salary_max == null) {
-    return job.salary_raw || "—";
-  }
-
-  const curr = job.salary_currency === "USD" || !job.salary_currency ? "$" : `${job.salary_currency} `;
-
-  // If job is specifically hourly, format as $/HR
-  if (job.salary_interval === "hour") {
-    const minHr = toHourlyRate(job.salary_min);
-    const maxHr = toHourlyRate(job.salary_max);
-
-    if (minHr != null && maxHr != null) {
-      if (minHr === maxHr) return `${curr}${minHr}/HR`;
-      return `${curr}${minHr} - ${curr}${maxHr}/HR`;
-    }
-    if (minHr != null) return `FROM ${curr}${minHr}/HR`;
-    if (maxHr != null) return `UP TO ${curr}${maxHr}/HR`;
-    return job.salary_raw || "—";
-  }
-
-  const fmtNum = (n: number) => {
-    if (n >= 1000) {
-      const k = n / 1000;
-      return `${Number.isInteger(k) ? k : k.toFixed(1)}K`;
-    }
-    return n.toLocaleString();
-  };
-
-  if (job.salary_min != null && job.salary_max != null) {
-    if (job.salary_min === job.salary_max) {
-      return `${curr}${fmtNum(job.salary_min)}`;
-    }
-    return `${curr}${fmtNum(job.salary_min)} - ${curr}${fmtNum(job.salary_max)}`;
-  }
-
-  if (job.salary_min != null) {
-    return `FROM ${curr}${fmtNum(job.salary_min)}`;
-  }
-
-  if (job.salary_max != null) {
-    return `UP TO ${curr}${fmtNum(job.salary_max)}`;
-  }
-
-  return "—";
+  const ranges = jobCompensation(job);
+  if (!ranges.length) return job.salary_raw ? (job.salary_min != null || job.salary_max != null ? `${job.salary_raw} (unit unverified)` : job.salary_raw) : "—";
+  return ranges.map((range) => {
+    const symbol = range.currency === "USD" ? "$" : range.currency ? `${range.currency} ` : "";
+    const amount = (minor: number) => {
+      const value = minor / 100;
+      if (range.interval === "year" && value >= 1000) return `${Number.isInteger(value / 1000) ? value / 1000 : (value / 1000).toFixed(1)}K`;
+      return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+    };
+    const unit = range.interval === "hour" ? "/HR" : range.interval && range.interval !== "year" ? `/${range.interval.toUpperCase()}` : range.interval ? "" : " (unit unknown)";
+    const text = range.min_minor != null && range.max_minor != null ? range.min_minor === range.max_minor ? `${symbol}${amount(range.min_minor)}` : `${symbol}${amount(range.min_minor)} - ${symbol}${amount(range.max_minor)}` : range.min_minor != null ? `FROM ${symbol}${amount(range.min_minor)}` : range.max_minor != null ? `UP TO ${symbol}${amount(range.max_minor)}` : "Unknown pay";
+    return `${text}${unit}${range.location ? ` (${range.location})` : ""}`;
+  }).join("; ");
 }
 
-/**
- * Format years of experience into compact string.
- */
 export function formatExperience(job: Job): string {
   if (job.experience_min == null && job.experience_max == null) {
     return job.experience_raw || "—";

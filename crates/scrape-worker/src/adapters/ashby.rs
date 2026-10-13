@@ -138,20 +138,22 @@ fn parse_ashby_jobs(
         let mut salary = None;
         if let Some(comp) = &job.compensation {
             if let Some(components) = &comp.summary_components {
-                let salary_comp = components
+                let ranges = components
                     .iter()
-                    .find(|c| c.compensation_type.as_deref() == Some("Salary"))
-                    .or_else(|| components.first());
-
-                if let Some(sc) = salary_comp {
-                    salary = Salary::from_structured(
-                        sc.min_value,
-                        sc.max_value,
-                        sc.currency_code.as_deref(),
-                        sc.interval.as_deref(),
-                        None,
-                    );
-                }
+                    .filter(|c| c.compensation_type.as_deref() == Some("Salary"))
+                    .flat_map(|sc| {
+                        Salary::from_structured(
+                            sc.min_value,
+                            sc.max_value,
+                            sc.currency_code.as_deref(),
+                            sc.interval.as_deref(),
+                            None,
+                        )
+                        .map(|s| s.ranges)
+                        .unwrap_or_default()
+                    })
+                    .collect();
+                salary = Salary::from_ranges(ranges);
             }
         }
         if salary.is_none() {

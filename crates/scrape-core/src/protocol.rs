@@ -66,11 +66,16 @@ pub struct WorkerFilters {
     pub query: Option<String>,
     #[serde(default)]
     pub policy: Option<serde_json::Value>,
+    #[serde(default)]
+    pub compensation: Option<crate::enrich::CompensationFilter>,
 }
 
 impl WorkerFilters {
     pub fn to_expr(&self) -> Result<crate::filter::FilterExpr, String> {
         use crate::filter::{FilterExpr, FilterField, FilterOp};
+        if let Some(pay) = &self.compensation {
+            pay.validate()?;
+        }
         let mut and_clauses = Vec::new();
 
         // 1. If explicit SQL-like query string is present, parse it

@@ -46,3 +46,11 @@ Types marked with `#[derive(TS)]` from `ts-rs` automatically synchronize Rust mo
 ```bash
 cargo test -p scrape-core -- test_bindings
 ```
+
+Compensation now includes separate native ranges in fixed-point hundredths of a
+currency's major unit, with interval, currency, source evidence, scope and derived
+status. `CompensationFilter` evaluates native ranges and compiles parameterized
+SQLite predicates. Hourly/annual filters require the original matching interval;
+annual equivalents remain compatibility analytics and have explicitly named
+`salary_annual_min`/`salary_annual_max` fields at the job boundary. Text without
+unit evidence retains an unknown interval. Multiple ranges are never blended.

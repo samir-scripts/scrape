@@ -45,3 +45,10 @@ historical keys as well as the new identity block so startup cannot recreate the
 Soft removal retains notes, favorites, status events and source-name snapshots.
 Automatic retention excludes removed records. Restore clears suppression and
 restores saved copies atomically; ordinary removal permits later rediscovery.
+
+Migration 0013 stores native compensation ranges separately from historical
+annual analytics. Backfill first uses explicit unit evidence where available;
+otherwise it reverses documented backend annualization only when both recorded
+interval and extraction source are known, and marks the range derived. Values
+without sufficient provenance remain recoverable in the legacy fields and do
+not match strict native-unit filters. Native hourly amounts retain cents.

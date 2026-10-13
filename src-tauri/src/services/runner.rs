@@ -63,6 +63,7 @@ pub async fn load_global_filters(pool: &SqlitePool) -> Result<WorkerFilters> {
             .unwrap_or_default(),
         query: None,
         policy: None,
+        compensation: None,
     })
 }
 
@@ -644,6 +645,10 @@ impl ScrapeRunner {
                                         Some(location)
                                     };
 
+                                    let compensation = salary
+                                        .as_ref()
+                                        .map(|s| s.ranges.clone())
+                                        .unwrap_or_default();
                                     let (
                                         salary_min,
                                         salary_max,
@@ -656,7 +661,7 @@ impl ScrapeRunner {
                                             s.min,
                                             s.max,
                                             Some(s.currency),
-                                            Some(s.interval),
+                                            s.ranges.first().and_then(|range| range.interval),
                                             Some(s.raw),
                                             Some(s.source),
                                         )
@@ -697,6 +702,7 @@ impl ScrapeRunner {
                                     };
 
                                     job_buffer.push(ScrapedJob {
+                                        compensation,
                                         dedupe_key,
                                         source_id: Some(source_id),
                                         external_id: Some(external_id),
@@ -980,6 +986,7 @@ mod tests {
             role_types: vec![RoleType::FullTime],
             query: Some("title LIKE '%Global%'".to_string()),
             policy: None,
+            compensation: None,
         };
 
         let source_filters = serde_json::json!({
@@ -1031,6 +1038,7 @@ mod tests {
             role_types: vec![RoleType::FullTime],
             query: None,
             policy: None,
+            compensation: None,
         };
 
         let null_filters = serde_json::Value::Null;
@@ -1265,6 +1273,7 @@ mod tests {
         // 3. Emulate sidecar emitting scraped postings matching the workflow
         let batch = vec![
             ScrapedJob {
+                compensation: vec![],
                 dedupe_key: format!("{}:job-101", source.id),
                 source_id: Some(source.id.clone()),
                 external_id: Some("job-101".to_string()),
@@ -1298,6 +1307,7 @@ mod tests {
                 locations: vec![],
             },
             ScrapedJob {
+                compensation: vec![],
                 dedupe_key: format!("{}:job-102", source.id),
                 source_id: Some(source.id.clone()),
                 external_id: Some("job-102".to_string()),

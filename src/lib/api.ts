@@ -440,6 +440,7 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
       notes: null,
       favorited: false,
       favorited_at: null,
+      compensation: [{ min_minor: Math.round(role.salary_min * 100), max_minor: Math.round(role.salary_max * 100), currency: "USD", interval: role.salary_interval, raw: salaryRaw, source: "structured", derived: false, location: role.location }],
       salary_min: role.salary_min,
       salary_max: role.salary_max,
       salary_currency: "USD",
@@ -1135,6 +1136,7 @@ const apiImplementation = {
               interval: j.salary_interval || "hour",
               raw: j.salary_raw || "",
               source: "structured",
+              ranges: j.compensation || [],
             }
           : null,
         description_text: j.description_text,
@@ -1180,6 +1182,7 @@ const apiImplementation = {
               interval: j.salary_interval || "hour",
               raw: j.salary_raw || "",
               source: "structured",
+              ranges: j.compensation || [],
             }
           : null,
         description_text: j.description_text,

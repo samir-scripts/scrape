@@ -155,7 +155,7 @@ export function FilterPanel({
       salary_min: filterSpec.salary_min ?? null,
       salary_max: filterSpec.salary_max ?? null,
       salary_currency: filterSpec.salary_currency ?? null,
-      salary_include_unknown: filterSpec.salary_include_unknown ?? true,
+      salary_include_unknown: filterSpec.salary_include_unknown ?? false,
       salary_interval: filterSpec.salary_interval ?? null,
       experience_min: filterSpec.experience_min ?? null,
       experience_max: filterSpec.experience_max ?? null,
@@ -301,7 +301,7 @@ export function FilterPanel({
           salaryMax={filterSpec.salary_max ?? null}
           currency={filterSpec.salary_currency ?? null}
           interval={filterSpec.salary_interval ?? null}
-          includeUnknown={filterSpec.salary_include_unknown ?? true}
+          includeUnknown={filterSpec.salary_include_unknown ?? false}
           onChange={({ salaryMin, salaryMax, currency, interval, includeUnknown }) =>
             onUpdateFilter((prev) => ({
               ...prev,

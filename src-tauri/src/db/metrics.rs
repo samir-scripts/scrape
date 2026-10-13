@@ -522,6 +522,7 @@ mod tests {
         salary: Option<(i64, i64)>,
     ) -> ScrapedJob {
         ScrapedJob {
+            compensation: vec![],
             dedupe_key: format!("test:{}:{}", company.to_lowercase(), id),
             source_id: None,
             external_id: Some(id.to_string()),

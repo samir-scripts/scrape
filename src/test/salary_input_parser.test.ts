@@ -23,11 +23,11 @@ describe("Salary Input Parser - parseSalaryInput", () => {
     expect(parseSalaryInput(" $ 90,000 ")).toBe(90000);
   });
 
-  it("interprets inputs <= 500 as thousands ($k)", () => {
-    expect(parseSalaryInput("150")).toBe(150000);
-    expect(parseSalaryInput("500")).toBe(500000);
-    expect(parseSalaryInput("85")).toBe(85000);
-    expect(parseSalaryInput("1")).toBe(1000);
+  it("preserves unsuffixed major-unit amounts without magnitude guessing", () => {
+    expect(parseSalaryInput("150")).toBe(150);
+    expect(parseSalaryInput("500")).toBe(500);
+    expect(parseSalaryInput("85")).toBe(85);
+    expect(parseSalaryInput("1")).toBe(1);
     // Values > 500 are treated as raw amounts
     expect(parseSalaryInput("501")).toBe(501);
     expect(parseSalaryInput("1000")).toBe(1000);

@@ -174,6 +174,7 @@ async fn execute_worker(
                         ref location,
                         ref company,
                         ref description_text,
+                        ref salary,
                         role_type,
                         ..
                     } = event
@@ -185,7 +186,13 @@ async fn execute_worker(
                             company,
                             role_type,
                         };
-                        if matcher.matches_context(&ctx) {
+                        if matcher.matches_context(&ctx)
+                            && filters.compensation.as_ref().is_none_or(|pay| {
+                                pay.matches(
+                                    salary.as_ref().map(|s| s.ranges.as_slice()).unwrap_or(&[]),
+                                )
+                            })
+                        {
                             matched_count += 1;
                             total_emitted += 1;
                             emit_event(&event)?;

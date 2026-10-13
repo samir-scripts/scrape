@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import type { Job } from "../bindings/Job";
-import type { JobFilter } from "../bindings/JobFilter";
 import {
   matchesJob,
   formatSalary,
@@ -100,87 +99,31 @@ describe("Contains / Keyword Filter Logic", () => {
   });
 });
 
-describe("Hourly vs Annual Salary Parsing and Formatting", () => {
-  it("parses hourly inputs correctly without multiplying by 1000", () => {
-    expect(parseHourlyInput("45")).toBe(45);
-    expect(parseHourlyInput("$60/hr")).toBe(60);
-    expect(parseHourlyInput("125")).toBe(125);
-    expect(parseHourlyInput("")).toBeNull();
-    expect(parseHourlyInput("invalid")).toBeNull();
+describe("native compensation units", () => {
+  const hourly = (min: number | null, max: number | null, currency = "USD"): Job => createMockJob({
+    salary_interval: "hour", compensation: [{ min_minor: min, max_minor: max, currency, interval: "hour", raw: "Hourly fixture", source: "structured", derived: false, location: null }],
   });
-
-  it("parses annual inputs correctly with k suffix or <= 500 heuristic", () => {
+  it("preserves cents and never guesses units from magnitude", () => {
+    expect(parseHourlyInput("$45.25/hr")).toBe(45.25);
+    expect(parseHourlyInput("45.255")).toBeNull();
+    expect(parseSalaryInput("150")).toBe(150);
     expect(parseSalaryInput("150k")).toBe(150000);
-    expect(parseSalaryInput("150")).toBe(150000);
-    expect(parseSalaryInput("150000")).toBe(150000);
+    expect(parseSalaryInput("50garbage")).toBeNull();
+    expect(formatSalary(hourly(4525, 5575))).toBe("$45.25 - $55.75/HR");
   });
-
-  it("formats hourly interval jobs as $/HR", () => {
-    const hourlyJob = createMockJob({
-      salary_min: 93600, // 45 * 2080
-      salary_max: 124800, // 60 * 2080
-      salary_interval: "hour",
-      salary_raw: "$45 - $60/hr",
-    });
-    expect(formatSalary(hourlyJob)).toBe("$45 - $60/HR");
-
-    const singleHourly = createMockJob({
-      salary_min: 104000,
-      salary_max: 104000,
-      salary_interval: "hour",
-    });
-    expect(formatSalary(singleHourly)).toBe("$50/HR");
-
-    const minOnlyHourly = createMockJob({
-      salary_min: 83200, // 40 * 2080
-      salary_max: null,
-      salary_interval: "hour",
-    });
-    expect(formatSalary(minOnlyHourly)).toBe("FROM $40/HR");
-
-    const maxOnlyHourly = createMockJob({
-      salary_min: null,
-      salary_max: 145600, // 70 * 2080
-      salary_interval: "hour",
-    });
-    expect(formatSalary(maxOnlyHourly)).toBe("UP TO $70/HR");
+  it("uses inclusive native overlap and one-sided bounds", () => {
+    const filter = { salary_min: 50, salary_max: 60, salary_interval: "hour" as const, salary_currency: "USD" };
+    expect(matchesJob(hourly(4500, 5500), filter)).toBe(true);
+    expect(matchesJob(hourly(null, 5000), filter)).toBe(true);
+    expect(matchesJob(hourly(6000, null), filter)).toBe(true);
+    expect(matchesJob(hourly(4000, 4999), filter)).toBe(false);
+    expect(matchesJob(hourly(4500, 5500, "EUR"), filter)).toBe(false);
+    expect(matchesJob(createMockJob(), filter)).toBe(false);
+    expect(matchesJob(createMockJob({ salary_interval: "hour", compensation: [] }), filter)).toBe(false);
   });
-
-  it("filters jobs by salary_interval", () => {
-    const hourlyJob = createMockJob({ salary_interval: "hour" });
-    const annualJob = createMockJob({ salary_interval: "year" });
-
-    expect(matchesJob(hourlyJob, { salary_interval: "hour" })).toBe(true);
-    expect(matchesJob(annualJob, { salary_interval: "hour" })).toBe(false);
-  });
-
-  it("increments countActiveFilters when salary_interval is set", () => {
+  it("keeps salary interval as an active filter and clears it", () => {
     expect(countActiveFilters({ salary_interval: "hour" })).toBe(1);
     expect(countActiveFilters({ salary_interval: null })).toBe(0);
-  });
-
-  it("matches hourly job when filter bounds match equivalent annualized rate", () => {
-    // $50/hr = $104,000/yr
-    const hourlyJob = createMockJob({
-      salary_min: 104000,
-      salary_max: 104000,
-      salary_interval: "hour",
-    });
-
-    // Filtering $40/hr ($83,200) to $60/hr ($124,800)
-    const filter: Partial<JobFilter> = {
-      salary_min: 83200,
-      salary_max: 124800,
-      salary_interval: "hour",
-    };
-    expect(matchesJob(hourlyJob, filter)).toBe(true);
-
-    // Filtering $60/hr ($124,800) to $80/hr ($166,400)
-    const outOfBoundsFilter: Partial<JobFilter> = {
-      salary_min: 124800,
-      salary_max: 166400,
-      salary_interval: "hour",
-    };
-    expect(matchesJob(hourlyJob, outOfBoundsFilter)).toBe(false);
+    expect(matchesJob(hourly(4500, 5500), {})).toBe(true);
   });
 });

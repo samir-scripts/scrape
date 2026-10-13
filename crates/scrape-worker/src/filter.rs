@@ -49,6 +49,7 @@ mod tests {
             role_types: vec![RoleType::FullTime],
             query: None,
             policy: None,
+            compensation: None,
         };
 
         let matcher = FilterMatcher::new(&filters).unwrap();
@@ -81,6 +82,7 @@ mod tests {
                     .to_string(),
             ),
             policy: None,
+            compensation: None,
         };
 
         let matcher = FilterMatcher::new(&filters).unwrap();

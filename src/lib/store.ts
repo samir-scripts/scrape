@@ -28,7 +28,7 @@ export const DEFAULT_FILTER_SPEC: Partial<JobFilter> = {
   salary_max: null,
   salary_currency: null,
   salary_interval: null,
-  salary_include_unknown: true,
+  salary_include_unknown: false,
   experience_min: null,
   experience_max: null,
   experience_include_unknown: true,

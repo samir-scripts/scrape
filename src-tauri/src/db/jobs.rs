@@ -15,9 +15,9 @@ use uuid::Uuid;
 pub struct Job {
     pub id: String,
     pub dedupe_key: String,
-    #[ts(optional)]
+    #[ts(optional = nullable)]
     pub posting_identity: Option<String>,
-    #[ts(optional)]
+    #[ts(optional = nullable)]
     pub removed_at: Option<String>,
     pub source_id: Option<String>,
     pub external_id: Option<String>,
@@ -35,6 +35,13 @@ pub struct Job {
     pub favorited: bool,
     pub favorited_at: Option<String>,
 
+    #[ts(optional = nullable)]
+    pub compensation: Option<Vec<scrape_core::enrich::CompensationRange>>,
+    // Explicitly named derived annual analytics; native filtering uses compensation.
+    #[ts(optional = nullable, type = "number | null")]
+    pub salary_annual_min: Option<i64>,
+    #[ts(optional = nullable, type = "number | null")]
+    pub salary_annual_max: Option<i64>,
     // Enrichment fields
     #[ts(type = "number | null")]
     pub salary_min: Option<i64>,
@@ -109,9 +116,9 @@ pub struct JobFilter {
 
     // Salary bounds
     #[ts(type = "number | null")]
-    pub salary_min: Option<i64>,
+    pub salary_min: Option<f64>,
     #[ts(type = "number | null")]
-    pub salary_max: Option<i64>,
+    pub salary_max: Option<f64>,
     pub salary_currency: Option<String>,
     pub salary_include_unknown: Option<bool>,
     pub salary_interval: Option<SalaryInterval>,
@@ -174,6 +181,8 @@ pub struct ScrapedJob {
     pub url: String,
     pub date_posted: Option<String>,
 
+    #[serde(default)]
+    pub compensation: Vec<scrape_core::enrich::CompensationRange>,
     // Enrichment
     #[ts(type = "number | null")]
     pub salary_min: Option<i64>,
@@ -218,7 +227,7 @@ impl JobsRepo {
     pub async fn get(pool: &SqlitePool, id: &str) -> Result<Job> {
         let r = sqlx::query(
             r#"
-            SELECT id, dedupe_key, posting_identity, removed_at, source_id, external_id, title, company,
+            SELECT id, dedupe_key, posting_identity, removed_at, compensation_json, source_id, external_id, title, company,
                    role_type, location, url, date_posted, date_added,
                    last_seen_at, status, status_changed_at, notes,
                    salary_min, salary_max, salary_currency, salary_interval,
@@ -403,6 +412,11 @@ impl JobsRepo {
             notes: r.get("notes"),
             favorited: favorited_int == 1,
             favorited_at,
+            compensation: Some(serde_json::from_str(
+                &r.get::<String, _>("compensation_json"),
+            )?),
+            salary_annual_min: r.get("salary_min"),
+            salary_annual_max: r.get("salary_max"),
             salary_min: r.get("salary_min"),
             salary_max: r.get("salary_max"),
             salary_currency: r.get("salary_currency"),
@@ -430,6 +444,7 @@ impl JobsRepo {
     }
 
     pub async fn list(pool: &SqlitePool, filter: JobFilter) -> Result<Page<Job>> {
+        super::compensation::backfill(pool).await?;
         let limit = filter.limit.unwrap_or(50).clamp(1, 200);
         let offset = filter.offset.unwrap_or(0).max(0);
 
@@ -487,46 +502,44 @@ impl JobsRepo {
             );
         }
 
-        // Salary range overlap: [lo, hi] overlaps if salary_max >= lo AND salary_min <= hi
-        let sal_min = filter.salary_min;
-        let sal_max = filter.salary_max;
-        let sal_inc_unknown = filter.salary_include_unknown.unwrap_or(true);
-
-        if sal_min.is_some() || sal_max.is_some() {
-            let lo = sal_min.unwrap_or(0);
-            let hi = sal_max.unwrap_or(i64::MAX);
-
-            if sal_inc_unknown {
-                conditions.push(format!(
-                    "((salary_max IS NULL AND salary_min IS NULL) OR (salary_max >= {} AND salary_min <= {}))",
-                    lo, hi
-                ));
-            } else {
-                conditions.push(format!(
-                    "(salary_max IS NOT NULL AND salary_min IS NOT NULL AND salary_max >= {} AND salary_min <= {})",
-                    lo, hi
-                ));
-            }
-        }
-
-        // Currency is user input: bind it for both count and page queries.
-        // Unknown currencies cannot satisfy an explicit currency selection.
-        let salary_currency = filter
-            .salary_currency
-            .as_ref()
-            .map(|c| c.trim().to_uppercase())
-            .filter(|c| !c.is_empty());
-        if salary_currency.is_some() {
-            conditions.push("salary_currency = ?".to_string());
-        }
-
-        // Salary interval (e.g. "hour" or "year")
-        if let Some(interval) = &filter.salary_interval {
-            let interval_str = match serde_json::to_value(interval)? {
-                serde_json::Value::String(s) => s,
-                _ => unreachable!(),
-            };
-            conditions.push(format!("salary_interval = '{}'", interval_str));
+        let amount = |value: Option<f64>| -> Result<Option<i64>> {
+            value
+                .map(|v| {
+                    if !v.is_finite()
+                        || !(0.0..=1_000_000_000.0).contains(&v)
+                        || (v * 100.0 - (v * 100.0).round()).abs() > 0.00001
+                    {
+                        Err(AppError::Validation(
+                            "Salary amounts must be nonnegative with at most two decimal places"
+                                .into(),
+                        ))
+                    } else {
+                        Ok((v * 100.0).round() as i64)
+                    }
+                })
+                .transpose()
+        };
+        let pay = scrape_core::enrich::CompensationFilter {
+            min_minor: amount(filter.salary_min)?,
+            max_minor: amount(filter.salary_max)?,
+            currency: filter
+                .salary_currency
+                .as_ref()
+                .map(|c| c.trim().to_ascii_uppercase())
+                .filter(|c| !c.is_empty() && c != "ALL"),
+            interval: filter.salary_interval,
+            include_unknown: filter.salary_include_unknown.unwrap_or(false),
+        };
+        pay.validate().map_err(AppError::Validation)?;
+        let mut pay_values = Vec::new();
+        if pay.min_minor.is_some()
+            || pay.max_minor.is_some()
+            || pay.currency.is_some()
+            || pay.interval.is_some()
+        {
+            let (predicate, values) = pay.sqlite_predicate();
+            conditions.push(predicate);
+            pay_values = values;
         }
 
         // Experience (YOE) bounds: [min_yoe, max_yoe]
@@ -746,15 +759,22 @@ impl JobsRepo {
                 .bind(term);
         }
 
-        if let Some(currency) = &salary_currency {
-            count_query = count_query.bind(currency);
+        for value in &pay_values {
+            count_query = match value {
+                scrape_core::enrich::salary::CompensationSqlValue::Integer(value) => {
+                    count_query.bind(*value)
+                }
+                scrape_core::enrich::salary::CompensationSqlValue::Text(value) => {
+                    count_query.bind(value)
+                }
+            };
         }
         let (total,) = count_query.fetch_one(pool).await?;
 
         // Query rows
         let select_sql = format!(
             r#"
-            SELECT id, dedupe_key, posting_identity, removed_at, source_id, external_id, title, company,
+            SELECT id, dedupe_key, posting_identity, removed_at, compensation_json, source_id, external_id, title, company,
                    role_type, location, url, date_posted, date_added,
                    last_seen_at, status, status_changed_at, notes,
                    salary_min, salary_max, salary_currency, salary_interval,
@@ -796,8 +816,15 @@ impl JobsRepo {
                 .bind(term.clone())
                 .bind(term);
         }
-        if let Some(currency) = &salary_currency {
-            data_query = data_query.bind(currency);
+        for value in &pay_values {
+            data_query = match value {
+                scrape_core::enrich::salary::CompensationSqlValue::Integer(value) => {
+                    data_query.bind(*value)
+                }
+                scrape_core::enrich::salary::CompensationSqlValue::Text(value) => {
+                    data_query.bind(value)
+                }
+            };
         }
         data_query = data_query.bind(limit).bind(offset);
 
@@ -1415,14 +1442,18 @@ impl JobsRepo {
                 TriState::Unknown => "unknown",
             };
 
+            let compensation = sal.as_ref().map(|s| s.ranges.clone()).unwrap_or_default();
             let (sal_min, sal_max, sal_curr, sal_int, sal_raw, sal_src) = if let Some(s) = sal {
-                let int_str = match s.interval {
-                    SalaryInterval::Year => "year",
-                    SalaryInterval::Month => "month",
-                    SalaryInterval::Week => "week",
-                    SalaryInterval::Day => "day",
-                    SalaryInterval::Hour => "hour",
-                };
+                let int_str =
+                    s.ranges.first().and_then(|range| range.interval).map(
+                        |interval| match interval {
+                            SalaryInterval::Year => "year",
+                            SalaryInterval::Month => "month",
+                            SalaryInterval::Week => "week",
+                            SalaryInterval::Day => "day",
+                            SalaryInterval::Hour => "hour",
+                        },
+                    );
                 let src_str = match s.source {
                     SalarySource::Structured => "structured",
                     SalarySource::Text => "text",
@@ -1431,7 +1462,7 @@ impl JobsRepo {
                     s.min,
                     s.max,
                     Some(s.currency),
-                    Some(int_str),
+                    int_str,
                     Some(s.raw),
                     Some(src_str),
                 )
@@ -1453,7 +1484,9 @@ impl JobsRepo {
                     salary_raw = COALESCE(salary_raw, ?15),
                     salary_source = COALESCE(salary_source, ?16),
                     work_auth = ?17, work_auth_evidence = ?18,
-                    enrichment_version = ?19
+                    enrichment_version = ?19,
+                    compensation_json = CASE WHEN compensation_json = '[]' THEN ?21 ELSE compensation_json END,
+                    compensation_migrated = 1
                 WHERE id = ?20
                 "#,
             )
@@ -1477,6 +1510,7 @@ impl JobsRepo {
             .bind(wa.evidence)
             .bind(ENRICHMENT_VERSION)
             .bind(&id)
+            .bind(serde_json::to_string(&compensation)?)
             .execute(pool)
             .await?;
 
@@ -1538,6 +1572,7 @@ mod tests {
 
         let batch = vec![
             ScrapedJob {
+                compensation: vec![],
                 dedupe_key: "greenhouse:stripe:101".to_string(),
                 source_id: None,
                 external_id: Some("101".to_string()),
@@ -1581,6 +1616,7 @@ mod tests {
                 }],
             },
             ScrapedJob {
+                compensation: vec![],
                 dedupe_key: "lever:figma:202".to_string(),
                 source_id: None,
                 external_id: Some("202".to_string()),
@@ -1637,8 +1673,8 @@ mod tests {
         let page = JobsRepo::list(
             &pool,
             JobFilter {
-                salary_min: Some(150_000),
-                salary_max: Some(200_000),
+                salary_min: Some(150_000.0),
+                salary_max: Some(200_000.0),
                 ..Default::default()
             },
         )
@@ -1650,8 +1686,8 @@ mod tests {
         let page = JobsRepo::list(
             &pool,
             JobFilter {
-                salary_min: Some(200_000),
-                salary_max: Some(250_000),
+                salary_min: Some(200_000.0),
+                salary_max: Some(250_000.0),
                 salary_include_unknown: Some(false),
                 ..Default::default()
             },
@@ -1754,6 +1790,7 @@ mod tests {
 
         // 1. Initial scrape ingestion
         let initial_job = ScrapedJob {
+            compensation: vec![],
             dedupe_key: "lever:stripe:eng-1".to_string(),
             source_id: None,
             external_id: Some("eng-1".to_string()),
@@ -1820,6 +1857,7 @@ mod tests {
 
         // 3. Re-scrape same job: updated salary and changed location
         let updated_job = ScrapedJob {
+            compensation: vec![],
             dedupe_key: "lever:stripe:eng-1".to_string(),
             source_id: None,
             external_id: Some("eng-1".to_string()),
@@ -1893,6 +1931,7 @@ mod tests {
 
         // Insert job with no structured enrichment, only plain description text
         let raw_job = ScrapedJob {
+                compensation: vec![],
             dedupe_key: "gh:unclassified:01".to_string(),
             source_id: None,
             external_id: Some("01".to_string()),
@@ -1971,6 +2010,7 @@ mod tests {
         // Insert jobs across varied attribute permutations
         let jobs = vec![
             ScrapedJob {
+                compensation: vec![],
                 dedupe_key: "t1".to_string(),
                 source_id: None,
                 external_id: Some("1".to_string()),
@@ -1985,7 +2025,7 @@ mod tests {
                 salary_currency: Some("USD".to_string()),
                 salary_interval: Some(SalaryInterval::Year),
                 salary_raw: None,
-                salary_source: None,
+                salary_source: Some(SalarySource::Structured),
                 workplace_type: WorkplaceType::Remote,
                 sponsorship: TriState::Yes,
                 sponsorship_evidence: None,
@@ -2010,6 +2050,7 @@ mod tests {
                 }],
             },
             ScrapedJob {
+                compensation: vec![],
                 dedupe_key: "t2".to_string(),
                 source_id: None,
                 external_id: Some("2".to_string()),
@@ -2024,7 +2065,7 @@ mod tests {
                 salary_currency: Some("USD".to_string()),
                 salary_interval: Some(SalaryInterval::Year),
                 salary_raw: None,
-                salary_source: None,
+                salary_source: Some(SalarySource::Structured),
                 workplace_type: WorkplaceType::Onsite,
                 sponsorship: TriState::No,
                 sponsorship_evidence: None,
@@ -2054,8 +2095,8 @@ mod tests {
 
         // Query with 5 filters combined simultaneously
         let combined_filter = JobFilter {
-            salary_min: Some(150_000),
-            salary_max: Some(220_000),
+            salary_min: Some(150_000.0),
+            salary_max: Some(220_000.0),
             salary_include_unknown: Some(false),
             experience_max: Some(6),
             experience_include_unknown: Some(false),
@@ -2094,6 +2135,7 @@ mod tests {
         let pool = init_memory_db().await.unwrap();
 
         let job_ca = ScrapedJob {
+            compensation: vec![],
             dedupe_key: "k1".to_string(),
             source_id: None,
             external_id: None,
@@ -2134,6 +2176,7 @@ mod tests {
         };
 
         let job_on = ScrapedJob {
+            compensation: vec![],
             dedupe_key: "k2".to_string(),
             source_id: None,
             external_id: None,
@@ -2213,6 +2256,7 @@ mod tests {
         let pool = init_memory_db().await.unwrap();
 
         let job = ScrapedJob {
+            compensation: vec![],
             dedupe_key: "fav:1".to_string(),
             source_id: None,
             external_id: Some("1".to_string()),
@@ -2274,6 +2318,7 @@ mod tests {
         let pool = init_memory_db().await.unwrap();
 
         let job_a = ScrapedJob {
+            compensation: vec![],
             dedupe_key: "fav:a".to_string(),
             source_id: None,
             external_id: Some("a".to_string()),
@@ -2308,6 +2353,7 @@ mod tests {
         };
 
         let job_b = ScrapedJob {
+            compensation: vec![],
             dedupe_key: "fav:b".to_string(),
             source_id: None,
             external_id: Some("b".to_string()),
@@ -2490,6 +2536,24 @@ mod tests {
         ] {
             sqlx::query("INSERT INTO jobs (id, dedupe_key, title, company, url, date_added, last_seen_at, status_changed_at, salary_currency) VALUES (?1, ?1, 'Engineer', 'Co', 'https://example.com/job', '2000-01-01', '2000-01-01', '2000-01-01', ?2)")
                 .bind(id).bind(currency).execute(&pool).await.unwrap();
+            let range = scrape_core::enrich::CompensationRange {
+                min_minor: None,
+                max_minor: None,
+                currency: currency.map(str::to_string),
+                interval: None,
+                raw: "Fixture currency evidence".into(),
+                source: SalarySource::Structured,
+                derived: false,
+                location: None,
+            };
+            sqlx::query(
+                "UPDATE jobs SET compensation_json = ?, compensation_migrated = 1 WHERE id = ?",
+            )
+            .bind(serde_json::to_string(&vec![range]).unwrap())
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
         }
         for (currency, expected) in [(" usd ", "usd"), ("X' OR 1=1 --", "quoted")] {
             let page = JobsRepo::list(
@@ -2567,6 +2631,7 @@ mod tests {
         let pool = init_memory_db().await.unwrap();
 
         let mut scraped = vec![ScrapedJob {
+            compensation: vec![],
             source_id: None,
             external_id: Some("99999".into()),
             dedupe_key: "gh:testco:99999".into(),

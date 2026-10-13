@@ -12,7 +12,7 @@ pub use eligibility::{
 pub use experience::{extract_experience, ExperienceClassification};
 pub use html::to_plain_text;
 pub use location::ParsedLocation;
-pub use salary::Salary;
+pub use salary::{CompensationFilter, CompensationRange, Salary};
 pub use workplace::classify_workplace;
 
 /// Current version of the enrichment extraction engine. Bump this when heuristics or classifiers change.

@@ -267,6 +267,7 @@ describe("Custom Scrape Jobs: Single-Source Run Isolation", () => {
           interval: "year",
           raw: "$150k - $200k",
           source: "structured",
+          ranges: [],
         },
         description_text: null,
         company_icon_url: null,
