@@ -21,6 +21,7 @@ interface TrackedViewProps {
   onOpenUrl: (url: string) => void;
   onUndo: () => void;
   onToggleFavorite?: (jobId: string) => void;
+  onRequestDelete?: (job: Job) => void;
 }
 
 export function TrackedView({
@@ -30,6 +31,7 @@ export function TrackedView({
   onOpenUrl,
   onUndo,
   onToggleFavorite,
+  onRequestDelete,
 }: TrackedViewProps) {
   const {
     trackedViewMode,
@@ -141,6 +143,11 @@ export function TrackedView({
         onToggleFavorite(selectedJob.id);
       }
     },
+    onDelete: () => {
+      if (selectedJob && onRequestDelete) {
+        onRequestDelete(selectedJob);
+      }
+    },
     onUndo,
   });
 
@@ -163,6 +170,7 @@ export function TrackedView({
           selectedJobId={selectedJobId}
           onSelectJob={handleSelectJob}
           onDropJob={onUpdateStatus}
+          onDelete={onRequestDelete}
         />
       ) : (
         <TrackedList
@@ -170,6 +178,8 @@ export function TrackedView({
           selectedJobId={selectedJobId}
           onSelectJob={handleSelectJob}
           onOpenUrl={onOpenUrl}
+          onToggleFavorite={onToggleFavorite}
+          onDelete={onRequestDelete}
         />
       )}
 
@@ -182,6 +192,7 @@ export function TrackedView({
         onUpdateNotes={onUpdateNotes}
         onOpenUrl={onOpenUrl}
         onToggleFavorite={onToggleFavorite}
+        onDelete={onRequestDelete}
       />
     </div>
   );

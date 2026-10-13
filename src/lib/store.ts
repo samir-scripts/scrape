@@ -47,6 +47,8 @@ interface UIState {
   setView: (view: NavTabId) => void;
 
   // Discovered View state
+  discoveredViewMode: "panes" | "table";
+  setDiscoveredViewMode: (mode: "panes" | "table") => void;
   selectedJobId: string | null;
   setSelectedJobId: (id: string | null) => void;
   selectedJobIds: string[];
@@ -130,6 +132,13 @@ export const useUIStore = create<UIState>((set, get) => ({
   setView: (view) => {
     setStored("scrape:view", view);
     set({ view });
+  },
+
+  discoveredViewMode:
+    (getStored("scrape:discoveredMode") as "panes" | "table") || "panes",
+  setDiscoveredViewMode: (mode) => {
+    setStored("scrape:discoveredMode", mode);
+    set({ discoveredViewMode: mode });
   },
 
   selectedJobId: null,

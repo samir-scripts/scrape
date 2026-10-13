@@ -60,12 +60,15 @@ describe("Domain models & types", () => {
       clearance: "no",
       clearance_level: null,
       clearance_evidence: null,
+      work_auth: "open",
+      work_auth_evidence: "Visa sponsorship available",
       experience_min: 3,
       experience_max: 5,
       experience_raw: "3-5 years",
       is_new_grad: "no",
       experience_evidence: "Requires 3+ years experience",
       description_text: "Join Stripe as a Data Engineer...",
+      company_icon_url: null,
       enrichment_version: 1,
       locations: [
         {
@@ -105,6 +108,7 @@ describe("Domain models & types", () => {
       app_auto_update: true,
       app_update_channel: "stable",
       app_last_update_check: null,
+      app_confirm_job_deletion: true,
     };
     expect(settings.ui_theme).toBe("paper");
     expect(settings.ui_tooltips_enabled).toBe(true);

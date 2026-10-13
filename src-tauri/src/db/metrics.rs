@@ -538,6 +538,8 @@ mod tests {
             workplace_type: scrape_core::WorkplaceType::Remote,
             sponsorship: scrape_core::TriState::Unknown,
             sponsorship_evidence: None,
+            work_auth: scrape_core::WorkAuthRequirement::Unknown,
+            work_auth_evidence: None,
             clearance: scrape_core::TriState::Unknown,
             clearance_level: None,
             clearance_evidence: None,
@@ -547,6 +549,7 @@ mod tests {
             is_new_grad: scrape_core::TriState::Unknown,
             experience_evidence: None,
             description_text: None,
+            company_icon_url: None,
             locations: vec![],
         }
     }

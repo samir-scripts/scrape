@@ -4,9 +4,10 @@ import type { JobStatus } from "../../../bindings/JobStatus";
 import type { JobStatusEvent } from "../../../bindings/JobStatusEvent";
 import { api } from "../../../lib/api";
 import { Tag } from "../../ui/Tag";
-import { Button } from "../../ui/Button";
 import { Rule } from "../../ui/Rule";
 import { KeyHint } from "../../ui/KeyHint";
+import { FavoriteButton } from "../../ui/FavoriteButton";
+import { CompanyLogo } from "../../ui/CompanyLogo";
 import { TRACKED_STAGES } from "../../../lib/constants";
 import { useDebounce } from "../../../hooks/useDebounce";
 
@@ -18,6 +19,7 @@ interface JobDetailDrawerProps {
   onUpdateNotes: (jobId: string, notes: string) => void;
   onOpenUrl: (url: string) => void;
   onToggleFavorite?: (jobId: string) => void;
+  onDelete?: (job: Job) => void;
 }
 
 export function JobDetailDrawer({
@@ -28,6 +30,7 @@ export function JobDetailDrawer({
   onUpdateNotes,
   onOpenUrl,
   onToggleFavorite,
+  onDelete,
 }: JobDetailDrawerProps) {
   const [events, setEvents] = useState<JobStatusEvent[]>([]);
   const [notes, setNotes] = useState(job?.notes || "");
@@ -108,25 +111,42 @@ export function JobDetailDrawer({
               <Tag label={job.role_type.toUpperCase()} variant="outline" />
             </div>
             {onToggleFavorite && (
-              <button
-                type="button"
-                onClick={() => onToggleFavorite(job.id)}
-                className={`px-2 py-0.5 border text-xs font-mono font-bold uppercase tracking-wider cursor-pointer ${
-                  job.favorited
-                    ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
-                    : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-                }`}
-                title={job.favorited ? "Favorited (Protected from TTL retention) [S]" : "Favorite job [S]"}
-              >
-                {job.favorited ? "★ FAVORITED" : "☆ FAVORITE"}
-              </button>
+              <div className="flex items-center gap-1.5 font-mono text-xs">
+                <FavoriteButton
+                  favorited={job.favorited}
+                  onToggle={() => onToggleFavorite(job.id)}
+                  size="sm"
+                />
+                <span
+                  className={`text-[11px] font-bold ${
+                    job.favorited
+                      ? "text-[var(--color-lime)]"
+                      : "text-[var(--color-ink-mute)]"
+                  }`}
+                >
+                  {job.favorited ? "FAVORITED" : "FAVORITE"}
+                </span>
+              </div>
             )}
           </div>
-          <h2 className="text-xl font-black uppercase tracking-tight text-[var(--color-ink)]">
-            {job.title}
-          </h2>
-          <div className="text-xs font-mono font-bold text-[var(--color-ink-mute)]">
-            {job.company} · {job.location || "REMOTE"}
+          <div className="flex items-start gap-2.5 mt-1">
+            <CompanyLogo
+              company={job.company}
+              iconUrl={job.company_icon_url}
+              size="md"
+              className="mt-0.5"
+            />
+            <div className="flex flex-col min-w-0 flex-1">
+              <h2 className="text-xl font-black uppercase tracking-tight text-[var(--color-ink)] leading-tight">
+                {job.title}
+              </h2>
+              <div className="text-xs font-mono font-bold text-[var(--color-ink-mute)] mt-0.5">
+                {job.company} · {job.location || (job.workplace_type === "onsite" ? "IN-OFFICE" : "REMOTE")} ·{" "}
+                {job.workplace_type === "onsite"
+                  ? "IN-OFFICE"
+                  : job.workplace_type.toUpperCase()}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -160,13 +180,49 @@ export function JobDetailDrawer({
         <Rule />
 
         {/* Open Job Link */}
-        <Button
-          variant="inverted"
-          onClick={() => onOpenUrl(job.url)}
-          className="w-full justify-center"
-        >
-          [↵] OPEN JOB POSTING
-        </Button>
+        <div className="flex items-center justify-between p-2 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/20 font-mono text-xs">
+          <a
+            href={job.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => {
+              e.preventDefault();
+              onOpenUrl(job.url);
+            }}
+            title="Open job posting in browser"
+            className="truncate max-w-[240px] text-[var(--color-ink)] hover:underline hover:opacity-80 font-mono text-[11px] flex items-center gap-1.5 cursor-pointer"
+          >
+            <span className="truncate">{job.url}</span>
+            <span className="opacity-60 text-[10px] shrink-0 font-bold">[↗]</span>
+          </a>
+          <button
+            onClick={() => onOpenUrl(job.url)}
+            className="px-2 py-0.5 border border-[var(--color-ink)] font-bold text-[10px] uppercase hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] cursor-pointer shrink-0 ml-2"
+          >
+            OPEN [↵]
+          </button>
+        </div>
+
+        {/* Job Description */}
+        <div className="flex flex-col gap-1.5 font-mono text-xs">
+          <div className="flex justify-between items-center font-bold uppercase tracking-wider">
+            <span>JOB DESCRIPTION</span>
+            {job.description_text && (
+              <span className="text-[10px] text-[var(--color-ink-mute)] font-normal">
+                {job.description_text.length} CHARS
+              </span>
+            )}
+          </div>
+          <div className="p-3 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/20 font-sans text-xs leading-relaxed text-[var(--color-ink)] whitespace-pre-wrap max-h-56 overflow-y-auto select-text">
+            {job.description_text ? (
+              job.description_text
+            ) : (
+              <span className="font-mono text-[var(--color-ink-mute)] italic">
+                [NO DESCRIPTION EXTRACTED]
+              </span>
+            )}
+          </div>
+        </div>
 
         {/* Notes */}
         <div className="flex flex-col gap-1.5 font-mono text-xs">
@@ -215,6 +271,21 @@ export function JobDetailDrawer({
             </div>
           )}
         </div>
+
+        {onDelete && (
+          <>
+            <Rule />
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => onDelete(job)}
+                className="w-full py-2 px-3 border border-[var(--color-cherry)] text-[var(--color-cherry)] hover:bg-[var(--color-cherry)] hover:text-white font-mono text-xs font-bold uppercase transition-colors cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>[DEL] DELETE APPLICATION RECORD</span>
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

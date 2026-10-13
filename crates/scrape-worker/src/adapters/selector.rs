@@ -1,9 +1,9 @@
 use crate::client::{ClientError, HttpClient};
 use scrape_core::enrich::{
-    classify_clearance, classify_sponsorship, extract_experience, location as loc_enrich,
-    to_plain_text, Salary,
+    classify_clearance, classify_sponsorship, classify_work_auth, classify_workplace,
+    extract_experience, location as loc_enrich, to_plain_text, Salary,
 };
-use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource, WorkplaceType};
+use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource};
 use scraper::{Html, Selector};
 use url::Url;
 
@@ -285,21 +285,20 @@ pub fn extract_jobs_with_selectors(
         }
 
         let locations = loc_enrich::parse(&location);
-        let workplace_type = if locations.iter().any(|l| l.is_remote)
-            || location.to_lowercase().contains("remote")
-        {
-            WorkplaceType::Remote
-        } else if location.to_lowercase().contains("hybrid") {
-            WorkplaceType::Hybrid
-        } else if !location.is_empty() {
-            WorkplaceType::Onsite
-        } else {
-            WorkplaceType::Unknown
-        };
+        let workplace_type = classify_workplace(
+            None,
+            &location,
+            desc_text.as_deref(),
+        );
 
         let text_for_enrich = desc_text.as_deref().unwrap_or("");
         let sponsorship = if !text_for_enrich.is_empty() {
             Some(classify_sponsorship(text_for_enrich))
+        } else {
+            None
+        };
+        let work_auth = if !text_for_enrich.is_empty() {
+            Some(classify_work_auth(text_for_enrich))
         } else {
             None
         };
@@ -314,6 +313,10 @@ pub fn extract_jobs_with_selectors(
             .map(|e| e.is_new_grad)
             .unwrap_or(TriState::Unknown);
 
+        let company_icon_url = base_url.host_str().map(|h| {
+            format!("https://www.google.com/s2/favicons?domain={h}&sz=64")
+        });
+
         events.push(WorkerEvent::Job {
             source_id: source.id.clone(),
             external_id: job_url.clone(),
@@ -327,10 +330,12 @@ pub fn extract_jobs_with_selectors(
             locations,
             workplace_type,
             sponsorship,
+            work_auth,
             clearance,
             experience,
             is_new_grad,
             description_text: desc_text,
+            company_icon_url,
         });
     }
 
@@ -340,7 +345,7 @@ pub fn extract_jobs_with_selectors(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use scrape_core::SourceKind;
+    use scrape_core::{SourceKind, WorkplaceType};
 
     #[test]
     fn test_extract_jobs_with_selectors() {

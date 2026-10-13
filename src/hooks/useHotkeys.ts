@@ -24,14 +24,25 @@ export function useGlobalHotkeys() {
           (activeEl as HTMLElement).blur();
           return;
         }
-        const { isFilterPanelOpen, setFilterPanelOpen, drawerJobId, setDrawerJobId } =
-          useUIStore.getState();
+        const {
+          isFilterPanelOpen,
+          setFilterPanelOpen,
+          drawerJobId,
+          setDrawerJobId,
+          view,
+          selectedJobId,
+          setSelectedJobId,
+        } = useUIStore.getState();
         if (isFilterPanelOpen) {
           setFilterPanelOpen(false);
           return;
         }
         if (drawerJobId) {
           setDrawerJobId(null);
+          return;
+        }
+        if (view === "discovered" && selectedJobId) {
+          setSelectedJobId(null);
           return;
         }
         return;
@@ -100,6 +111,7 @@ export interface HotkeyOptions {
   onToggleFavorite?: () => void;
   onShiftLeft?: () => void;
   onShiftRight?: () => void;
+  onDelete?: () => void;
 }
 
 /**
@@ -202,6 +214,17 @@ export function useHotkeys(options: HotkeyOptions = {}) {
         if (e.key === "s" || e.key === "S") {
           e.preventDefault();
           optionsRef.current.onToggleFavorite?.();
+          return;
+        }
+
+        if (
+          e.key === "Delete" ||
+          e.key === "Backspace" ||
+          e.key === "d" ||
+          e.key === "D"
+        ) {
+          e.preventDefault();
+          optionsRef.current.onDelete?.();
           return;
         }
       }

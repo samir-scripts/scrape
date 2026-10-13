@@ -129,3 +129,17 @@ pub async fn cleanup_expired_jobs(
         JobsRepo::prune_all_expired(&state.db).await
     }
 }
+
+#[tauri::command]
+pub async fn delete_job(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<bool> {
+    let deleted = JobsRepo::delete(&state.db, &id).await?;
+    if deleted {
+        let _ = app.emit("jobs://changed", ());
+    }
+    Ok(deleted)
+}
+

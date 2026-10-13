@@ -4,11 +4,12 @@ node_modules/
 # Build output
 dist/
 target/
-src-tauri/gen/schemas/
+src-tauri/gen/schemas/*.json
 
 # Sidecar binaries (built per target by scripts/build-sidecar.mjs)
 src-tauri/binaries/*
 !src-tauri/binaries/.gitkeep
+!src-tauri/binaries/*.md
 
 # Local data
 *.db

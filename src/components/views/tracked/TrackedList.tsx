@@ -10,9 +10,12 @@ import {
 } from "../../ui/Table";
 import { Tag } from "../../ui/Tag";
 import { EmptyState } from "../../ui/EmptyState";
+import { FavoriteButton } from "../../ui/FavoriteButton";
+import { CompanyLogo } from "../../ui/CompanyLogo";
 import {
   formatSalary,
   formatExperience,
+  formatWorkAuth,
   triStateToLabel,
 } from "../../../lib/filter";
 
@@ -21,6 +24,8 @@ interface TrackedListProps {
   selectedJobId: string | null;
   onSelectJob: (job: Job) => void;
   onOpenUrl: (url: string) => void;
+  onToggleFavorite?: (jobId: string) => void;
+  onDelete?: (job: Job) => void;
 }
 
 export type SortField = "company" | "title" | "status" | "salary" | "date_added" | "favorited";
@@ -55,6 +60,8 @@ export function TrackedList({
   selectedJobId,
   onSelectJob,
   onOpenUrl,
+  onToggleFavorite,
+  onDelete,
 }: TrackedListProps) {
   const [sortField, setSortField] = useState<SortField>("date_added");
   const [sortAsc, setSortAsc] = useState(false);
@@ -97,6 +104,7 @@ export function TrackedList({
             <TableHeader onClick={() => handleSort("title")} className="cursor-pointer">
               JOB TITLE {sortField === "title" ? (sortAsc ? "▲" : "▼") : ""}
             </TableHeader>
+            <TableHeader className="min-w-[200px]">DESCRIPTION & RELEVANT INFO</TableHeader>
             <TableHeader onClick={() => handleSort("status")} className="cursor-pointer">
               STAGE {sortField === "status" ? (sortAsc ? "▲" : "▼") : ""}
             </TableHeader>
@@ -107,6 +115,7 @@ export function TrackedList({
             <TableHeader>YOE</TableHeader>
             <TableHeader>NEW GRAD</TableHeader>
             <TableHeader>SPONSORSHIP</TableHeader>
+            <TableHeader>GREEN CARD</TableHeader>
             <TableHeader>CLEARANCE</TableHeader>
             <TableHeader onClick={() => handleSort("date_added")} className="cursor-pointer">
               ADDED {sortField === "date_added" ? (sortAsc ? "▲" : "▼") : ""}
@@ -117,6 +126,10 @@ export function TrackedList({
         <TableBody>
           {sortedJobs.map((job) => {
             const isSelected = job.id === selectedJobId;
+            const descSnippet = job.description_text
+              ? job.description_text.replace(/\s+/g, " ").trim().slice(0, 100) +
+                (job.description_text.length > 100 ? "…" : "")
+              : "—";
 
             return (
               <TableRow
@@ -126,11 +139,30 @@ export function TrackedList({
                   isSelected ? "bg-[var(--color-paper-2)] font-bold" : ""
                 }`}
               >
-                <TableCell className={`text-center font-bold ${job.favorited ? "text-[var(--color-lime)]" : "text-[var(--color-ink-mute)]"}`}>
-                  {job.favorited ? "★" : "☆"}
+                <TableCell className="text-center">
+                  <FavoriteButton
+                    favorited={job.favorited}
+                    onToggle={() => onToggleFavorite?.(job.id)}
+                    size="sm"
+                  />
                 </TableCell>
-                <TableCell className="font-bold uppercase">{job.company}</TableCell>
+                <TableCell className="font-bold uppercase whitespace-nowrap">
+                  <div className="flex items-center gap-2">
+                    <CompanyLogo
+                      company={job.company}
+                      iconUrl={job.company_icon_url}
+                      size="sm"
+                    />
+                    <span>{job.company}</span>
+                  </div>
+                </TableCell>
                 <TableCell>{job.title}</TableCell>
+                <TableCell
+                  className="text-[11px] font-mono text-[var(--color-ink-mute)] max-w-xs truncate select-text"
+                  title={job.description_text || ""}
+                >
+                  {descSnippet}
+                </TableCell>
                 <TableCell>
                   <Tag status={job.status} />
                 </TableCell>
@@ -138,7 +170,12 @@ export function TrackedList({
                   {formatSalary(job)}
                 </TableCell>
                 <TableCell className="text-[var(--color-ink-mute)] whitespace-nowrap">
-                  {job.location || "REMOTE"}
+                  {job.location ||
+                    (job.workplace_type === "onsite"
+                      ? "IN-OFFICE"
+                      : job.workplace_type === "hybrid"
+                      ? "HYBRID"
+                      : "REMOTE")}
                 </TableCell>
                 <TableCell className="font-mono text-xs whitespace-nowrap">
                   {formatExperience(job)}
@@ -149,6 +186,9 @@ export function TrackedList({
                 <TableCell className="font-mono text-xs">
                   {triStateToLabel(job.sponsorship)}
                 </TableCell>
+                <TableCell className="font-mono text-xs whitespace-nowrap">
+                  {formatWorkAuth(job)}
+                </TableCell>
                 <TableCell className="font-mono text-xs">
                   {triStateToLabel(job.clearance)}
                 </TableCell>
@@ -156,15 +196,29 @@ export function TrackedList({
                   {job.date_added.slice(0, 10)}
                 </TableCell>
                 <TableCell>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenUrl(job.url);
-                    }}
-                    className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] text-[10px] font-mono uppercase cursor-pointer"
-                  >
-                    OPEN ↗
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenUrl(job.url);
+                      }}
+                      className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] text-[10px] font-mono uppercase cursor-pointer"
+                    >
+                      OPEN ↗
+                    </button>
+                    {onDelete && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(job);
+                        }}
+                        className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-cherry)] hover:text-white text-[10px] font-mono font-bold uppercase cursor-pointer"
+                        title="Delete application record"
+                      >
+                        DEL
+                      </button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             );

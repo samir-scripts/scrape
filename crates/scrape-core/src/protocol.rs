@@ -1,5 +1,6 @@
 use crate::enrich::{
-    ClassifiedClearance, ClassifiedSponsorship, ExperienceClassification, ParsedLocation, Salary,
+    ClassifiedClearance, ClassifiedSponsorship, ClassifiedWorkAuth, ExperienceClassification,
+    ParsedLocation, Salary,
 };
 use crate::{RoleType, SourceKind, TriState, WorkplaceType};
 use serde::{Deserialize, Serialize};
@@ -234,6 +235,10 @@ pub enum WorkerEvent {
         is_new_grad: TriState,
         #[serde(default)]
         description_text: Option<String>,
+        #[serde(default)]
+        company_icon_url: Option<String>,
+        #[serde(default)]
+        work_auth: Option<ClassifiedWorkAuth>,
     },
     Progress {
         source_id: String,
@@ -317,6 +322,8 @@ mod tests {
             experience: None,
             is_new_grad: TriState::Unknown,
             description_text: None,
+            company_icon_url: None,
+            work_auth: None,
         };
 
         let serialized = serde_json::to_string(&job).unwrap();

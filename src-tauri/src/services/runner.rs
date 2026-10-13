@@ -683,10 +683,12 @@ impl ScrapeRunner {
                                     locations,
                                     workplace_type,
                                     sponsorship,
+                                    work_auth,
                                     clearance,
                                     experience,
                                     is_new_grad,
                                     description_text,
+                                    company_icon_url,
                                 } => {
                                     let dedupe_key = format!("{}:{}", source_id, external_id);
                                     let loc_opt = if location.is_empty() {
@@ -720,6 +722,13 @@ impl ScrapeRunner {
                                             (sp.value, sp.evidence)
                                         } else {
                                             (TriState::Unknown, None)
+                                        };
+
+                                    let (work_auth_val, work_auth_evidence) =
+                                        if let Some(wa) = work_auth {
+                                            (wa.value, wa.evidence)
+                                        } else {
+                                            (scrape_core::WorkAuthRequirement::Unknown, None)
                                         };
 
                                     let (clearance_val, clearance_level, clearance_evidence) =
@@ -759,6 +768,8 @@ impl ScrapeRunner {
                                         workplace_type,
                                         sponsorship: sponsorship_val,
                                         sponsorship_evidence,
+                                        work_auth: work_auth_val,
+                                        work_auth_evidence,
                                         clearance: clearance_val,
                                         clearance_level,
                                         clearance_evidence,
@@ -768,6 +779,7 @@ impl ScrapeRunner {
                                         is_new_grad,
                                         experience_evidence,
                                         description_text,
+                                        company_icon_url,
                                         locations,
                                     });
                                     total_found += 1;
@@ -1302,6 +1314,8 @@ mod tests {
                 workplace_type: WorkplaceType::Hybrid,
                 sponsorship: TriState::Yes,
                 sponsorship_evidence: Some("Sponsorship available".to_string()),
+                work_auth: scrape_core::WorkAuthRequirement::Unknown,
+                work_auth_evidence: None,
                 clearance: TriState::No,
                 clearance_level: None,
                 clearance_evidence: None,
@@ -1311,6 +1325,7 @@ mod tests {
                 is_new_grad: TriState::Yes,
                 experience_evidence: None,
                 description_text: Some("Join our summer intern program".to_string()),
+                company_icon_url: None,
                 locations: vec![],
             },
             ScrapedJob {
@@ -1332,6 +1347,8 @@ mod tests {
                 workplace_type: WorkplaceType::Remote,
                 sponsorship: TriState::Unknown,
                 sponsorship_evidence: None,
+                work_auth: scrape_core::WorkAuthRequirement::Unknown,
+                work_auth_evidence: None,
                 clearance: TriState::Unknown,
                 clearance_level: None,
                 clearance_evidence: None,
@@ -1341,6 +1358,7 @@ mod tests {
                 is_new_grad: TriState::No,
                 experience_evidence: None,
                 description_text: Some("Build edge networking systems".to_string()),
+                company_icon_url: None,
                 locations: vec![],
             },
         ];
@@ -1377,6 +1395,7 @@ mod tests {
                 experience_include_unknown: None,
                 new_grad: None,
                 sponsorship: None,
+                work_auth: None,
                 clearance: None,
                 countries: None,
                 regions: None,
@@ -1424,6 +1443,7 @@ mod tests {
                 experience_include_unknown: None,
                 new_grad: None,
                 sponsorship: None,
+                work_auth: None,
                 clearance: None,
                 countries: None,
                 regions: None,
@@ -1464,6 +1484,7 @@ mod tests {
                 experience_include_unknown: None,
                 new_grad: None,
                 sponsorship: None,
+                work_auth: None,
                 clearance: None,
                 countries: None,
                 regions: None,

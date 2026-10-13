@@ -167,6 +167,7 @@ export function FilterPanel({
       regions: filterSpec.regions ?? null,
       remote: filterSpec.remote ?? null,
       location_include_unknown: filterSpec.location_include_unknown ?? true,
+      work_auth: filterSpec.work_auth ?? null,
     };
 
     api.previewFilterImpact(fullSpec)

@@ -121,6 +121,13 @@ export function matchesJob(job: Job, filter: Partial<JobFilter>): boolean {
     }
   }
 
+  // 9b. Work authorization / Green Card
+  if (filter.work_auth && filter.work_auth.length > 0) {
+    if (!filter.work_auth.includes(job.work_auth)) {
+      return false;
+    }
+  }
+
   // 10. Clearance tri-state
   if (filter.clearance && filter.clearance.length > 0) {
     if (!filter.clearance.includes(job.clearance)) {
@@ -264,6 +271,23 @@ export function formatExperience(job: Job): string {
 }
 
 /**
+ * Format work authorization / Green Card eligibility into clean brutalist label.
+ */
+export function formatWorkAuth(job: Job): string {
+  switch (job.work_auth) {
+    case "citizen_only":
+      return "CITIZEN ONLY";
+    case "us_person":
+      return "GC / US PERSON";
+    case "open":
+      return "OPEN";
+    case "unknown":
+    default:
+      return "—";
+  }
+}
+
+/**
  * Count how many non-default filter dimensions are currently set.
  */
 export function countActiveFilters(filter: Partial<JobFilter>): number {
@@ -275,6 +299,7 @@ export function countActiveFilters(filter: Partial<JobFilter>): number {
   if (filter.experience_min != null || filter.experience_max != null) count++;
   if (filter.new_grad && filter.new_grad !== "any") count++;
   if (filter.sponsorship && filter.sponsorship.length > 0) count++;
+  if (filter.work_auth && filter.work_auth.length > 0) count++;
   if (filter.clearance && filter.clearance.length > 0) count++;
   if (filter.remote && filter.remote !== "all") count++;
   if (filter.countries && filter.countries.length > 0) count++;

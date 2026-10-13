@@ -1,9 +1,10 @@
 use crate::client::{ClientError, HttpClient};
 use chrono::{DateTime, SecondsFormat};
 use scrape_core::enrich::{
-    classify_clearance, classify_sponsorship, extract_experience, location as loc_enrich, Salary,
+    classify_clearance, classify_sponsorship, classify_work_auth, classify_workplace,
+    extract_experience, location as loc_enrich, Salary,
 };
-use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource, WorkplaceType};
+use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -107,26 +108,6 @@ fn parse_lever_postings(
         };
         let locations = loc_enrich::parse(&location_str);
 
-        // Workplace type
-        let workplace_type = match posting.workplace_type.as_deref() {
-            Some("remote") => WorkplaceType::Remote,
-            Some("hybrid") => WorkplaceType::Hybrid,
-            Some("on-site") => WorkplaceType::Onsite,
-            _ => {
-                if locations.iter().any(|l| l.is_remote)
-                    || location_str.to_lowercase().contains("remote")
-                {
-                    WorkplaceType::Remote
-                } else if location_str.to_lowercase().contains("hybrid") {
-                    WorkplaceType::Hybrid
-                } else if !location_str.is_empty() {
-                    WorkplaceType::Onsite
-                } else {
-                    WorkplaceType::Unknown
-                }
-            }
-        };
-
         // Combine description texts
         let mut desc_parts = Vec::new();
         if let Some(dp) = &posting.description_plain {
@@ -155,6 +136,13 @@ fn parse_lever_postings(
         } else {
             Some(full_description.chars().take(32768).collect::<String>())
         };
+
+        // Workplace type
+        let workplace_type = classify_workplace(
+            posting.workplace_type.as_deref(),
+            &location_str,
+            desc_text.as_deref(),
+        );
 
         // Salary
         let mut salary = None;
@@ -190,6 +178,11 @@ fn parse_lever_postings(
         } else {
             None
         };
+        let work_auth = if !text_for_enrich.is_empty() {
+            Some(classify_work_auth(text_for_enrich))
+        } else {
+            None
+        };
         let experience = Some(extract_experience(&posting.text, text_for_enrich));
         let is_new_grad = experience
             .as_ref()
@@ -200,6 +193,11 @@ fn parse_lever_postings(
             DateTime::from_timestamp_millis(ms)
                 .map(|dt| dt.to_rfc3339_opts(SecondsFormat::Millis, true))
         });
+
+        let company_icon_url = Some(format!(
+            "https://www.google.com/s2/favicons?domain={}.com&sz=64",
+            source.identifier.trim().to_lowercase().replace(' ', "-")
+        ));
 
         events.push(WorkerEvent::Job {
             source_id: source.id.clone(),
@@ -215,9 +213,11 @@ fn parse_lever_postings(
             workplace_type,
             sponsorship,
             clearance,
+            work_auth,
             experience,
             is_new_grad,
             description_text: desc_text,
+            company_icon_url,
         });
     }
 
@@ -227,6 +227,7 @@ fn parse_lever_postings(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use scrape_core::WorkplaceType;
 
     #[test]
     fn test_parse_lever_json() {

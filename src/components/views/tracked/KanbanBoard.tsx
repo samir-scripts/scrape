@@ -9,6 +9,7 @@ interface KanbanBoardProps {
   selectedJobId: string | null;
   onSelectJob: (job: Job) => void;
   onDropJob: (jobId: string, targetStatus: JobStatus) => void;
+  onDelete?: (job: Job) => void;
 }
 
 export function KanbanBoard({
@@ -16,6 +17,7 @@ export function KanbanBoard({
   selectedJobId,
   onSelectJob,
   onDropJob,
+  onDelete,
 }: KanbanBoardProps) {
   const [draggingJobId, setDraggingJobId] = useState<string | null>(null);
 
@@ -44,6 +46,7 @@ export function KanbanBoard({
               onDropJob={onDropJob}
               onDragStartJob={(id) => setDraggingJobId(id)}
               onDragEndJob={() => setDraggingJobId(null)}
+              onDelete={onDelete}
             />
           );
         })}

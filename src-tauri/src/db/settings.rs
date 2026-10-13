@@ -29,6 +29,7 @@ pub struct Settings {
     pub app_auto_update: bool,
     pub app_update_channel: String,
     pub app_last_update_check: Option<String>,
+    pub app_confirm_job_deletion: bool,
 }
 
 impl Default for Settings {
@@ -56,6 +57,7 @@ impl Default for Settings {
             app_auto_update: true,
             app_update_channel: "stable".to_string(),
             app_last_update_check: None,
+            app_confirm_job_deletion: true,
         }
     }
 }
@@ -85,6 +87,7 @@ impl SettingsRepo {
     const KEY_APP_AUTO_UPDATE: &'static str = "app.auto_update";
     const KEY_APP_UPDATE_CHANNEL: &'static str = "app.update_channel";
     const KEY_APP_LAST_UPDATE_CHECK: &'static str = "app.last_update_check";
+    const KEY_APP_CONFIRM_JOB_DELETION: &'static str = "app.confirm_job_deletion";
 
     pub async fn ensure_defaults(pool: &SqlitePool, defaults: &Settings) -> Result<()> {
         let entries = vec![
@@ -175,6 +178,10 @@ impl SettingsRepo {
             (
                 Self::KEY_APP_LAST_UPDATE_CHECK,
                 serde_json::to_string(&defaults.app_last_update_check)?,
+            ),
+            (
+                Self::KEY_APP_CONFIRM_JOB_DELETION,
+                serde_json::to_string(&defaults.app_confirm_job_deletion)?,
             ),
         ];
 
@@ -356,6 +363,11 @@ impl SettingsRepo {
                         settings.app_last_update_check = v;
                     }
                 }
+                Self::KEY_APP_CONFIRM_JOB_DELETION => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.app_confirm_job_deletion = v;
+                    }
+                }
                 _ => {}
             }
         }
@@ -391,6 +403,7 @@ impl SettingsRepo {
             Self::KEY_APP_AUTO_UPDATE,
             Self::KEY_APP_UPDATE_CHANNEL,
             Self::KEY_APP_LAST_UPDATE_CHECK,
+            Self::KEY_APP_CONFIRM_JOB_DELETION,
         ];
 
         if !valid_keys.contains(&key) {
@@ -487,6 +500,15 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(updated_date.system_date_format, "DD/MM/YYYY");
+
+        let updated_confirm = SettingsRepo::update_setting(
+            &pool,
+            "app.confirm_job_deletion",
+            serde_json::json!(false),
+        )
+        .await
+        .unwrap();
+        assert!(!updated_confirm.app_confirm_job_deletion);
 
         let err =
             SettingsRepo::update_setting(&pool, "invalid.key", serde_json::json!("foo")).await;

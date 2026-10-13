@@ -47,10 +47,11 @@ describe("Dev-Mode Scrape Workflow Execution & Discovered Pipeline", () => {
 
     // Verify job structure and fields
     const titles = discovered.items.map((j) => j.title);
-    expect(titles).toContain("Software Engineering Intern - Systems & Core Infrastructure");
-    expect(titles).toContain("Systems Engineering Intern - Edge & Networking Protocols");
-    expect(titles).toContain("Security Engineering Intern - Product Security & Cryptography");
-    expect(titles).toContain("Distributed Systems Engineer Intern - Global CDN & Data Platform");
+    expect(titles).toContain("Software Engineer Intern (2027) - Austin, TX");
+    expect(titles).toContain("Software Engineer Intern (2027)");
+    expect(titles).toContain("Systems Engineer, Network Protocols & Distributed Systems");
+    expect(titles).not.toContain("Technical Product Marketing Manager");
+    expect(titles).not.toContain("Account Executive, FedCiv");
 
     for (const job of discovered.items) {
       expect(job.company).toBe("Cloudflare");

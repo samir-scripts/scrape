@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { api } from "./lib/api";
@@ -15,6 +15,7 @@ import { MetricsView } from "./components/views/metrics/MetricsView";
 import { ScraperView } from "./components/views/scraper/ScraperView";
 import { SettingsView } from "./components/views/settings/SettingsView";
 import { FilterPanel } from "./components/filters/FilterPanel";
+import { DeleteJobModal } from "./components/ui/DeleteJobModal";
 import { matchesJob } from "./lib/filter";
 import { useGlobalHotkeys } from "./hooks/useHotkeys";
 
@@ -239,6 +240,60 @@ export default function App() {
     },
   });
 
+  // 6b. Delete job mutation with optimistic updates
+  const deleteJobMutation = useMutation({
+    mutationFn: async (jobId: string) => {
+      return api.deleteJob(jobId);
+    },
+    onMutate: async (jobId: string) => {
+      await queryClient.cancelQueries({ queryKey: ["jobs"] });
+      const prevData = queryClient.getQueryData<Page<Job>>(["jobs"]);
+      if (prevData) {
+        queryClient.setQueryData<Page<Job>>(["jobs"], {
+          ...prevData,
+          items: prevData.items.filter((j) => j.id !== jobId),
+          total:
+            typeof prevData.total === "bigint"
+              ? (prevData.total > 0n ? prevData.total - 1n : 0n)
+              : BigInt(Math.max(0, Number(prevData.total) - 1)),
+        });
+      }
+      return { prevData };
+    },
+    onError: (_err, _jobId, context) => {
+      if (context?.prevData) {
+        queryClient.setQueryData(["jobs"], context.prevData);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["metrics"] });
+    },
+  });
+
+  const [jobPendingDelete, setJobPendingDelete] = useState<Job | null>(null);
+
+  const handleRequestDelete = (job: Job) => {
+    if (settings?.app_confirm_job_deletion ?? true) {
+      setJobPendingDelete(job);
+    } else {
+      deleteJobMutation.mutate(job.id);
+    }
+  };
+
+  const handleConfirmDelete = (dontAskAgain: boolean) => {
+    if (!jobPendingDelete) return;
+    const targetId = jobPendingDelete.id;
+    if (dontAskAgain) {
+      updateSettingMutation.mutate({
+        key: "app.confirm_job_deletion",
+        value: false,
+      });
+    }
+    deleteJobMutation.mutate(targetId);
+    setJobPendingDelete(null);
+  };
+
   // 7. Undo handler
   const handleUndo = async () => {
     const item = popUndo();
@@ -251,13 +306,19 @@ export default function App() {
     }
   };
 
-  // 8. Open URL helper
+  // 8. Open URL helper (Tauri native opener with resilient browser fallback)
   const handleOpenUrl = async (url: string) => {
     if (!url) return;
     try {
-      await openUrl(url);
+      if (typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__)) {
+        await openUrl(url);
+        return;
+      }
     } catch (e) {
-      console.error("Failed to open URL in browser:", e);
+      console.warn("Tauri opener failed, using browser window.open fallback:", e);
+    }
+    if (typeof window !== "undefined") {
+      window.open(url, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -405,6 +466,7 @@ export default function App() {
           onOpenUrl={handleOpenUrl}
           onUndo={handleUndo}
           onToggleFavorite={(jobId) => toggleFavoriteMutation.mutate(jobId)}
+          onRequestDelete={handleRequestDelete}
         />
       )}
 
@@ -420,6 +482,7 @@ export default function App() {
           onOpenUrl={handleOpenUrl}
           onUndo={handleUndo}
           onToggleFavorite={(jobId) => toggleFavoriteMutation.mutate(jobId)}
+          onRequestDelete={handleRequestDelete}
         />
       )}
 
@@ -450,6 +513,14 @@ export default function App() {
         filterSpec={filterSpec}
         onUpdateFilter={setFilterSpec}
         onResetFilters={resetFilterSpec}
+      />
+
+      {/* Delete Job Confirmation Modal */}
+      <DeleteJobModal
+        isOpen={jobPendingDelete !== null}
+        job={jobPendingDelete}
+        onClose={() => setJobPendingDelete(null)}
+        onConfirm={handleConfirmDelete}
       />
     </Shell>
   );

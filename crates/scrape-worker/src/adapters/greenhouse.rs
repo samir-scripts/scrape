@@ -1,9 +1,9 @@
 use crate::client::{ClientError, HttpClient};
 use scrape_core::enrich::{
-    classify_clearance, classify_sponsorship, extract_experience, location as loc_enrich,
-    to_plain_text, Salary,
+    classify_clearance, classify_sponsorship, classify_work_auth, classify_workplace,
+    extract_experience, location as loc_enrich, to_plain_text, Salary,
 };
-use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource, WorkplaceType};
+use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -18,9 +18,16 @@ struct GreenhouseJob {
     title: String,
     absolute_url: String,
     location: Option<GreenhouseLocation>,
+    offices: Option<Vec<GreenhouseOffice>>,
     updated_at: Option<String>,
     content: Option<String>,
     pay_input_ranges: Option<Vec<GreenhousePayRange>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GreenhouseOffice {
+    name: Option<String>,
+    location: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -66,25 +73,47 @@ fn parse_greenhouse_jobs(
 
     for job in jobs {
         let role_type = RoleType::infer(&job.title, None);
-        let location_str = job.location.and_then(|l| l.name).unwrap_or_default();
-        let locations = loc_enrich::parse(&location_str);
+        let raw_location_name = job.location.and_then(|l| l.name).unwrap_or_default();
+        let offices_str = job
+            .offices
+            .as_ref()
+            .map(|offs| {
+                offs.iter()
+                    .filter_map(|o| o.name.as_deref().or(o.location.as_deref()))
+                    .filter(|s| !s.trim().is_empty())
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            })
+            .unwrap_or_default();
 
-        let workplace_type = if locations.iter().any(|l| l.is_remote)
-            || location_str.to_lowercase().contains("remote")
-        {
-            WorkplaceType::Remote
-        } else if location_str.to_lowercase().contains("hybrid") {
-            WorkplaceType::Hybrid
-        } else if !location_str.is_empty() {
-            WorkplaceType::Onsite
+        let is_arrangement_keyword = raw_location_name.eq_ignore_ascii_case("In-Office")
+            || raw_location_name.eq_ignore_ascii_case("In Office")
+            || raw_location_name.eq_ignore_ascii_case("On-Site")
+            || raw_location_name.eq_ignore_ascii_case("OnSite")
+            || raw_location_name.eq_ignore_ascii_case("Hybrid")
+            || raw_location_name.eq_ignore_ascii_case("Distributed")
+            || raw_location_name.eq_ignore_ascii_case("Remote");
+
+        let effective_location_str = if is_arrangement_keyword && !offices_str.is_empty() {
+            offices_str
+        } else if !raw_location_name.is_empty() {
+            raw_location_name.clone()
         } else {
-            WorkplaceType::Unknown
+            offices_str
         };
+
+        let locations = loc_enrich::parse(&effective_location_str);
 
         let desc_text = job
             .content
             .as_deref()
             .map(|html| to_plain_text(html, 32768));
+
+        let workplace_type = classify_workplace(
+            Some(&raw_location_name),
+            &effective_location_str,
+            desc_text.as_deref(),
+        );
 
         let mut salary = None;
         if let Some(ranges) = &job.pay_input_ranges {
@@ -113,11 +142,29 @@ fn parse_greenhouse_jobs(
         } else {
             None
         };
+        let work_auth = if !text_for_enrich.is_empty() {
+            Some(classify_work_auth(text_for_enrich))
+        } else {
+            None
+        };
         let experience = Some(extract_experience(&job.title, text_for_enrich));
         let is_new_grad = experience
             .as_ref()
             .map(|e| e.is_new_grad)
             .unwrap_or(TriState::Unknown);
+
+        let company_icon_url = Some(format!(
+            "https://www.google.com/s2/favicons?domain={}.com&sz=64",
+            source.identifier.trim().to_lowercase().replace(' ', "-")
+        ));
+
+        let url = if job.absolute_url.contains("boards.greenhouse.io") {
+            job.absolute_url
+                .replace("https://boards.greenhouse.io", "https://job-boards.greenhouse.io")
+                .replace("http://boards.greenhouse.io", "https://job-boards.greenhouse.io")
+        } else {
+            job.absolute_url
+        };
 
         events.push(WorkerEvent::Job {
             source_id: source.id.clone(),
@@ -125,17 +172,19 @@ fn parse_greenhouse_jobs(
             title: job.title,
             company: source.name.clone(),
             role_type,
-            location: location_str,
-            url: job.absolute_url,
+            location: effective_location_str,
+            url,
             date_posted: job.updated_at,
             salary,
             locations,
             workplace_type,
             sponsorship,
             clearance,
+            work_auth,
             experience,
             is_new_grad,
             description_text: desc_text,
+            company_icon_url,
         });
     }
 
@@ -145,6 +194,7 @@ fn parse_greenhouse_jobs(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use scrape_core::WorkplaceType;
 
     #[test]
     fn test_parse_greenhouse_json() {
@@ -203,6 +253,7 @@ mod tests {
         assert_eq!(events.len(), 1);
 
         if let WorkerEvent::Job {
+            url,
             salary,
             sponsorship,
             clearance,
@@ -212,6 +263,7 @@ mod tests {
             ..
         } = &events[0]
         {
+            assert_eq!(url, "https://job-boards.greenhouse.io/acme/jobs/999123");
             let sal = salary
                 .as_ref()
                 .expect("Salary should be extracted from pay_input_ranges");

@@ -1,9 +1,11 @@
 use crate::client::{ClientError, HttpClient};
 use scrape_core::enrich::{
-    classify_clearance, classify_sponsorship, extract_experience, location as loc_enrich,
-    to_plain_text, Salary,
+    classify_clearance, classify_sponsorship, classify_work_auth, classify_workplace,
+    extract_experience, location as loc_enrich, to_plain_text, Salary,
 };
-use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource, WorkplaceType};
+use scrape_core::{
+    RoleType, TriState, WorkAuthRequirement, WorkerEvent, WorkerSource,
+};
 use scraper::{Html, Selector};
 use serde_json::Value;
 use std::collections::HashSet;
@@ -159,18 +161,12 @@ fn parse_job_posting_map(
         .map(|s| s.eq_ignore_ascii_case("TELECOMMUTE"))
         .unwrap_or(false);
 
-    let workplace_type = if is_telecommute
-        || locations.iter().any(|l| l.is_remote)
-        || location.to_lowercase().contains("remote")
-    {
-        WorkplaceType::Remote
-    } else if location.to_lowercase().contains("hybrid") {
-        WorkplaceType::Hybrid
-    } else if !location.is_empty() {
-        WorkplaceType::Onsite
-    } else {
-        WorkplaceType::Unknown
-    };
+    let explicit = if is_telecommute { Some("Remote") } else { None };
+    let workplace_type = classify_workplace(
+        explicit,
+        &location,
+        desc_text.as_deref(),
+    );
 
     let text_for_enrich = desc_text.as_deref().unwrap_or("");
 
@@ -212,6 +208,37 @@ fn parse_job_posting_map(
         .map(|e| e.is_new_grad)
         .unwrap_or(TriState::Unknown);
 
+    let work_auth = if let Some(req) = map
+        .get("eligibilityToWorkRequirement")
+        .and_then(|v| v.as_str())
+    {
+        let mut wa = classify_work_auth(req);
+        if wa.value == WorkAuthRequirement::Unknown && !text_for_enrich.is_empty() {
+            wa = classify_work_auth(text_for_enrich);
+        }
+        Some(wa)
+    } else if !text_for_enrich.is_empty() {
+        Some(classify_work_auth(text_for_enrich))
+    } else {
+        None
+    };
+
+    let logo_url = map
+        .get("hiringOrganization")
+        .and_then(|ho| ho.get("logo"))
+        .and_then(|l| {
+            if let Some(s) = l.as_str() {
+                Some(s.to_string())
+            } else {
+                l.get("url").and_then(|u| u.as_str()).map(|s| s.to_string())
+            }
+        });
+    let company_icon_url = logo_url.or_else(|| {
+        Url::parse(page_url).ok().and_then(|u| {
+            u.host_str().map(|h| format!("https://www.google.com/s2/favicons?domain={h}&sz=64"))
+        })
+    });
+
     Some(WorkerEvent::Job {
         source_id: source.id.clone(),
         external_id,
@@ -225,10 +252,12 @@ fn parse_job_posting_map(
         locations,
         workplace_type,
         sponsorship,
+        work_auth,
         clearance,
         experience,
         is_new_grad,
         description_text: desc_text,
+        company_icon_url,
     })
 }
 

@@ -1,9 +1,9 @@
 use crate::client::{ClientError, HttpClient};
 use scrape_core::enrich::{
-    classify_clearance, classify_sponsorship, extract_experience, location as loc_enrich,
-    to_plain_text, Salary,
+    classify_clearance, classify_sponsorship, classify_work_auth, classify_workplace,
+    extract_experience, location as loc_enrich, to_plain_text, Salary,
 };
-use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource, WorkplaceType};
+use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -113,22 +113,6 @@ fn parse_ashby_jobs(
         };
         let locations = loc_enrich::parse(&location_str);
 
-        // Workplace type
-        let workplace_type = if job.is_remote == Some(true)
-            || job.workplace_type.as_deref() == Some("Remote")
-            || locations.iter().any(|l| l.is_remote)
-        {
-            WorkplaceType::Remote
-        } else if job.workplace_type.as_deref() == Some("Hybrid")
-            || location_str.to_lowercase().contains("hybrid")
-        {
-            WorkplaceType::Hybrid
-        } else if job.workplace_type.as_deref() == Some("OnSite") || !location_str.is_empty() {
-            WorkplaceType::Onsite
-        } else {
-            WorkplaceType::Unknown
-        };
-
         // Description
         let desc_text = if let Some(dp) = &job.description_plain {
             if !dp.trim().is_empty() {
@@ -141,6 +125,18 @@ fn parse_ashby_jobs(
                 .as_ref()
                 .map(|dh| to_plain_text(dh, 32768))
         };
+
+        // Workplace type
+        let explicit = if job.is_remote == Some(true) {
+            Some("Remote")
+        } else {
+            job.workplace_type.as_deref()
+        };
+        let workplace_type = classify_workplace(
+            explicit,
+            &location_str,
+            desc_text.as_deref(),
+        );
 
         // Compensation
         let mut salary = None;
@@ -180,11 +176,21 @@ fn parse_ashby_jobs(
         } else {
             None
         };
+        let work_auth = if !text_for_enrich.is_empty() {
+            Some(classify_work_auth(text_for_enrich))
+        } else {
+            None
+        };
         let experience = Some(extract_experience(&job.title, text_for_enrich));
         let is_new_grad = experience
             .as_ref()
             .map(|e| e.is_new_grad)
             .unwrap_or(TriState::Unknown);
+
+        let company_icon_url = Some(format!(
+            "https://www.google.com/s2/favicons?domain={}.com&sz=64",
+            source.identifier.trim().to_lowercase().replace(' ', "-")
+        ));
 
         events.push(WorkerEvent::Job {
             source_id: source.id.clone(),
@@ -200,9 +206,11 @@ fn parse_ashby_jobs(
             workplace_type,
             sponsorship,
             clearance,
+            work_auth,
             experience,
             is_new_grad,
             description_text: desc_text,
+            company_icon_url,
         });
     }
 
@@ -212,6 +220,7 @@ fn parse_ashby_jobs(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use scrape_core::WorkplaceType;
 
     #[test]
     fn test_parse_ashby_json() {

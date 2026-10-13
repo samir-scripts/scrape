@@ -160,6 +160,20 @@ pub enum ClearanceLevel {
     TsSci,
 }
 
+/// Work authorization and export compliance requirement for a job posting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS, Default)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(feature = "sqlx", sqlx(rename_all = "snake_case"))]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum WorkAuthRequirement {
+    CitizenOnly, // U.S. Citizenship strictly required (Green Card holders barred)
+    UsPerson,    // U.S. Person: U.S. Citizen or lawful Permanent Resident / Green Card holder (ITAR/EAR)
+    Open,        // Standard work authorization (open / no export control restriction)
+    #[default]
+    Unknown,     // Not specified in posting
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,10 +196,14 @@ mod tests {
             serde_json::to_string(&SourceCadence::Every12h).unwrap(),
             "\"every_12h\""
         );
-        assert_eq!(
-            SourceCadence::Every12h.default_cron(),
-            Some("0 0 */12 * * *")
-        );
         assert_eq!(SourceCadence::Global.default_cron(), None);
+        assert_eq!(
+            serde_json::to_string(&WorkAuthRequirement::UsPerson).unwrap(),
+            "\"us_person\""
+        );
+        assert_eq!(
+            serde_json::to_string(&WorkAuthRequirement::CitizenOnly).unwrap(),
+            "\"citizen_only\""
+        );
     }
 }

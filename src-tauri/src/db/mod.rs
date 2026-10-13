@@ -84,7 +84,7 @@ mod tests {
     use sqlx::Row;
 
     #[tokio::test]
-    async fn test_all_migrations_apply_cleanly_up_to_version_7() {
+    async fn test_all_migrations_apply_cleanly_up_to_version_10() {
         let pool = init_memory_db()
             .await
             .expect("Failed to initialize in-memory DB");
@@ -98,10 +98,10 @@ mod tests {
         let cnt: i64 = count_row.get("cnt");
         let max_v: i64 = count_row.get("max_v");
 
-        assert_eq!(cnt, 7, "Expected exactly 7 migrations to be applied");
+        assert_eq!(cnt, 10, "Expected exactly 10 migrations to be applied");
         assert_eq!(
-            max_v, 7,
-            "Expected migration version 7 to be highest version"
+            max_v, 10,
+            "Expected migration version 10 to be highest version"
         );
 
         // Verify that app_notifications allows 'error'
@@ -115,6 +115,24 @@ mod tests {
             insert_res.is_ok(),
             "Inserting 'error' notification kind must succeed on migrated DB"
         );
+
+        // Verify that company_icon_url column exists on jobs
+        let col_res = sqlx::query("SELECT company_icon_url FROM jobs LIMIT 1")
+            .fetch_optional(&pool)
+            .await;
+        assert!(col_res.is_ok(), "company_icon_url column must exist on jobs table");
+
+        // Verify that work_auth and work_auth_evidence columns exist on jobs
+        let wa_res = sqlx::query("SELECT work_auth, work_auth_evidence FROM jobs LIMIT 1")
+            .fetch_optional(&pool)
+            .await;
+        assert!(wa_res.is_ok(), "work_auth and work_auth_evidence columns must exist on jobs table");
+
+        // Verify that deleted_jobs table exists
+        let dj_res = sqlx::query("SELECT dedupe_key, deleted_at FROM deleted_jobs LIMIT 1")
+            .fetch_optional(&pool)
+            .await;
+        assert!(dj_res.is_ok(), "deleted_jobs table must exist on migrated DB");
     }
 
     #[tokio::test]

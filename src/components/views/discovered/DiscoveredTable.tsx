@@ -1,0 +1,281 @@
+import { useState } from "react";
+import type { Job } from "../../../bindings/Job";
+import type { JobStatus } from "../../../bindings/JobStatus";
+import {
+  Table,
+  TableHead,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableCell,
+} from "../../ui/Table";
+import { Tag } from "../../ui/Tag";
+import { EmptyState } from "../../ui/EmptyState";
+import { FavoriteButton } from "../../ui/FavoriteButton";
+import { CompanyLogo } from "../../ui/CompanyLogo";
+import {
+  formatSalary,
+  formatExperience,
+  formatWorkAuth,
+  triStateToLabel,
+} from "../../../lib/filter";
+
+interface DiscoveredTableProps {
+  jobs: Job[];
+  selectedJobId: string | null;
+  onSelectJob: (job: Job) => void;
+  onUpdateStatus: (jobId: string, status: JobStatus) => void;
+  onOpenUrl: (url: string) => void;
+  onToggleFavorite?: (jobId: string) => void;
+  onDelete?: (job: Job) => void;
+}
+
+export type DiscoveredSortField =
+  | "company"
+  | "title"
+  | "status"
+  | "salary"
+  | "date_added"
+  | "favorited";
+
+export function compareDiscoveredJobs(
+  a: Job,
+  b: Job,
+  sortField: DiscoveredSortField,
+  sortAsc: boolean
+): number {
+  let cmp = 0;
+  if (sortField === "favorited") {
+    cmp = (a.favorited ? 1 : 0) - (b.favorited ? 1 : 0);
+  } else if (sortField === "company") {
+    cmp = a.company.localeCompare(b.company);
+  } else if (sortField === "title") {
+    cmp = a.title.localeCompare(b.title);
+  } else if (sortField === "status") {
+    cmp = a.status.localeCompare(b.status);
+  } else if (sortField === "salary") {
+    const aSal = a.salary_min ?? a.salary_max ?? -1;
+    const bSal = b.salary_min ?? b.salary_max ?? -1;
+    cmp = aSal - bSal;
+  } else {
+    cmp = a.date_added.localeCompare(b.date_added);
+  }
+  return sortAsc ? cmp : -cmp;
+}
+
+export function DiscoveredTable({
+  jobs,
+  selectedJobId,
+  onSelectJob,
+  onUpdateStatus,
+  onOpenUrl,
+  onToggleFavorite,
+  onDelete,
+}: DiscoveredTableProps) {
+  const [sortField, setSortField] = useState<DiscoveredSortField>("date_added");
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const handleSort = (field: DiscoveredSortField) => {
+    if (sortField === field) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortField(field);
+      setSortAsc(true);
+    }
+  };
+
+  const sortedJobs = [...jobs].sort((a, b) =>
+    compareDiscoveredJobs(a, b, sortField, sortAsc)
+  );
+
+  if (jobs.length === 0) {
+    return (
+      <div className="p-8 flex items-center justify-center">
+        <EmptyState
+          title="NO POSTINGS FOUND"
+          description="ALL DISCOVERED JOBS HAVE BEEN TRIAGED OR FILTERED."
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 bg-[var(--color-paper)]">
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableHeader
+              onClick={() => handleSort("favorited")}
+              className="cursor-pointer w-9 text-center"
+              title="Sort by Favorited"
+            >
+              ★ {sortField === "favorited" ? (sortAsc ? "▲" : "▼") : ""}
+            </TableHeader>
+            <TableHeader
+              onClick={() => handleSort("company")}
+              className="cursor-pointer min-w-[140px]"
+            >
+              COMPANY {sortField === "company" ? (sortAsc ? "▲" : "▼") : ""}
+            </TableHeader>
+            <TableHeader
+              onClick={() => handleSort("title")}
+              className="cursor-pointer min-w-[180px]"
+            >
+              JOB TITLE {sortField === "title" ? (sortAsc ? "▲" : "▼") : ""}
+            </TableHeader>
+            <TableHeader className="min-w-[240px]">
+              DESCRIPTION & RELEVANT INFO
+            </TableHeader>
+            <TableHeader
+              onClick={() => handleSort("status")}
+              className="cursor-pointer"
+            >
+              STATUS {sortField === "status" ? (sortAsc ? "▲" : "▼") : ""}
+            </TableHeader>
+            <TableHeader
+              onClick={() => handleSort("salary")}
+              className="cursor-pointer"
+            >
+              SALARY {sortField === "salary" ? (sortAsc ? "▲" : "▼") : ""}
+            </TableHeader>
+            <TableHeader>LOCATION</TableHeader>
+            <TableHeader>YOE</TableHeader>
+            <TableHeader>NEW GRAD</TableHeader>
+            <TableHeader>SPONSORSHIP</TableHeader>
+            <TableHeader>GREEN CARD</TableHeader>
+            <TableHeader>CLEARANCE</TableHeader>
+            <TableHeader
+              onClick={() => handleSort("date_added")}
+              className="cursor-pointer"
+            >
+              ADDED {sortField === "date_added" ? (sortAsc ? "▲" : "▼") : ""}
+            </TableHeader>
+            <TableHeader className="text-right">TRIAGE</TableHeader>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {sortedJobs.map((job) => {
+            const isSelected = job.id === selectedJobId;
+            const descSnippet = job.description_text
+              ? job.description_text.replace(/\s+/g, " ").trim().slice(0, 110) +
+                (job.description_text.length > 110 ? "…" : "")
+              : "—";
+
+            return (
+              <TableRow
+                key={job.id}
+                onClick={() => onSelectJob(job)}
+                className={`cursor-pointer ${
+                  isSelected ? "bg-[var(--color-paper-2)] font-bold" : ""
+                }`}
+              >
+                <TableCell className="text-center">
+                  <FavoriteButton
+                    favorited={job.favorited}
+                    onToggle={() => onToggleFavorite?.(job.id)}
+                    size="sm"
+                  />
+                </TableCell>
+                <TableCell className="font-bold uppercase whitespace-nowrap">
+                  <div className="flex items-center gap-2">
+                    <CompanyLogo
+                      company={job.company}
+                      iconUrl={job.company_icon_url}
+                      size="sm"
+                    />
+                    <span>{job.company}</span>
+                  </div>
+                </TableCell>
+                <TableCell className="font-bold">{job.title}</TableCell>
+                <TableCell
+                  className="text-[11px] font-mono text-[var(--color-ink-mute)] max-w-xs truncate select-text"
+                  title={job.description_text || "No description"}
+                >
+                  {descSnippet}
+                </TableCell>
+                <TableCell>
+                  <Tag status={job.status} />
+                </TableCell>
+                <TableCell className="font-mono text-xs whitespace-nowrap">
+                  {formatSalary(job)}
+                </TableCell>
+                <TableCell className="text-[var(--color-ink-mute)] whitespace-nowrap">
+                  {job.location ||
+                    (job.workplace_type === "onsite"
+                      ? "IN-OFFICE"
+                      : job.workplace_type === "hybrid"
+                      ? "HYBRID"
+                      : "REMOTE")}
+                </TableCell>
+                <TableCell className="font-mono text-xs whitespace-nowrap">
+                  {formatExperience(job)}
+                </TableCell>
+                <TableCell className="font-mono text-xs">
+                  {triStateToLabel(job.is_new_grad)}
+                </TableCell>
+                <TableCell className="font-mono text-xs">
+                  {triStateToLabel(job.sponsorship)}
+                </TableCell>
+                <TableCell className="font-mono text-xs whitespace-nowrap">
+                  {formatWorkAuth(job)}
+                </TableCell>
+                <TableCell className="font-mono text-xs">
+                  {triStateToLabel(job.clearance)}
+                </TableCell>
+                <TableCell className="text-[var(--color-ink-mute)] whitespace-nowrap font-mono text-xs">
+                  {job.date_added.slice(0, 10)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onUpdateStatus(job.id, "applied");
+                      }}
+                      className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-lime)] text-[var(--color-ink)] hover:opacity-90 text-[10px] font-mono font-bold uppercase cursor-pointer"
+                      title="Apply [A]"
+                    >
+                      APPLY
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onUpdateStatus(job.id, "ignored");
+                      }}
+                      className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] text-[10px] font-mono uppercase cursor-pointer"
+                      title="Ignore [X]"
+                    >
+                      IGN
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenUrl(job.url);
+                      }}
+                      className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper-2)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] text-[10px] font-mono uppercase cursor-pointer"
+                      title="Open URL [Enter]"
+                    >
+                      ↗
+                    </button>
+                    {onDelete && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(job);
+                        }}
+                        className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-cherry)] hover:text-white text-[10px] font-mono font-bold uppercase cursor-pointer"
+                        title="Delete posting"
+                      >
+                        DEL
+                      </button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}

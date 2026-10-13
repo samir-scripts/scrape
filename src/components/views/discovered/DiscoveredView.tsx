@@ -2,14 +2,11 @@ import { useEffect, useMemo } from "react";
 import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
 import { useUIStore } from "../../../lib/store";
-import { ThreeColumn } from "../../layout/ThreeColumn";
-import { ListRow } from "../../ui/ListRow";
-import { Tag } from "../../ui/Tag";
-import { EmptyState } from "../../ui/EmptyState";
+import { DiscoveredTwoColumn } from "../../layout/DiscoveredTwoColumn";
+import { JobCard } from "./JobCard";
 import { JobDetail } from "./JobDetail";
-import { JobMetaPanel } from "./JobMetaPanel";
+import { EmptyState } from "../../ui/EmptyState";
 import { useHotkeys } from "../../../hooks/useHotkeys";
-import { formatExperience, formatSalary } from "../../../lib/filter";
 
 interface DiscoveredViewProps {
   jobs: Job[];
@@ -18,6 +15,7 @@ interface DiscoveredViewProps {
   onOpenUrl: (url: string) => void;
   onUndo: () => void;
   onToggleFavorite?: (jobId: string) => void;
+  onRequestDelete?: (job: Job) => void;
 }
 
 export function DiscoveredView({
@@ -27,6 +25,7 @@ export function DiscoveredView({
   onOpenUrl,
   onUndo,
   onToggleFavorite,
+  onRequestDelete,
 }: DiscoveredViewProps) {
   const {
     filterSpec,
@@ -36,15 +35,13 @@ export function DiscoveredView({
 
   const filteredJobs = jobs;
 
-  // Keep selection valid or pick the first job
+  // Clear selection only if currently selected job was removed or filtered out
   useEffect(() => {
-    if (filteredJobs.length > 0) {
+    if (selectedJobId !== null) {
       const exists = filteredJobs.some((j) => j.id === selectedJobId);
       if (!exists) {
-        setSelectedJobId(filteredJobs[0].id);
+        setSelectedJobId(null);
       }
-    } else {
-      setSelectedJobId(null);
     }
   }, [filteredJobs, selectedJobId, setSelectedJobId]);
 
@@ -71,13 +68,21 @@ export function DiscoveredView({
   useHotkeys({
     onNextItem: () => {
       if (filteredJobs.length === 0) return;
-      const nextIdx = Math.min(currentIndex + 1, filteredJobs.length - 1);
-      setSelectedJobId(filteredJobs[nextIdx].id);
+      if (selectedJobId === null) {
+        setSelectedJobId(filteredJobs[0].id);
+      } else {
+        const nextIdx = Math.min(currentIndex + 1, filteredJobs.length - 1);
+        setSelectedJobId(filteredJobs[nextIdx].id);
+      }
     },
     onPrevItem: () => {
       if (filteredJobs.length === 0) return;
-      const prevIdx = Math.max(currentIndex - 1, 0);
-      setSelectedJobId(filteredJobs[prevIdx].id);
+      if (selectedJobId === null) {
+        setSelectedJobId(filteredJobs[0].id);
+      } else {
+        const prevIdx = Math.max(currentIndex - 1, 0);
+        setSelectedJobId(filteredJobs[prevIdx].id);
+      }
     },
     onOpenUrl: () => {
       if (selectedJob) onOpenUrl(selectedJob.url);
@@ -98,130 +103,53 @@ export function DiscoveredView({
         onToggleFavorite(selectedJob.id);
       }
     },
+    onDelete: () => {
+      if (selectedJob && onRequestDelete) {
+        onRequestDelete(selectedJob);
+      }
+    },
     onUndo,
   });
 
-  return (
-    <ThreeColumn
-      left={
-        filteredJobs.length === 0 ? (
-          <div className="p-4">
-            <EmptyState
-              title="NO POSTINGS FOUND"
-              description={
-                filterSpec.search
-                  ? "TRY CLEARING FILTERS OR SEARCH TERMS."
-                  : "ALL DISCOVERED JOBS HAVE BEEN TRIAGED."
-              }
-            />
-          </div>
-        ) : (
-          <div className="flex flex-col w-full divide-y-0">
-            {filteredJobs.map((job) => {
-              const isSelected = job.id === selectedJobId;
-              const expText = formatExperience(job);
-              const salText = formatSalary(job);
-
-              return (
-                <ListRow
-                  key={job.id}
-                  selected={isSelected}
-                  onClick={() => setSelectedJobId(job.id)}
-                >
-                  <div className="flex flex-col gap-1 pr-1">
-                    <div className="flex items-center justify-between gap-1">
-                      <div className="flex items-center gap-1 min-w-0">
-                        {onToggleFavorite && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onToggleFavorite(job.id);
-                            }}
-                            className={`px-0.5 text-xs font-mono cursor-pointer transition-colors ${
-                              job.favorited
-                                ? "text-[var(--color-lime)] font-black"
-                                : "text-[var(--color-ink-mute)] hover:text-[var(--color-ink)]"
-                            }`}
-                            title={job.favorited ? "Favorited [S]" : "Favorite [S]"}
-                            aria-label={job.favorited ? "Unfavorite posting" : "Favorite posting"}
-                          >
-                            {job.favorited ? "★" : "☆"}
-                          </button>
-                        )}
-                        <span className="font-bold truncate max-w-[170px]">
-                          {job.title}
-                        </span>
-                      </div>
-                      <Tag
-                        status={job.status}
-                        className={isSelected ? "border-[var(--color-paper)]" : ""}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-[11px] opacity-80 font-mono">
-                      <span className="truncate max-w-[140px]">
-                        {job.company}
-                      </span>
-                      <span className="truncate max-w-[100px] text-right">
-                        {job.location || "REMOTE"}
-                      </span>
-                    </div>
-
-                    {/* Enrichment Badges Row */}
-                    <div className="flex items-center flex-wrap gap-1 text-[9px] font-mono mt-0.5">
-                      {salText !== "—" && (
-                        <span className="px-1 border border-current opacity-90 font-bold">
-                          {salText}
-                        </span>
-                      )}
-                      {expText !== "—" && (
-                        <span className="px-1 border border-current opacity-80">
-                          {expText}
-                        </span>
-                      )}
-                      {job.is_new_grad === "yes" && (
-                        <span className="px-1 bg-[var(--color-ink)] text-[var(--color-paper)] font-bold">
-                          GRAD
-                        </span>
-                      )}
-                      {job.sponsorship === "yes" && (
-                        <span className="px-1 border border-current opacity-70">
-                          SPON:Y
-                        </span>
-                      )}
-                      {job.sponsorship === "no" && (
-                        <span className="px-1 border border-current opacity-50">
-                          SPON:N
-                        </span>
-                      )}
-                      {job.clearance === "yes" && (
-                        <span className="px-1 border border-[var(--color-cherry)] text-[var(--color-cherry)] font-bold">
-                          CLR:REQ
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </ListRow>
-              );
-            })}
-          </div>
-        )
-      }
-      center={
-        <JobDetail
-          job={selectedJob}
-          onUpdateNotes={onUpdateNotes}
-          onOpenUrl={onOpenUrl}
+  const leftContent =
+    filteredJobs.length === 0 ? (
+      <div className="p-8 flex items-center justify-center w-full">
+        <EmptyState
+          title="NO POSTINGS FOUND"
+          description={
+            filterSpec.search
+              ? "TRY CLEARING FILTERS OR SEARCH TERMS."
+              : "ALL DISCOVERED JOBS HAVE BEEN TRIAGED."
+          }
         />
-      }
-      right={
-        <JobMetaPanel
-          job={selectedJob}
-          onUpdateStatus={onUpdateStatus}
-          onOpenUrl={onOpenUrl}
-          onToggleFavorite={onToggleFavorite}
-        />
-      }
+      </div>
+    ) : (
+      <div className="flex flex-col gap-2.5 p-2 w-full">
+        {filteredJobs.map((job) => (
+          <JobCard
+            key={job.id}
+            job={job}
+            selected={job.id === selectedJobId}
+            onClick={() => setSelectedJobId(job.id)}
+            onToggleFavorite={onToggleFavorite}
+            onOpenUrl={onOpenUrl}
+            onDelete={onRequestDelete}
+          />
+        ))}
+      </div>
+    );
+
+  const rightContent = selectedJob ? (
+    <JobDetail
+      job={selectedJob}
+      onClose={() => setSelectedJobId(null)}
+      onUpdateStatus={onUpdateStatus}
+      onUpdateNotes={onUpdateNotes}
+      onOpenUrl={onOpenUrl}
+      onToggleFavorite={onToggleFavorite}
+      onDelete={onRequestDelete}
     />
-  );
+  ) : null;
+
+  return <DiscoveredTwoColumn left={leftContent} right={rightContent} />;
 }

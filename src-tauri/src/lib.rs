@@ -113,6 +113,7 @@ pub fn run() {
             commands::jobs::toggle_job_favorite,
             commands::jobs::set_job_favorite,
             commands::jobs::cleanup_expired_jobs,
+            commands::jobs::delete_job,
             commands::settings::get_settings,
             commands::settings::update_setting,
             commands::sources::list_sources,

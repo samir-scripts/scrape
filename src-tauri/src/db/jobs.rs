@@ -2,7 +2,7 @@ use crate::error::{AppError, Result};
 use scrape_core::enrich::{ParsedLocation, ENRICHMENT_VERSION};
 use scrape_core::{
     now_iso, ClearanceLevel, JobStatus, RoleType, SalaryInterval, SalarySource, TriState,
-    WorkplaceType,
+    WorkAuthRequirement, WorkplaceType,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
@@ -43,6 +43,8 @@ pub struct Job {
     pub workplace_type: WorkplaceType,
     pub sponsorship: TriState,
     pub sponsorship_evidence: Option<String>,
+    pub work_auth: WorkAuthRequirement,
+    pub work_auth_evidence: Option<String>,
     pub clearance: TriState,
     pub clearance_level: Option<ClearanceLevel>,
     pub clearance_evidence: Option<String>,
@@ -54,6 +56,7 @@ pub struct Job {
     pub is_new_grad: TriState,
     pub experience_evidence: Option<String>,
     pub description_text: Option<String>,
+    pub company_icon_url: Option<String>,
     pub enrichment_version: i32,
     #[serde(default)]
     pub locations: Vec<ParsedLocation>,
@@ -121,6 +124,7 @@ pub struct JobFilter {
 
     // Eligibility tri-state filters
     pub sponsorship: Option<Vec<TriState>>,
+    pub work_auth: Option<Vec<WorkAuthRequirement>>,
     pub clearance: Option<Vec<TriState>>,
 
     // Location filters
@@ -178,6 +182,8 @@ pub struct ScrapedJob {
     pub workplace_type: WorkplaceType,
     pub sponsorship: TriState,
     pub sponsorship_evidence: Option<String>,
+    pub work_auth: WorkAuthRequirement,
+    pub work_auth_evidence: Option<String>,
     pub clearance: TriState,
     pub clearance_level: Option<ClearanceLevel>,
     pub clearance_evidence: Option<String>,
@@ -189,6 +195,7 @@ pub struct ScrapedJob {
     pub is_new_grad: TriState,
     pub experience_evidence: Option<String>,
     pub description_text: Option<String>,
+    pub company_icon_url: Option<String>,
     #[serde(default)]
     pub locations: Vec<ParsedLocation>,
 }
@@ -215,7 +222,8 @@ impl JobsRepo {
                    sponsorship_evidence, clearance, clearance_level,
                    clearance_evidence, experience_min, experience_max,
                    experience_raw, is_new_grad, experience_evidence,
-                   description_text, enrichment_version, favorited, favorited_at
+                   description_text, company_icon_url, enrichment_version, favorited, favorited_at,
+                   work_auth, work_auth_evidence
             FROM jobs
             WHERE id = ?
             "#,
@@ -330,6 +338,18 @@ impl JobsRepo {
             _ => TriState::Unknown,
         };
 
+        let work_auth: WorkAuthRequirement = match r
+            .try_get::<String, _>("work_auth")
+            .unwrap_or_else(|_| "unknown".to_string())
+            .as_str()
+        {
+            "citizen_only" => WorkAuthRequirement::CitizenOnly,
+            "us_person" => WorkAuthRequirement::UsPerson,
+            "open" => WorkAuthRequirement::Open,
+            _ => WorkAuthRequirement::Unknown,
+        };
+        let work_auth_evidence: Option<String> = r.try_get("work_auth_evidence").unwrap_or(None);
+
         let clearance: TriState = match r.get::<String, _>("clearance").as_str() {
             "yes" => TriState::Yes,
             "no" => TriState::No,
@@ -386,6 +406,8 @@ impl JobsRepo {
             workplace_type,
             sponsorship,
             sponsorship_evidence: r.get("sponsorship_evidence"),
+            work_auth,
+            work_auth_evidence,
             clearance,
             clearance_level,
             clearance_evidence: r.get("clearance_evidence"),
@@ -395,6 +417,7 @@ impl JobsRepo {
             is_new_grad,
             experience_evidence: r.get("experience_evidence"),
             description_text: r.get("description_text"),
+            company_icon_url: r.try_get("company_icon_url").unwrap_or(None),
             enrichment_version: r.get("enrichment_version"),
             locations,
         })
@@ -562,6 +585,27 @@ impl JobsRepo {
             }
         }
 
+        // Work auth list
+        if let Some(wa_list) = &filter.work_auth {
+            if !wa_list.is_empty() && wa_list.len() < 4 {
+                let wa_strs: Vec<String> = wa_list
+                    .iter()
+                    .map(|w| {
+                        serde_json::to_string(w)
+                            .unwrap()
+                            .trim_matches('"')
+                            .to_string()
+                    })
+                    .collect();
+                let joined = wa_strs
+                    .iter()
+                    .map(|w| format!("'{}'", w))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                conditions.push(format!("work_auth IN ({})", joined));
+            }
+        }
+
         // Clearance tri-state list
         if let Some(clr_list) = &filter.clearance {
             if !clr_list.is_empty() && clr_list.len() < 3 {
@@ -715,7 +759,8 @@ impl JobsRepo {
                    sponsorship_evidence, clearance, clearance_level,
                    clearance_evidence, experience_min, experience_max,
                    experience_raw, is_new_grad, experience_evidence,
-                   description_text, enrichment_version, favorited, favorited_at
+                   description_text, enrichment_version, favorited, favorited_at,
+                   company_icon_url, work_auth, work_auth_evidence
             FROM jobs
             {}
             ORDER BY {}
@@ -907,6 +952,41 @@ impl JobsRepo {
         Self::get(pool, id).await
     }
 
+    pub async fn delete(pool: &SqlitePool, id: &str) -> Result<bool> {
+        use sqlx::Row;
+        let mut tx = pool.begin().await?;
+
+        let row = sqlx::query("SELECT dedupe_key FROM jobs WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+        if let Some(r) = row {
+            let dedupe_key: String = r.get("dedupe_key");
+            let now = now_iso();
+
+            // 1. Tombstone dedupe_key so subsequent scrapes never re-insert it
+            sqlx::query(
+                "INSERT OR REPLACE INTO deleted_jobs (dedupe_key, deleted_at) VALUES (?1, ?2)",
+            )
+            .bind(&dedupe_key)
+            .bind(&now)
+            .execute(&mut *tx)
+            .await?;
+
+            // 2. Delete job (cascades to job_status_events and job_locations)
+            sqlx::query("DELETE FROM jobs WHERE id = ?")
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+
+            tx.commit().await?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
     pub async fn prune_expired_by_source(
         pool: &SqlitePool,
         source_id: &str,
@@ -1017,6 +1097,17 @@ impl JobsRepo {
         for job in batch {
             stats.total += 1;
 
+            // Check if posting has been deleted (tombstoned) by user
+            let is_deleted: Option<String> =
+                sqlx::query_scalar("SELECT dedupe_key FROM deleted_jobs WHERE dedupe_key = ?")
+                    .bind(&job.dedupe_key)
+                    .fetch_optional(&mut *tx)
+                    .await?;
+
+            if is_deleted.is_some() {
+                continue;
+            }
+
             use sqlx::Row;
             let existing = sqlx::query("SELECT id, role_type FROM jobs WHERE dedupe_key = ?")
                 .bind(&job.dedupe_key)
@@ -1074,6 +1165,13 @@ impl JobsRepo {
                 TriState::Unknown => "unknown",
             };
 
+            let work_auth_str = match job.work_auth {
+                WorkAuthRequirement::CitizenOnly => "citizen_only",
+                WorkAuthRequirement::UsPerson => "us_person",
+                WorkAuthRequirement::Open => "open",
+                WorkAuthRequirement::Unknown => "unknown",
+            };
+
             match existing {
                 Some(ex) => {
                     stats.updated += 1;
@@ -1110,8 +1208,11 @@ impl JobsRepo {
                             experience_raw = COALESCE(?22, experience_raw),
                             is_new_grad = CASE WHEN ?23 != 'unknown' THEN ?23 ELSE is_new_grad END,
                             experience_evidence = COALESCE(?24, experience_evidence),
-                            description_text = COALESCE(?25, description_text)
-                        WHERE id = ?26
+                            description_text = COALESCE(?25, description_text),
+                            company_icon_url = COALESCE(?26, company_icon_url),
+                            work_auth = CASE WHEN ?27 != 'unknown' THEN ?27 ELSE work_auth END,
+                            work_auth_evidence = COALESCE(?28, work_auth_evidence)
+                        WHERE id = ?29
                         "#,
                     )
                     .bind(&job.title)
@@ -1139,6 +1240,9 @@ impl JobsRepo {
                     .bind(new_grad_str)
                     .bind(&job.experience_evidence)
                     .bind(&job.description_text)
+                    .bind(&job.company_icon_url)
+                    .bind(work_auth_str)
+                    .bind(&job.work_auth_evidence)
                     .bind(&ex_id)
                     .execute(&mut *tx)
                     .await?;
@@ -1183,13 +1287,15 @@ impl JobsRepo {
                             sponsorship_evidence, clearance, clearance_level,
                             clearance_evidence, experience_min, experience_max,
                             experience_raw, is_new_grad, experience_evidence,
-                            description_text, enrichment_version
+                            description_text, enrichment_version, company_icon_url,
+                            work_auth, work_auth_evidence
                         )
                         VALUES (
                             ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
                             ?11, ?12, 'scraped', ?13, ?14, ?15, ?16, ?17,
                             ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25,
-                            ?26, ?27, ?28, ?29, ?30, ?31, ?32
+                            ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33,
+                            ?34, ?35
                         )
                         "#,
                     )
@@ -1225,6 +1331,9 @@ impl JobsRepo {
                     .bind(&job.experience_evidence)
                     .bind(&job.description_text)
                     .bind(ENRICHMENT_VERSION)
+                    .bind(&job.company_icon_url)
+                    .bind(work_auth_str)
+                    .bind(&job.work_auth_evidence)
                     .execute(&mut *tx)
                     .await?;
 
@@ -1285,6 +1394,7 @@ impl JobsRepo {
 
             let spon = scrape_core::enrich::classify_sponsorship(&desc);
             let clr = scrape_core::enrich::classify_clearance(&desc);
+            let wa = scrape_core::enrich::classify_work_auth(&desc);
             let exp = scrape_core::enrich::extract_experience(&title, &desc);
             let sal = scrape_core::enrich::Salary::from_text(&desc);
 
@@ -1300,6 +1410,13 @@ impl JobsRepo {
                 TriState::Yes => "yes",
                 TriState::No => "no",
                 TriState::Unknown => "unknown",
+            };
+
+            let wa_str = match wa.value {
+                WorkAuthRequirement::CitizenOnly => "citizen_only",
+                WorkAuthRequirement::UsPerson => "us_person",
+                WorkAuthRequirement::Open => "open",
+                WorkAuthRequirement::Unknown => "unknown",
             };
 
             let clr_str = match clr.value {
@@ -1351,8 +1468,9 @@ impl JobsRepo {
                     salary_interval = COALESCE(salary_interval, ?14),
                     salary_raw = COALESCE(salary_raw, ?15),
                     salary_source = COALESCE(salary_source, ?16),
-                    enrichment_version = ?17
-                WHERE id = ?18
+                    work_auth = ?17, work_auth_evidence = ?18,
+                    enrichment_version = ?19
+                WHERE id = ?20
                 "#,
             )
             .bind(spon_str)
@@ -1371,6 +1489,8 @@ impl JobsRepo {
             .bind(sal_int)
             .bind(sal_raw)
             .bind(sal_src)
+            .bind(wa_str)
+            .bind(wa.evidence)
             .bind(ENRICHMENT_VERSION)
             .bind(&id)
             .execute(pool)
@@ -1452,6 +1572,8 @@ mod tests {
                 workplace_type: WorkplaceType::Hybrid,
                 sponsorship: TriState::No,
                 sponsorship_evidence: Some("No visa sponsorship".to_string()),
+                work_auth: WorkAuthRequirement::UsPerson,
+                work_auth_evidence: Some("Must be a US Person (US Citizen or Green Card holder)".to_string()),
                 clearance: TriState::Unknown,
                 clearance_level: None,
                 clearance_evidence: None,
@@ -1463,6 +1585,7 @@ mod tests {
                 description_text: Some(
                     "5+ years experience required. No visa sponsorship.".to_string(),
                 ),
+                company_icon_url: None,
                 locations: vec![ParsedLocation {
                     raw: "San Francisco, CA".to_string(),
                     city: Some("San Francisco".to_string()),
@@ -1490,6 +1613,8 @@ mod tests {
                 workplace_type: WorkplaceType::Remote,
                 sponsorship: TriState::Yes,
                 sponsorship_evidence: Some("Visa sponsorship available".to_string()),
+                work_auth: WorkAuthRequirement::Open,
+                work_auth_evidence: Some("Open to all candidates authorized to work".to_string()),
                 clearance: TriState::No,
                 clearance_level: None,
                 clearance_evidence: Some("No clearance required".to_string()),
@@ -1499,6 +1624,7 @@ mod tests {
                 is_new_grad: TriState::Yes,
                 experience_evidence: Some("New Grad 2026".to_string()),
                 description_text: Some("New Grad role. Visa sponsorship available.".to_string()),
+                company_icon_url: None,
                 locations: vec![ParsedLocation {
                     raw: "Remote".to_string(),
                     city: None,
@@ -1512,6 +1638,14 @@ mod tests {
         let stats = JobsRepo::upsert_scraped(&pool, &batch).await.unwrap();
         assert_eq!(stats.total, 2);
         assert_eq!(stats.inserted, 2);
+
+        let jobs = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+        assert_eq!(jobs.total, 2);
+        let j1 = jobs.items.iter().find(|j| j.company == "Stripe").unwrap();
+        assert_eq!(j1.work_auth, WorkAuthRequirement::UsPerson);
+        assert!(j1.work_auth_evidence.is_some());
+        let j2 = jobs.items.iter().find(|j| j.company == "Figma").unwrap();
+        assert_eq!(j2.work_auth, WorkAuthRequirement::Open);
 
         // Test list with salary overlap filter: [150k, 200k] should match BOTH
         let page = JobsRepo::list(
@@ -1652,6 +1786,8 @@ mod tests {
             workplace_type: WorkplaceType::Onsite,
             sponsorship: TriState::Unknown,
             sponsorship_evidence: None,
+            work_auth: WorkAuthRequirement::Unknown,
+            work_auth_evidence: None,
             clearance: TriState::Unknown,
             clearance_level: None,
             clearance_evidence: None,
@@ -1661,6 +1797,7 @@ mod tests {
             is_new_grad: TriState::No,
             experience_evidence: None,
             description_text: Some("Initial posting text".to_string()),
+            company_icon_url: None,
             locations: vec![ParsedLocation {
                 raw: "San Francisco, CA".to_string(),
                 city: Some("San Francisco".to_string()),
@@ -1715,6 +1852,8 @@ mod tests {
             workplace_type: WorkplaceType::Hybrid,
             sponsorship: TriState::Yes,
             sponsorship_evidence: Some("Sponsors H1B".to_string()),
+            work_auth: WorkAuthRequirement::UsPerson,
+            work_auth_evidence: Some("US Person required".to_string()),
             clearance: TriState::No,
             clearance_level: None,
             clearance_evidence: None,
@@ -1724,6 +1863,7 @@ mod tests {
             is_new_grad: TriState::No,
             experience_evidence: None,
             description_text: Some("Updated description text".to_string()),
+            company_icon_url: None,
             locations: vec![ParsedLocation {
                 raw: "Seattle, WA".to_string(),
                 city: Some("Seattle".to_string()),
@@ -1785,6 +1925,8 @@ mod tests {
             workplace_type: WorkplaceType::Unknown,
             sponsorship: TriState::Unknown,
             sponsorship_evidence: None,
+            work_auth: WorkAuthRequirement::Unknown,
+            work_auth_evidence: None,
             clearance: TriState::Unknown,
             clearance_level: None,
             clearance_evidence: None,
@@ -1797,9 +1939,11 @@ mod tests {
                 "Annual compensation: $140,000 to $170,000. \
                  Requires 4+ years of relevant experience. \
                  Must hold an active Secret security clearance. \
+                 Must be a U.S. Person (US citizen or lawful permanent resident / green card holder) under ITAR. \
                  Unfortunately, we cannot sponsor work visas."
                     .to_string(),
             ),
+            company_icon_url: None,
             locations: vec![],
         };
 
@@ -1828,8 +1972,10 @@ mod tests {
         assert_eq!(reclassified.experience_min, Some(4));
         assert_eq!(reclassified.clearance, TriState::Yes);
         assert_eq!(reclassified.sponsorship, TriState::No);
+        assert_eq!(reclassified.work_auth, WorkAuthRequirement::UsPerson);
         assert!(reclassified.clearance_evidence.is_some());
         assert!(reclassified.sponsorship_evidence.is_some());
+        assert!(reclassified.work_auth_evidence.is_some());
     }
 
     #[tokio::test]
@@ -1857,6 +2003,8 @@ mod tests {
                 workplace_type: WorkplaceType::Remote,
                 sponsorship: TriState::Yes,
                 sponsorship_evidence: None,
+                work_auth: WorkAuthRequirement::Open,
+                work_auth_evidence: None,
                 clearance: TriState::No,
                 clearance_level: None,
                 clearance_evidence: None,
@@ -1866,6 +2014,7 @@ mod tests {
                 is_new_grad: TriState::No,
                 experience_evidence: None,
                 description_text: None,
+                company_icon_url: None,
                 locations: vec![ParsedLocation {
                     raw: "Remote, US".to_string(),
                     city: None,
@@ -1893,6 +2042,8 @@ mod tests {
                 workplace_type: WorkplaceType::Onsite,
                 sponsorship: TriState::No,
                 sponsorship_evidence: None,
+                work_auth: WorkAuthRequirement::CitizenOnly,
+                work_auth_evidence: None,
                 clearance: TriState::Yes,
                 clearance_level: None,
                 clearance_evidence: None,
@@ -1902,6 +2053,7 @@ mod tests {
                 is_new_grad: TriState::No,
                 experience_evidence: None,
                 description_text: None,
+                company_icon_url: None,
                 locations: vec![ParsedLocation {
                     raw: "Arlington, VA, US".to_string(),
                     city: Some("Arlington".to_string()),
@@ -1931,6 +2083,15 @@ mod tests {
         let result = JobsRepo::list(&pool, combined_filter).await.unwrap();
         assert_eq!(result.total, 1);
         assert_eq!(result.items[0].company, "Vercel");
+
+        // Test work_auth filter explicitly
+        let wa_filter = JobFilter {
+            work_auth: Some(vec![WorkAuthRequirement::CitizenOnly]),
+            ..Default::default()
+        };
+        let wa_result = JobsRepo::list(&pool, wa_filter).await.unwrap();
+        assert_eq!(wa_result.total, 1);
+        assert_eq!(wa_result.items[0].company, "Lockheed");
 
         // Mutate one dimension (e.g. require clearance) and ensure empty result without SQL syntax errors
         let non_matching_filter = JobFilter {
@@ -1965,6 +2126,8 @@ mod tests {
             workplace_type: WorkplaceType::Hybrid,
             sponsorship: TriState::Unknown,
             sponsorship_evidence: None,
+            work_auth: WorkAuthRequirement::Unknown,
+            work_auth_evidence: None,
             clearance: TriState::Unknown,
             clearance_level: None,
             clearance_evidence: None,
@@ -1974,6 +2137,7 @@ mod tests {
             is_new_grad: TriState::Unknown,
             experience_evidence: None,
             description_text: None,
+            company_icon_url: None,
             locations: vec![ParsedLocation {
                 raw: "San Francisco, CA".to_string(),
                 city: Some("San Francisco".to_string()),
@@ -2002,6 +2166,8 @@ mod tests {
             workplace_type: WorkplaceType::Hybrid,
             sponsorship: TriState::Unknown,
             sponsorship_evidence: None,
+            work_auth: WorkAuthRequirement::Unknown,
+            work_auth_evidence: None,
             clearance: TriState::Unknown,
             clearance_level: None,
             clearance_evidence: None,
@@ -2011,6 +2177,7 @@ mod tests {
             is_new_grad: TriState::Unknown,
             experience_evidence: None,
             description_text: None,
+            company_icon_url: None,
             locations: vec![ParsedLocation {
                 raw: "Toronto, ON".to_string(),
                 city: Some("Toronto".to_string()),
@@ -2078,6 +2245,8 @@ mod tests {
             workplace_type: WorkplaceType::Remote,
             sponsorship: TriState::Unknown,
             sponsorship_evidence: None,
+            work_auth: WorkAuthRequirement::Unknown,
+            work_auth_evidence: None,
             clearance: TriState::Unknown,
             clearance_level: None,
             clearance_evidence: None,
@@ -2087,6 +2256,7 @@ mod tests {
             is_new_grad: TriState::Unknown,
             experience_evidence: None,
             description_text: None,
+            company_icon_url: None,
             locations: vec![],
         };
 
@@ -2136,6 +2306,8 @@ mod tests {
             workplace_type: WorkplaceType::Remote,
             sponsorship: TriState::Unknown,
             sponsorship_evidence: None,
+            work_auth: WorkAuthRequirement::Unknown,
+            work_auth_evidence: None,
             clearance: TriState::Unknown,
             clearance_level: None,
             clearance_evidence: None,
@@ -2145,6 +2317,7 @@ mod tests {
             is_new_grad: TriState::Unknown,
             experience_evidence: None,
             description_text: None,
+            company_icon_url: None,
             locations: vec![],
         };
 
@@ -2167,6 +2340,8 @@ mod tests {
             workplace_type: WorkplaceType::Remote,
             sponsorship: TriState::Unknown,
             sponsorship_evidence: None,
+            work_auth: WorkAuthRequirement::Unknown,
+            work_auth_evidence: None,
             clearance: TriState::Unknown,
             clearance_level: None,
             clearance_evidence: None,
@@ -2176,6 +2351,7 @@ mod tests {
             is_new_grad: TriState::Unknown,
             experience_evidence: None,
             description_text: None,
+            company_icon_url: None,
             locations: vec![],
         };
 
@@ -2316,5 +2492,81 @@ mod tests {
             JobsRepo::get(&pool, "j4").await.is_ok(),
             "Job 4 (applied) must be preserved"
         );
+    }
+
+    #[tokio::test]
+    async fn test_delete_job_and_tombstone_prevention() {
+        use scrape_core::RoleType;
+
+        let pool = init_memory_db().await.unwrap();
+
+        let scraped = vec![ScrapedJob {
+            source_id: None,
+            external_id: Some("99999".into()),
+            dedupe_key: "gh:testco:99999".into(),
+            title: "Staff Engineer".into(),
+            company: "TestCo".into(),
+            role_type: RoleType::FullTime,
+            location: Some("Remote".into()),
+            locations: vec![],
+            url: "https://example.com/job/99999".into(),
+            date_posted: None,
+            salary_min: None,
+            salary_max: None,
+            salary_currency: None,
+            salary_interval: None,
+            salary_raw: None,
+            salary_source: None,
+            workplace_type: scrape_core::WorkplaceType::Remote,
+            sponsorship: scrape_core::TriState::Unknown,
+            sponsorship_evidence: None,
+            clearance: scrape_core::TriState::Unknown,
+            clearance_level: None,
+            clearance_evidence: None,
+            experience_min: None,
+            experience_max: None,
+            experience_raw: None,
+            is_new_grad: scrape_core::TriState::Unknown,
+            experience_evidence: None,
+            work_auth: scrape_core::WorkAuthRequirement::Unknown,
+            work_auth_evidence: None,
+            description_text: None,
+            company_icon_url: None,
+        }];
+
+        // 1. Initial upsert
+        let stats = JobsRepo::upsert_scraped(&pool, &scraped).await.unwrap();
+        assert_eq!(stats.inserted, 1);
+
+        let jobs = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+        assert_eq!(jobs.items.len(), 1);
+        let job_id = &jobs.items[0].id;
+
+        // 2. Delete job
+        let deleted = JobsRepo::delete(&pool, job_id).await.unwrap();
+        assert!(deleted);
+
+        // 3. Verify job is gone
+        assert!(JobsRepo::get(&pool, job_id).await.is_err());
+
+        // 4. Verify tombstone exists in deleted_jobs table
+        let tombstone: Option<String> = sqlx::query_scalar("SELECT dedupe_key FROM deleted_jobs WHERE dedupe_key = ?")
+            .bind("gh:testco:99999")
+            .fetch_optional(&pool)
+            .await
+            .unwrap();
+        assert_eq!(tombstone, Some("gh:testco:99999".into()));
+
+        // 5. Subsequent scrape with identical dedupe_key must be skipped
+        let stats2 = JobsRepo::upsert_scraped(&pool, &scraped).await.unwrap();
+        assert_eq!(stats2.inserted, 0);
+        assert_eq!(stats2.updated, 0);
+
+        let jobs_after = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+        assert_eq!(jobs_after.items.len(), 0, "Deleted job must not be resurrected");
+
+        // 6. Non-existent job deletion returns false
+        let deleted_again = JobsRepo::delete(&pool, "nonexistent-id").await.unwrap();
+        assert!(!deleted_again);
     }
 }

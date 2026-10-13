@@ -103,8 +103,17 @@ Default OS scrollbars (with rounded pill corners, transparent overlays, or OS-na
 - [x] Query `list_jobs({ statuses: ['scraped','viewed'] })`, sorted newest; search box.
 - [x] Selecting a row for >1s auto-marks `viewed` (configurable).
 - [x] Bulk: `Shift+↑/↓` multi-select → `A`/`X`.
-- [x] Right panel: job metadata table + source health; header counter `DISCOVERED (n)`.
+- [x] Header counter `DISCOVERED (n)`.
 - [x] Live: listens to `jobs://changed` / `scrape://*` → invalidate queries; shows `SCANNING…` in TopNav during runs.
+- [x] **Default & Only View: Vertically Stacked Card Stream (`JobCard.tsx`):** Renders clean cards with 1px dividers, bold job title, company logo avatar, company name, formatted date (`Aug 5, 2026`), and status badges (`Remote`, salary, new grad, role type, clearance).
+- [x] **Consolidated Job Window (`JobDetail.tsx`):** Merges all status, compensation, eligibility, evidence quotes, triage actions, description viewer, and candidate notes into a single cohesive window (retiring the separate 3rd metadata panel).
+- [x] **Dynamic 1-Pane to 2-Pane Transition (`DiscoveredTwoColumn.tsx`):**
+  - Unselected (`selectedJobId === null`): Full-width 1-pane card stream.
+  - Selected (`selectedJobId !== null`): Interactive 2-pane view with a resizable 1px window divider (pointer capture, double-click reset to 440px, `localStorage` persistence).
+  - Window header controls: `[✕ CLOSE] [ESC]` deselects and returns to 1-pane view.
+- [x] **High-Visibility Favorite Button:** Dedicated `<FavoriteButton>` component with bold 18px–20px geometric 5-point SVG star, solid `var(--color-lime)` active fill, and crisp 1.5px ink outline stroke.
+- [x] **Company Icon Extraction & Brutalist Monogram:** Displays 20x20px company brand icon/favicon next to company name with fallback to high-contrast monochrome letter monogram square.
+- [x] **Scraper Deduplication Idempotency:** Workflow runs use deterministic `dedupe_key`s and upsert existing records without creating duplicates or resetting triage state.
 
 ### Tracked (Kanban / List)
 - [x] Columns: `APPLIED · INTERVIEWING · OFFER · REJECTED` (`TRACKED_STAGES`).
@@ -157,4 +166,5 @@ Default OS scrollbars (with rounded pill corners, transparent overlays, or OS-na
 - [ ] All user-suggested features developed on dedicated feature branches with passing tests before merge.
 - [ ] Extended in [Phase 3.5](./03b-enrichment-filters.md): custom filter panel (state, country, salary range slider + numbers, YOE, New Grad, sponsorship & clearance tri-state `YES`/`NO`/`N/A`), table columns, scraper advanced settings, and scraper logs.
 - [ ] Extended in [Phase 3.6](./03c-custom-scrape-jobs.md): custom company scrape jobs registry, per-job cadence/cron scheduling, isolated `[RUN NOW]` execution, dry-run testing, telemetry inspector drawer, and dual form/YAML specification editor.
+- [x] Extended in [Phase 3.15](./03k-job-url-navigation-and-authenticity.md): interactive URL anchor links with external indicator, resilient native + browser opener fallback, real verified Greenhouse job IDs in dev seed data, and direct job-boards.greenhouse.io normalization.
 

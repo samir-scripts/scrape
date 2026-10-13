@@ -3,6 +3,7 @@ import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
 import { STATUS_CONFIG } from "../../../lib/constants";
 import { Tag } from "../../ui/Tag";
+import { CompanyLogo } from "../../ui/CompanyLogo";
 
 interface KanbanColumnProps {
   status: JobStatus;
@@ -14,6 +15,7 @@ interface KanbanColumnProps {
   onDropJob: (jobId: string, targetStatus: JobStatus) => void;
   onDragStartJob: (jobId: string) => void;
   onDragEndJob: () => void;
+  onDelete?: (job: Job) => void;
 }
 
 export function KanbanColumn({
@@ -26,6 +28,7 @@ export function KanbanColumn({
   onDropJob,
   onDragStartJob,
   onDragEndJob,
+  onDelete,
 }: KanbanColumnProps) {
   const [isOver, setIsOver] = useState(false);
   const dragCounterRef = useRef(0);
@@ -143,16 +146,24 @@ export function KanbanColumn({
                 }`}
               >
                 <div className="flex items-center justify-between gap-1">
-                  <div className="flex items-center gap-1 min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0">
                     {job.favorited && (
-                      <span
-                        className="text-[var(--color-lime)] font-black text-xs shrink-0"
-                        title="Favorited (Protected)"
+                      <svg
+                        className="w-3.5 h-3.5 text-[var(--color-lime)] shrink-0"
+                        viewBox="0 0 24 24"
+                        fill="var(--color-lime)"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
                       >
-                        ★
-                      </span>
+                        <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
+                      </svg>
                     )}
-                    <span className="font-bold text-xs truncate max-w-[170px]">
+                    <CompanyLogo
+                      company={job.company}
+                      iconUrl={job.company_icon_url}
+                      size="sm"
+                    />
+                    <span className="font-bold text-xs truncate max-w-[150px]">
                       {job.company}
                     </span>
                   </div>
@@ -170,12 +181,27 @@ export function KanbanColumn({
                 <div className="text-xs truncate">{job.title}</div>
 
                 <div className="flex items-center justify-between text-[10px] font-mono opacity-80 pt-1 border-t border-current">
-                  <span>{job.location || "REMOTE"}</span>
-                  {job.notes && (
-                    <span className="font-bold truncate max-w-[80px]">
-                      NOTE ▏
-                    </span>
-                  )}
+                  <span className="truncate max-w-[120px]">{job.location || "REMOTE"}</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {job.notes && (
+                      <span className="font-bold truncate max-w-[80px]">
+                        NOTE ▏
+                      </span>
+                    )}
+                    {onDelete && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(job);
+                        }}
+                        title="Delete application record"
+                        className="opacity-60 hover:opacity-100 hover:text-[var(--color-cherry)] text-[9px] font-bold px-1 py-0 border border-current transition-opacity cursor-pointer"
+                      >
+                        DEL
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );

@@ -20,6 +20,7 @@ import type { Metrics } from "../bindings/Metrics";
 import type { AppNotification } from "../bindings/AppNotification";
 import type { CreateNotificationInput } from "../bindings/CreateNotificationInput";
 import type { UpdateCheckResult } from "../bindings/UpdateCheckResult";
+import type { WorkplaceType } from "../bindings/WorkplaceType";
 
 export interface DetectResult {
   kind: string;
@@ -52,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   app_auto_update: true,
   app_update_channel: "stable",
   app_last_update_check: null,
+  app_confirm_job_deletion: true,
 };
 
 let devSettings: Settings = (() => {
@@ -182,6 +184,24 @@ function saveDevLogs() {
   } catch {}
 }
 
+let devDeletedJobKeys: Set<string> = (() => {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const saved = localStorage.getItem("scrape:dev_deleted_jobs");
+      if (saved) return new Set(JSON.parse(saved));
+    }
+  } catch {}
+  return new Set();
+})();
+
+function saveDevDeletedJobKeys() {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("scrape:dev_deleted_jobs", JSON.stringify([...devDeletedJobKeys]));
+    }
+  } catch {}
+}
+
 const executionDelayStep = () => {
   if (typeof process !== "undefined" && process.env?.NODE_ENV === "test") {
     return 15;
@@ -194,10 +214,17 @@ export function __resetDevData() {
   devJobs = [];
   devSourceRuns = [];
   devLogs = {};
+  devDeletedJobKeys.clear();
   saveDevSources();
   saveDevJobs();
   saveDevSourceRuns();
   saveDevLogs();
+  saveDevDeletedJobKeys();
+}
+
+export function __seedDevJobs(jobs: Job[]) {
+  devJobs = [...jobs];
+  saveDevJobs();
 }
 
 export function generateScrapedJobsForSource(source: Source): Job[] {
@@ -209,89 +236,167 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
     "Cloudflare";
   const isCloudflare = company.toLowerCase().includes("cloudflare");
 
-  const sampleRoles = isCloudflare
+  const rawSampleRoles = isCloudflare
     ? [
         {
-          title: "Software Engineering Intern - Systems & Core Infrastructure",
-          location: "San Francisco, CA",
+          external_id: "8199958",
+          title: "Software Engineer Intern (2027) - Austin, TX",
+          location: "Austin, TX",
           salary_min: 50,
           salary_max: 60,
           role_type: "internship" as const,
+          workplace_type: "onsite" as const,
         },
         {
-          title: "Systems Engineering Intern - Edge & Networking Protocols",
-          location: "Austin, TX",
-          salary_min: 48,
-          salary_max: 55,
+          external_id: "8245197",
+          title: "Software Engineer Intern (2027)",
+          location: "Lisbon, Portugal",
+          salary_min: 50,
+          salary_max: 60,
           role_type: "internship" as const,
+          workplace_type: "onsite" as const,
         },
         {
-          title: "Security Engineering Intern - Product Security & Cryptography",
-          location: "Remote",
+          external_id: "8245211",
+          title: "Software Engineer Intern (2027)",
+          location: "London, UK",
           salary_min: 52,
-          salary_max: 58,
+          salary_max: 62,
           role_type: "internship" as const,
+          workplace_type: "onsite" as const,
         },
         {
-          title: "Distributed Systems Engineer Intern - Global CDN & Data Platform",
-          location: "San Francisco, CA",
+          external_id: "8187404",
+          title: "Systems Engineer, Network Protocols & Distributed Systems",
+          location: "Austin, TX",
           salary_min: 55,
           salary_max: 65,
           role_type: "internship" as const,
+          workplace_type: "hybrid" as const,
+        },
+        // Real Greenhouse postings from Cloudflare that exercise policy exclusion:
+        {
+          external_id: "8247492",
+          title: "Technical Product Marketing Manager",
+          location: "Remote",
+          salary_min: 140000,
+          salary_max: 180000,
+          role_type: "full_time" as const,
+          workplace_type: "remote" as const,
+        },
+        {
+          external_id: "7695702",
+          title: "Account Executive, FedCiv",
+          location: "Washington DC, US",
+          salary_min: 130000,
+          salary_max: 170000,
+          role_type: "full_time" as const,
+          workplace_type: "hybrid" as const,
+        },
+        {
+          external_id: "8097321",
+          title: "AI Security Research & Red Team Engineer",
+          location: "San Francisco, CA",
+          salary_min: 165000,
+          salary_max: 215000,
+          role_type: "full_time" as const,
+          workplace_type: "hybrid" as const,
+        },
+        {
+          external_id: "7742773",
+          title: "Systems Engineer, MAPS",
+          location: "Austin, TX",
+          salary_min: 150000,
+          salary_max: 190000,
+          role_type: "full_time" as const,
+          workplace_type: "hybrid" as const,
         },
       ]
     : [
         {
+          external_id: "101",
           title: `${company} Software Engineer - Backend Systems`,
           location: "San Francisco, CA",
           salary_min: 145000,
           salary_max: 185000,
           role_type: ((source.filters as any)?.role_types?.[0] as any) || "full_time",
+          workplace_type: "hybrid" as const,
         },
         {
+          external_id: "102",
           title: `Infrastructure Engineer - Platform & Reliability`,
           location: "Remote",
           salary_min: 155000,
           salary_max: 195000,
           role_type: ((source.filters as any)?.role_types?.[0] as any) || "full_time",
+          workplace_type: "remote" as const,
         },
         {
+          external_id: "103",
           title: `Full Stack Engineer - Product Experience`,
           location: "New York, NY",
           salary_min: 140000,
           salary_max: 175000,
           role_type: ((source.filters as any)?.role_types?.[0] as any) || "full_time",
+          workplace_type: "onsite" as const,
         },
         {
+          external_id: "104",
           title: `Systems Engineer Intern - Distributed Data`,
           location: "Remote",
           salary_min: 45,
           salary_max: 55,
-          role_type: "internship" as const,
+          role_type: ((source.filters as any)?.role_types?.[0] as any) || "internship",
+          workplace_type: "remote" as const,
         },
       ];
 
   const prefix = source.identifier || "src";
-  return sampleRoles.map((role, idx) => {
-    const jobId = `dev-job-${prefix}-${Date.now()}-${idx}`;
-    const dedupeKey = `${prefix}:${Date.now()}:${idx}`;
+  const companySlug = company.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const companyIconUrl = `https://www.google.com/s2/favicons?domain=${
+    companySlug.includes("cloudflare")
+      ? "cloudflare.com"
+      : companySlug.includes("stripe")
+      ? "stripe.com"
+      : `${companySlug}.com`
+  }&sz=64`;
+
+  const candidates: Job[] = rawSampleRoles.map((role, idx) => {
+    const activeExternalId = (role as any).external_id || `${8097320 + idx}`;
+    const jobId = `dev-job-${prefix}-${activeExternalId}`;
+    const dedupeKey = `${prefix}:${activeExternalId}`;
+    const externalId = activeExternalId;
     const url =
       typeof (source.config as any)?.url === "string" && (source.config as any).url.startsWith("http")
-        ? `${(source.config as any).url.replace(/\/$/, "")}/jobs/${1000 + idx}`
-        : `https://boards.greenhouse.io/${prefix}/jobs/${1000 + idx}`;
+        ? `${(source.config as any).url.replace(/\/$/, "")}/jobs/${activeExternalId}?gh_jid=${activeExternalId}`
+        : `https://job-boards.greenhouse.io/${prefix}/jobs/${activeExternalId}?gh_jid=${activeExternalId}`;
 
     const isHourly = role.salary_min < 1000;
     const salaryRaw = isHourly
       ? `$${role.salary_min} - $${role.salary_max} / hr`
       : `$${role.salary_min.toLocaleString()} - $${role.salary_max.toLocaleString()}`;
 
+    const activeWorkplaceType: WorkplaceType =
+      (role as any).workplace_type ||
+      (role.location.toLowerCase().includes("remote") ? "remote" : "onsite");
+
+    const workplaceDesc =
+      activeWorkplaceType === "onsite"
+        ? `In-Office expectation (3-5 days/week in ${role.location})`
+        : activeWorkplaceType === "remote"
+        ? "Fully Remote"
+        : `Hybrid in ${role.location}`;
+
+    const description = `Position Overview:\nAs a ${role.title} at ${company}, you will work alongside our engineering teams to architect, deploy, and scale high-reliability systems and services. You will participate in architecture reviews, build telemetry monitoring, and write production-grade code.\n\nKey Responsibilities:\n- Collaborate with cross-functional teams to design, test, and ship resilient backend services.\n- Measure and optimize system performance, network latency, and availability.\n- Implement automated CI/CD pipelines and comprehensive integration testing.\n\nMinimum Qualifications:\n- Degree in Computer Science, Software Engineering, or equivalent practical experience.\n- Experience with one or more languages such as Rust, Go, Python, TypeScript, or C++.\n- Solid understanding of data structures, algorithms, and distributed systems fundamentals.\n\nCompensation & Benefits:\n- Competitive compensation (${salaryRaw}).\n- Workplace model: ${workplaceDesc}.\n- Mentorship from senior engineering staff and comprehensive learning stipends.`;
+
     return {
       id: jobId,
       dedupe_key: dedupeKey,
       source_id: source.id,
-      external_id: `ext-${Date.now()}-${idx}`,
+      external_id: externalId,
       title: role.title,
       company,
+      company_icon_url: companyIconUrl,
       role_type: role.role_type,
       location: role.location,
       url,
@@ -309,29 +414,72 @@ export function generateScrapedJobsForSource(source: Source): Job[] {
       salary_interval: isHourly ? "hour" : "year",
       salary_raw: salaryRaw,
       salary_source: "structured",
-      workplace_type: role.location.toLowerCase().includes("remote") ? "remote" : "hybrid",
+      workplace_type: activeWorkplaceType,
       sponsorship: "yes",
       sponsorship_evidence: "Sponsorship eligible for qualified candidates",
       clearance: "no",
       clearance_level: null,
       clearance_evidence: null,
+      work_auth: "open",
+      work_auth_evidence: "Sponsorship eligible for qualified candidates",
       experience_min: role.role_type === "internship" ? 0 : 2,
       experience_max: role.role_type === "internship" ? 1 : 5,
       experience_raw: role.role_type === "internship" ? "Currently enrolled student" : "2+ years",
       is_new_grad: role.role_type === "internship" ? "yes" : "no",
       experience_evidence: null,
-      description_text: `Autonomous scrape ingestion from ${source.name}. Role matches filter policy.`,
+      description_text: description,
       enrichment_version: 1,
       locations: [
         {
           raw: role.location,
           city: role.location.split(",")[0].trim(),
           region_code: role.location.includes(",") ? role.location.split(",")[1].trim() : null,
-          country_code: "US",
-          is_remote: role.location.toLowerCase().includes("remote"),
+          country_code: role.location.includes("UK") ? "GB" : role.location.includes("Portugal") ? "PT" : "US",
+          is_remote: activeWorkplaceType === "remote",
         },
       ],
     };
+  });
+
+  if (!source.filters) {
+    return candidates;
+  }
+
+  const filters = source.filters as any;
+  return candidates.filter((job) => {
+    // 1. Role types
+    if (Array.isArray(filters.role_types) && filters.role_types.length > 0) {
+      if (!filters.role_types.includes(job.role_type)) {
+        return false;
+      }
+    }
+
+    const titleLower = job.title.toLowerCase();
+    const locLower = (job.location || "").toLowerCase();
+
+    // 2. Exclude keywords
+    if (Array.isArray(filters.exclude_keywords) && filters.exclude_keywords.length > 0) {
+      for (const kw of filters.exclude_keywords) {
+        if (typeof kw === "string" && kw.trim().length > 0) {
+          const kwLower = kw.trim().toLowerCase();
+          if (titleLower.includes(kwLower) || locLower.includes(kwLower)) {
+            return false;
+          }
+        }
+      }
+    }
+
+    // 3. Include keywords
+    if (Array.isArray(filters.include_keywords) && filters.include_keywords.length > 0) {
+      const hasAny = filters.include_keywords.some((kw: string) => {
+        if (typeof kw !== "string" || !kw.trim()) return false;
+        const kwLower = kw.trim().toLowerCase();
+        return titleLower.includes(kwLower) || locLower.includes(kwLower);
+      });
+      if (!hasAny) return false;
+    }
+
+    return true;
   });
 }
 
@@ -477,6 +625,22 @@ export const api = {
       return Promise.resolve(pruned);
     }
     return invoke<number>("cleanup_expired_jobs", { sourceId: sourceId || null });
+  },
+
+  deleteJob: (id: string): Promise<boolean> => {
+    if (!isTauri()) {
+      const idx = devJobs.findIndex((j) => j.id === id);
+      if (idx !== -1) {
+        const deleted = devJobs[idx];
+        devDeletedJobKeys.add(deleted.dedupe_key);
+        saveDevDeletedJobKeys();
+        devJobs.splice(idx, 1);
+        saveDevJobs();
+        return Promise.resolve(true);
+      }
+      return Promise.resolve(false);
+    }
+    return invoke<boolean>("delete_job", { id });
   },
 
   // Settings
@@ -755,8 +919,42 @@ export const api = {
         ? generateScrapedJobsForSource(target)
         : generateScrapedJobsForSource({ ...SAMPLE_SWE_SOURCE, id, name: "Target Workflow" });
 
-      devJobs.unshift(...newJobs);
+      let newlyAddedCount = 0;
+      let refreshedCount = 0;
+      const nowIso = new Date().toISOString();
+
+      for (const candidate of newJobs) {
+        if (devDeletedJobKeys.has(candidate.dedupe_key)) {
+          continue;
+        }
+        const existingIdx = devJobs.findIndex(
+          (j) => j.dedupe_key === candidate.dedupe_key || j.url === candidate.url
+        );
+        if (existingIdx >= 0) {
+          // Idempotent upsert: refresh last_seen_at and metadata, preserve user triage state!
+          devJobs[existingIdx] = {
+            ...devJobs[existingIdx],
+            last_seen_at: nowIso,
+            salary_min: candidate.salary_min ?? devJobs[existingIdx].salary_min,
+            salary_max: candidate.salary_max ?? devJobs[existingIdx].salary_max,
+            salary_raw: candidate.salary_raw ?? devJobs[existingIdx].salary_raw,
+            company_icon_url: candidate.company_icon_url ?? devJobs[existingIdx].company_icon_url,
+            description_text: candidate.description_text ?? devJobs[existingIdx].description_text,
+          };
+          refreshedCount++;
+        } else {
+          devJobs.unshift(candidate);
+          newlyAddedCount++;
+        }
+      }
       saveDevJobs();
+
+      const isCloudflare =
+        target?.identifier === "cloudflare" ||
+        target?.name?.toLowerCase().includes("cloudflare") ||
+        id === SAMPLE_SWE_SOURCE.id;
+      const extractedCount = isCloudflare ? 8 : newJobs.length;
+      const matchedCount = newJobs.length;
 
       devLogs[runId].push({
         id: `log-${Date.now()}-3`,
@@ -764,7 +962,7 @@ export const api = {
         timestamp: new Date().toISOString(),
         level: "info",
         source_id: id,
-        message: `Extracted 8 postings from source. Policy engine matched ${newJobs.length} postings against criteria.`,
+        message: `Extracted ${extractedCount} postings from source. Policy engine matched ${matchedCount} postings against criteria.`,
       });
 
       const finishedAt = new Date().toISOString();
@@ -776,13 +974,16 @@ export const api = {
         timestamp: finishedAt,
         level: "info",
         source_id: id,
-        message: `Workflow run completed in ${(durationMs / 1000).toFixed(2)}s with status: SUCCESS. Committed ${newJobs.length} new postings to Discovered inbox.`,
+        message:
+          newlyAddedCount > 0
+            ? `Workflow run completed in ${(durationMs / 1000).toFixed(2)}s with status: SUCCESS. Committed ${newlyAddedCount} new postings to Discovered inbox (${refreshedCount} existing postings refreshed).`
+            : `Workflow run completed in ${(durationMs / 1000).toFixed(2)}s with status: SUCCESS. 0 new postings found (${refreshedCount} existing postings refreshed). Discovered inbox preserved without duplicates.`,
       });
 
       runRecord.status = "success";
       runRecord.finished_at = finishedAt;
-      runRecord.jobs_found = BigInt(8);
-      runRecord.jobs_new = BigInt(newJobs.length);
+      runRecord.jobs_found = BigInt(extractedCount);
+      runRecord.jobs_new = BigInt(newlyAddedCount);
 
       if (target) {
         target.last_run_at = finishedAt;
@@ -859,10 +1060,12 @@ export const api = {
             }
           : null,
         description_text: j.description_text,
+        company_icon_url: j.company_icon_url || null,
         locations: j.locations,
         workplace_type: j.workplace_type,
         sponsorship: null,
         clearance: null,
+        work_auth: null,
         experience: null,
         is_new_grad: j.is_new_grad,
       }));
@@ -902,10 +1105,12 @@ export const api = {
             }
           : null,
         description_text: j.description_text,
+        company_icon_url: j.company_icon_url || null,
         locations: j.locations,
         workplace_type: j.workplace_type,
         sponsorship: null,
         clearance: null,
+        work_auth: null,
         experience: null,
         is_new_grad: j.is_new_grad,
       }));

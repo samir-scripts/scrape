@@ -5,6 +5,7 @@ import {
   matchesJob,
   formatSalary,
   formatExperience,
+  formatWorkAuth,
   triStateToLabel,
   countActiveFilters,
 } from "../lib/filter";
@@ -40,12 +41,15 @@ const createMockJob = (overrides: Partial<Job> = {}): Job => ({
   clearance: "no",
   clearance_level: null,
   clearance_evidence: "No clearance required.",
+  work_auth: "open",
+  work_auth_evidence: "We sponsor H1B visas.",
   experience_min: 5,
   experience_max: 8,
   experience_raw: "5-8 years",
   is_new_grad: "no",
   experience_evidence: "Minimum 5 years in Rust.",
   description_text: "Job description text...",
+  company_icon_url: null,
   enrichment_version: 1,
   locations: [
     {
@@ -358,6 +362,53 @@ describe("Anchored Filter Dropdown Coordinate & Viewport Geometry", () => {
     expect(coords.left).toBe(12);
     expect(coords.width).toBe(420);
     expect(coords.maxHeight).toBe(704);
+  });
+});
+
+describe("Work Authorization & Green Card Filtering", () => {
+  it("formats work authorization requirements accurately", () => {
+    expect(formatWorkAuth(createMockJob({ work_auth: "us_person" }))).toBe("GC / US PERSON");
+    expect(formatWorkAuth(createMockJob({ work_auth: "citizen_only" }))).toBe("CITIZEN ONLY");
+    expect(formatWorkAuth(createMockJob({ work_auth: "open" }))).toBe("OPEN");
+    expect(formatWorkAuth(createMockJob({ work_auth: "unknown" }))).toBe("—");
+  });
+
+  it("filters jobs based on work_auth requirements array", () => {
+    const usPersonJob = createMockJob({ work_auth: "us_person" });
+    const citizenJob = createMockJob({ work_auth: "citizen_only" });
+    const openJob = createMockJob({ work_auth: "open" });
+
+    // Filter for US Person (Green card eligible)
+    const usPersonFilter: JobFilter = {
+      statuses: null,
+      role_types: null,
+      search: null,
+      source_id: null,
+      sort: null,
+      limit: null,
+      offset: null,
+      favorited_only: null,
+      salary_min: null,
+      salary_max: null,
+      salary_currency: null,
+      salary_include_unknown: true,
+      salary_interval: null,
+      experience_min: null,
+      experience_max: null,
+      experience_include_unknown: true,
+      new_grad: null,
+      sponsorship: null,
+      clearance: null,
+      countries: null,
+      regions: null,
+      remote: null,
+      location_include_unknown: true,
+      work_auth: ["us_person", "open"],
+    };
+
+    expect(matchesJob(usPersonJob, usPersonFilter)).toBe(true);
+    expect(matchesJob(openJob, usPersonFilter)).toBe(true);
+    expect(matchesJob(citizenJob, usPersonFilter)).toBe(false);
   });
 });
 

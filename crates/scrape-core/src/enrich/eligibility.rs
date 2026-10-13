@@ -1,4 +1,4 @@
-use crate::types::{ClearanceLevel, TriState};
+use crate::types::{ClearanceLevel, TriState, WorkAuthRequirement};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
@@ -19,6 +19,13 @@ pub struct ClassifiedClearance {
     pub evidence: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ClassifiedWorkAuth {
+    pub value: WorkAuthRequirement,
+    pub evidence: Option<String>,
+}
+
 static SPONSORSHIP_NO_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(?:unable|not able|cannot|can't|will not|won't|does not|do not)\s+(?:to\s+)?(?:provide\s+|offer\s+)?(?:visa\s+)?sponsor|\bwithout\s+(?:the\s+need\s+for\s+)?(?:current\s+or\s+future\s+)?(?:visa\s+)?sponsorship|\bno\s+(?:visa\s+)?sponsorship\b|\bmust\s+be\s+(?:a\s+)?u\.?s\.?\s+citizen|\bu\.?s\.?\s+citizenship\s+(?:is\s+)?required|\bgreen\s+card\s+holders?\s+only|\b(?:itar|ear)\s+compliance\b|\bu\.?s\.?\s+person\s+(?:status\s+)?required").unwrap()
 });
@@ -33,6 +40,22 @@ static CLEARANCE_NO_RE: LazyLock<Regex> = LazyLock::new(|| {
 
 static CLEARANCE_YES_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(?:active|current)?\s*(ts/sci|top\s+secret|secret|public\s+trust)\s*(?:security\s+)?clearance|\bsecurity\s+clearance\s+(?:is\s+)?required|\bmust\s+(?:be\s+able\s+to\s+)?(?:obtain|maintain|hold)\s+(?:a\s+)?(?:security\s+)?clearance|\bpolygraph\s+(?:examination\s+)?required").unwrap()
+});
+
+static WORK_AUTH_EXCLUDE_GC_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\b(?:permanent\s+residents?|green\s+card\s+holders?)\s+(?:are\s+)?(?:not\s+eligible|cannot\s+be\s+considered)\b|\bonly\s+u\.?s\.?\s+citizens?\s+(?:will\s+be\s+considered|are\s+eligible)\b|\bu\.?s\.?\s+citizenship\s+only\b").unwrap()
+});
+
+static WORK_AUTH_US_PERSON_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\b(?:u\.?s\.?\s+person\s+(?:status|required|status\s+required)?|requires?\s+(?:a\s+)?u\.?s\.?\s+person|must\s+be\s+(?:a\s+)?u\.?s\.?\s+person)\b|\b(?:u\.?s\.?\s+citizen\s+or\s+(?:lawful\s+)?permanent\s+resident|u\.?s\.?\s+citizen\s+or\s+green\s+card\s+holder)\b|\b(?:green\s+card\s+or\s+u\.?s\.?\s+citizen|green\s+card\s+holders?\s+only)\b|\b(?:compliance\s+with\s+(?:the\s+)?(?:itar|ear)|(?:itar|ear)\s+(?:regulations?|compliance|export\s+controls?|requirements?|restrictions?))\b|\b(?:lawful\s+permanent\s+resident|green\s+card\s+holder)\s+(?:status\s+)?required\b").unwrap()
+});
+
+static WORK_AUTH_CITIZEN_ONLY_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\bmust\s+be\s+(?:a\s+)?u\.?s\.?\s+citizen\b|\bu\.?s\.?\s+citizenship\s+(?:is\s+)?required\b").unwrap()
+});
+
+static WORK_AUTH_OPEN_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\b(?:authorized\s+to\s+work\s+in\s+the\s+u\.?s\.?|authorization\s+to\s+work\s+in\s+the\s+united\s+states)\b").unwrap()
 });
 
 /// Split text into sentences for scoped context analysis
@@ -159,9 +182,117 @@ pub fn classify_clearance(text: &str) -> ClassifiedClearance {
     }
 }
 
+pub fn classify_work_auth(text: &str) -> ClassifiedWorkAuth {
+    let sentences = split_sentences(text);
+
+    let filtered_sentences: Vec<&str> = sentences
+        .into_iter()
+        .filter(|s| {
+            let lower = s.to_lowercase();
+            !lower.contains("are you a u.s. citizen")
+                && !lower.contains("are you legally authorized")
+                && !lower.contains("do you now or in the future")
+                && !lower.contains("will you require")
+        })
+        .collect();
+
+    // Rule 1: Explicit Green Card / Permanent Resident exclusions -> CitizenOnly
+    for sentence in &filtered_sentences {
+        if WORK_AUTH_EXCLUDE_GC_RE.is_match(sentence) {
+            return ClassifiedWorkAuth {
+                value: WorkAuthRequirement::CitizenOnly,
+                evidence: Some(sentence.to_string()),
+            };
+        }
+    }
+
+    // Rule 2: US Person (Citizen OR Green Card / Permanent Resident under ITAR/EAR) -> UsPerson
+    for sentence in &filtered_sentences {
+        if WORK_AUTH_US_PERSON_RE.is_match(sentence) {
+            return ClassifiedWorkAuth {
+                value: WorkAuthRequirement::UsPerson,
+                evidence: Some(sentence.to_string()),
+            };
+        }
+    }
+
+    // Rule 3: US Citizenship required (without Green Card allowance) -> CitizenOnly
+    for sentence in &filtered_sentences {
+        if WORK_AUTH_CITIZEN_ONLY_RE.is_match(sentence) {
+            let lower = sentence.to_lowercase();
+            if !lower.contains("green card") && !lower.contains("permanent resident") {
+                return ClassifiedWorkAuth {
+                    value: WorkAuthRequirement::CitizenOnly,
+                    evidence: Some(sentence.to_string()),
+                };
+            }
+        }
+    }
+
+    // Rule 4: Explicit Open authorization statement -> Open
+    for sentence in &filtered_sentences {
+        if WORK_AUTH_OPEN_RE.is_match(sentence) {
+            return ClassifiedWorkAuth {
+                value: WorkAuthRequirement::Open,
+                evidence: Some(sentence.to_string()),
+            };
+        }
+    }
+
+    ClassifiedWorkAuth {
+        value: WorkAuthRequirement::Unknown,
+        evidence: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_work_auth_us_person() {
+        let samples = vec![
+            "To conform to U.S. Government export regulations, applicant must be a U.S. Person: U.S. Citizen or lawful Permanent Resident.",
+            "Must be a U.S. Citizen or Green Card holder under ITAR regulations.",
+            "Position requires U.S. person status.",
+            "Green card holders only for this hardware program.",
+            "Requires compliance with EAR export controls for permanent residents and citizens.",
+        ];
+
+        for s in samples {
+            let res = classify_work_auth(s);
+            assert_eq!(res.value, WorkAuthRequirement::UsPerson, "Failed on: {}", s);
+            assert!(res.evidence.is_some());
+        }
+    }
+
+    #[test]
+    fn test_work_auth_citizen_only() {
+        let samples = vec![
+            "Must be a U.S. citizen due to federal defense contract requirements.",
+            "Only U.S. citizens are eligible for this security role. Green card holders are not eligible.",
+            "U.S. citizenship required for high-assurance cryptography work.",
+        ];
+
+        for s in samples {
+            let res = classify_work_auth(s);
+            assert_eq!(res.value, WorkAuthRequirement::CitizenOnly, "Failed on: {}", s);
+            assert!(res.evidence.is_some());
+        }
+    }
+
+    #[test]
+    fn test_work_auth_open_and_unknown() {
+        let open_text = "Candidates must be authorized to work in the U.S. upon hire.";
+        let res_open = classify_work_auth(open_text);
+        assert_eq!(res_open.value, WorkAuthRequirement::Open);
+        assert!(res_open.evidence.is_some());
+
+        let unknown_text = "Looking for a seasoned Rust backend developer.";
+        let res_unknown = classify_work_auth(unknown_text);
+        assert_eq!(res_unknown.value, WorkAuthRequirement::Unknown);
+        assert!(res_unknown.evidence.is_none());
+    }
 
     #[test]
     fn test_sponsorship_no() {

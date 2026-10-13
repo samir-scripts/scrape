@@ -9,6 +9,8 @@ export function SubNav() {
     view,
     trackedViewMode,
     setTrackedViewMode,
+    selectedJobId,
+    setSelectedJobId,
     filterSpec,
     setFilterSpec,
     resetFilterSpec,
@@ -24,6 +26,23 @@ export function SubNav() {
       <div className="flex items-center justify-between h-9 px-3 border-b border-[var(--color-ink)] bg-[var(--color-paper-2)]/40">
         {/* Left: View-specific sub-categories & consolidated Filters button */}
         <div className="flex items-center gap-4 text-xs font-mono">
+          {view === "discovered" && (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-[var(--color-ink-mute)]">
+                DISCOVERED
+              </span>
+              {selectedJobId && (
+                <button
+                  onClick={() => setSelectedJobId(null)}
+                  className="flex items-center gap-1 px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[10px] font-mono uppercase font-bold text-[var(--color-ink)] cursor-pointer"
+                  title="Close active job window [Esc]"
+                >
+                  <span>✕ CLOSE WINDOW</span>
+                  <KeyHint keys="ESC" className="text-[9px]" />
+                </button>
+              )}
+            </div>
+          )}
 
           {view === "tracked" && (
             <div className="flex items-center gap-1">
