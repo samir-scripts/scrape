@@ -15,6 +15,7 @@ import { FavoriteButton } from "../ui/FavoriteButton";
 import { RemoveJobButton } from "../ui/RemoveJobButton";
 import { IconButton } from "../ui/IconButton";
 import { Modal } from "../ui/Modal";
+import { JobDescriptionView } from "./JobDescriptionView";
 
 export interface JobInspectorProps {
   job: Job | null;
@@ -260,9 +261,11 @@ export function JobInspectorContent({
       </header>
       <section className="grid gap-2">
         <h3 className="font-bold">Description</h3>
-        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-          {job.description_text || "No description extracted."}
-        </p>
+        <JobDescriptionView
+          description={job.description}
+          fallback={job.description_text}
+          onOpenUrl={onOpenUrl}
+        />
       </section>
       <section className="grid gap-2">
         <div className="flex justify-between gap-2">

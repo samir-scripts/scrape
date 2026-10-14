@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { JobInspectorContent } from "../components/jobs/JobInspector";
 import { TrackedList } from "../components/views/tracked/TrackedList";
 import type { Job } from "../bindings/Job";
+import type { JobDescription } from "../bindings/JobDescription";
 import { recordedJobs } from "../lib/recordedJobs";
 const job: Job = {
   ...recordedJobs()[0],
@@ -44,6 +45,44 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("shared job inspector", () => {
+  it("renders structured descriptions and sends only safe links to the opener", async () => {
+    const open = vi.fn();
+    const description: JobDescription = {
+      plain_text: "Role\n\nBuild systems\n• First\n• Second",
+      truncated: false,
+      blocks: [
+        { kind: "heading", level: 2, children: [{ kind: "text", text: "Role" }] },
+        {
+          kind: "paragraph",
+          children: [
+            { kind: "text", text: "Build " },
+            { kind: "link", text: "systems", url: "https://jobs.acme.test/guide" },
+            { kind: "link", text: " unsafe", url: "javascript:alert(1)" },
+          ],
+        },
+        {
+          kind: "list",
+          ordered: false,
+          items: [[{ kind: "text", text: "First" }], [{ kind: "text", text: "Second" }]],
+        },
+      ],
+    };
+    render(
+      <JobInspectorContent
+        job={{ ...job, description }}
+        onUpdateStatus={vi.fn()}
+        onUpdateNotes={vi.fn()}
+        onOpenUrl={open}
+      />,
+    );
+    expect(screen.getByRole("heading", { name: "Role" })).toBeTruthy();
+    expect(screen.getByText("First")).toBeTruthy();
+    expect(screen.getByText("unsafe")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /unsafe/ })).toBeNull();
+    await userEvent.click(screen.getByRole("link", { name: "systems" }));
+    expect(open).toHaveBeenCalledWith("https://jobs.acme.test/guide");
+  });
+
   it("opens the stored destination, changes stage and removes through distinct controls", async () => {
     const user = userEvent.setup(),
       open = vi.fn(),
