@@ -10,7 +10,9 @@ pub use eligibility::{
     ClassifiedSponsorship, ClassifiedWorkAuth,
 };
 pub use experience::{extract_experience, ExperienceClassification};
-pub use html::to_plain_text;
+pub use html::{
+    normalize_description, to_plain_text, DescriptionBlock, DescriptionInline, JobDescription,
+};
 pub use location::ParsedLocation;
 pub use salary::{CompensationFilter, CompensationRange, Salary};
 pub use workplace::classify_workplace;

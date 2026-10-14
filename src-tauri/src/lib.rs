@@ -216,6 +216,9 @@ mod bindings_test {
         scrape_core::ClearanceLevel::export().unwrap();
         scrape_core::enrich::Salary::export().unwrap();
         scrape_core::enrich::ParsedLocation::export().unwrap();
+        scrape_core::enrich::DescriptionInline::export().unwrap();
+        scrape_core::enrich::DescriptionBlock::export().unwrap();
+        scrape_core::enrich::JobDescription::export().unwrap();
         scrape_core::enrich::ClassifiedSponsorship::export().unwrap();
         scrape_core::enrich::ClassifiedClearance::export().unwrap();
         scrape_core::enrich::ExperienceClassification::export().unwrap();

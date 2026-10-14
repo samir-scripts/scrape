@@ -20,3 +20,5 @@ sqlx = { workspace = true, optional = true }
 
 url = "2"
 chrono-tz = "0.10"
+scraper = "0.27"
+ego-tree = "0.11"
