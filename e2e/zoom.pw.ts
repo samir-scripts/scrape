@@ -11,13 +11,15 @@ test("both themes remain operable at actual 200% browser zoom", async () => {
   try {
     await context.route("**/*", route => new URL(route.request().url()).hostname === "127.0.0.1" ? route.continue() : route.abort());
     const page = await context.newPage();
-    await page.goto("http://127.0.0.1:1420/?demo=1&fixtures=1");
+    const baseURL = String(test.info().project.use.baseURL);
+    await page.goto(`${baseURL}/?demo=1&fixtures=1`);
     await expect.poll(() => page.evaluate(() => innerWidth)).toBeLessThanOrEqual(640);
     const worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
-    const zoom = await worker.evaluate(async () => {
-      const tabs = await (globalThis as any).chrome.tabs.query({ url: "http://127.0.0.1:1420/*" });
-      return (globalThis as any).chrome.tabs.getZoom(tabs[0].id);
-    });
+    const zoom = await worker.evaluate(async baseURL => {
+      const tabs = await (globalThis as any).chrome.tabs.query({});
+      const tab = tabs.find((tab: {url?:string}) => tab.url?.startsWith(baseURL));
+      return (globalThis as any).chrome.tabs.getZoom(tab.id);
+    }, baseURL);
     expect(zoom).toBe(2);
     for (const theme of ["paper", "obsidian"]) {
       await page.getByRole("button", { name: "SETTINGS", exact: true }).click();
