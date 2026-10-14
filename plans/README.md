@@ -1,5 +1,10 @@
 # Plan status
 
+[Interface simplification and real-source verification](07-interface-simplification.md)
+is the researched, not-yet-implemented UI revision handoff. It updates presentation
+choices such as separate workflow step buttons while preserving the data and
+execution contracts below.
+
 [Trustworthy scraping](06-trustworthy-scraping.md) is the current behavior and
 verification specification. Older plans below are historical design records;
 conflicting claims about permanent deletion, guessed icons, browser live data,
