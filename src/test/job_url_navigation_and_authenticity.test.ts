@@ -87,9 +87,8 @@ describe("Job URL Navigation & Authenticity Engine", () => {
         })
       );
 
-      // Card must render external open button [↗]
-      expect(html).toContain("[↗]");
-      expect(html).toContain("Open job posting in browser");
+      expect(html).toContain(`aria-label="Open ${mockJob.title.replaceAll("&", "&amp;")} at ${mockJob.company} in browser"`);
+      expect(html).toContain('aria-hidden="true"');
     });
   });
 

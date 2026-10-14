@@ -1,3 +1,5 @@
+import { Icon } from "../ui/Icon";
+import { IconButton } from "../ui/IconButton";
 import type { JobFilter } from "../../bindings/JobFilter";
 import { ROLE_TYPE_LABELS } from "../../lib/constants";
 
@@ -153,13 +155,9 @@ export function FilterChips({ filter, onUpdate, onClearAll }: FilterChipsProps) 
           className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] text-xs font-mono font-bold uppercase tracking-wider"
         >
           <span>{chip.label}</span>
-          <button
-            type="button"
-            onClick={chip.onRemove}
-            className="hover:text-[var(--color-danger)] cursor-pointer text-xs leading-none font-bold"
-          >
-            ×
-          </button>
+          <IconButton label={`Remove filter ${chip.label}`} onClick={chip.onRemove}>
+            <Icon name="close" size="sm" />
+          </IconButton>
         </span>
       ))}
       <button

@@ -73,7 +73,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Browser interaction regressions
-        run: npx playwright test e2e/workflows.pw.ts e2e/jobs.pw.ts e2e/fonts.pw.ts
+        run: npx playwright test e2e/workflows.pw.ts e2e/jobs.pw.ts e2e/fonts.pw.ts e2e/controls.pw.ts
 
   native-and-visual:
     name: Native and visual verification
@@ -99,3 +99,9 @@ jobs:
 
       - name: Actual Tauri development startup and historical upgrades
         run: npm run test:native-startup
+
+      - name: Native themes, fonts and Always scrollbars
+        run: SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_APPEARANCE=1 SCRAPE_SCROLLBAR_MODE=Always npm run test:native-startup
+
+      - name: Narrow native controls and Automatic scrollbars
+        run: SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_APPEARANCE=1 SCRAPE_NATIVE_WIDTH=480 SCRAPE_SCROLLBAR_MODE=Automatic npm run test:native-startup

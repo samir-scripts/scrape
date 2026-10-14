@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page, Locator } from "@playwright/test";
 export async function contrastFailures(page: Page) {
   // Capture a deliberate resting state, rather than incidental hover/tooltip timing.
   await page.mouse.move(0, 0);
@@ -35,4 +35,21 @@ export async function contrastFailures(page: Page) {
     }
     return result;
   });
+}
+
+export async function indicatorContrast(control: Locator, property: "color" | "outlineColor") {
+  return control.evaluate((element, property) => {
+    const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;
+    const context = canvas.getContext("2d", { willReadFrequently: true })!;
+    const luminance = (value: string) => {
+      context.clearRect(0, 0, 1, 1); context.fillStyle = value; context.fillRect(0, 0, 1, 1);
+      const rgb = [...context.getImageData(0, 0, 1, 1).data].slice(0, 3).map(c => c / 255).map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4);
+      return rgb.reduce((sum, c, i) => sum + c * [.2126, .7152, .0722][i], 0);
+    };
+    const style = getComputedStyle(element);
+    const surface = getComputedStyle(document.documentElement).getPropertyValue("--color-surface").trim();
+    // The remove icon and focus ring are essential indicators against the card surface.
+    const a = luminance(style[property]); const b = luminance(surface);
+    return (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+  }, property);
 }

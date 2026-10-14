@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
   --palette-paper: #F5F5DC;
   --palette-obsidian: #262628;
   --palette-ink: #1A1A1A;
@@ -44,9 +45,16 @@
   --spacing-panel: 16px;
   --spacing-section: 24px;
   --spacing-control: 8px;
+  --control-height-sm: 32px;
+  --control-height: 36px;
+  --control-height-lg: 40px;
+  --color-scrollbar-thumb: var(--color-text-muted);
+  --color-scrollbar-track: var(--color-surface-raised);
+  --color-scrollbar-hover: var(--color-text);
 }
 
 [data-theme="obsidian"] {
+  color-scheme: dark;
   --color-surface: var(--palette-obsidian);
   --color-surface-raised: #36363a;
   --color-text: var(--palette-cream);
@@ -83,7 +91,15 @@
     overflow: hidden;
     user-select: text;
   }
+  button, input, select, textarea { font-family: inherit; }
   input, textarea { text-transform: none; }
+  select {
+    min-height: var(--control-height-sm);
+    padding: 4px 8px;
+    color: var(--color-ink);
+    background-color: var(--color-paper);
+    border: 1px solid var(--color-border);
+  }
   nav, label, th {
     text-transform: uppercase;
     letter-spacing: -0.02em;
@@ -100,10 +116,10 @@
     outline-offset: 2px;
   }
 
-  /* Brutalist Theme-Synchronized Scrollbars */
+  /* Native scrolling: standard properties plus WKWebView fallback. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--color-ink-mute) var(--color-paper-2);
+    scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
   }
 
   ::-webkit-scrollbar {
@@ -112,23 +128,23 @@
   }
 
   ::-webkit-scrollbar-track {
-    background: var(--color-paper-2);
+    background: var(--color-scrollbar-track);
     border-left: 1px solid var(--color-ink);
     border-top: 1px solid var(--color-ink);
   }
 
   ::-webkit-scrollbar-thumb {
-    background: var(--color-ink-mute);
+    background: var(--color-scrollbar-thumb);
     border-radius: 0 !important;
     border: 1px solid var(--color-ink);
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-ink);
+    background: var(--color-scrollbar-hover);
   }
 
   ::-webkit-scrollbar-corner {
-    background: var(--color-paper-2);
+    background: var(--color-scrollbar-track);
   }
 }
 
@@ -182,3 +198,8 @@
   .kanban-column { display: none; width: 100%; }
   .kanban-column.kanban-active { display: block; }
 }
+
+/* Shared targets do not depend on the selected font or the SVG's size. */
+.ui-icon-button { min-width: var(--control-height-sm); min-height: var(--control-height-sm); padding: 4px; }
+.ui-icon { flex: none; vertical-align: middle; }
+.overflow-y-auto, .overflow-auto { scrollbar-gutter: stable; }

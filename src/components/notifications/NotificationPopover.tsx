@@ -1,3 +1,5 @@
+import { Icon } from "../ui/Icon";
+import { IconButton } from "../ui/IconButton";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import type { AppNotification } from "../../bindings/AppNotification";
@@ -268,13 +270,7 @@ export function NotificationPopover({
             </button>
           )}
 
-          <button
-            onClick={onClose}
-            aria-label="Close notifications"
-            className="w-5 h-5 flex items-center justify-center font-bold text-xs border border-transparent hover:border-[var(--color-ink)] text-[var(--color-ink)] cursor-pointer"
-          >
-            ✕
-          </button>
+          <IconButton label="Close notifications" onClick={onClose}><Icon name="close" /></IconButton>
         </div>
       </div>
 
@@ -385,7 +381,7 @@ export function NotificationPopover({
           onClick={handleOpenSettings}
           className="text-[var(--color-ink)] hover:underline cursor-pointer uppercase font-bold"
         >
-          UPDATE SETTINGS ↗
+          UPDATE SETTINGS <Icon name="external" size="sm" />
         </button>
       </div>
     </div>,

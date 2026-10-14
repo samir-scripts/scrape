@@ -3,7 +3,6 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "../lib/api";
 import type { Job } from "../bindings/Job";
-import { FavoriteButton } from "../components/ui/FavoriteButton";
 import { CompanyLogo } from "../components/ui/CompanyLogo";
 import { ThreeColumn } from "../components/layout/ThreeColumn";
 import {
@@ -101,35 +100,6 @@ describe("Deduplication Idempotency (Workflow Re-Runs)", () => {
     const jobAfterSecondRun = await api.getJob(sampleJob.id);
     expect(jobAfterSecondRun.status).toBe("applied");
     expect(jobAfterSecondRun.favorited).toBe(true);
-  });
-});
-
-describe("Prominent Favorite Button Component", () => {
-  it("renders a brutalist 5-point SVG star with proper accessible attributes", () => {
-    const htmlUnfav = renderToStaticMarkup(
-      React.createElement(FavoriteButton, {
-        favorited: false,
-        size: "md",
-      })
-    );
-
-    expect(htmlUnfav).toContain('aria-pressed="false"');
-    expect(htmlUnfav).toContain('aria-label="Favorite posting"');
-    expect(htmlUnfav).toContain("<svg");
-    expect(htmlUnfav).toContain("<polygon");
-    expect(htmlUnfav).toContain('fill="none"');
-
-    const htmlFav = renderToStaticMarkup(
-      React.createElement(FavoriteButton, {
-        favorited: true,
-        size: "lg",
-      })
-    );
-
-    expect(htmlFav).toContain('aria-pressed="true"');
-    expect(htmlFav).toContain('aria-label="Unfavorite posting"');
-    expect(htmlFav).toContain('fill="var(--color-lime)"');
-    expect(htmlFav).toContain("min-w-9 min-h-9");
   });
 });
 

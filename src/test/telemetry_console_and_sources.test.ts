@@ -1,9 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TopNav } from "../components/layout/TopNav";
 import { api } from "../lib/api";
+import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useToastStore } from "../lib/toast";
+
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("Telemetry Console & Source Workflow UI Hardening", () => {
   beforeEach(() => {
@@ -18,16 +23,14 @@ describe("Telemetry Console & Source Workflow UI Hardening", () => {
       expect(html).toContain('id="terminal-console-btn"');
       expect(html).toContain('aria-label="Open Terminal Console"');
 
-      // Terminal SVG icon has terminal prompt glyphs (> and _)
-      expect(html).toContain('<rect x="1.5" y="2.5" width="13" height="11"');
-      expect(html).toContain('<path d="M4.5 6l2.5 2-2.5 2"');
-      expect(html).toContain('<line x1="8.5" y1="10" x2="11.5" y2="10"');
+      expect(html).toContain('aria-hidden="true"');
     });
 
     it("triggers openTerminalConsole when invoked", async () => {
-      const spy = vi.spyOn(api, "openTerminalConsole");
-      await api.openTerminalConsole();
-      expect(spy).toHaveBeenCalledTimes(1);
+      const spy = vi.spyOn(api, "openTerminalConsole").mockResolvedValue(undefined);
+      render(React.createElement(TopNav));
+      await userEvent.setup().click(screen.getByRole("button", { name: "Open Terminal Console" }));
+      expect(spy).toHaveBeenCalledExactlyOnceWith();
     });
   });
 

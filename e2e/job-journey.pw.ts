@@ -32,7 +32,7 @@ for (const theme of ["paper", "obsidian"])
       });
       expect(await remove.textContent()).toBe("");
       expect(await contrastFailures(page)).toEqual([]);
-      await expect(page).toHaveScreenshot(`${theme}-${width}-inspector.png`, {
+      await expect.soft(page).toHaveScreenshot(`${theme}-${width}-inspector.png`, {
         animations: "disabled",
       });
       await inspector.getByLabel("Notes").fill("Follow up with recruiter");
@@ -49,13 +49,13 @@ for (const theme of ["paper", "obsidian"])
       await page.getByRole("button", { name: /LIST/ }).click();
       expect(await page.locator("thead th").count()).toBe(6);
       expect(await contrastFailures(page)).toEqual([]);
-      await expect(page).toHaveScreenshot(
+      await expect.soft(page).toHaveScreenshot(
         `${theme}-${width}-applied-list.png`,
         { animations: "disabled" },
       );
       await page.getByRole("button", { name: /KANBAN/ }).click();
       expect(await contrastFailures(page)).toEqual([]);
-      await expect(page).toHaveScreenshot(`${theme}-${width}-board.png`, {
+      await expect.soft(page).toHaveScreenshot(`${theme}-${width}-board.png`, {
         animations: "disabled",
       });
       await page

@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode, type MouseEvent } from "react";
-import { KeyHint } from "./KeyHint";
+import { Icon } from "./Icon";
+import { IconButton } from "./IconButton";
 import { Rule } from "./Rule";
 
 interface ModalProps {
@@ -92,14 +93,9 @@ export function Modal({
           <h2 className="font-mono font-bold text-xs uppercase tracking-wider">
             {title}
           </h2>
-          <button
-            type="button"
-            aria-label="Close dialog"
-            onClick={onClose}
-            className="text-[var(--color-paper)] hover:opacity-70 cursor-pointer flex items-center gap-1.5"
-          >
-            <KeyHint keys="ESC" className="border-[var(--color-paper)] text-xs" />
-          </button>
+          <IconButton label="Close dialog" onClick={onClose} variant="inverse">
+            <Icon name="close" />
+          </IconButton>
         </div>
 
         <Rule />

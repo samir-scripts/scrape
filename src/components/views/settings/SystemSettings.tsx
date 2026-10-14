@@ -1,3 +1,4 @@
+import { Icon } from "../../ui/Icon";
 import { useState } from "react";
 import type { Settings } from "../../../bindings/Settings";
 import { api } from "../../../lib/api";
@@ -338,7 +339,7 @@ export function SystemSettings({
             EXPORT TO CSV
           </Button>
           <Button variant="ghost" onClick={handleOpenDataFolder}>
-            OPEN PROJECT FOLDER ↗
+            OPEN PROJECT FOLDER <Icon name="external" size="sm" />
           </Button>
         </div>
       </div>

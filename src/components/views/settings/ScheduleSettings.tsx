@@ -1,3 +1,4 @@
+import { Icon } from "../../ui/Icon";
 import { useState, useEffect } from "react";
 import type { Settings } from "../../../bindings/Settings";
 import type { ScrapeRun } from "../../../bindings/ScrapeRun";
@@ -359,9 +360,9 @@ export function ScheduleSettings({
           </span>
           <button
             onClick={fetchRecentRuns}
-            className="text-xs font-mono uppercase text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] cursor-pointer"
+            className="inline-flex items-center gap-2 min-h-[var(--control-height-sm)] text-xs font-mono uppercase text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] cursor-pointer"
           >
-            REFRESH ↻
+            REFRESH <Icon name="refresh" size="sm" />
           </button>
         </div>
 

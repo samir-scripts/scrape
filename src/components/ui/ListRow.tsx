@@ -1,3 +1,4 @@
+import { Icon } from "./Icon";
 import type { HTMLAttributes } from "react";
 
 interface ListRowProps extends HTMLAttributes<HTMLDivElement> {
@@ -29,7 +30,7 @@ export function ListRow({
     >
       {selected && (
         <span className="absolute left-1 text-[var(--color-paper)] font-mono text-xs select-none">
-          ▸
+          <Icon name="right" size="sm" />
         </span>
       )}
       <div className={`w-full ${selected ? "pl-2" : ""}`}>{children}</div>

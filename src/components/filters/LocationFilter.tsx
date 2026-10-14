@@ -1,3 +1,5 @@
+import { Icon } from "../ui/Icon";
+import { IconButton } from "../ui/IconButton";
 import { useState, useEffect } from "react";
 import { api } from "../../lib/api";
 import {
@@ -317,14 +319,9 @@ export function LocationFilter({
                   className="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-mono font-bold uppercase border border-[var(--color-ink)] bg-[var(--color-paper-2)] text-[var(--color-ink)]"
                 >
                   <span>{label}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveRegion(reg)}
-                    className="hover:text-[var(--color-danger)] cursor-pointer text-xs leading-none"
-                    aria-label={`Remove ${reg}`}
-                  >
-                    ×
-                  </button>
+                  <IconButton label={`Remove ${reg}`} onClick={() => handleRemoveRegion(reg)}>
+                    <Icon name="close" size="sm" />
+                  </IconButton>
                 </span>
               );
             })}

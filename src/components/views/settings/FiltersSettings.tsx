@@ -1,3 +1,5 @@
+import { Icon } from "../../ui/Icon";
+import { IconButton } from "../../ui/IconButton";
 import { useState } from "react";
 import type { Settings } from "../../../bindings/Settings";
 import type { RoleType } from "../../../bindings/RoleType";
@@ -124,18 +126,7 @@ export function FiltersSettings({
                 className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper-2)] text-[var(--color-ink)] text-xs font-bold uppercase tracking-wider"
               >
                 <span>{kw}</span>
-                <button
-                  onClick={() =>
-                    handleRemoveChip(
-                      "filters.include_keywords",
-                      settings.filters_include_keywords,
-                      kw
-                    )
-                  }
-                  className="hover:text-[var(--color-danger)] cursor-pointer text-sm leading-none"
-                >
-                  ×
-                </button>
+                <IconButton label={`Remove included keyword ${kw}`} onClick={() => handleRemoveChip("filters.include_keywords", settings.filters_include_keywords, kw)}><Icon name="close" size="sm" /></IconButton>
               </span>
             ))
           )}
@@ -179,18 +170,7 @@ export function FiltersSettings({
                 className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-[var(--color-danger)] bg-[var(--color-paper-2)] text-[var(--color-danger)] text-xs font-bold uppercase tracking-wider"
               >
                 <span>{kw}</span>
-                <button
-                  onClick={() =>
-                    handleRemoveChip(
-                      "filters.exclude_keywords",
-                      settings.filters_exclude_keywords,
-                      kw
-                    )
-                  }
-                  className="hover:text-black cursor-pointer text-sm leading-none"
-                >
-                  ×
-                </button>
+                <IconButton label={`Remove excluded keyword ${kw}`} onClick={() => handleRemoveChip("filters.exclude_keywords", settings.filters_exclude_keywords, kw)}><Icon name="close" size="sm" /></IconButton>
               </span>
             ))
           )}
@@ -234,18 +214,7 @@ export function FiltersSettings({
                 className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper-2)] text-[var(--color-ink)] text-xs font-bold uppercase tracking-wider"
               >
                 <span>{loc}</span>
-                <button
-                  onClick={() =>
-                    handleRemoveChip(
-                      "filters.locations",
-                      settings.filters_locations,
-                      loc
-                    )
-                  }
-                  className="hover:text-[var(--color-danger)] cursor-pointer text-sm leading-none"
-                >
-                  ×
-                </button>
+                <IconButton label={`Remove location rule ${loc}`} onClick={() => handleRemoveChip("filters.locations", settings.filters_locations, loc)}><Icon name="close" size="sm" /></IconButton>
               </span>
             ))
           )}

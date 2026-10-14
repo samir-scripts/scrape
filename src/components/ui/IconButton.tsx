@@ -1,22 +1,18 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
-export function IconButton({
-  label,
-  children,
-  className = "",
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+
+export const IconButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & {
   label: string;
   children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      className={`inline-flex min-w-8 min-h-8 items-center justify-center cursor-pointer hover:bg-[var(--color-paper-2)] shrink-0 ${className}`}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-}
+  variant?: "default" | "outlined" | "danger" | "inverse";
+}>(function IconButton({ label, children, className = "", variant = "default", ...props }, ref) {
+  const variants = {
+    default: "border-transparent enabled:hover:bg-[var(--color-paper-2)]",
+    outlined: "border-current enabled:hover:bg-[var(--color-paper-2)]",
+    danger: "border-current text-[var(--color-danger)] enabled:hover:bg-[var(--color-paper-2)]",
+    inverse: "border-transparent text-[var(--color-paper)] enabled:hover:border-current focus-visible:outline-[var(--color-paper)]",
+  };
+  return <button type="button" title={label} {...props} ref={ref} aria-label={label}
+    className={`ui-icon-button inline-flex items-center justify-center gap-2 border shrink-0 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${variants[variant]} ${className}`}>
+    {children}
+  </button>;
+});

@@ -1,3 +1,5 @@
+import { Icon } from "../ui/Icon";
+import { IconButton } from "../ui/IconButton";
 import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { JobFilter } from "../../bindings/JobFilter";
@@ -223,15 +225,9 @@ export function FilterPanel({
               [RESET]
             </button>
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex items-center gap-1 px-1.5 py-0.5 border border-[var(--color-ink)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] font-bold cursor-pointer"
-            aria-label="Close filters"
-          >
-            <span>[ESC]</span>
-            <span className="text-xs leading-none font-bold">×</span>
-          </button>
+          <IconButton label="Close filters" onClick={onClose} variant="outlined">
+            <Icon name="close" />
+          </IconButton>
         </div>
       </div>
 
@@ -243,17 +239,6 @@ export function FilterPanel({
             <label className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
               CONTAINS (KEYWORDS / TEXT)
             </label>
-            {Boolean(filterSpec.search?.trim()) && (
-              <button
-                type="button"
-                onClick={() =>
-                  onUpdateFilter((prev) => ({ ...prev, search: null }))
-                }
-                className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-danger)] uppercase cursor-pointer"
-              >
-                [RESET]
-              </button>
-            )}
           </div>
           <div className="flex items-center border border-[var(--color-ink)] bg-[var(--color-paper)]">
             <input
@@ -270,15 +255,9 @@ export function FilterPanel({
               className="w-full py-1 px-2 bg-transparent text-[var(--color-ink)] text-xs font-mono uppercase focus:outline-none placeholder-[var(--color-ink-mute)]"
             />
             {Boolean(filterSpec.search?.trim()) && (
-              <button
-                type="button"
-                onClick={() =>
-                  onUpdateFilter((prev) => ({ ...prev, search: null }))
-                }
-                className="px-2 text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] cursor-pointer"
-              >
-                ×
-              </button>
+              <IconButton label="Clear filter search" onClick={() => onUpdateFilter((prev) => ({ ...prev, search: null }))}>
+                <Icon name="close" size="sm" />
+              </IconButton>
             )}
           </div>
         </div>

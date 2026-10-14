@@ -1,3 +1,5 @@
+import { Icon } from "../../ui/Icon";
+import { IconButton } from "../../ui/IconButton";
 import { RemoveJobButton } from "../../ui/RemoveJobButton";
 import { useState } from "react";
 import type { Job } from "../../../bindings/Job";
@@ -90,6 +92,16 @@ export function DiscoveredTable({
     compareDiscoveredJobs(a, b, sortField, sortAsc)
   );
 
+  const sortHeader = (field: DiscoveredSortField, label: string, className = "") => (
+    <TableHeader className={className} aria-sort={sortField === field ? (sortAsc ? "ascending" : "descending") : "none"}>
+      <button type="button" aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => handleSort(field)}
+        className="inline-flex items-center gap-1 min-h-[var(--control-height-sm)] cursor-pointer">
+        {field === "favorited" ? <Icon name="star" size="sm" /> : label.toUpperCase()}
+        {sortField === field && <Icon name={sortAsc ? "up" : "down"} size="sm" />}
+      </button>
+    </TableHeader>
+  );
+
   if (jobs.length === 0) {
     return (
       <div className="p-8 flex items-center justify-center">
@@ -106,52 +118,21 @@ export function DiscoveredTable({
       <Table>
         <TableHead>
           <TableRow>
-            <TableHeader
-              onClick={() => handleSort("favorited")}
-              className="cursor-pointer w-9 text-center"
-              title="Sort by Favorited"
-            >
-              ★ {sortField === "favorited" ? (sortAsc ? "▲" : "▼") : ""}
-            </TableHeader>
-            <TableHeader
-              onClick={() => handleSort("company")}
-              className="cursor-pointer min-w-[140px]"
-            >
-              COMPANY {sortField === "company" ? (sortAsc ? "▲" : "▼") : ""}
-            </TableHeader>
-            <TableHeader
-              onClick={() => handleSort("title")}
-              className="cursor-pointer min-w-[180px]"
-            >
-              JOB TITLE {sortField === "title" ? (sortAsc ? "▲" : "▼") : ""}
-            </TableHeader>
+            {sortHeader("favorited", "Favorites", "w-9 text-center")}
+            {sortHeader("company", "Company", "min-w-[140px]")}
+            {sortHeader("title", "Job title", "min-w-[180px]")}
             <TableHeader className="min-w-[240px]">
               DESCRIPTION & RELEVANT INFO
             </TableHeader>
-            <TableHeader
-              onClick={() => handleSort("status")}
-              className="cursor-pointer"
-            >
-              STATUS {sortField === "status" ? (sortAsc ? "▲" : "▼") : ""}
-            </TableHeader>
-            <TableHeader
-              onClick={() => handleSort("salary")}
-              className="cursor-pointer"
-            >
-              SALARY {sortField === "salary" ? (sortAsc ? "▲" : "▼") : ""}
-            </TableHeader>
+            {sortHeader("status", "Status", "")}
+            {sortHeader("salary", "Salary", "")}
             <TableHeader>LOCATION</TableHeader>
             <TableHeader>YOE</TableHeader>
             <TableHeader>NEW GRAD</TableHeader>
             <TableHeader>SPONSORSHIP</TableHeader>
             <TableHeader>GREEN CARD</TableHeader>
             <TableHeader>CLEARANCE</TableHeader>
-            <TableHeader
-              onClick={() => handleSort("date_added")}
-              className="cursor-pointer"
-            >
-              ADDED {sortField === "date_added" ? (sortAsc ? "▲" : "▼") : ""}
-            </TableHeader>
+            {sortHeader("date_added", "Added", "")}
             <TableHeader className="text-right">TRIAGE</TableHeader>
           </TableRow>
         </TableHead>
@@ -243,16 +224,11 @@ export function DiscoveredTable({
                     >
                       IGN
                     </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenUrl(job.url);
-                      }}
-                      className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper-2)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] text-xs font-mono uppercase cursor-pointer"
-                      title="Open URL [Enter]"
-                    >
-                      ↗
-                    </button>
+                    <IconButton
+                      label={`Open ${job.title} at ${job.company} in browser`}
+                      onClick={(e) => { e.stopPropagation(); onOpenUrl(job.url); }}
+                      variant="outlined"
+                    ><Icon name="external" /></IconButton>
                     {onDelete && <RemoveJobButton title={job.title} company={job.company} onClick={e => { e.stopPropagation(); onDelete(job); }} />}
                   </div>
                 </TableCell>

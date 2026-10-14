@@ -1,3 +1,5 @@
+import { Icon } from "../../ui/Icon";
+import { IconButton } from "../../ui/IconButton";
 import { RemoveJobButton } from "../../ui/RemoveJobButton";
 import type { JobSort } from "../../../bindings/JobSort";
 import { useState } from "react";
@@ -259,25 +261,9 @@ export function TrackedList({
                 ))}
                 <TableCell>
                   <div className="flex gap-2">
-                    <button
-                      type="button"
-                      aria-label={`Open ${job.title} posting`}
-                      title="Open posting"
-                      className="min-h-8 min-w-8 cursor-pointer"
-                      onClick={() => onOpenUrl(job.url)}
-                    >
-                      <svg
-                        aria-hidden="true"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M14 3h7v7M21 3 10 14M10 3H3v18h18v-7" />
-                      </svg>
-                    </button>
+                    <IconButton label={`Open ${job.title} posting`} title="Open posting" onClick={() => onOpenUrl(job.url)}>
+                      <Icon name="external" />
+                    </IconButton>
                     {onDelete && (
                       <RemoveJobButton
                         title={job.title}

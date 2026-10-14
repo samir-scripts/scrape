@@ -1,3 +1,5 @@
+import { Icon } from "../../ui/Icon";
+import { IconButton } from "../../ui/IconButton";
 import { RemoveJobButton } from "../../ui/RemoveJobButton";
 import type { MouseEvent } from "react";
 import type { Job } from "../../../bindings/Job";
@@ -74,18 +76,11 @@ export function JobCard({
         <div className="flex items-center gap-2 shrink-0 pt-0.5">
           <Tag status={job.status} />
           {onOpenUrl && (
-            <button
-              type="button"
-              onClick={(e: MouseEvent<HTMLButtonElement>) => {
-                e.stopPropagation();
-                onOpenUrl(job.url);
-              }}
-              title="Open job posting in browser"
-              aria-label={`Open ${job.title} at ${job.company} in browser`}
-              className="px-1.5 py-0.5 border border-[var(--color-ink)]/30 hover:border-[var(--color-ink)] text-xs font-mono font-bold text-[var(--color-ink)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] transition-colors cursor-pointer shrink-0"
-            >
-              [↗]
-            </button>
+            <IconButton
+              label={`Open ${job.title} at ${job.company} in browser`}
+              onClick={(e: MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onOpenUrl(job.url); }}
+              variant="outlined"
+            ><Icon name="external" /></IconButton>
           )}
           {onToggleFavorite && (
             <FavoriteButton

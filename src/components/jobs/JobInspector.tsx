@@ -13,6 +13,7 @@ import {
 import { Button } from "../ui/Button";
 import { FavoriteButton } from "../ui/FavoriteButton";
 import { RemoveJobButton } from "../ui/RemoveJobButton";
+import { Icon } from "../ui/Icon";
 import { IconButton } from "../ui/IconButton";
 import { Modal } from "../ui/Modal";
 import { JobDescriptionView } from "./JobDescriptionView";
@@ -191,17 +192,7 @@ export function JobInspectorContent({
           )}
           {onClose && (
             <IconButton label="Close job details" onClick={onClose}>
-              <svg
-                aria-hidden="true"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="m6 6 12 12M18 6 6 18" />
-              </svg>
+              <Icon name="close" />
             </IconButton>
           )}
           </div>

@@ -1,3 +1,4 @@
+import { Icon } from "../../ui/Icon";
 import { RemovedJobsSettings } from "./RemovedJobsSettings";
 import type { Settings } from "../../../bindings/Settings";
 import { useUIStore, type SettingsCategory } from "../../../lib/store";
@@ -60,7 +61,7 @@ export function SettingsView({
                   <span>{cat.label}</span>
                   {isActive && (
                     <span className="text-xs text-[var(--color-paper)]">
-                      ▸
+                      <Icon name="right" size="sm" />
                     </span>
                   )}
                 </button>

@@ -197,7 +197,6 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
 
       expect(html).toContain(`aria-label="Remove ${sampleJob.title} at ${sampleJob.company}"`);
       expect(html).toContain('aria-hidden="true"');
-      expect(html).toContain("min-w-8 min-h-8");
     });
 
     it("renders DEL button in DiscoveredTable row actions when onDelete is supplied", () => {

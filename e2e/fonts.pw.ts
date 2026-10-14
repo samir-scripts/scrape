@@ -12,7 +12,7 @@ test('selected fonts load locally and apply to navigation, body, fields and dial
       const faces = await document.fonts.load(`14px "${family}"`, 'Software Engineer 45.25');
       return faces.length > 0 && faces.every(face => face.status === 'loaded');
     }, family)).toBe(true);
-    for (const target of [picker, page.getByRole('button', { name: 'SETTINGS', exact: true }), page.getByRole('heading', { name: 'Software Engineer at Acme' })]) {
+    for (const target of [picker, page.getByRole('button', { name: 'SETTINGS', exact: true }), page.getByRole('heading', { name: 'Software Engineer at Acme' }), page.getByRole('button', { name: 'Open Terminal Console' })]) {
       expect(await target.evaluate(el => getComputedStyle(el).fontFamily)).toContain(family);
     }
   }

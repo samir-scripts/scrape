@@ -1,3 +1,5 @@
+import { Icon } from "./Icon";
+import { IconButton } from "./IconButton";
 import { useToastStore, type Toast } from "../../lib/toast";
 
 export function ToastContainer() {
@@ -32,14 +34,14 @@ function ToastItem({
   const borderColor = isError
     ? "border-[var(--color-danger)]"
     : isSuccess
-    ? "border-[var(--color-lime)]"
-    : "border-[var(--color-signal)]";
+    ? "border-[var(--color-success)]"
+    : "border-[var(--color-information)]";
 
   const markerColor = isError
     ? "text-[var(--color-danger)]"
     : isSuccess
-    ? "text-[var(--color-lime)]"
-    : "text-[var(--color-signal)]";
+    ? "text-[var(--color-success)]"
+    : "text-[var(--color-information)]";
 
   return (
     <div
@@ -51,15 +53,9 @@ function ToastItem({
           <span className={markerColor}>■</span>
           <span className="text-[var(--color-ink)]">{toast.title ?? (isError ? "ERROR" : isSuccess ? "SUCCESS" : "INFO")}</span>
         </div>
-        <button
-          type="button"
-          onClick={() => onDismiss(toast.id)}
-          className="text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] px-1 py-0.5 text-xs font-mono transition-colors"
-          title="Dismiss"
-          aria-label="Dismiss notification"
-        >
-          [×]
-        </button>
+        <IconButton label="Dismiss notification" onClick={() => onDismiss(toast.id)}>
+          <Icon name="close" />
+        </IconButton>
       </div>
       <div className="text-[var(--color-ink)] select-text break-words whitespace-pre-wrap leading-relaxed font-mono">
         {toast.message}
