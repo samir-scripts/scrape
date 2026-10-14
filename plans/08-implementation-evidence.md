@@ -1,6 +1,6 @@
 # Desktop usability repair: implementation evidence
 
-Status: Section 1 and Section 2A implementation are complete. The native description-rendering visual check remains pending because the native smoke harness timed out before injecting its page script. Sections 2B–7 have not started.
+Status: Sections 1, 2A, and 2B are implemented with code-level tests. Native UI verification for the description and Remote + US journey remains pending; the earlier native harness timed out before injecting its page script. Sections 3–7 have not started.
 
 This document records results for [the implementation plan](08-desktop-usability-and-extraction.md). Each new result must include the environment, command or interaction, expected behavior, observed outcome, and evidence. Do not upgrade a hypothesis to a confirmed cause without a reproduction.
 
@@ -18,7 +18,7 @@ This document records results for [the implementation plan](08-desktop-usability
 | ID | Report / expected observable result | Existing coverage and gaps | Section / test layer | Reproduction in Section 1 |
 |---|---|---|---|---|
 | D1 | Encoded HTML descriptions display readable headings, paragraphs, and lists; raw tags are absent. | Baseline covered ordinary HTML only. Section 2A now adds core, actual-worker/repository, and inspector-interaction regressions. | 2A: Rust normalization; worker/repository integration; inspector interaction; native visual. | Encoded markup regression added and observed against the prior implementation; it failed because markup tags leaked into output. The fixed path now passes focused Rust, integration, and UI checks. Native visual check is pending. |
-| D2 | Remote + US finds the Cloudflare posting; workplace and eligible geography remain separate. | Location parser and matching tests cover ordinary locations and stored-country predicates. No fixture contains Remote plus a labeled Available Locations section; no end-to-end test checks extraction→persistence→filter. | 2B: Rust enrichment and matching; worker→repository; filter UI; native journey. | Official posting corroborates Remote and Available Locations: US; exact raw API response is absent. Evidence envelope at `fixtures/providers/regressions/cloudflare-8024849.json`. |
+| D2 | Remote + US finds the Cloudflare posting; workplace and eligible geography remain separate. | Section 2B adds labeled-section, prose-negative, office-precedence, incomplete-refresh, filter-control, label-display, and actual Greenhouse sidecar→SQLite→restart tests. | 2B: Rust enrichment and matching; worker→repository; filter UI; native journey. | The authored regression passes through actual sidecar extraction and repository filtering after database reopen. The raw historical Cloudflare response remains unavailable; the UI control and card opener are covered separately, not as one native journey. |
 | D3 | User can resize Discovered list/details panes; sizing persists and keyboard works. | Existing inspector tests cover details interactions; `layout/ThreeColumn.tsx` and `DiscoveredTwoColumn.tsx` have unrelated splitters. No current test proves this inspector is adjustable. | 4: split primitive interaction, keyboard, persistence, native pointer. | Static code confirms 480px inspector width; no native pointer reproduction this section. |
 | D4 | Kanban columns are visually distinct and a card move persists to another stage. | `kanban_board.test.ts` (10) passes, but its scope is component behavior and does not prove native drag delivery/persistence. Existing native smoke tests status persistence generally, not pointer drag. | 5: component and IPC tests plus native pointer movement/restart. | Source contains HTML5 drag handlers, so root cause is unknown. No native drag reproduction this section. |
 | D5 | Scraper options are compact; YAML import is discoverable as an accessible upload SVG; Run all is explicit. | Workflow interaction test passes and tests URL→preview→save. `telemetry_console_and_sources.test.ts` contains a source-string expectation for Import YAML despite actual button text; no file chooser interaction. | 6: wizard interactions, actual file selection/import, run-all backend parity. | Static code confirms both top disclosures and text import action. |
@@ -43,7 +43,7 @@ The frontend command emitted Node's existing experimental localStorage warning; 
 
 Official Greenhouse page: https://job-boards.greenhouse.io/cloudflare/jobs/8024849 . Checked through the public page on 2026-10-14. It identifies external ID 8024849 in the URL, title “Senior Principal, Sales Compensation Design & Strategy,” workplace “Remote,” an “Available Locations” section containing “US,” and an application deadline of 2026-10-13. The page text therefore supports the user-visible expected geography for this regression.
 
-The official rendered page is not the raw Greenhouse API response. The reviewed repo has recorded provider payloads for SEP and Linear but no Cloudflare capture. There is no trustworthy checksum or adapter input for this posting in the repository. Capture the public endpoint response, timestamp it, hash the bytes, and review privacy/provenance before creating the deterministic worker fixture in Section 2B. Until then, the JSON evidence envelope explicitly must not be treated as raw provider input.
+The official rendered page is not the raw Greenhouse API response. The reviewed repo has recorded provider payloads for SEP and Linear but no Cloudflare capture. A direct attempt to retrieve the Cloudflare endpoint failed at DNS resolution in this environment. The separate authored regression fixture is therefore clearly labeled and is not treated as raw provider input; the Cloudflare JSON evidence envelope remains corroboration only.
 
 ## Native reproduction status
 
@@ -53,7 +53,7 @@ The user screenshots are preserved and establish what the reported UI looked lik
 
 Every report now has an affected path, an existing-coverage assessment, and an assigned regression layer. Reproductions supported by source inspection or official page evidence are identified as such; native-only gestures have an explicit limitation and were not guessed at. The exact Cloudflare title/ID/Remote/US evidence is recorded, with the missing raw API response clearly called out. Baseline tests are green. Section 1 is complete at this documented gate; native interaction reproduction remains a required gate before selecting the drag/splitter fix.
 
-Section 2A is implemented and its code-level checks pass. Do not start Sections 2B–7 until the user requests the next section. The remaining Section 2A gate is native visual verification of the formatted description in the inspector; the attempted `npm run test:native` timed out before its injected page script ran, so it is not evidence of a pass.
+Section 2A is implemented and its code-level checks pass. The user subsequently directed work to Section 2B. The Section 2A native visual gate remains open: `npm run test:native` timed out before its injected page script ran, so it is not evidence of a pass.
 
 ## Section 2A implementation evidence
 
@@ -78,3 +78,31 @@ Section 2A is implemented and its code-level checks pass. Do not start Sections 
 | `npm run test:native` | **Not verified:** exceeded its deadline before the injected page script ran. It did not exercise description rendering. |
 
 The native limitation is explicit: startup fixtures demonstrate database/core startup handling, not actual macOS WKWebView rendering. No claim is made that the description was visually inspected in the native application. Do not advance this plan's section until that check is completed or the user explicitly directs work to another section.
+
+## Section 2B implementation evidence
+
+**Research and source assessment.** Traced Greenhouse location and office selection through the worker event, shared matcher, ingestion, `job_locations`, and repository SQL. The prior adapter substituted office display names for a `Remote` label and did not inspect labeled eligible-geography sections in descriptions. The matching code already keeps workplace policy separate and requires a country/region row for a geography match. Greenhouse documents `content=true` as including the full description, department, and office data ([Job Board API](https://docs.greenhouse.io/job-board.html)); that does not make an office address eligible geography for a Remote role. A direct request for the old Cloudflare API posting failed because this environment could not resolve `boards-api.greenhouse.io`. The public rendered-page evidence remains corroboration only, not a raw provider capture.
+
+**Regression fixture and implementation.** Added `fixtures/providers/regressions/remote-us-availability-authored.json`, explicitly marked as an authored case with no source capture, and documented that distinction in `fixtures/providers/README.md`. The positive posting is Remote with US only under “Available Locations”; the negative posting mentions the United States only in company prose. The shared Rust location extractor consumes bounded normalized description blocks only under explicit location labels, retains the label in `ParsedLocation.raw`, and recognizes exact country abbreviations such as `US`. Greenhouse keeps Remote independent from office addresses and prefers the provider's actual office `location` field for hybrid/on-site postings. All adapters call the same labeled-section extractor.
+
+The worker event now includes `location_data_complete`. This transient status distinguishes a complete empty extraction from a source that did not expose eligible geography. Repository upserts replace stored geography only when this status is true; incomplete Remote-only refreshes preserve prior eligible locations, while a complete empty response clears stale entries. No schema migration was needed. A shared TypeScript formatter now displays workplace policy and evidenced geography consistently in discovered cards/table, tracked list/Kanban, and the inspector.
+
+**Verification.** On 2026-10-14:
+
+| Check | Result |
+|---|---|
+| `cargo test -p scrape-worker remote_job_uses_only_labeled_eligible_locations_from_its_description` | Passed after first observing the new regression fail because US eligibility was absent. |
+| `cargo test -p scrape --lib db::jobs::tests::test_upsert_scraped_preserves_user_triage_state_and_updates_enrichment` | Passed; incomplete geography preserves existing evidence and a complete empty refresh clears it. |
+| `cargo test -p scrape --test worker_repository` | Passed: 3 tests. The authored Remote + US case runs through local HTTP, the actual rebuilt Greenhouse sidecar, ingestion, SQLite persistence, filter query, and database reopen; company-prose-only US does not match. |
+| `cargo test --workspace` | Passed: Rust workspace suites, including 121 core, 19 worker, and existing Tauri tests. |
+| `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all -- --check` | Passed. |
+| `npm run gen:types` | Passed; protocol and repository TypeScript contracts were regenerated. |
+| `npm test` | Passed: 368 tests across 53 files plus development HTML transformation smoke. |
+| `npm run build` | Passed; existing large-bundle advisory remains. |
+| `npm run build:sidecar` | Passed for the local aarch64 macOS target. |
+
+Native macOS UI verification remains outstanding, and the Cloudflare API bytes remain uncaptured. The current checks prove the deterministic authored case through the actual worker and persistence boundary, not a live Cloudflare scrape or a complete native click-through.
+
+## Branch merge decision
+
+At the Section 2B checkpoint, local `develop` is the merge base and `git rev-list --left-right --count develop...HEAD` reports `0 60`: a fast-forward would bring in all 60 branch commits, covering the broader in-progress implementation rather than just the current section. Tests are green, but native visual/interaction acceptance is still open and Sections 3–7 remain. Do not merge this branch into `develop` yet; revisit after the remaining acceptance and review gates.

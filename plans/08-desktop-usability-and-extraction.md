@@ -1,6 +1,6 @@
 # Desktop usability and extraction repair
 
-Status: implementation in progress. Section 1 and Section 2A are complete at the code/test level; native visual verification for Section 2A remains pending. Sections 2B–7 are not started.
+Status: Sections 1, 2A, and 2B are implemented with code-level tests. Native verification for the description and Remote + US journey remains pending. Sections 3–7 are not started.
 
 **Luna: execute the implementation workbook below in order.** Sections 1–8 specify behavior; the workbook specifies how to research, implement, test, and deliver it. Do not treat a passing unit suite or a completed visual change as completion of a phase whose native acceptance remains unverified.
 
