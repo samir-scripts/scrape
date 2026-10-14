@@ -55,9 +55,12 @@ pub fn install(app: &mut tauri::App) -> bool {
             .expect("Prepare scoped worker fixture");
         }
     });
+    let result_directory = directory.clone();
     let handle = app.handle().clone();
     app.listen("native-smoke-result", move |event| {
         let result: serde_json::Value = serde_json::from_str(event.payload()).unwrap_or_default();
+        std::fs::write(result_directory.join("result.json"), result.to_string())
+            .expect("Persist native completion report");
         println!("NATIVE_SMOKE_RESULT {result}");
         handle.exit(if result["ok"] == true { 0 } else { 1 });
     });

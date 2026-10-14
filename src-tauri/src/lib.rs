@@ -18,16 +18,23 @@ pub async fn bootstrap_database_and_services(
 }
 
 pub fn run() {
-    let outcome = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // A validated debug smoke directory owns an isolated database and lifecycle.
+    // It must not forward to a user's running application and exit before testing.
+    let builder = if services::native_smoke::directory().is_none() {
+        builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            services::tray::show_main_window(app);
+        }))
+    } else {
+        builder
+    };
+    let outcome = builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            services::tray::show_main_window(app);
-        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtemp, writeFile, chmod, realpath } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, chmod, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 const directory = await mkdtemp(join(tmpdir(), "scrape-native-smoke-"));
@@ -64,6 +64,19 @@ await writeFile(join(directory, "smoke.js"), `
     const source = await invoke("save_workflow", { spec, id: null });
     assert((await invoke("list_jobs", { filter: {} })).total === before.total, "Saving scraped implicitly");
     steps.push("startup, canonical IPC and read-only preview/save");
+    for (const family of ["Inter Variable", "JetBrains Mono Variable", "Geist Mono Variable", "Fira Code Variable", "IBM Plex Mono"]) {
+      const faces = await document.fonts.load('14px "' + family + '"', "Software Engineer 45.25");
+      assert(faces.length > 0 && faces.every(face => face.status === "loaded"), "Native bundled font did not load: " + family);
+    }
+    const settingsButton = [...document.querySelectorAll("button")].find(button => button.textContent.trim() === "SETTINGS");
+    assert(settingsButton, "Native settings navigation unavailable"); settingsButton.click(); await pause(300);
+    const picker = document.querySelector('[aria-label="Interface font"]');
+    assert(picker, "Native font picker unavailable"); picker.value = "jetbrains"; picker.dispatchEvent(new Event("change", { bubbles: true }));
+    await pause(500);
+    assert(document.documentElement.getAttribute("data-font") === "jetbrains", "Native font selection was not applied");
+    assert(getComputedStyle(settingsButton).fontFamily.includes("JetBrains Mono Variable"), "Native navigation retained another family");
+    steps.push("bundled native WebView fonts and global interface selection");
+
     const run = await invoke("run_source_now", { id: source.id });
     assert(run.status === "success" && run.counts.inserted === 1 && run.counts.rejected === 1, "Native sidecar run/audit failed: " + JSON.stringify(run));
     let job = (await invoke("list_jobs", { filter: {} })).items[0];
@@ -127,6 +140,8 @@ try {
   const timer = setTimeout(() => child.kill("SIGKILL"), 70000);
   const code = await new Promise(resolve => child.once("exit", resolve)); clearTimeout(timer);
   if (code !== 0) throw new Error(`Native smoke failed (${code}); isolated artifacts: ${directory}`);
+  const completion = JSON.parse(await readFile(join(directory, "result.json"), "utf8"));
+  if (!completion.ok) throw new Error("Native smoke did not complete: " + JSON.stringify(completion));
   if (!opened) throw new Error("Native opener returned without reaching the local destination");
   console.log(`Native smoke passed; external destination reached. Isolated artifacts: ${directory}`);
 } finally { child?.kill(); vite.kill(); server.closeAllConnections(); server.close(); }
