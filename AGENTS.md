@@ -1,6 +1,6 @@
 # Project instructions
 
-Implement [Trustworthy scraping](plans/06-trustworthy-scraping.md). Visual references: [NieR menu](plans/assets/ref-nier-menu.png), [dither](plans/assets/ref-dither.png), [palette](plans/assets/ref-palette.png).
+Implement [Trustworthy scraping](plans/06-trustworthy-scraping.md) and [Interface simplification](plans/07-interface-simplification.md). Visual references: [NieR menu](plans/assets/ref-nier-menu.png), [dither](plans/assets/ref-dither.png), [palette](plans/assets/ref-palette.png).
 
 1. Protect the working tree. Inspect changes before editing; never discard unrelated work or use destructive reset/clean as routine recovery.
 2. Commit early and often. Checkpoint existing work first; commit each coherent behavior with relevant tests. Separate mechanical formatting.

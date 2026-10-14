@@ -1,6 +1,6 @@
 # Interface simplification and real-source verification
 
-Status: researched implementation handoff; application changes are not implemented by this document.
+Status: implemented and verified. See [implementation evidence](07-interface-implementation-evidence.md) for checks actually run, fixes discovered during verification, and scope limits.
 Date: 2026-10-13. Implementer: Sol or Luna.
 
 This updates the presentation decisions in [06-trustworthy-scraping.md](06-trustworthy-scraping.md), particularly its separate Simple workflow steps. Preserve that plan's data protection, canonical workflow specification, filtering, scheduling, identity, removal, and migration contracts. Do not reopen the database repair or redesign the backend merely to rearrange controls.
@@ -182,4 +182,4 @@ Usability review: ask a reviewer to create a workflow, identify a job's pay/loca
 
 ## 5. Research-session verification limits
 
-This handoff is based on repository inspection, authoritative design/API documentation, and isolated Chromium inspection of current UI demonstration states. Demonstration screenshots are used only to inspect layout. No live scraper, user database, native WebView, complete font matrix, or full regression suite was verified during this planning task. Implementation and its acceptance checks remain outstanding.
+This handoff was originally based on repository inspection, authoritative design/API documentation, and isolated Chromium inspection of then-current UI demonstration states. Demonstration screenshots are used only to inspect layout. No live scraper, user database, native WebView, complete font matrix, or full regression suite was verified during this planning task. Those limits describe the planning session. Subsequent implementation verification is recorded in the linked evidence document.

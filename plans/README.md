@@ -1,7 +1,7 @@
 # Plan status
 
 [Interface simplification and real-source verification](07-interface-simplification.md)
-is the researched, not-yet-implemented UI revision handoff. It updates presentation
+is the implemented UI revision, with [verification evidence](07-interface-implementation-evidence.md). It updates presentation
 choices such as separate workflow step buttons while preserving the data and
 execution contracts below.
 
