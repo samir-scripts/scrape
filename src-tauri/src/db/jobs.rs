@@ -92,6 +92,8 @@ pub struct JobStatusEvent {
 pub enum JobSort {
     DateAddedDesc,
     DateAddedAsc,
+    StatusChangedAtDesc,
+    StatusChangedAtAsc,
     DatePostedDesc,
     DatePostedAsc,
     CompanyAsc,
@@ -624,6 +626,8 @@ impl JobsRepo {
         let order_by = match filter.sort.unwrap_or(JobSort::DateAddedDesc) {
             JobSort::DateAddedDesc => "date_added DESC",
             JobSort::DateAddedAsc => "date_added ASC",
+            JobSort::StatusChangedAtDesc => "status_changed_at DESC, id ASC",
+            JobSort::StatusChangedAtAsc => "status_changed_at ASC, id ASC",
             JobSort::DatePostedDesc => "date_posted DESC",
             JobSort::DatePostedAsc => "date_posted ASC",
             JobSort::CompanyAsc => "company ASC, date_added DESC",

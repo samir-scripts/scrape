@@ -33,8 +33,14 @@ fn worker() -> std::path::PathBuf {
     file
 }
 fn invoke(config: &WorkerConfig, preview: bool) -> Vec<WorkerEvent> {
+    invoke_replay(config, preview, None)
+}
+fn invoke_replay(config: &WorkerConfig, preview: bool, origin: Option<&str>) -> Vec<WorkerEvent> {
     let mut command = Command::new(worker());
     command.arg("--stdin");
+    if let Some(origin) = origin {
+        command.args(["--replay-origin", origin]);
+    }
     if preview {
         command.arg("--dry-run");
     }
@@ -228,6 +234,120 @@ async fn preview_single_global_identity_and_native_pay_survive_persistence_and_b
         }
     }
     assert!(identities.windows(2).all(|p| p[0] == p[1]));
+    server.join().unwrap();
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn recorded_lever_response_survives_actual_worker_and_repository() {
+    let payload = include_str!("../../fixtures/providers/lever/sep.json");
+    let expected: serde_json::Value = serde_json::from_str(payload).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(3)))
+            .unwrap();
+        let mut buffer = [0; 4096];
+        let n = stream.read(&mut buffer).unwrap();
+        assert!(String::from_utf8_lossy(&buffer[..n])
+            .starts_with("GET /api.lever.co/v0/postings/sep?mode=json "));
+        write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",payload.len(),payload).unwrap();
+    });
+    let directory = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&directory.path().join("recorded.db"))
+        .await
+        .unwrap();
+    let source = SourcesRepo::create(
+        &pool,
+        CreateSourceInput {
+            kind: SourceKind::Lever,
+            name: "SEP".into(),
+            identifier: "sep".into(),
+            config: None,
+            enabled: Some(false),
+            cadence: Some(scrape_core::SourceCadence::Manual),
+            cadence_cron: None,
+            retention_days: None,
+            retention_policy: None,
+            filters: None,
+        },
+    )
+    .await
+    .unwrap();
+    let config = WorkerConfig {
+        version: PROTOCOL_VERSION,
+        sources: vec![WorkerSource {
+            id: source.id.clone(),
+            kind: source.kind,
+            name: source.name.clone(),
+            identifier: source.identifier.clone(),
+            config: serde_json::json!({}),
+        }],
+        filters: WorkerFilters::default(),
+        filters_by_source: Default::default(),
+        run_started_at: Some("2026-10-14T03:27:51Z".into()),
+        limits: WorkerLimits {
+            request_timeout_s: 3,
+            per_host_delay_ms: 0,
+            concurrency: 1,
+        },
+    };
+    let events = invoke_replay(&config, false, Some(&format!("http://{address}")));
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event, WorkerEvent::Error { .. })));
+    let jobs: Vec<_> = events
+        .into_iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .map(|e| scraped_job_from_event(e).unwrap())
+        .collect();
+    assert_eq!(jobs.len(), expected.as_array().unwrap().len());
+    JobsRepo::upsert_scraped(&pool, &jobs).await.unwrap();
+    let saved = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+    assert_eq!(saved.total, jobs.len() as i64);
+    let recent_id = saved.items[0].id.clone();
+    sqlx::query("UPDATE jobs SET status_changed_at = '2030-01-01T00:00:00Z' WHERE id = ?")
+        .bind(&recent_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let ordered = JobsRepo::list(
+        &pool,
+        JobFilter {
+            sort: Some(scrape_lib::db::jobs::JobSort::StatusChangedAtDesc),
+            limit: Some(1),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(ordered.items[0].id, recent_id);
+    for job in saved.items {
+        let provider = expected
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["id"].as_str() == job.external_id.as_deref())
+            .unwrap();
+        assert_eq!(job.title, provider["text"].as_str().unwrap());
+        assert_eq!(job.url, provider["hostedUrl"].as_str().unwrap());
+        assert_eq!(
+            job.posting_identity.as_deref(),
+            Some(
+                scrape_core::PostingIdentity::for_posting(
+                    Some(SourceKind::Lever),
+                    Some("sep"),
+                    job.external_id.as_deref(),
+                    &job.url
+                )
+                .unwrap()
+                .key
+                .as_str()
+            )
+        );
+    }
     server.join().unwrap();
     pool.close().await;
 }

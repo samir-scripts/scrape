@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useRef } from "react";
+import { useMemo, useEffect, useLayoutEffect, useRef } from "react";
 import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
 import { useUIStore } from "../../../lib/store";
@@ -17,7 +17,7 @@ import { useHotkeys } from "../../../hooks/useHotkeys";
 interface TrackedViewProps {
   jobs: Job[];
   onUpdateStatus: (jobId: string, status: JobStatus) => void;
-  onUpdateNotes: (jobId: string, notes: string) => void;
+  onUpdateNotes: (jobId: string, notes: string) => void | Promise<unknown>;
   onOpenUrl: (url: string) => void;
   onUndo: () => void;
   onToggleFavorite?: (jobId: string) => void;
@@ -44,6 +44,14 @@ export function TrackedView({
   } = useUIStore();
 
   const preferredRowRef = useRef<number>(0);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const scrollPositions = useRef<Record<string, {top:number;left:number}>>({});
+  useLayoutEffect(() => {
+    const element = contentRef.current?.querySelector<HTMLElement>(".tracked-scroll");
+    const saved = scrollPositions.current[trackedViewMode];
+    if (element && saved) { element.scrollTop = saved.top; element.scrollLeft = saved.left; }
+  }, [trackedViewMode]);
+
   const filteredJobs = jobs;
 
   // Keep selection valid within TrackedView or pick the first tracked job
@@ -162,10 +170,9 @@ export function TrackedView({
 
   return (
     <div
-      className={`flex-1 w-full h-full relative overflow-hidden flex flex-col bg-[var(--color-paper)] transition-[padding] duration-150 ${
-        drawerJobId ? "pr-96" : ""
-      }`}
+      className="flex-1 min-h-0 min-w-0 relative overflow-hidden flex bg-[var(--color-paper)]"
     >
+      <div ref={contentRef} onScrollCapture={event => { const element = event.target as HTMLElement; if (element.classList.contains("tracked-scroll")) scrollPositions.current[trackedViewMode] = {top:element.scrollTop,left:element.scrollLeft}; }} className="flex-1 min-w-0 min-h-0 flex flex-col">
       {trackedViewMode === "kanban" ? (
         <KanbanBoard
           jobs={filteredJobs}
@@ -176,7 +183,7 @@ export function TrackedView({
         />
       ) : (
         <TrackedList
-          repositorySort={filterSpec.sort || "date_added_desc"}
+          repositorySort={filterSpec.sort || "status_changed_at_desc"}
           onRepositorySort={(sort) => setFilterSpec({ sort })}
           jobs={filteredJobs}
           selectedJobId={selectedJobId}
@@ -187,7 +194,8 @@ export function TrackedView({
         />
       )}
 
-      {/* Slide-out detail drawer */}
+      </div>
+      {/* Shared job inspector */}
       <JobDetailDrawer
         job={drawerJob}
         isOpen={drawerJobId !== null}

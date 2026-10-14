@@ -43,7 +43,7 @@ export function JobCard({
     }
   };
 
-  const formattedDate = formatDate(job.date_posted || job.date_added);
+  const formattedDate = formatDate(job.date_posted);
   const isRemote =
     job.workplace_type === "remote" ||
     (job.workplace_type === "unknown" &&
@@ -59,7 +59,7 @@ export function JobCard({
     >
       {/* Top Line: Title + Status + Favorite */}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h2 className="text-sm font-bold text-[var(--color-ink)] group-hover:underline leading-snug line-clamp-2">
+        <h2 className="text-base font-bold text-[var(--color-ink)] group-hover:underline leading-snug line-clamp-2">
           <button type="button" onClick={onClick} className="normal-case text-left cursor-pointer" aria-label={`View ${job.title} at ${job.company}`}>
             {job.title}
           </button>

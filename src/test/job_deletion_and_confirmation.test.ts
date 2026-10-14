@@ -169,7 +169,7 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
         })
       );
 
-      expect(html).toContain("Remove job");
+      expect(html).toContain("aria-label=\"Remove ");
       expect(html).toContain(`Remove ${sampleJob.title} at ${sampleJob.company}`);
       expect(html).toContain("text-[var(--color-danger)]");
     });
@@ -231,7 +231,7 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
         })
       );
 
-      expect(html).toContain("Remove job");
+      expect(html).toContain("aria-label=\"Remove ");
       expect(html).toContain("border-current");
     });
 

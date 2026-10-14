@@ -3,8 +3,7 @@ import { useState, useRef, type DragEvent } from "react";
 import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
 import { STATUS_CONFIG } from "../../../lib/constants";
-import { Tag } from "../../ui/Tag";
-import { CompanyLogo } from "../../ui/CompanyLogo";
+import { formatSalary } from "../../../lib/filter";
 
 interface KanbanColumnProps {
   status: JobStatus;
@@ -21,7 +20,6 @@ interface KanbanColumnProps {
 
 export function KanbanColumn({
   status,
-  columnIndex,
   jobs,
   selectedJobId,
   draggingJobId,
@@ -68,130 +66,89 @@ export function KanbanColumn({
     const jobId = e.dataTransfer.getData("text/plain");
     if (jobId) {
       onDropJob(jobId, status);
+      onDragEndJob();
     }
   };
 
   return (
-    <div
+    <section
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`flex flex-col h-full overflow-hidden bg-[var(--color-paper)] transition-colors select-none ${
-        isOver ? "bg-[var(--color-paper-2)]" : ""
-      }`}
+      aria-label={`${config.label} stage`}
+      className={`flex flex-col h-full overflow-hidden bg-[var(--color-paper-2)] ${isOver ? "outline outline-2 outline-[var(--color-focus)] outline-offset-[-2px]" : ""}`}
     >
-      {/* Pinned Brutalist Header (h-9) */}
-      <div className="h-9 shrink-0 px-3 border-b border-[var(--color-ink)] bg-[var(--color-paper-2)]/40 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {/* Stage index & status accent pip */}
-          <span className="font-mono text-xs text-[var(--color-ink-mute)]">
-            // 0{columnIndex + 1}
-          </span>
-          <span
-            className="w-2 h-2 border border-[var(--color-ink)] shrink-0"
-            style={{ backgroundColor: config.bg }}
-            aria-hidden="true"
-          />
-          <h3 className="font-mono font-bold text-xs uppercase tracking-wider text-[var(--color-ink)]">
-            {config.label}
-          </h3>
-        </div>
-
-        {/* Tabular Count Badge */}
-        <span className="font-mono text-xs font-bold px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] min-w-[28px] text-center">
-          {String(jobs.length).padStart(2, "0")}
-        </span>
-      </div>
-
-      {/* Cards List with Stable Scrollbar Gutter */}
-      <div className="flex-1 overflow-y-scroll p-2.5 flex flex-col gap-2">
-        {jobs.length === 0 ? (
-          <div
-            className={`flex-1 min-h-[140px] border border-dashed border-[var(--color-ink-mute)] flex flex-col items-center justify-center p-3 text-center transition-colors ${
-              isOver
-                ? "border-solid border-[var(--color-ink)] bg-[var(--color-paper-2)] font-bold"
-                : "bg-[var(--color-paper-2)]/20"
-            }`}
-          >
-            <span className="text-xs font-mono font-bold tracking-wider text-[var(--color-ink-mute)]">
-              [ + ] DROP TO STAGE
-            </span>
-            <span className="text-[9px] font-mono text-[var(--color-ink-mute)]/60 mt-1">
-              // NO ACTIVE APPLICATIONS
-            </span>
-          </div>
+      <header className="min-h-12 shrink-0 px-4 py-3 border-b flex items-center justify-between gap-2">
+        <h3 className="font-bold text-sm normal-case">
+          {config.label.toLowerCase()}
+        </h3>
+        <span className="text-xs">{jobs.length} loaded</span>
+      </header>
+      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
+        {!jobs.length ? (
+          <p className="text-sm text-[var(--color-ink-mute)] p-3">
+            No jobs loaded in this stage. Check other pages or move an
+            application here.
+          </p>
         ) : (
-          jobs.map((job) => {
-            const isSelected = job.id === selectedJobId;
-            const isDragging = job.id === draggingJobId;
-
-            return (
-              <div
-                key={job.id}
-                id={`kanban-card-${job.id}`}
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData("text/plain", job.id);
-                  e.dataTransfer.effectAllowed = "move";
-                  setTimeout(() => onDragStartJob(job.id), 0);
-                }}
-                onDragEnd={onDragEndJob}
-                className={`p-3 border border-[var(--color-ink)] select-text transition-none flex flex-col gap-1.5 ${
-                  isDragging
-                    ? "opacity-30 border-dashed"
-                    : isSelected
-                    ? "bg-[var(--color-paper-2)] text-[var(--color-ink)] font-bold"
-                    : "bg-[var(--color-paper)] text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-1">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    {job.favorited && (
-                      <svg
-                        className="w-3.5 h-3.5 text-[var(--color-success)] shrink-0"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                      >
-                        <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
-                      </svg>
-                    )}
-                    <CompanyLogo
-                      company={job.company}
-                      iconUrl={job.company_icon_url}
-                      size="sm"
-                    />
-                    <span className="font-bold text-xs truncate max-w-[150px]">
-                      {job.company}
-                    </span>
-                  </div>
-                  <Tag
-                    label={job.role_type.toUpperCase()}
-                    variant="muted"
-
-                  />
-                </div>
-
-                <div className="text-xs truncate"><button type="button" aria-label={`View ${job.title} at ${job.company}`} className="text-left normal-case cursor-pointer underline" onClick={() => onSelectJob(job)}>{job.title}</button></div>
-
-                <div className="flex items-center justify-between text-xs font-mono opacity-80 pt-1 border-t border-current">
-                  <span className="truncate max-w-[120px]">{job.location || "Location unknown"}</span>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {job.notes && (
-                      <span className="font-bold truncate max-w-[80px]">
-                        NOTE ▏
-                      </span>
-                    )}
-                    {onDelete && <RemoveJobButton title={job.title} company={job.company} onClick={e => { e.stopPropagation(); onDelete(job); }} />}
-                  </div>
-                </div>
+          jobs.map((job) => (
+            <article
+              key={job.id}
+              id={`kanban-card-${job.id}`}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData("text/plain", job.id);
+                e.dataTransfer.effectAllowed = "move";
+                onDragStartJob(job.id);
+              }}
+              onDragEnd={onDragEndJob}
+              className={`border p-4 grid gap-3 select-text bg-[var(--color-paper)] ${job.id === selectedJobId ? "outline outline-2 outline-[var(--color-focus)] outline-offset-[-2px]" : "border-[var(--color-ink-mute)]"} ${job.id === draggingJobId ? "border-dashed" : ""}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <button
+                  type="button"
+                  aria-label={`View ${job.title} at ${job.company}`}
+                  className="normal-case text-left font-bold text-base leading-snug cursor-pointer line-clamp-2 underline"
+                  title={job.title}
+                  onClick={() => onSelectJob(job)}
+                >
+                  {job.title}
+                </button>
+                <span
+                  aria-hidden="true"
+                  title="Drag to another stage"
+                  className="cursor-grab text-[var(--color-ink-mute)]"
+                >
+                  ⠿
+                </span>
               </div>
-            );
-          })
+              <p className="text-sm">{job.company}</p>
+              <p className="text-sm text-[var(--color-ink-mute)]">
+                {job.location || "Location unknown"}
+              </p>
+              <p className="text-sm">{formatSalary(job)}</p>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-[var(--color-ink-mute)]">
+                  {[
+                    job.favorited ? "Favorited" : "",
+                    job.notes?.trim() ? "Has notes" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+                {onDelete && (
+                  <RemoveJobButton
+                    title={job.title}
+                    company={job.company}
+                    onClick={() => onDelete(job)}
+                  />
+                )}
+              </div>
+            </article>
+          ))
         )}
       </div>
-    </div>
+    </section>
   );
 }

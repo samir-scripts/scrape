@@ -129,7 +129,7 @@ describe("Prominent Favorite Button Component", () => {
     expect(htmlFav).toContain('aria-pressed="true"');
     expect(htmlFav).toContain('aria-label="Unfavorite posting"');
     expect(htmlFav).toContain('fill="var(--color-lime)"');
-    expect(htmlFav).toContain("w-7 h-7");
+    expect(htmlFav).toContain("min-w-9 min-h-9");
   });
 });
 

@@ -52,7 +52,7 @@ export default function App() {
   const offset = pageState.key === pageKey ? pageState.offset : 0;
   const pageSize = 50;
   const pageStatuses: JobStatus[] = view === "tracked" ? ["applied", "interviewing", "offer", "rejected"] : ["scraped", "viewed"];
-  const effectiveFilter: Partial<JobFilter> = { ...filterSpec, statuses: filterSpec.statuses?.length ? pageStatuses.filter((status) => filterSpec.statuses!.includes(status)) : pageStatuses, limit: pageSize, offset };
+  const effectiveFilter: Partial<JobFilter> = { ...filterSpec, sort: filterSpec.sort || (view === "tracked" ? "status_changed_at_desc" : "date_added_desc"), statuses: filterSpec.statuses?.length ? pageStatuses.filter((status) => filterSpec.statuses!.includes(status)) : pageStatuses, limit: pageSize, offset };
   const { data: counts } = useQuery({
     queryKey: ["job_counts"],
     queryFn: async () => {
@@ -141,9 +141,10 @@ export default function App() {
 
   const updateStatusMutation = useMutation({
     mutationFn: ({ jobId, status }: { jobId: string; status: JobStatus }) => api.updateJobStatus(jobId, status),
-    onSuccess: (_job, { jobId }) => {
+    onSuccess: (_job, { jobId, status }) => {
       const previous = allJobs.find((job) => job.id === jobId);
       if (previous) pushUndo({ jobId, previousStatus: previous.status });
+      if (status === "applied" && view === "discovered") useToastStore.getState().addToast({type:"success",message:"Application added to Tracked.",action:{label:"View in Tracked",run:()=>useUIStore.getState().setView("tracked")}});
     },
     onError: (error) => notifyError(String(error), "STATUS UPDATE FAILED"),
     onSettled: () => {
@@ -155,6 +156,7 @@ export default function App() {
 
   // 5. Notes mutation
   const updateNotesMutation = useMutation({
+    onError: (error) => notifyError(String(error), "NOTES SAVE FAILED"),
     mutationFn: ({ jobId, notes }: { jobId: string; notes: string }) =>
       api.updateJobNotes(jobId, notes),
     onSettled: () => {
@@ -371,8 +373,8 @@ export default function App() {
         <button type="button" disabled={offset === 0 || jobsLoading} onClick={() => setPageState({ key: pageKey, offset: Math.max(0, offset - pageSize) })} className="border px-3 py-1">Previous page</button>
         <span role="status">{jobsLoading ? "Loading jobs…" : `${Number(jobsPage?.total || 0) === 0 ? 0 : offset + 1}–${Math.min(offset + pageSize, Number(jobsPage?.total || 0))} of ${jobsPage?.total ?? 0}`}</span>
         <button type="button" disabled={jobsLoading || offset + pageSize >= Number(jobsPage?.total || 0)} onClick={() => setPageState({ key: pageKey, offset: offset + pageSize })} className="border px-3 py-1">Next page</button>
-        <label>Sort <select aria-label="Sort jobs" value={filterSpec.sort || "date_added_desc"} onChange={(event) => setFilterSpec({ sort: event.target.value as JobFilter["sort"] })} className="border bg-[var(--color-paper)] p-1">
-          <option value="date_added_desc">Newest discoveries</option><option value="date_added_asc">Oldest discoveries</option><option value="date_posted_desc">Newest postings</option><option value="company_asc">Company</option><option value="title_asc">Title</option><option value="salary_desc">Derived annual pay</option><option value="favorited_desc">Favorites first</option>
+        <label>Sort <select aria-label="Sort jobs" value={filterSpec.sort || (view === "tracked" ? "status_changed_at_desc" : "date_added_desc")} onChange={(event) => setFilterSpec({ sort: event.target.value as JobFilter["sort"] })} className="border bg-[var(--color-paper)] p-1">
+          <option value="status_changed_at_desc">Recent stage activity</option><option value="date_added_desc">Newest discoveries</option><option value="date_added_asc">Oldest discoveries</option><option value="date_posted_desc">Newest postings</option><option value="company_asc">Company</option><option value="title_asc">Title</option><option value="salary_desc">Derived annual pay</option><option value="favorited_desc">Favorites first</option>
         </select></label>
         {jobsError && <p role="alert">Could not load this page: {String(jobsError)} <button onClick={() => refetchJobs()}>Retry</button></p>}
       </div>}
@@ -383,7 +385,7 @@ export default function App() {
             updateStatusMutation.mutate({ jobId, status })
           }
           onUpdateNotes={(jobId, notes) =>
-            updateNotesMutation.mutate({ jobId, notes })
+            updateNotesMutation.mutateAsync({ jobId, notes })
           }
           onOpenUrl={handleOpenUrl}
           onUndo={handleUndo}
@@ -399,7 +401,7 @@ export default function App() {
             updateStatusMutation.mutate({ jobId, status })
           }
           onUpdateNotes={(jobId, notes) =>
-            updateNotesMutation.mutate({ jobId, notes })
+            updateNotesMutation.mutateAsync({ jobId, notes })
           }
           onOpenUrl={handleOpenUrl}
           onUndo={handleUndo}

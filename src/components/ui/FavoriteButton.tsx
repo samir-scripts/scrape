@@ -18,9 +18,9 @@ export function FavoriteButton({
   title,
 }: FavoriteButtonProps) {
   const sizeClasses = {
-    sm: "w-5 h-5",
-    md: "w-6 h-6",
-    lg: "w-7 h-7",
+    sm: "min-w-8 min-h-8",
+    md: "min-w-8 min-h-8",
+    lg: "min-w-9 min-h-9",
   }[size];
 
   const svgSizes = {

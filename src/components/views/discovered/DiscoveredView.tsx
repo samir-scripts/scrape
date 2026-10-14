@@ -3,7 +3,6 @@ import { useEffect, useMemo } from "react";
 import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
 import { useUIStore } from "../../../lib/store";
-import { DiscoveredTwoColumn } from "../../layout/DiscoveredTwoColumn";
 import { JobCard } from "./JobCard";
 import { JobDetail } from "./JobDetail";
 import { EmptyState } from "../../ui/EmptyState";
@@ -12,7 +11,7 @@ import { useHotkeys } from "../../../hooks/useHotkeys";
 interface DiscoveredViewProps {
   jobs: Job[];
   onUpdateStatus: (jobId: string, status: JobStatus) => void;
-  onUpdateNotes: (jobId: string, notes: string) => void;
+  onUpdateNotes: (jobId: string, notes: string) => void | Promise<unknown>;
   onOpenUrl: (url: string) => void;
   onUndo: () => void;
   onToggleFavorite?: (jobId: string) => void;
@@ -125,7 +124,7 @@ export function DiscoveredView({
         />
       </div>
     ) : (
-      <div className="flex flex-col gap-2.5 p-2 w-full">
+      <div className="flex flex-col gap-3 p-4 w-full">
         {filteredJobs.map((job) => (
           <JobCard
             key={job.id}
@@ -152,5 +151,5 @@ export function DiscoveredView({
     />
   ) : null;
 
-  return <DiscoveredTwoColumn left={leftContent} right={rightContent} />;
+  return <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden"><div className="flex-1 min-w-0 overflow-y-auto"><div className="max-w-[1000px] mx-auto">{leftContent}</div></div>{rightContent}</div>;
 }

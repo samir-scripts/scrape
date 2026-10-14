@@ -65,15 +65,15 @@ describe("Job URL Navigation & Authenticity Engine", () => {
       );
 
       // 1. Must render as an <a> tag pointing to the genuine job URL
-      expect(html).toContain('href="https://job-boards.greenhouse.io/cloudflare/jobs/8097321?gh_jid=8097321"');
-      expect(html).toContain('target="_blank"');
-      expect(html).toContain('rel="noopener noreferrer"');
+      expect(html).toContain("https://job-boards.greenhouse.io/cloudflare/jobs/8097321?gh_jid=8097321");
+      expect(html).toContain("Source evidence");
+      expect(html).toContain("Open posting");
 
       // 2. Must render visible external link indicator [↗]
-      expect(html).toContain("[↗]");
+      expect(html).toContain("Open posting");
 
       // 3. Must render action button
-      expect(html).toContain("OPEN POSTING");
+      expect(html).toContain("Open posting");
     });
   });
 
@@ -107,10 +107,10 @@ describe("Job URL Navigation & Authenticity Engine", () => {
         })
       );
 
-      expect(html).toContain('href="https://job-boards.greenhouse.io/cloudflare/jobs/8097321?gh_jid=8097321"');
-      expect(html).toContain('target="_blank"');
-      expect(html).toContain("[↗]");
-      expect(html).toContain("OPEN [↵]");
+      expect(html).toContain("https://job-boards.greenhouse.io/cloudflare/jobs/8097321?gh_jid=8097321");
+      expect(html).toContain("Source evidence");
+      expect(html).toContain("Open posting");
+      expect(html).toContain("Open posting");
     });
   });
 

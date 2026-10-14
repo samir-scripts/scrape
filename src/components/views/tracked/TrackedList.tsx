@@ -13,7 +13,6 @@ import {
 import { Tag } from "../../ui/Tag";
 import { EmptyState } from "../../ui/EmptyState";
 import { FavoriteButton } from "../../ui/FavoriteButton";
-import { CompanyLogo } from "../../ui/CompanyLogo";
 import {
   formatSalary,
   formatExperience,
@@ -32,13 +31,14 @@ interface TrackedListProps {
   onDelete?: (job: Job) => void;
 }
 
-export type SortField = "company" | "title" | "status" | "salary" | "date_added" | "favorited";
+export type SortField =
+  "company" | "title" | "status" | "salary" | "date_added" | "favorited" | "status_changed_at";
 
 export function compareTrackedJobs(
   a: Job,
   b: Job,
   sortField: SortField,
-  sortAsc: boolean
+  sortAsc: boolean,
 ): number {
   let cmp = 0;
   if (sortField === "favorited") {
@@ -53,12 +53,24 @@ export function compareTrackedJobs(
     const aSal = a.salary_min ?? a.salary_max ?? -1;
     const bSal = b.salary_min ?? b.salary_max ?? -1;
     cmp = aSal - bSal;
+  } else if (sortField === "status_changed_at") {
+    cmp = a.status_changed_at.localeCompare(b.status_changed_at);
   } else {
     cmp = a.date_added.localeCompare(b.date_added);
   }
   return sortAsc ? cmp : -cmp;
 }
 
+const extraColumns = [
+  "Description",
+  "Experience",
+  "New graduate",
+  "Sponsorship",
+  "Work authorization",
+  "Clearance",
+  "Discovered",
+  "Source",
+] as const;
 export function TrackedList({
   jobs,
   selectedJobId,
@@ -69,162 +81,223 @@ export function TrackedList({
   onRepositorySort,
   repositorySort,
 }: TrackedListProps) {
-  const [localSortField, setSortField] = useState<SortField>("date_added");
+  const [localSortField, setSortField] = useState<SortField>("status_changed_at");
   const [localSortAsc, setSortAsc] = useState(false);
-
-  const sortField = repositorySort ? repositorySort.replace(/_(asc|desc)$/, "") as SortField : localSortField;
-  const sortAsc = repositorySort ? repositorySort.endsWith("_asc") : localSortAsc;
-  const handleSort = (field: SortField) => {
-    if (onRepositorySort) {
-      const ascending = sortField === field ? !sortAsc : true;
-      onRepositorySort(`${field}_${ascending ? "asc" : "desc"}` as JobSort);
+  const [columns, setColumns] = useState<string[]>(() => {
+    try {
+      const value = JSON.parse(
+        localStorage.getItem("scrape:tracked:columns") || "[]",
+      );
+      return Array.isArray(value)
+        ? value.filter((c) => extraColumns.includes(c))
+        : [];
+    } catch {
+      return [];
     }
-    if (sortField === field) {
-      setSortAsc(!sortAsc);
-    } else {
-      setSortField(field);
-      setSortAsc(true);
+  });
+  const changeColumns = (next: string[]) => {
+    setColumns(next);
+    try {
+      localStorage.setItem("scrape:tracked:columns", JSON.stringify(next));
+    } catch {}
+  };
+  const sortField = repositorySort
+    ? (repositorySort.replace(/_(asc|desc)$/, "") as SortField)
+    : localSortField;
+  const sortAsc = repositorySort
+    ? repositorySort.endsWith("_asc")
+    : localSortAsc;
+  const handleSort = (field: SortField) => {
+    const ascending = sortField === field ? !sortAsc : true;
+    if (onRepositorySort)
+      onRepositorySort(`${field}_${ascending ? "asc" : "desc"}` as JobSort);
+    setSortField(field);
+    setSortAsc(ascending);
+  };
+  const sortedJobs = onRepositorySort
+    ? jobs
+    : [...jobs].sort((a, b) => compareTrackedJobs(a, b, sortField, sortAsc));
+  const sortButton = (label: string, field: SortField) => (
+    <button
+      type="button"
+      className="cursor-pointer min-h-8 text-left"
+      onClick={() => handleSort(field)}
+    >
+      {label} {sortField === field ? (sortAsc ? "↑" : "↓") : ""}
+    </button>
+  );
+  const extra = (job: Job, column: string) => {
+    switch (column) {
+      case "Description":
+        return job.description_text || "Unknown";
+      case "Experience":
+        return formatExperience(job);
+      case "New graduate":
+        return triStateToLabel(job.is_new_grad);
+      case "Sponsorship":
+        return triStateToLabel(job.sponsorship);
+      case "Work authorization":
+        return formatWorkAuth(job);
+      case "Clearance":
+        return triStateToLabel(job.clearance);
+      case "Discovered":
+        return job.date_added.slice(0, 10);
+      case "Source":
+        return job.source_id || "Unknown";
     }
   };
-
-  const sortedJobs = onRepositorySort ? jobs : [...jobs].sort((a, b) =>
-    compareTrackedJobs(a, b, sortField, sortAsc)
-  );
-
-  if (jobs.length === 0) {
-    return (
-      <div className="p-8 flex items-center justify-center">
+  return (
+    <div className="tracked-scroll flex-1 min-h-0 overflow-auto p-4 bg-[var(--color-paper)]">
+      <details className="mb-3">
+        <summary className="cursor-pointer text-sm min-h-8">Columns</summary>
+        <div className="flex flex-wrap gap-4 py-3">
+          {extraColumns.map((column) => (
+            <label className="flex items-center gap-2 text-sm" key={column}>
+              <input
+                type="checkbox"
+                checked={columns.includes(column)}
+                onChange={(e) =>
+                  changeColumns(
+                    e.target.checked
+                      ? [...columns, column]
+                      : columns.filter((c) => c !== column),
+                  )
+                }
+              />
+              {column}
+            </label>
+          ))}
+          <button
+            type="button"
+            className="underline cursor-pointer"
+            onClick={() => changeColumns([])}
+          >
+            Reset columns
+          </button>
+        </div>
+      </details>
+      {!jobs.length ? (
         <EmptyState
           title="NO TRACKED APPLICATIONS"
-          description="APPLICATIONS MOVED TO APPLIED, INTERVIEWING, OFFER, OR REJECTED APPEAR HERE."
+          description="Applications moved to Applied, Interviewing, Offer, or Rejected appear here."
         />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex-1 overflow-y-auto p-4 bg-[var(--color-paper)]">
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableHeader onClick={() => handleSort("favorited")} className="cursor-pointer w-8 text-center" title="Sort by Favorited">
-              ★ {sortField === "favorited" ? (sortAsc ? "▲" : "▼") : ""}
-            </TableHeader>
-            <TableHeader onClick={() => handleSort("company")} className="cursor-pointer">
-              COMPANY {sortField === "company" ? (sortAsc ? "▲" : "▼") : ""}
-            </TableHeader>
-            <TableHeader onClick={() => handleSort("title")} className="cursor-pointer">
-              JOB TITLE {sortField === "title" ? (sortAsc ? "▲" : "▼") : ""}
-            </TableHeader>
-            <TableHeader className="min-w-[200px]">DESCRIPTION & RELEVANT INFO</TableHeader>
-            <TableHeader onClick={() => handleSort("status")} className="cursor-pointer">
-              STAGE {sortField === "status" ? (sortAsc ? "▲" : "▼") : ""}
-            </TableHeader>
-            <TableHeader onClick={() => handleSort("salary")} className="cursor-pointer">
-              SALARY {sortField === "salary" ? (sortAsc ? "▲" : "▼") : ""}
-            </TableHeader>
-            <TableHeader>LOCATION</TableHeader>
-            <TableHeader>YOE</TableHeader>
-            <TableHeader>NEW GRAD</TableHeader>
-            <TableHeader>SPONSORSHIP</TableHeader>
-            <TableHeader>GREEN CARD</TableHeader>
-            <TableHeader>CLEARANCE</TableHeader>
-            <TableHeader onClick={() => handleSort("date_added")} className="cursor-pointer">
-              ADDED {sortField === "date_added" ? (sortAsc ? "▲" : "▼") : ""}
-            </TableHeader>
-            <TableHeader>ACTIONS</TableHeader>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {sortedJobs.map((job) => {
-            const isSelected = job.id === selectedJobId;
-            const descSnippet = job.description_text
-              ? job.description_text.replace(/\s+/g, " ").trim().slice(0, 100) +
-                (job.description_text.length > 100 ? "…" : "")
-              : "—";
-
-            return (
+      ) : (
+        <Table className="tracked-table text-sm">
+          <TableHead>
+            <TableRow>
+              <TableHeader className="w-[35%] min-w-[240px]">
+                {sortButton("Job", "title")}
+              </TableHeader>
+              <TableHeader>{sortButton("Stage", "status")}</TableHeader>
+              <TableHeader className="tracked-secondary">Location</TableHeader>
+              <TableHeader className="tracked-secondary">
+                {sortButton("Pay", "salary")}
+              </TableHeader>
+              <TableHeader className="tracked-secondary">
+                {sortButton("Stage updated", "status_changed_at")}
+              </TableHeader>
+              {columns.map((column) => (
+                <TableHeader key={column} className="min-w-[140px]">
+                  {column}
+                </TableHeader>
+              ))}
+              <TableHeader>Actions</TableHeader>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {sortedJobs.map((job) => (
               <TableRow
                 key={job.id}
-                className={`cursor-pointer ${
-                  isSelected ? "bg-[var(--color-paper-2)] font-bold" : ""
-                }`}
+                className={
+                  job.id === selectedJobId ? "bg-[var(--color-paper-2)]" : ""
+                }
               >
-                <TableCell className="text-center">
-                  <FavoriteButton
-                    favorited={job.favorited}
-                    onToggle={() => onToggleFavorite?.(job.id)}
-                    size="sm"
-                  />
-                </TableCell>
-                <TableCell className="font-bold uppercase whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    <CompanyLogo
-                      company={job.company}
-                      iconUrl={job.company_icon_url}
-                      size="sm"
-                    />
-                    <span>{job.company}</span>
+                <TableCell className="min-h-16">
+                  <div className="flex items-start gap-2">
+                    {onToggleFavorite && (
+                      <FavoriteButton
+                        favorited={job.favorited}
+                        onToggle={() => onToggleFavorite(job.id)}
+                      />
+                    )}
+                    <div className="min-w-0">
+                      <button
+                        type="button"
+                        className="text-left normal-case font-bold underline cursor-pointer text-sm leading-snug"
+                        aria-label={`View ${job.title} at ${job.company}`}
+                        onClick={() => onSelectJob(job)}
+                      >
+                        {job.title}
+                      </button>
+                      <p className="text-sm mt-1 text-[var(--color-ink-mute)]">
+                        {job.company}
+                      </p>
+                      <p className="tracked-mobile-meta mt-1 text-xs">
+                        {job.location || "Location unknown"} ·{" "}
+                        {formatSalary(job)}
+                      </p>
+                    </div>
                   </div>
-                </TableCell>
-                <TableCell><button type="button" className="text-left normal-case underline cursor-pointer" aria-label={`View ${job.title} at ${job.company}`} onClick={() => onSelectJob(job)}>{job.title}</button></TableCell>
-                <TableCell
-                  className="text-xs font-mono text-[var(--color-ink-mute)] max-w-xs truncate select-text"
-                  title={job.description_text || ""}
-                >
-                  {descSnippet}
                 </TableCell>
                 <TableCell>
                   <Tag status={job.status} />
                 </TableCell>
-                <TableCell className="font-mono text-xs whitespace-nowrap">
+                <TableCell className="tracked-secondary text-sm">
+                  {job.location || "Location unknown"}
+                  {job.workplace_type !== "unknown" && (
+                    <p className="text-xs text-[var(--color-ink-mute)]">
+                      {job.workplace_type === "onsite"
+                        ? "On-site"
+                        : job.workplace_type}
+                    </p>
+                  )}
+                </TableCell>
+                <TableCell className="tracked-secondary text-sm">
                   {formatSalary(job)}
                 </TableCell>
-                <TableCell className="text-[var(--color-ink-mute)] whitespace-nowrap">
-                  {job.location ||
-                    (job.workplace_type === "onsite"
-                      ? "IN-OFFICE"
-                      : job.workplace_type === "hybrid"
-                      ? "HYBRID"
-                      : "Location unknown")}
+                <TableCell className="tracked-secondary text-sm">
+                  {job.status_changed_at.slice(0, 10)}
                 </TableCell>
-                <TableCell className="font-mono text-xs whitespace-nowrap">
-                  {formatExperience(job)}
-                </TableCell>
-                <TableCell className="font-mono text-xs">
-                  {triStateToLabel(job.is_new_grad)}
-                </TableCell>
-                <TableCell className="font-mono text-xs">
-                  {triStateToLabel(job.sponsorship)}
-                </TableCell>
-                <TableCell className="font-mono text-xs whitespace-nowrap">
-                  {formatWorkAuth(job)}
-                </TableCell>
-                <TableCell className="font-mono text-xs">
-                  {triStateToLabel(job.clearance)}
-                </TableCell>
-                <TableCell className="text-[var(--color-ink-mute)] whitespace-nowrap">
-                  {job.date_added.slice(0, 10)}
-                </TableCell>
+                {columns.map((column) => (
+                  <TableCell key={column} className="text-sm max-w-[260px]">
+                    <p className="line-clamp-3">{extra(job, column)}</p>
+                  </TableCell>
+                ))}
                 <TableCell>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex gap-2">
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenUrl(job.url);
-                      }}
-                      className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] text-xs font-mono uppercase cursor-pointer"
+                      type="button"
+                      aria-label={`Open ${job.title} posting`}
+                      title="Open posting"
+                      className="min-h-8 min-w-8 cursor-pointer"
+                      onClick={() => onOpenUrl(job.url)}
                     >
-                      OPEN ↗
+                      <svg
+                        aria-hidden="true"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M14 3h7v7M21 3 10 14M10 3H3v18h18v-7" />
+                      </svg>
                     </button>
-          {onDelete && <RemoveJobButton title={job.title} company={job.company} onClick={e => { e.stopPropagation(); onDelete(job); }} />}
+                    {onDelete && (
+                      <RemoveJobButton
+                        title={job.title}
+                        company={job.company}
+                        onClick={() => onDelete(job)}
+                      />
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+            ))}
+          </TableBody>
+        </Table>
+      )}
     </div>
   );
 }

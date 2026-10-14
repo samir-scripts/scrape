@@ -153,47 +153,14 @@ describe("Discovered Tab Card View and Consolidated Job Window", () => {
         })
       );
 
-      // 1. Window controls
-      expect(html).toContain("[✕] CLOSE [ESC]");
-      expect(html).toContain("[↵] OPEN");
-
-      // 1b. Interactive URL Anchor
-      expect(html).toContain('href="https://stripe.com/jobs/101"');
-      expect(html).toContain('target="_blank"');
-      expect(html).toContain("[↗]");
-
-      // 2. Triage actions strip
-      expect(html).toContain("TRIAGE:");
-      expect(html).toContain("MARK AS APPLIED");
-      expect(html).toContain("IGNORE POSTING");
-      expect(html).toContain("MARK VIEWED");
-
-      // 3. Consolidated Metadata Boxed Tables
-      expect(html).toContain("COMPENSATION &amp; WORKPLACE");
-      expect(html).toContain("VISA SPONSORSHIP");
-      expect(html).toContain("SECURITY CLEARANCE");
-      expect(html).toContain("WORK AUTH / GREEN CARD");
-      expect(html).toContain("Yes");
-      expect(html).toContain("No");
-      expect(html).toContain("GC / US PERSON");
-
-      // 4. Policy Engine Evidence Snippets
-      expect(html).toContain("POLICY ENGINE EVIDENCE QUOTES");
-      expect(html).toContain("Sponsors H-1B visas and green cards.");
-      expect(html).toContain("WORK AUTH / GREEN CARD QUOTE");
-      expect(html).toContain("Must be a US Citizen or Permanent Resident (Green Card holder).");
-      expect(html).toContain("6+ years of distributed systems engineering.");
-
-      // 5. Timeline telemetry
-      expect(html).toContain("POSTING TIMELINE");
-      expect(html).toContain("POSTED DATE");
-      expect(html).toContain("DISCOVERED AT");
-      expect(html).toContain("LAST SEEN");
-
-      // 6. Job Description and Notes
-      expect(html).toContain("JOB DESCRIPTION");
-      expect(html).toContain("Lead critical infrastructure systems");
-      expect(html).toContain("CANDIDATE NOTES");
+      expect(html).toContain('aria-label="Close job details"');
+      expect(html).toContain('Open posting');
+      expect(html).toContain('Mark as applied');
+      expect(html).toContain('More details');
+      expect(html).toContain('Source evidence');
+      expect(html).toContain('Sponsors H-1B visas and green cards.');
+      expect(html).toContain('Lead critical infrastructure systems');
+      expect(html).toContain('Notes');
     });
   });
 });

@@ -167,3 +167,18 @@
 @utility rule-double {
   border-left: 3px double var(--color-signal);
 }
+
+.tracked-mobile-meta { display: none; }
+@media (max-width: 767px) {
+  .tracked-secondary { display: none; }
+  .tracked-mobile-meta { display: block; }
+  .tracked-table th:first-child { min-width: 160px; width: auto; }
+}
+
+.kanban-stage-picker { display: none; }
+@media (max-width: 767px) {
+  .kanban-stage-picker { display: block; }
+  .kanban-columns { width: 100%; }
+  .kanban-column { display: none; width: 100%; }
+  .kanban-column.kanban-active { display: block; }
+}
