@@ -8,6 +8,7 @@ import {
   detectLocationFromLocale,
   detectUserLocation,
 } from "../lib/locationData";
+import { formatJobLocation } from "../lib/jobLocationLabel";
 
 describe("locationData", () => {
   it("exports valid countries and regions", () => {
@@ -131,5 +132,32 @@ describe("locationData", () => {
       value: originalLanguage,
       configurable: true,
     });
+  });
+
+  it("displays remote workplace and eligible geography together", () => {
+    expect(
+      formatJobLocation(
+        "Remote",
+        "remote",
+        [
+          {
+            raw: "Remote",
+            city: null,
+            region_code: null,
+            country_code: null,
+            is_remote: true,
+          },
+          {
+            raw: "Available Locations: US",
+            city: null,
+            region_code: null,
+            country_code: "US",
+            is_remote: false,
+          },
+        ],
+      ),
+    ).toBe("Remote · United States");
+
+    expect(formatJobLocation("Remote", "remote", [])).toBe("Remote");
   });
 });

@@ -20,6 +20,7 @@ import {
   formatWorkAuth,
   triStateToLabel,
 } from "../../../lib/filter";
+import { formatJobLocation } from "../../../lib/jobLocationLabel";
 
 interface DiscoveredTableProps {
   jobs: Job[];
@@ -200,12 +201,7 @@ export function DiscoveredTable({
                   {formatSalary(job)}
                 </TableCell>
                 <TableCell className="text-[var(--color-ink-mute)] whitespace-nowrap">
-                  {job.location ||
-                    (job.workplace_type === "onsite"
-                      ? "IN-OFFICE"
-                      : job.workplace_type === "hybrid"
-                      ? "HYBRID"
-                      : "REMOTE")}
+                  {formatJobLocation(job.location, job.workplace_type, job.locations)}
                 </TableCell>
                 <TableCell className="font-mono text-xs whitespace-nowrap">
                   {formatExperience(job)}

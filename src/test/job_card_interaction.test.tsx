@@ -10,7 +10,20 @@ afterEach(cleanup);
 
 describe("independent card keyboard controls", () => {
   it("opens the stored destination without activating details; delete/favorite also stay independent", async () => {
-    const job = generateScrapedJobsForSource(SAMPLE_SWE_SOURCE)[0];
+    const job = {
+      ...generateScrapedJobsForSource(SAMPLE_SWE_SOURCE)[0],
+      location: "Remote",
+      workplace_type: "remote" as const,
+      locations: [
+        {
+          raw: "Available Locations: US",
+          city: null,
+          region_code: null,
+          country_code: "US",
+          is_remote: false,
+        },
+      ],
+    };
     const details = vi.fn(), open = vi.fn(), remove = vi.fn(), favorite = vi.fn();
     const globalOpen = vi.fn();
     function Harness() {
@@ -18,6 +31,7 @@ describe("independent card keyboard controls", () => {
       return <JobCard job={job} onClick={details} onOpenUrl={open} onDelete={remove} onToggleFavorite={favorite} />;
     }
     render(<Harness />);
+    expect(screen.getByText("Remote · United States")).toBeTruthy();
     const user = userEvent.setup();
     screen.getByRole("button", { name: /^Open .* in browser$/ }).focus();
     await user.keyboard("{Enter}");

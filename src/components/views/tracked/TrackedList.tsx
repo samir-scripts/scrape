@@ -19,6 +19,7 @@ import {
   formatWorkAuth,
   triStateToLabel,
 } from "../../../lib/filter";
+import { formatJobLocation } from "../../../lib/jobLocationLabel";
 
 interface TrackedListProps {
   onRepositorySort?: (sort: JobSort) => void;
@@ -233,7 +234,7 @@ export function TrackedList({
                         {job.company}
                       </p>
                       <p className="tracked-mobile-meta mt-1 text-xs">
-                        {job.location || "Location unknown"} ·{" "}
+                        {formatJobLocation(job.location, job.workplace_type, job.locations)} ·{" "}
                         {formatSalary(job)}
                       </p>
                     </div>
@@ -243,14 +244,7 @@ export function TrackedList({
                   <Tag status={job.status} />
                 </TableCell>
                 <TableCell className="tracked-secondary text-sm">
-                  {job.location || "Location unknown"}
-                  {job.workplace_type !== "unknown" && (
-                    <p className="text-xs text-[var(--color-ink-mute)]">
-                      {job.workplace_type === "onsite"
-                        ? "On-site"
-                        : job.workplace_type}
-                    </p>
-                  )}
+                  {formatJobLocation(job.location, job.workplace_type, job.locations)}
                 </TableCell>
                 <TableCell className="tracked-secondary text-sm">
                   {formatSalary(job)}

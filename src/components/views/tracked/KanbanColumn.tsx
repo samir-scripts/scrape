@@ -4,6 +4,7 @@ import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
 import { STATUS_CONFIG } from "../../../lib/constants";
 import { formatSalary } from "../../../lib/filter";
+import { formatJobLocation } from "../../../lib/jobLocationLabel";
 
 interface KanbanColumnProps {
   status: JobStatus;
@@ -125,7 +126,7 @@ export function KanbanColumn({
               </div>
               <p className="text-sm">{job.company}</p>
               <p className="text-sm text-[var(--color-ink-mute)]">
-                {job.location || "Location unknown"}
+                {formatJobLocation(job.location, job.workplace_type, job.locations)}
               </p>
               <p className="text-sm">{formatSalary(job)}</p>
               <div className="flex items-center justify-between gap-2">

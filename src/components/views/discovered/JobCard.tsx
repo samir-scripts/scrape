@@ -5,6 +5,7 @@ import { CompanyLogo } from "../../ui/CompanyLogo";
 import { FavoriteButton } from "../../ui/FavoriteButton";
 import { Tag } from "../../ui/Tag";
 import { formatSalary, formatExperience } from "../../../lib/filter";
+import { formatJobLocation } from "../../../lib/jobLocationLabel";
 
 interface JobCardProps {
   job: Job;
@@ -48,6 +49,11 @@ export function JobCard({
     job.workplace_type === "remote" ||
     (job.workplace_type === "unknown" &&
       Boolean(job.location && job.location.toLowerCase().includes("remote")));
+  const locationLabel = formatJobLocation(
+    job.location,
+    job.workplace_type,
+    job.locations,
+  );
 
   return (
     <div
@@ -106,11 +112,11 @@ export function JobCard({
           <span className="font-semibold text-[var(--color-ink)] truncate max-w-[200px]">
             {job.company}
           </span>
-          {job.location && (
+          {locationLabel && (
             <>
               <span aria-hidden="true" className="opacity-40">·</span>
               <span className="truncate max-w-[160px]">
-                {job.location}
+                {locationLabel}
               </span>
             </>
           )}

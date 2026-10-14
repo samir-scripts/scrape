@@ -16,6 +16,7 @@ import { RemoveJobButton } from "../ui/RemoveJobButton";
 import { IconButton } from "../ui/IconButton";
 import { Modal } from "../ui/Modal";
 import { JobDescriptionView } from "./JobDescriptionView";
+import { formatJobLocation } from "../../lib/jobLocationLabel";
 
 export interface JobInspectorProps {
   job: Job | null;
@@ -206,9 +207,7 @@ export function JobInspectorContent({
           </div>
         </div>
         <p className="text-sm">
-          {job.location || "Location unknown"}
-          {job.workplace_type !== "unknown" &&
-            ` · ${job.workplace_type === "onsite" ? "On-site" : job.workplace_type}`}
+          {formatJobLocation(job.location, job.workplace_type, job.locations)}
         </p>
         <p className="text-sm font-bold">{formatSalary(job)}</p>
         <div className="flex flex-wrap items-center gap-2">
