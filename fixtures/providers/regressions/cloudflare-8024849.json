@@ -1,0 +1,34 @@
+{
+  "fixture_kind": "review_evidence_envelope_not_raw_provider_capture",
+  "source": {
+    "adapter": "greenhouse",
+    "board": "cloudflare",
+    "posting_id": "8024849",
+    "canonical_url": "https://job-boards.greenhouse.io/cloudflare/jobs/8024849",
+    "official_page_checked_on": "2026-10-14",
+    "official_page": "https://job-boards.greenhouse.io/cloudflare/jobs/8024849",
+    "reference_screenshot": "plans/assets/08-desktop-review/05-provider-location.png",
+    "raw_api_response_in_repository": false,
+    "raw_response_sha256": null,
+    "limitations": [
+      "The official public job page corroborates the title, Remote workplace label, and Available Locations: US.",
+      "No raw Greenhouse API response was captured or hashed for this envelope.",
+      "This envelope must not be fed to the worker as if it were an authentic provider response. Capture a deterministic raw response before writing adapter-level regression tests."
+    ]
+  },
+  "observed": {
+    "title": "Senior Principal, Sales Compensation Design & Strategy",
+    "company": "Cloudflare",
+    "workplace_label": "Remote",
+    "eligible_locations_section": "Available Locations",
+    "eligible_location_text": "US",
+    "application_deadline": "2026-10-13"
+  },
+  "expected_contract": {
+    "external_id": "8024849",
+    "workplace_type": "remote",
+    "eligible_country_codes": ["US"],
+    "remote_and_us_filter_matches": true,
+    "identity_url": "https://job-boards.greenhouse.io/cloudflare/jobs/8024849"
+  }
+}
