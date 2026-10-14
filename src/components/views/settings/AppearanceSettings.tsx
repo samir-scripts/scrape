@@ -1,7 +1,6 @@
 import type { Settings } from "../../../bindings/Settings";
 import { Toggle } from "../../ui/Toggle";
 import { Rule } from "../../ui/Rule";
-import { Dither } from "../../ui/Dither";
 import { useUIStore } from "../../../lib/store";
 import { FONT_OPTIONS, type FontFamilyId } from "../../../lib/constants";
 
@@ -24,10 +23,6 @@ export function AppearanceSettings({
 
   const handleSelectFont = (fontId: FontFamilyId) => {
     onUpdateSetting("ui.font_family", fontId);
-    document.documentElement.setAttribute("data-font", fontId);
-    try {
-      localStorage.setItem("scrape:font_family", fontId);
-    } catch {}
   };
 
   const handleToggleTooltips = (enabled: boolean) => {
@@ -139,78 +134,20 @@ export function AppearanceSettings({
 
       <Rule />
 
-      {/* Typography & Font Family Cards */}
-      <div className="flex flex-col gap-3 text-xs">
-        <div className="flex justify-between items-center font-mono">
-          <label className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
-            TYPOGRAPHY & FONT FAMILY
-          </label>
-          <span className="text-xs text-[var(--color-ink-mute)]">
-            ACTIVE: {FONT_OPTIONS.find((f) => f.id === currentFont)?.name || "DEFAULT"}
-          </span>
+      <section className="grid gap-4" aria-label="Typography">
+        <label className="grid gap-2 text-sm">
+          Interface font
+          <select aria-label="Interface font" className="min-h-9 border p-2 bg-[var(--color-paper)]" value={currentFont} onChange={e => handleSelectFont(e.target.value as FontFamilyId)}>
+            {FONT_OPTIONS.map(font => <option key={font.id} value={font.id}>{font.name}</option>)}
+          </select>
+        </label>
+        <p className="text-sm text-[var(--color-ink-mute)]">Applies throughout the application. YAML and code use a fixed-width font. All fonts are available offline.</p>
+        <div aria-label="Font preview" className="border p-4 grid gap-2">
+          <h3 className="text-lg font-bold normal-case">Software Engineer at Acme</h3>
+          <p>Explore the posting, save a note, and track your next step.</p>
+          <p className="text-sm text-[var(--color-ink-mute)]">Remote · $45.25–55.75/hour · 09:00</p>
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {FONT_OPTIONS.map((font) => {
-            const isSelected = currentFont === font.id;
-
-            return (
-              <div
-                key={font.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => handleSelectFont(font.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    handleSelectFont(font.id);
-                  }
-                }}
-                className={`p-3 border-2 cursor-pointer flex flex-col justify-between gap-2.5 bg-[var(--color-paper)] text-[var(--color-ink)] focus:outline-none transition-none ${
-                  isSelected
-                    ? "border-[var(--color-ink)] bg-[var(--color-paper-2)]/60"
-                    : "border-[var(--color-ink-mute)]/30 hover:border-[var(--color-ink)]"
-                }`}
-              >
-                <div className="flex flex-col gap-1 font-mono">
-                  <div className="flex justify-between items-center font-bold">
-                    <span className="text-xs">{font.label}</span>
-                    {isSelected && (
-                      <span className="bg-[var(--color-ink)] text-[var(--color-paper)] px-1.5 py-0.5 text-[9px]">
-                        ACTIVE
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-xs text-[var(--color-ink-mute)]">
-                    {font.name} · {font.category === "readable" ? "READABLE SANS" : "MONOSPACE"}
-                  </span>
-                  <p className="text-xs opacity-80 leading-snug pt-1">
-                    {font.description}
-                  </p>
-                </div>
-
-                {/* Dedicated Typeface Specimen Box (Displays its own font regardless of active application theme/font) */}
-                <div
-                  className={`font-specimen font-specimen-${font.id} mt-2 p-2.5 border border-[var(--color-ink)]/30 bg-[var(--color-paper-2)]/40 flex flex-col gap-1.5 select-none`}
-                >
-                  <div className="flex justify-between items-baseline border-b border-[var(--color-ink)]/15 pb-1">
-                    <span className="text-xs font-bold tracking-normal">
-                      AaBbCc 0123456789
-                    </span>
-                    <span className="text-xs opacity-80">
-                      {font.category === "readable" ? "ABC xyz" : "{ } => !="}
-                    </span>
-                  </div>
-                  <div className="text-xs leading-tight break-words">
-                    {font.previewText}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
+      </section>
       <Rule />
 
       {/* Interface & Motion Controls */}
@@ -232,30 +169,6 @@ export function AppearanceSettings({
         />
       </div>
 
-      <Rule />
-
-      {/* Dither & Texture Previews */}
-      <div className="flex flex-col gap-2 font-mono text-xs">
-        <label className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
-          PATTERNS
-        </label>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="border border-[var(--color-ink)] p-3 flex flex-col gap-2">
-            <span className="text-xs font-bold">
-              RADIAL DOT MATRIX (4PX)
-            </span>
-            <Dither type="dots" height="40px" className="opacity-80" />
-          </div>
-          <div className="border border-[var(--color-ink)] p-3 flex flex-col gap-2">
-            <span className="text-xs font-bold">CONIC CHECKER (2PX)</span>
-            <Dither type="checker" height="40px" className="opacity-80" />
-          </div>
-          <div className="border border-[var(--color-ink)] p-3 flex flex-col gap-2">
-            <span className="text-xs font-bold">REPEATING 45° LINES</span>
-            <Dither type="lines" height="40px" className="opacity-80" />
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

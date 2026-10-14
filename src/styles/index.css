@@ -36,8 +36,14 @@
   --color-warning: #765000;
   --color-information: #3030B0;
 
-  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --font-mono: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-ui);
+  --font-code: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  --spacing-page: 24px;
+  --spacing-panel: 16px;
+  --spacing-section: 24px;
+  --spacing-control: 8px;
 }
 
 [data-theme="obsidian"] {
@@ -51,78 +57,15 @@
   --color-information: #B8B5FA;
 }
 
-/* Typography & Font Family Switches */
-[data-font="jetbrains"],
-[data-font="jetbrains"] body {
-  --font-mono: "JetBrains Mono", "SF Mono", Menlo, Monaco, Consolas, monospace;
-}
-
-[data-font="inter"],
-[data-font="inter"] body {
-  --font-mono: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-[data-font="geist"],
-[data-font="geist"] body {
-  --font-mono: "Geist Mono", "SF Mono", Monaco, Consolas, monospace;
-}
-
-[data-font="fira_code"],
-[data-font="fira_code"] body {
-  --font-mono: "Fira Code", Menlo, Monaco, Consolas, monospace;
-}
-
-[data-font="ibm_plex"],
-[data-font="ibm_plex"] body {
-  --font-mono: "IBM Plex Mono", Menlo, Monaco, Consolas, monospace;
-  --font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-[data-font="default"],
-[data-font="default"] body {
-  --font-mono: "SF Mono", Menlo, Monaco, Consolas, monospace;
-  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
-}
-
-[data-font] .font-mono {
-  font-family: var(--font-mono) !important;
-}
-
-[data-font] .font-sans {
-  font-family: var(--font-sans) !important;
-}
-
-/* Dedicated Font Specimen Preview Boxes (Unaffected by currently active application font) */
-.font-specimen-default,
-.font-specimen-default * {
-  font-family: "SF Mono", Menlo, Monaco, Consolas, monospace !important;
-}
-
-.font-specimen-inter,
-.font-specimen-inter * {
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-}
-
-.font-specimen-jetbrains,
-.font-specimen-jetbrains * {
-  font-family: "JetBrains Mono", "SF Mono", Menlo, Monaco, Consolas, monospace !important;
-}
-
-.font-specimen-geist,
-.font-specimen-geist * {
-  font-family: "Geist Mono", "SF Mono", Monaco, Consolas, monospace !important;
-}
-
-.font-specimen-fira_code,
-.font-specimen-fira_code * {
-  font-family: "Fira Code", Menlo, Monaco, Consolas, monospace !important;
-}
-
-.font-specimen-ibm_plex,
-.font-specimen-ibm_plex * {
-  font-family: "IBM Plex Mono", Menlo, Monaco, Consolas, monospace !important;
-}
+/* One selected family throughout the interface. Code remains fixed-width. */
+[data-font="jetbrains"] { --font-ui: "JetBrains Mono Variable", monospace; }
+[data-font="inter"] { --font-ui: "Inter Variable", sans-serif; }
+[data-font="geist"] { --font-ui: "Geist Mono Variable", monospace; }
+[data-font="fira_code"] { --font-ui: "Fira Code Variable", monospace; }
+[data-font="ibm_plex"] { --font-ui: "IBM Plex Mono", monospace; }
+[data-font="default"] { --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.font-mono, .font-sans { font-family: var(--font-ui); }
+.font-code { font-family: var(--font-code); }
 
 @layer base {
   *, *::before, *::after {
@@ -131,7 +74,7 @@
   html, body {
     background: var(--color-paper);
     color: var(--color-ink);
-    font-family: var(--font-sans);
+    font-family: var(--font-ui);
     font-size: 14px;
     margin: 0;
     padding: 0;

@@ -111,6 +111,7 @@ export default function App() {
         "data-font",
         settings.ui_font_family || "default"
       );
+      try { localStorage.setItem("scrape:font_family", settings.ui_font_family || "default"); } catch {}
       if (typeof settings.ui_tooltips_enabled === "boolean") {
         useUIStore.getState().setTooltipsEnabled(settings.ui_tooltips_enabled);
       }
@@ -188,7 +189,7 @@ export default function App() {
       return { previousSettings };
     },
     onError: (err, _vars, context) => {
-      console.error("Failed to update setting:", err);
+      notifyError(String(err), "SETTING UPDATE FAILED");
       if (context?.previousSettings) {
         queryClient.setQueryData(["settings"], context.previousSettings);
       }

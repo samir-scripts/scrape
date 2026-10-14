@@ -8,6 +8,7 @@ interface ModalProps {
   title: string;
   children: ReactNode;
   width?: string;
+  footer?: ReactNode;
 }
 
 export function Modal({
@@ -16,6 +17,7 @@ export function Modal({
   title,
   children,
   width = "max-w-lg",
+  footer,
 }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
@@ -78,15 +80,15 @@ export function Modal({
       ref={dialogRef}
       aria-label={title}
       onClick={handleBackdropClick}
-      className={`fixed inset-0 m-auto p-0 bg-transparent backdrop:bg-[var(--color-ink)]/70 backdrop:backdrop-blur-none backdrop:dither-checker ${
+      className={`fixed inset-0 m-auto p-0 max-w-[calc(100vw-32px)] max-h-[calc(100dvh-32px)] bg-transparent backdrop:bg-black/50 backdrop:backdrop-blur-none ${
         isOpen ? "block" : "hidden"
       }`}
     >
       <div
-        className={`w-full ${width} border-2 border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] shadow-none flex flex-col`}
+        className={`w-full ${width} border-2 border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] shadow-none flex flex-col max-h-[calc(100dvh-32px)]`}
       >
         {/* Modal Header */}
-        <div className="bg-[var(--color-ink)] text-[var(--color-paper)] px-4 py-2.5 flex items-center justify-between select-none">
+        <div className="bg-[var(--color-ink)] text-[var(--color-paper)] px-4 py-3 shrink-0 flex items-center justify-between select-none">
           <h2 className="font-mono font-bold text-xs uppercase tracking-wider">
             {title}
           </h2>
@@ -103,7 +105,8 @@ export function Modal({
         <Rule />
 
         {/* Modal Body */}
-        <div className="p-4 overflow-y-auto max-h-[80vh]">{children}</div>
+        <div className="p-4 overflow-y-auto min-h-0">{children}</div>
+        {footer && <div className="p-4 border-t shrink-0 bg-[var(--color-paper)]">{footer}</div>}
       </div>
     </dialog>
   );

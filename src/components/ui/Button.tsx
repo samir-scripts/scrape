@@ -18,10 +18,10 @@ export function Button({
 }: ButtonProps) {
   const sizeClass =
     size === "sm"
-      ? "px-2 py-1 text-xs"
+      ? "min-h-8 px-2 py-1 text-xs"
       : size === "lg"
-      ? "px-4 py-2.5 text-sm"
-      : "px-3 py-1.5 text-xs";
+      ? "min-h-10 px-4 py-2.5 text-sm"
+      : "min-h-9 px-3 py-1.5 text-sm";
 
   let variantClass =
     "border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] active:bg-[var(--color-ink)] active:text-[var(--color-paper)]";

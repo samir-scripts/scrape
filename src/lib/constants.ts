@@ -120,10 +120,10 @@ export const FONT_OPTIONS: FontFamilyOption[] = [
   {
     id: "default",
     label: "DEFAULT",
-    name: "SF Mono / System",
-    category: "monospace",
-    description: "Classic NieR brutalist monospace typography.",
-    fontFamily: '"SF Mono", Menlo, Monaco, Consolas, monospace',
+    name: "System",
+    category: "readable",
+    description: "The device interface font.",
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     previewText: "STATUS: SCRAPED // 127.0.0.1 // [APPLY]",
   },
   {
@@ -132,7 +132,7 @@ export const FONT_OPTIONS: FontFamilyOption[] = [
     name: "Inter (Readable Sans)",
     category: "readable",
     description: "Highly legible sans-serif designed for supreme readability and zero eye fatigue.",
-    fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontFamily: '"Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     previewText: "Senior Distributed Systems Engineer · Fully Remote",
   },
   {
@@ -141,7 +141,7 @@ export const FONT_OPTIONS: FontFamilyOption[] = [
     name: "JetBrains Mono",
     category: "monospace",
     description: "Developer favorite with open counters and distinct code glyphs.",
-    fontFamily: '"JetBrains Mono", "SF Mono", monospace',
+    fontFamily: '"JetBrains Mono Variable", "SF Mono", monospace',
     previewText: "fn triage_postings(queue: &mut Vec<Job>) -> Result<()>",
   },
   {
@@ -150,7 +150,7 @@ export const FONT_OPTIONS: FontFamilyOption[] = [
     name: "Geist Mono",
     category: "monospace",
     description: "Modern minimalist developer typography by Vercel.",
-    fontFamily: '"Geist Mono", "SF Mono", monospace',
+    fontFamily: '"Geist Mono Variable", "SF Mono", monospace',
     previewText: "export const RETENTION_TTL = 90_DAYS;",
   },
   {
@@ -159,7 +159,7 @@ export const FONT_OPTIONS: FontFamilyOption[] = [
     name: "Fira Code",
     category: "monospace",
     description: "Iconic programming font with high-clarity punctuation.",
-    fontFamily: '"Fira Code", Menlo, monospace',
+    fontFamily: '"Fira Code Variable", Menlo, monospace',
     previewText: "match status { JobStatus::Offer => 100% }",
   },
   {
