@@ -1,6 +1,6 @@
 # Desktop usability repair: implementation evidence
 
-Status: Sections 1, 2A, and 2B are implemented with code-level tests. Native UI verification for the description and Remote + US journey remains pending; the earlier native harness timed out before injecting its page script. Sections 3–7 have not started.
+Status: Sections 1, 2A, 2B, and 3 are implemented with tests. Automated native startup/IPC and Section 3 appearance checks now pass after repairing the test launcher. Native screenshot/manual acceptance remains pending; Sections 4–7 have not started.
 
 This document records results for [the implementation plan](08-desktop-usability-and-extraction.md). Each new result must include the environment, command or interaction, expected behavior, observed outcome, and evidence. Do not upgrade a hypothesis to a confirmed cause without a reproduction.
 
@@ -24,8 +24,8 @@ This document records results for [the implementation plan](08-desktop-usability
 | D5 | Scraper options are compact; YAML import is discoverable as an accessible upload SVG; Run all is explicit. | Workflow interaction test passes and tests URL→preview→save. `telemetry_console_and_sources.test.ts` contains a source-string expectation for Import YAML despite actual button text; no file chooser interaction. | 6: wizard interactions, actual file selection/import, run-all backend parity. | Static code confirms both top disclosures and text import action. |
 | D6 | Schedule control reports the actual paused/running/next/no-auto-run/error state. | Scheduler unit tests cover cron math/dispatcher. No UI test covers malformed or absent `next_run_at`; frontend falls back to SCHEDULED if absent. | 7: fake-clock status + UI state tests + native click-through. | Existing backend tests pass; static UI path shows ambiguous fallback. Scheduler failure itself is not established. |
 | D7 | One toolbar; SVG pagination at bottom; page number can be entered directly and jumps accurately. | Filter tests cover predicates. No result-toolbar/page-jump interaction test. `App.tsx` currently renders Previous/Next and sort above results. | 4: repository page/query interaction; >2k scale; native keyboard and screen review. | Static code confirms current top-row controls and fixed page size; no jump UI currently exists. |
-| D8 | Scrollbars and native controls match Paper/Obsidian surfaces in WKWebView. | Browser contrast/visual tests exist; global standard/WebKit scrollbar CSS exists. They do not establish actual macOS overlay scrollbar appearance. | 3: both themes, OS scrollbar settings, actual WKWebView screenshot. | No native WebView reproduction this section. |
-| D9 | All action icons use one legible pixel SVG system; action names and focus remain clear. | Existing SVG controls and font tests exist; coverage is partial and some Unicode/text controls remain. | 3: component interaction/accessibility, visual snapshots, keyboard. | User references preserved; no icon changes this section. |
+| D8 | Scrollbars and native controls match Paper/Obsidian surfaces in WKWebView. | Section 3 adds explicit app color-scheme, shared scrollbar tokens, and native computed-style checks at wide/Always and narrow/Automatic settings. Native screenshot review remains pending. | 3: both themes, per-process scrollbar preferences, actual WKWebView styles, browser visual regression. | Browser regression first confirmed color-scheme was normal in both themes. Native fallback now reports Paper rgb(103,99,87) and Obsidian rgb(185,181,175) thumbs. |
+| D9 | All action icons use one legible pixel SVG system; action names and focus remain clear. | Section 3 introduces the shared family and migrates job, filter, dialog, notification and navigation controls. Unit/browser tests exercise keyboard actions, disabled semantics, target sizes, names, fonts and contrast. Later workflow/pagination/drag sections consume the same family. | 3: component interaction/accessibility, reviewed visual snapshots, keyboard, native styles. | Existing duplicated paths and Unicode action glyphs were replaced; no icon font or stock artwork was introduced. |
 
 ## Baseline checks run in this section
 
@@ -128,3 +128,91 @@ version 19. Fixtures use temporary directories and isolated local Vite ports. Th
 startup harness now explicitly shows its test window so WKWebView loads and emits
 an IPC completion result. This proves actual native startup/IPC readiness or controlled
 failure; it does not by itself prove every visual/interaction acceptance criterion.
+
+
+## Section 3 — shared icons, controls, fonts and native scrolling
+
+**Research.** Inventoried action glyphs and duplicated SVG paths, `IconButton`,
+`Button`, `Input`, `Select`, `Modal`, font selectors and scrollbar rules. Existing
+scrollbar colors were present, but the new browser regression failed because both
+app themes reported `color-scheme: normal`. [MDN color-scheme](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/color-scheme)
+confirms that this property controls native form and scrollbar appearance;
+[WebKit scrollbar documentation](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Selectors/::-webkit-scrollbar)
+explains the fallback and interaction with supported standard scrollbar properties.
+The tested macOS 15.6 WKWebView uses the WebKit fallback for thumb colors.
+
+**Implementation.** Added one original SVG family on a 24-unit grid with shared
+14/16/20px sizes and `currentColor`. Shared icon buttons own 32px minimum targets,
+forwarded refs, semantic variants, disabled behavior and accessible names. Reused
+them for job/card/table/inspector controls, global and panel search, filter chips,
+workflow matching chips, dialogs, toasts, notifications and the terminal launcher.
+Discovered table sort headers are named keyboard-operable buttons with `aria-sort`.
+Selected fonts remain inherited by controls; code keeps its separate fixed-width
+font. Removed an empty subnavigation strip on non-job screens and a duplicate
+filter-search reset control. Toolbar/pagination consolidation, split panes, Kanban
+movement, workflow breadcrumbs and schedule-status work remain in Sections 4–7.
+
+Shared control heights and scrollbar roles now live in CSS tokens. Paper uses
+light native controls and Obsidian uses dark controls. Standard and WebKit scrollbar
+rules consume the same semantic values; vertical scroll surfaces use stable gutters
+where supported, and tables retain horizontal scrolling. No custom JavaScript
+scrollbar was introduced. Updated primitive and test-harness documentation.
+
+**Test adaptation.** Replaced brittle polygon/path/class/glyph expectations with
+shared-control and favorite keyboard interactions, a real terminal-button click,
+rendered dimensions, decorative SVG semantics, accessible labels and focus checks.
+Extended bundled-font coverage to icon controls and shared indicator-contrast checks.
+Reviewed 35 changed macOS Chromium screenshots (settings, workflow, jobs, removal,
+inspector, applied list and board across both themes and relevant widths) before
+accepting baselines. Screenshot expectations remain failures; soft assertions simply
+allow all visual checkpoints to be collected in a single failing review run.
+
+**Native verification.** Isolated actual Tauri dev runs passed at 1280×600 with
+per-process Always scrollbars and 480×600 with Automatic scrollbars. All five bundled
+font families loaded and applied to navigation/fields; the workflow dialog retained
+the selected IBM Plex font. Both themes produced the expected native select/color
+scheme, named SVG controls of at least 32px, and WebKit thumb colors:
+Paper `rgb(103, 99, 87)`, Obsidian `rgb(185, 181, 175)`. No global macOS preference was
+changed. Successful artifacts include `scrape-native-smoke-YqQAv0` and
+`scrape-native-smoke-GsYEuV` in the system temporary directory.
+
+The older full-native smoke assumed a fixed Vite URL despite per-test URLs being
+embedded in the executable, and its default window was hidden. Both native scripts
+now share a launcher owning a visible temporary-profile window, isolated port,
+actual Tauri dev build, process group and completion log. `npm run test:native`
+passed with explicit IPC, packaged sidecar, persistence, block/restore, cancellation,
+malformed output/nonzero exit/missing completion/timeout, and external-destination
+completion (`scrape-native-smoke-VDYF2j`). Refactored startup checks also passed for
+current19 appearance and unknown19 refusal.
+
+Native screenshot capture/manual gesture review remains pending: the UI automation
+surface could not attach to the development binary, and an optional delayed visual
+capture attempt exceeded the native deadline. Its temporary delay code was removed.
+The successful checks above are programmatic WKWebView checks; the visually reviewed
+screenshots are Chromium. The prior native description/Remote+US full journey gates
+remain open.
+
+**Final checks for this section (2026-10-14).**
+
+| Command | Observed result |
+|---|---|
+| `cargo fmt --all -- --check` | Passed. |
+| `cargo clippy --workspace --all-targets -- -D warnings` | Passed. |
+| `cargo test --workspace` | Passed with loopback enabled for deterministic HTTP fixtures. The initial restricted run could not bind those servers. |
+| `npm test` | Passed: 370 tests in 55 files, plus Vite HTML-transformation startup smoke. |
+| `npm run build` | Passed; existing large-bundle advisory remains. |
+| `node scripts/check-style.mjs` | Passed. |
+| `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers SCRAPE_BROWSER_PORT=1437 npm run test:browser -- --workers=1` | Passed: all 18 browser tests, including 200% zoom, both-theme contrast/focus, font loading, workflows, removal and job-stage journeys. |
+| `npm run test:native-startup` | Seven startup fixtures passed before the shared-launcher refactor; current19 appearance and unknown19 refusal passed again through the shared launcher. |
+| `npm run test:native` | Passed with explicit IPC/worker/opener completion. |
+| Native appearance commands in `scripts/README.md` | Wide/Always and narrow/Automatic runs passed for both themes and all bundled fonts. |
+
+A source edit during one browser run triggered Vite reload and invalidated a
+screenshot; that blank image was rejected. The final full browser run used stable
+source files and all 18 tests passed. No unreviewed screenshot was accepted.
+
+Implementation commits: `ea9c3dc` (migration-19 incident/repair), `3b229d8`
+(shared SVG family and interaction regressions), `e814a8b` (isolated native launcher
+and appearance checks), and `1ebede4` (screen migration, shared styles, adapted tests,
+reviewed baselines and CI wiring). Generated bindings have no drift. The branch
+remains unmerged because the later sections and native visual/manual gates are open.
