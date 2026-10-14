@@ -1,3 +1,4 @@
+import { isRecordedMode } from "../../../lib/runtime";
 import { useState, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Source } from "../../../bindings/Source";
@@ -305,6 +306,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           <Tooltip content="Create a new autonomous scrape workflow for a company careers site">
             <Button
               variant="inverted"
+              disabled={isRecordedMode()}
               onClick={() => {
                 setEditingSource(null);
                 setIsAddModalOpen(true);
@@ -491,7 +493,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       <Tooltip content="Run this workflow immediately into database">
                         <button
                           onClick={() => handleRunSourceNow(s)}
-                          disabled={isRunning}
+                          disabled={isRecordedMode() || isRunning}
                           className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-80 text-xs font-mono uppercase cursor-pointer disabled:opacity-50"
                         >
                           {isRunning ? "RUNNING…" : "RUN"}
@@ -569,7 +571,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => handleRunSourceNow(inspectedSource)}
-                disabled={runningSourceId === inspectedSource.id}
+                disabled={isRecordedMode() || runningSourceId === inspectedSource.id}
                 className="px-2.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-85 text-xs uppercase font-bold cursor-pointer disabled:opacity-50"
               >
                 {runningSourceId === inspectedSource.id ? "RUNNING WORKFLOW…" : "RUN WORKFLOW NOW"}

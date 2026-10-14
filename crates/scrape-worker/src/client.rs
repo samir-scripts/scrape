@@ -25,6 +25,7 @@ pub enum ClientError {
 
 pub struct HttpClient {
     client: Client,
+    replay_origin: Option<Url>,
     per_host_delay: Duration,
     host_locks: Mutex<HashMap<String, Arc<Mutex<Instant>>>>,
     robots_cache: Mutex<HashMap<String, Option<Arc<Robot>>>>,
@@ -42,10 +43,44 @@ impl HttpClient {
 
         Self {
             client,
+            replay_origin: None,
             per_host_delay: Duration::from_millis(per_host_delay_ms),
             host_locks: Mutex::new(HashMap::new()),
             robots_cache: Mutex::new(HashMap::new()),
             json_cache: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Explicit offline transport; parsing and identity still use provider URLs.
+    pub fn with_replay_origin(mut self, origin: &str) -> Result<Self, String> {
+        let url = Url::parse(origin).map_err(|e| e.to_string())?;
+        if url.scheme() != "http"
+            || !matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"))
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+            || url.path() != "/"
+        {
+            return Err("Replay origin must be a plain loopback HTTP origin".into());
+        }
+        self.replay_origin = Some(url);
+        Ok(self)
+    }
+
+    fn transport_url(&self, original: &str) -> Result<Url, ClientError> {
+        let parsed = Url::parse(original)?;
+        if let Some(origin) = &self.replay_origin {
+            let mut replay = origin.clone();
+            replay.set_path(&format!(
+                "/{}{}",
+                parsed.host_str().unwrap_or(""),
+                parsed.path()
+            ));
+            replay.set_query(parsed.query());
+            Ok(replay)
+        } else {
+            Ok(parsed)
         }
     }
 
@@ -85,7 +120,7 @@ impl HttpClient {
                 let robots_url = format!("{}://{}/robots.txt", parsed_url.scheme(), host);
                 let resp = self
                     .client
-                    .get(&robots_url)
+                    .get(self.transport_url(&robots_url)?)
                     .timeout(Duration::from_secs(5))
                     .send()
                     .await;
@@ -177,8 +212,9 @@ impl HttpClient {
 
         let _guard = self.rate_limit(&host).await;
 
+        let transport = self.transport_url(url)?;
         let resp = self
-            .execute_with_retries(|| self.client.get(url).send())
+            .execute_with_retries(|| self.client.get(transport.clone()).send())
             .await?;
 
         let text = resp.text().await?;
@@ -217,8 +253,9 @@ impl HttpClient {
 
         let _guard = self.rate_limit(&host).await;
 
+        let transport = self.transport_url(url)?;
         let resp = self
-            .execute_with_retries(|| self.client.get(url).send())
+            .execute_with_retries(|| self.client.get(transport.clone()).send())
             .await?;
 
         let json = resp.json::<T>().await?;

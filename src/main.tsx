@@ -29,7 +29,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         <main className="p-8 text-[var(--color-ink)] bg-[var(--color-paper)]">
           <h1 className="text-xl font-bold">Scrape</h1>
           <p className="my-4">Live scraping and saved jobs require the desktop application.</p>
-          <a className="underline" href="?demo=1">Explore a demonstration with fictional postings</a>
+          <a className="underline" href="?demo=1">Explore recorded provider examples</a>
         </main>
       ) : <App />}
     </QueryClientProvider>

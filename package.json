@@ -14,7 +14,9 @@
     "gen:types": "cargo test --workspace export_bindings",
     "test:browser": "playwright test",
     "test:native": "node scripts/native-smoke.mjs",
-    "test:native-startup": "node scripts/test-native-startup.mjs"
+    "test:native-startup": "node scripts/test-native-startup.mjs",
+    "test:providers": "node scripts/provider-verification.mjs",
+    "test:providers:live": "node scripts/provider-verification.mjs --live"
   },
   "dependencies": {
     "@fontsource-variable/fira-code": "^5.3.0",

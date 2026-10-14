@@ -25,6 +25,10 @@ struct Cli {
     #[arg(long)]
     source: Option<String>,
 
+    /// Replay provider HTTP through a loopback fixture server (never live).
+    #[arg(long)]
+    replay_origin: Option<String>,
+
     /// Auto-detect ATS or JSON-LD configuration for a given URL
     #[arg(long)]
     detect: Option<String>,
@@ -51,12 +55,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if let Some(source_spec) = args.source {
-        run_single_source(&source_spec, args.dry_run).await?;
+        run_single_source(&source_spec, args.dry_run, args.replay_origin.as_deref()).await?;
         return Ok(());
     }
 
     if args.stdin {
-        run_stdin_config(args.dry_run).await?;
+        run_stdin_config(args.dry_run, args.replay_origin.as_deref()).await?;
         return Ok(());
     }
 
@@ -64,7 +68,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::process::exit(1);
 }
 
-async fn run_stdin_config(dry_run: bool) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_stdin_config(
+    dry_run: bool,
+    replay_origin: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut input = String::new();
     let _ = io::stdin().read_line(&mut input);
 
@@ -85,10 +92,14 @@ async fn run_stdin_config(dry_run: bool) -> Result<(), Box<dyn std::error::Error
         std::process::exit(1);
     }
 
-    execute_worker(config, dry_run).await
+    execute_worker(config, dry_run, replay_origin).await
 }
 
-async fn run_single_source(spec: &str, dry_run: bool) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_single_source(
+    spec: &str,
+    dry_run: bool,
+    replay_origin: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let (kind_str, identifier) = spec
         .split_once(':')
         .filter(|(_, identifier)| !identifier.trim().is_empty())
@@ -124,18 +135,19 @@ async fn run_single_source(spec: &str, dry_run: bool) -> Result<(), Box<dyn std:
         limits: WorkerLimits::default(),
     };
 
-    execute_worker(config, dry_run).await
+    execute_worker(config, dry_run, replay_origin).await
 }
 
 async fn execute_worker(
     config: WorkerConfig,
     dry_run: bool,
+    replay_origin: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if config.limits.concurrency != 1 {
         return Err("Worker concurrency currently supports one source at a time".into());
     }
     let start_time = Instant::now();
-    let client = HttpClient::new(
+    let mut client = HttpClient::new(
         config.limits.request_timeout_s,
         config.limits.per_host_delay_ms,
     );
@@ -154,6 +166,10 @@ async fn execute_worker(
         .unwrap_or_else(chrono::Utc::now);
     let mut stats = WorkerStats::default();
     let mut total_emitted = 0u64;
+    if let Some(origin) = replay_origin {
+        client = client.with_replay_origin(origin)?;
+        tracing::info!("Recorded provider replay via {origin}; no live-provider verification");
+    }
     let max_dry_run_jobs = 10u64;
 
     for source in &config.sources {

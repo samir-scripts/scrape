@@ -1,0 +1,388 @@
+{
+  "provenance": {
+    "kind": "lever",
+    "board": "sep",
+    "capture_url": "https://api.lever.co/v0/postings/sep?mode=json",
+    "captured_at": "2026-10-14T03:27:51.591154+00:00",
+    "sha256": "dbda1f6de673d485bb313f973afca5023f17a55b3ac536ecf8d9d1f1425e3989",
+    "extraction_version": "scrape-worker 0.1.0; protocol 2"
+  },
+  "source": {
+    "kind": "lever",
+    "name": "SEP",
+    "identifier": "sep",
+    "url": "https://api.lever.co/v0/postings/sep?mode=json",
+    "file": "fixtures/providers/lever/sep.json",
+    "id": "recorded-sep"
+  },
+  "events": [
+    {
+      "type": "job",
+      "source_id": "recorded-sep",
+      "external_id": "7b96b0c6-8429-4861-bf69-a00956e42a8d",
+      "title": "Azure Solution Architect (in person)",
+      "company": "SEP",
+      "role_type": "full_time",
+      "location": "Westfield, IN",
+      "url": "https://jobs.lever.co/sep/7b96b0c6-8429-4861-bf69-a00956e42a8d",
+      "date_posted": "2023-08-07T16:39:25.907Z",
+      "provider_updated_at": null,
+      "salary": null,
+      "locations": [
+        {
+          "raw": "Westfield, IN",
+          "city": null,
+          "region_code": "US-IN",
+          "country_code": "US",
+          "is_remote": false
+        }
+      ],
+      "workplace_type": "onsite",
+      "sponsorship": {
+        "value": "unknown",
+        "evidence": null
+      },
+      "clearance": {
+        "value": "unknown",
+        "level": null,
+        "evidence": null
+      },
+      "experience": {
+        "min_years": 5,
+        "max_years": null,
+        "raw": "5+ years",
+        "is_new_grad": "no",
+        "evidence": "<li><strong>5+ years professional experience with Azure</strong></li>"
+      },
+      "is_new_grad": "no",
+      "description_text": "SEP has an immediate opening for an experienced Azure solution architect. This position gets involved in our early discussions with clients looking to understand what solutions may be appropriate to the problems they've asked us to solve, provides guidance to our teams during development, and reviews existing architectures for improvement. \n\nThis is a client-facing consulting role responsible for leading technical discovery and solution discussions with our clients working with a wide variety of client stakeholders in IT, engineering, and marketing, as well as our client’s executive leaders.\n\n\nWhat we have to offer\n\n\n<li>Clients in a variety of domains with challenging problems to solve</li>\n<li>Flexible, reasonable work schedules</li>\n<li>Extensive opportunities to learn and develop yourself</li>\n<li>A community of friendly, talented, and effective peers</li>\n<li>Gorgeous facilities</li>\n\n\nWhat you'll be doing\n\n\n<li>Consult on and lead architectural activities on new and existing software systems</li>\n<li>Support sales meetings with your architectural expertise</li>\n<li>Quickly build trust with our clients</li>\n<li>Develop architectural prototypes to validate candidate solutions</li>\n<li>Occasional travel for meetings with clients</li>\n<li>Mentor software engineers both within and external to your team</li>\n<li>Work on projects in a wide variety of domains: life science, medical, aerospace, finance, heavy machinery (did we mention we have a lot of variety!?)</li>\n<li>Build and deliver great software while maintaining a clear understanding and vision of the client’s needs</li>\n<li>Guide team members towards effective solutions during all stages of the project</li>\n<li>Develop, present, and defend solution recommendations to client technical and business stakeholders</li>\n<li>Maintain project momentum through timely communication and problem solving with all stakeholders</li>\n<li>Keep up to date in your knowledge of Azure platform tools as new tools are released and existing tools are revised</li>\n<li>Deepen engineering expertise and technical capacity of team members through constructive feedback</li>\n<li>Help your teams, clients, and SEP constantly get better</li>\n\n\nKey attributes for applicants\n\n\n<li>A passion for great products, software development, and learning</li>\n<li>Breadth and depth of technical knowledge, and eagerness to share that knowledge</li>\n<li>Great team skills</li>\n<li>Excellent problem solving skills</li>\n<li>Excellent communication skills</li>\n<li>Interacting with clients in a technical role during sales discussions</li>\n<li><strong>5+ years professional experience with Azure</strong></li>\n<li><strong>5+ years professional experience with system architecture</strong></li>\n<li><strong>10+ years professional experience with mainstream development technologies</strong></li>\n<li>Must be legally authorized to work in the United States</li>\n<li>Must not require visa sponsorship or have work authorization based on OPT or CPT</li>\n<li>Must be able to work from our office in Westfield, IN</li>\n\n\nPreferred additional experience\n\n\n<li>Guiding strategies for determining integration points (such as Dynamics 365, SalesForce, other)</li>\n<li>Leading teams or organizations</li>\n<li>Communicating across organizational levels, including C-suite</li>\n<li>Conference speaking</li>\n<li>Azure Solutions Architect Expert certification</li>\n\n\nSEP is a software product design and development company located in Westfield, IN. We provide powerful teams of thoughtful developers and designers to bring ideas to life. Founded in 1988, SEP is one of Indiana’s largest software development firms with 180 employees. Our clients span from Fortune 100 to scale-up companies. We are 100% employee-owned through an ESOP and are consistently recognized for our great culture (Top Workplaces, Best Place to Work in Indiana, Techpoint Mira Exceptional Employer).\n\nWe are an equal opportunity employer as to all protected groups, including protected veterans and individuals with disabilities\n",
+      "company_icon_url": null,
+      "work_auth": {
+        "value": "unknown",
+        "evidence": null
+      }
+    },
+    {
+      "type": "job",
+      "source_id": "recorded-sep",
+      "external_id": "2eb79283-b3fd-4316-9e93-e80dbebfba05",
+      "title": "Data Engineer (in person)",
+      "company": "SEP",
+      "role_type": "full_time",
+      "location": "Westfield, IN",
+      "url": "https://jobs.lever.co/sep/2eb79283-b3fd-4316-9e93-e80dbebfba05",
+      "date_posted": "2026-05-21T18:11:00.345Z",
+      "provider_updated_at": null,
+      "salary": null,
+      "locations": [
+        {
+          "raw": "Westfield, IN",
+          "city": null,
+          "region_code": "US-IN",
+          "country_code": "US",
+          "is_remote": false
+        }
+      ],
+      "workplace_type": "onsite",
+      "sponsorship": {
+        "value": "unknown",
+        "evidence": null
+      },
+      "clearance": {
+        "value": "unknown",
+        "level": null,
+        "evidence": null
+      },
+      "experience": {
+        "min_years": null,
+        "max_years": null,
+        "raw": null,
+        "is_new_grad": "unknown",
+        "evidence": null
+      },
+      "is_new_grad": "unknown",
+      "description_text": "SEP is looking for a data engineer to join our growing data practice and deliver data solutions for our clients. We've been helping companies build great software products since 1988 in a wide range of industries and technologies, and more and more of these products are powered by data. Our clients want us to apply the same engineering rigor we bring to software development to their data pipelines and data platforms. You'll spend your days building, testing, and shipping data systems that real clients depend on. \n\n\nWhat we have to offer \n\n<div>\n\n<li>Variety on every axis — tools, technologies, market sectors, methodologies&nbsp;</li>\n<li>Flexible, reasonable work schedules&nbsp;</li>\n<li>Extensive opportunities to learn and develop yourself&nbsp;</li>\n<li>A community of friendly, talented, and effective peers&nbsp;</li>\n<li>Opportunities to try out different roles with minimal risk&nbsp;</li>\n<li>Gorgeous facilities&nbsp;</li>\n\n</div>\n\nWhat you'll be doing \n\n\n<li>Build and maintain data pipelines and transformations (batch and streaming)&nbsp;</li>\n<li>Implement data models for analytics use cases&nbsp;</li>\n<li>Write data quality checks and tests for data pipelines&nbsp;</li>\n<li>Configure orchestration and workflow tooling to support delivery&nbsp;</li>\n<li>Implement infrastructure as code for data platforms&nbsp;</li>\n<li>Investigate and resolve pipeline failures and performance issues&nbsp;</li>\n<li>Participate in peer code review and contribute to team documentation&nbsp;</li>\n<li>Communicate progress, blockers, and risks to the team and stakeholders&nbsp;</li>\n<li>Support client meetings in a technical capacity&nbsp;</li>\n\n\nKey attributes for applicants \n\n<div>\n\n<li>A passion for great products, software development, and learning&nbsp;</li>\n<li>Strong SQL skills with working proficiency in Python; experience with Spark, Scala, R, or C# is a plus&nbsp;</li>\n<li>Practical experience in data pipeline development, ideally in both batch and streaming patterns&nbsp;</li>\n<li>Understanding of data modeling patterns for analytics (dimensional modeling, normalized data models, lakehouse concepts)&nbsp;</li>\n<li>Hands-On experience with at least one cloud data platforms (Azure preferred, AWS and GCP experience also valued)&nbsp;</li>\n<li>Familiarity with modern data platforms such as Databricks, Snowflake, Microsoft Fabric, or Redshift&nbsp;</li>\n<li>Familiarity with orchestration and workflow management (Apache Airflow, Databricks Workflows, Temporal, or similar)&nbsp;</li>\n<li>Experience writing tests and data quality checks for pipelines&nbsp;</li>\n<li>Exposure to infrastructure as code tooling (Terraform, ARM/Bicep) and CI/CD pipelines (GitHub Actions or similar) is a plus&nbsp;</li>\n<li>Experience with analytics engineering tools like dbt and data catalog tools (Unity Catalog, Microsoft Purview) is a plus&nbsp;</li>\n<li>Applies software engineering best practices to data engineering (source control, automated testing, code review, CI/CD)&nbsp;</li>\n<li>Comfortable with ambiguity; can clarify requirements through conversation&nbsp;</li>\n<li>Interest in mentoring and developing less experienced engineers&nbsp;</li>\n<li>Professional data engineering experience (2+ years desired)&nbsp;</li>\n<li>Must be legally authorized to work in the United States&nbsp;</li>\n<li>Must not require visa sponsorship or have work authorization based on OPT or CPT&nbsp;</li>\n<li>Must be able to work from our office in Westfield, IN without relocation financial assistance&nbsp;</li>\n\n</div>\n\nSEP is a software product design and development company located in Westfield, IN. We provide powerful teams of thoughtful developers and designers to bring ideas to life. Founded in 1988, SEP is one of Indiana’s largest software development firms with 180 employees. Our clients span from Fortune 100 to scale-up companies. We are 100% employee-owned through an ESOP and are consistently recognized for our great culture (Top Workplaces, Best Place to Work in Indiana, Techpoint Mira Exceptional Employer).\n\nWe are an equal opportunity employer as to all protected groups, including protected veterans and individuals with disabilities\n",
+      "company_icon_url": null,
+      "work_auth": {
+        "value": "unknown",
+        "evidence": null
+      }
+    },
+    {
+      "type": "job",
+      "source_id": "recorded-sep",
+      "external_id": "80cd8c15-bafc-49a9-b8f1-5d407e891ec0",
+      "title": "Experienced Software Engineer (in person)",
+      "company": "SEP",
+      "role_type": "full_time",
+      "location": "Westfield, IN",
+      "url": "https://jobs.lever.co/sep/80cd8c15-bafc-49a9-b8f1-5d407e891ec0",
+      "date_posted": "2025-09-17T15:56:46.169Z",
+      "provider_updated_at": null,
+      "salary": null,
+      "locations": [
+        {
+          "raw": "Westfield, IN",
+          "city": null,
+          "region_code": "US-IN",
+          "country_code": "US",
+          "is_remote": false
+        }
+      ],
+      "workplace_type": "onsite",
+      "sponsorship": {
+        "value": "unknown",
+        "evidence": null
+      },
+      "clearance": {
+        "value": "unknown",
+        "level": null,
+        "evidence": null
+      },
+      "experience": {
+        "min_years": 2,
+        "max_years": null,
+        "raw": "2+ years",
+        "is_new_grad": "no",
+        "evidence": "<li><strong>Minimum 2 years experience building software professionally in a full-time role (not internships)</strong></li>"
+      },
+      "is_new_grad": "no",
+      "description_text": "SEP has an opening for an experienced software engineer. We've been helping companies build great software products since 1988 in a wide range of industries and technologies. We provide software product and design outsource and consulting services covering all areas of the software life cycle.\n\n\nWhat we have to offer\n\n\n<li>Variety on every axis ... tools, technologies, market sectors, methodologies</li>\n<li>Flexible, reasonable work schedules</li>\n<li>Extensive opportunities to learn and develop yourself</li>\n<li>A community of friendly, talented, and effective peers</li>\n<li>Opportunities to try out different roles with minimal risk</li>\n<li>Gorgeous facilities</li>\n\n\nWhat you'll be doing\n\n\n<li>Work in cross-functional teams to build product</li>\n<li>Mentor other engineers within your team</li>\n<li>Work on projects in a wide variety of domains: life science, medical, aerospace, finance, heavy machinery (did we mention we have a lot of variety!?)</li>\n<li>Build and deliver great software while maintaining a clear understanding and vision of the client’s needs</li>\n<li>Guide team members towards effective solutions during all stages of the project</li>\n<li>Maintain the project momentum through timely communication and problem solving with all stakeholders</li>\n<li>Deepen engineering expertise and technical capacity of team members through constructive feedback</li>\n<li>Help your team, client, and SEP constantly get better</li>\n\n\nKey attributes for applicants\n\n\n<li><strong>Minimum 2 years experience building software professionally in a full-time role (not internships)</strong></li>\n<li>A passion for great products, software development, and learning</li>\n<li>Breadth and depth of technical knowledge, and eagerness to share that knowledge</li>\n<li>Great team skills</li>\n<li>Excellent problem solving skills</li>\n<li>Effective communication skills</li>\n<li>Professional experience with mainstream development technologies (JavaScript, .NET, Python, iOS, Android, Java, React, etc.)</li>\n<li>Must be legally authorized to work in the United States</li>\n<li>Must not require visa sponsorship or have work authorization based on OPT or CPT</li>\n<li>Must be able to work from our office in Westfield, IN without relocation financial assistance</li>\n\n\nSEP is a software product design and development company located in Westfield, IN. We provide powerful teams of thoughtful developers and designers to bring ideas to life. Founded in 1988, SEP is one of Indiana’s largest software development firms with 180 employees. Our clients span from Fortune 100 to scale-up companies. We are 100% employee-owned through an ESOP and are consistently recognized for our great culture (Top Workplaces, Best Place to Work in Indiana, Techpoint Mira Exceptional Employer).\n\nWe are an equal opportunity employer as to all protected groups, including protected veterans and individuals with disabilities\n",
+      "company_icon_url": null,
+      "work_auth": {
+        "value": "unknown",
+        "evidence": null
+      }
+    },
+    {
+      "type": "job",
+      "source_id": "recorded-sep",
+      "external_id": "0b14158a-68e4-4e94-86f8-3f74c87cb3bd",
+      "title": "Lead Software Engineer (in person)",
+      "company": "SEP",
+      "role_type": "full_time",
+      "location": "Westfield, IN",
+      "url": "https://jobs.lever.co/sep/0b14158a-68e4-4e94-86f8-3f74c87cb3bd",
+      "date_posted": "2021-09-07T15:51:29.164Z",
+      "provider_updated_at": null,
+      "salary": null,
+      "locations": [
+        {
+          "raw": "Westfield, IN",
+          "city": null,
+          "region_code": "US-IN",
+          "country_code": "US",
+          "is_remote": false
+        }
+      ],
+      "workplace_type": "onsite",
+      "sponsorship": {
+        "value": "unknown",
+        "evidence": null
+      },
+      "clearance": {
+        "value": "unknown",
+        "level": null,
+        "evidence": null
+      },
+      "experience": {
+        "min_years": 5,
+        "max_years": null,
+        "raw": "5+ years",
+        "is_new_grad": "no",
+        "evidence": "Title indicates senior level: Lead Software Engineer (in person)"
+      },
+      "is_new_grad": "no",
+      "description_text": "SEP has openings for experienced lead software engineers. We've been helping companies build great software products since 1988 in a wide range of industries and technologies. We provide software product and design outsource and consulting services covering all areas of the software life cycle.\n\n\nWhat we have to offer\n\n\n<li>Variety on every axis ... tools, technologies, market sectors, methodologies</li>\n<li>Flexible, reasonable work schedules</li>\n<li>Extensive opportunities to learn and develop yourself</li>\n<li>A community of friendly, talented, and effective peers</li>\n<li>Opportunities to try out different roles with minimal risk</li>\n<li>Gorgeous facilities</li>\n\n\nWhat you'll be doing\n\n\n<li>Lead small- to medium-sized cross-functional teams to build product</li>\n<li>Work on projects in a wide variety of domains: life science, medical, aerospace, finance, heavy machinery (did we mention we have a lot of variety!?)</li>\n<li>Build and deliver great software while maintaining a clear understanding and vision of the client’s needs</li>\n<li>Guide team members towards effective solutions during all stages of the project</li>\n<li>Maintain the project momentum through timely communication and problem solving with all stakeholders</li>\n<li>Deepen engineering expertise and technical capacity of team members through constructive feedback</li>\n<li>Help your team, client, and SEP constantly get better</li>\n\n\nKey attributes for applicants\n\n\n<li>A passion for great products, software development, and learning</li>\n<li>Experience leading teams of 4 or more other engineers <strong>(5+ years desired)</strong></li>\n<li>Excellent problem solving skills</li>\n<li>Strong communication skills</li>\n<li>Professional experience with mainstream development technologies (JavaScript, .NET, Python, iOS, Android, Java, React, etc.) <strong>(10+ years desired)</strong></li>\n<li>Must be legally authorized to work in the United States</li>\n<li>Must not require visa sponsorship or have work authorization based on OPT or CPT</li>\n<li>Must be able to work from our office in Westfield, IN without relocation financial assistance</li>\n\n\nSEP is a software product design and development company located in Westfield, IN. We provide powerful teams of thoughtful developers and designers to bring ideas to life. Founded in 1988, SEP is one of Indiana’s largest software development firms with 180 employees. Our clients span from Fortune 100 to scale-up companies. We are 100% employee-owned through an ESOP and are consistently recognized for our great culture (Top Workplaces, Best Place to Work in Indiana, Techpoint Mira Exceptional Employer).\n\nWe are an equal opportunity employer as to all protected groups, including protected veterans and individuals with disabilities\n",
+      "company_icon_url": null,
+      "work_auth": {
+        "value": "unknown",
+        "evidence": null
+      }
+    },
+    {
+      "type": "job",
+      "source_id": "recorded-sep",
+      "external_id": "98fc318a-8ce1-4730-a898-3ca372878bb2",
+      "title": "Senior Data Engineer (in person)",
+      "company": "SEP",
+      "role_type": "full_time",
+      "location": "Westfield, IN",
+      "url": "https://jobs.lever.co/sep/98fc318a-8ce1-4730-a898-3ca372878bb2",
+      "date_posted": "2026-01-28T18:23:13.987Z",
+      "provider_updated_at": null,
+      "salary": null,
+      "locations": [
+        {
+          "raw": "Westfield, IN",
+          "city": null,
+          "region_code": "US-IN",
+          "country_code": "US",
+          "is_remote": false
+        }
+      ],
+      "workplace_type": "onsite",
+      "sponsorship": {
+        "value": "unknown",
+        "evidence": null
+      },
+      "clearance": {
+        "value": "unknown",
+        "level": null,
+        "evidence": null
+      },
+      "experience": {
+        "min_years": 5,
+        "max_years": null,
+        "raw": "5+ years",
+        "is_new_grad": "no",
+        "evidence": "Title indicates senior level: Senior Data Engineer (in person)"
+      },
+      "is_new_grad": "no",
+      "description_text": "Data is only as powerful as the foundation beneath it. At SEP, we're building that foundation — and we're looking for a Senior Data Engineer who's ready to lead the way.\n\nWe've been partnering with companies to build software that matters since 1988. From Fortune 100 enterprises to fast-moving scale-ups, our clients depend on us to tackle complexity, deliver with craft, and stay engaged through every stage of the work. Now, we're growing our data practice — and we want someone who's as excited about clean, connected, trustworthy data as we are.\n\n\nWhat we have to offer \n\n\n<li>Variety on every axis — tools, technologies, market sectors, methodologies&nbsp;</li>\n<li>Flexible, reasonable work schedules&nbsp;</li>\n<li>Extensive opportunities to learn and develop yourself&nbsp;</li>\n<li>A community of friendly, talented, and effective peers&nbsp;</li>\n<li>Opportunities to try out&nbsp;different roles&nbsp;with minimal risk&nbsp;</li>\n<li>Gorgeous facilities&nbsp;</li>\n\n\nWhat you'll be doing \n\n\n<li>Provide technical direction on data engagements and mentor other engineers&nbsp;</li>\n<li>Design and implement data pipelines and transformations (batch and streaming)&nbsp;</li>\n<li>Develop data models for analytics use cases&nbsp;</li>\n<li>Implement data quality checks and testing strategies for pipelines&nbsp;</li>\n<li>Configure and manage orchestration and workflow tooling&nbsp;</li>\n<li>Build and&nbsp;maintain&nbsp;infrastructure as code for data platforms&nbsp;</li>\n<li>Translate architectural direction into implementation plans&nbsp;</li>\n<li>Communicate progress, risks, and technical tradeoffs to stakeholders&nbsp;</li>\n<li>Support client meetings in a technical capacity&nbsp;</li>\n\n\nKey attributes for applicants \n\n\n<li>A passion for great products, software development, and learning&nbsp;</li>\n<li>Expert-level SQL skills with strong&nbsp;proficiency&nbsp;in Python; experience with Spark, Scala, R, or C# is a plus&nbsp;</li>\n<li>Deep&nbsp;expertise&nbsp;in data pipeline development, including batch and streaming patterns&nbsp;</li>\n<li>Solid understanding of data modeling patterns for analytics (dimensional modeling, data vault,&nbsp;lakehouse&nbsp;architectures)&nbsp;</li>\n<li>Experience with cloud data platforms — Azure preferred, AWS experience also valued&nbsp;</li>\n<li>Familiarity with modern data platforms such as Databricks, Snowflake, Microsoft Fabric, or Redshift&nbsp;</li>\n<li>Understanding of orchestration and workflow management (Apache Airflow, Databricks Workflows, Temporal, or similar)&nbsp;</li>\n<li>Experience with data quality frameworks and testing strategies for pipelines&nbsp;</li>\n<li>Familiarity with&nbsp;infrastructure&nbsp;as code tooling (Terraform, ARM/Bicep) and CI/CD pipelines (GitHub Actions or similar) is a plus&nbsp;</li>\n<li>Experience with analytics engineering tools like&nbsp;dbt&nbsp;and data catalog tools (Unity Catalog, Microsoft Purview) is a plus&nbsp;</li>\n<li>Ability to evaluate architectural tradeoffs in data systems (OLAP vs. OLTP, batch vs. streaming, warehouse vs.&nbsp;lakehouse)&nbsp;</li>\n<li>Comfortable with ambiguity; can clarify requirements through conversation&nbsp;</li>\n<li>Interest in mentoring and developing less experienced engineers&nbsp;</li>\n<li>Professional data engineering experience (8+ years desired)&nbsp;</li>\n<li>Must be legally authorized to work in the United States&nbsp;</li>\n<li>Must not require visa sponsorship or have work authorization based on OPT or CPT&nbsp;</li>\n<li>Must be able to work from our office in Westfield, IN without relocation financial&nbsp;assistance&nbsp;</li>\n\n\nSEP is a software product design and development company located in Westfield, IN. We provide powerful teams of thoughtful developers and designers to bring ideas to life. Founded in 1988, SEP is one of Indiana’s largest software development firms with 180 employees. Our clients span from Fortune 100 to scale-up companies. We are 100% employee-owned through an ESOP and are consistently recognized for our great culture (Top Workplaces, Best Place to Work in Indiana, Techpoint Mira Exceptional Employer).\n\nWe are an equal opportunity employer as to all protected groups, including protected veterans and individuals with disabilities\n",
+      "company_icon_url": null,
+      "work_auth": {
+        "value": "unknown",
+        "evidence": null
+      }
+    },
+    {
+      "type": "job",
+      "source_id": "recorded-sep",
+      "external_id": "0eccbd97-a731-4912-8856-a92942897be9",
+      "title": "Senior Product Designer (in person)",
+      "company": "SEP",
+      "role_type": "full_time",
+      "location": "Westfield, IN",
+      "url": "https://jobs.lever.co/sep/0eccbd97-a731-4912-8856-a92942897be9",
+      "date_posted": "2023-04-21T17:13:09.664Z",
+      "provider_updated_at": null,
+      "salary": null,
+      "locations": [
+        {
+          "raw": "Westfield, IN",
+          "city": null,
+          "region_code": "US-IN",
+          "country_code": "US",
+          "is_remote": false
+        }
+      ],
+      "workplace_type": "onsite",
+      "sponsorship": {
+        "value": "unknown",
+        "evidence": null
+      },
+      "clearance": {
+        "value": "unknown",
+        "level": null,
+        "evidence": null
+      },
+      "experience": {
+        "min_years": 5,
+        "max_years": null,
+        "raw": "5+ years",
+        "is_new_grad": "no",
+        "evidence": "Title indicates senior level: Senior Product Designer (in person)"
+      },
+      "is_new_grad": "no",
+      "description_text": "At SEP, we make vital software. The kind that keeps airplanes in the sky, helps farmers feed a growing population, and makes medical devices safe. Our clients range from Fortune 100 enterprises to fast-moving startups.\n\n\nWhy SEP for Your Design Career\n\n<p>The designer in this role embeds into one of our product teams, bringing human-centered design and complex problem-solving to platforms that range from data-heavy enterprise tooling to consumer mobile apps to software running on an embedded device.</p>\n<p>The problems are real ones. Our designers have made chemical-ID equipment usable through heavy gloves for first responders, and folded three separate engineering analysis tools into one, deliberately mirroring the Microsoft Office interface so engineers could pick it up without training. Complex, consequential, and rarely the kind of thing you can solve from a mockup.</p>\n<p>We're not an agency — we're a consultancy. We co-create with our clients, guiding not just what we build but how we build it. Designers here influence product direction, align cross-functional teams, and raise the bar for design maturity across industries.</p>\n<p>Curiosity is our default setting. We're relentless question-askers and makers. You'll solve real problems, reflect with peers, and share what works. Senior designers lead by example, coaching through collaboration, critique, and clear decision-making.</p>\n<p>We value assertiveness and empathy in equal measure. You'll need to read the room, push when it matters, and navigate ambiguity with care.</p>\n\nYou might be our new Senior Product Designer if:\n\n\n<li>\n<p>You enjoy the challenge of complex software design and have the work experience to prove it</p>\n</li>\n<li>\n<p>You thrive on finding the path forward that solves both business objectives and user needs</p>\n</li>\n<li>\n<p>Your passion for design shows up in the conversation, and you have the professional know-how to bring a client's product vision to life</p>\n</li>\n<li>\n<p>You like working alongside people with different technical backgrounds — the chance to learn, adapt, collaborate, and coach as a member of your product team</p>\n</li>\n\n\nResponsibilities and Duties\n\n\n<li>\n<p>Set design direction on your cross-functional client team and iterate toward it, refining the product experience as you learn</p>\n</li>\n<li>\n<p>Make the call when inputs conflict — user needs, business objectives, technical reality, and client opinion rarely point the same direction</p>\n</li>\n<li>\n<p>Work end-to-end on a client team: flows and diagrams, prototyping, pairing with other designers, collaborating with engineers — using dual-track Agile where it fits</p>\n</li>\n<li>\n<p>Plan, run, and synthesize generative and evaluative research</p>\n</li>\n<li>\n<p>Facilitate continuous discovery in a way that brings the team along rather than reporting findings at them</p>\n</li>\n<li>\n<p>Craft the artifacts that align a team around the broader user experience: conceptual models, user flows, information architecture, design systems, and prototypes</p>\n</li>\n<li>\n<p>Design AI into the product. Decide what the system does on its own, how a person stays in control, and where human judgment is still required</p>\n</li>\n<li>\n<p>Design alongside AI. While embedded with your product team, you'll both use AI tools to design solutions and pair with engineers shipping through agentic workflows. Less handing off screens, more setting the design system and patterns that the team — and its agents — both build against</p>\n</li>\n<li>\n<p>Work comfortably with developers. We don't expect you to code; we do expect you to know what code can do</p>\n</li>\n<li>\n<p>Contribute to the growth of design at SEP through writing, facilitation, and knowledge sharing</p>\n</li>\n<li>\n<p>Occasionally travel within Indiana and surrounding states to work on-site with clients or conduct product research</p>\n</li>\n<li>Leave your team, your client, and SEP better than you found them</li>\n\n\nRequired Qualifications\n\n\n<li>\n<p>8+ years of professional design experience, <strong>including&nbsp;4+ years focused on complex software problems</strong>, across more than one platform (web, mobile, desktop, embedded, or IoT)</p>\n</li>\n<li>\n<p>A Bachelor's degree in an applicable major</p>\n</li>\n<li>\n<p>A portfolio showcasing a variety of project types, <strong>with clear articulation of your own role and contributions</strong></p>\n</li>\n<li>\n<p>Proven experience with Figma</p>\n</li>\n<li>Experience collaborating with a cross-functional team in an Agile or Lean environment</li>\n<li>\n<p>Experience coaching and mentoring growing designers, engineers, and clients in their design awareness and understanding</p>\n</li>\n<li>\n<p>Modern product thinking, including working with metrics, to pragmatically inform design decisions</p>\n</li>\n<li>\n<p>Strong communication skills and the ability to stay highly organized</p>\n</li>\n<li>\n<p>Must be legally authorized to work in the United States. We aren't able to sponsor visas or hire candidates on OPT or CPT work authorization</p>\n</li>\n<li>Must be able to work from our office in Westfield, IN without relocation financial assistance</li>\n\n\nNice to have\n\n\n<li>\n<p>Consultancy or agency experience, including assessing client design maturity and coaching teams toward growth</p>\n</li>\n<li>Depth in embedded, device-constrained, or data-heavy platforms</li>\n<li>\n<p>Experience designing for complex systems such as AI systems, agent-assisted workflows, automation, or complex logic</p>\n</li>\n<li>\n<p>Fluency with prompt-to-prototype tooling such as Figma Make or Claude Design, and judgment about when it earns its place in the work and when it doesn't</p>\n</li>\n<li>HCI coursework, certification, or graduate study</li>\n\n\nBenefits\n\n\n<li>Flexible time off (FTO)</li>\n<li>Medical, dental, vision, long- and short-term disability, and life insurance</li>\n<li>401(k) and ESOP retirement programs — as an employee-owned company, you share in what we build</li>\n<li>Project variety</li>\n<li>Professional development reimbursements</li>\n<li>Fitness classes and on-site gym</li>\n<li>Free EV chargers</li>\n\n\nSEP is a software product design and development company located in Westfield, IN. We provide powerful teams of thoughtful developers and designers to bring ideas to life. Founded in 1988, SEP is one of Indiana’s largest software development firms with 180 employees. Our clients span from Fortune 100 to scale-up companies. We are 100% employee-owned through an ESOP and are consistently recognized for our great culture (Top Workplaces, Best Place to Work in Indiana, Techpoint Mira Exceptional Employer).\n\nWe are an equal opportunity employer as to all protected groups, including protected veterans and individuals with disabilities\n",
+      "company_icon_url": null,
+      "work_auth": {
+        "value": "unknown",
+        "evidence": null
+      }
+    },
+    {
+      "type": "job",
+      "source_id": "recorded-sep",
+      "external_id": "f7ad9ffb-03dc-4fb2-9a92-e5f04a85ba08",
+      "title": "Software Engineer (2027 start dates, in person)",
+      "company": "SEP",
+      "role_type": "full_time",
+      "location": "Westfield, IN",
+      "url": "https://jobs.lever.co/sep/f7ad9ffb-03dc-4fb2-9a92-e5f04a85ba08",
+      "date_posted": "2026-09-10T13:54:03.079Z",
+      "provider_updated_at": null,
+      "salary": null,
+      "locations": [
+        {
+          "raw": "Westfield, IN",
+          "city": null,
+          "region_code": "US-IN",
+          "country_code": "US",
+          "is_remote": false
+        }
+      ],
+      "workplace_type": "onsite",
+      "sponsorship": {
+        "value": "unknown",
+        "evidence": null
+      },
+      "clearance": {
+        "value": "unknown",
+        "level": null,
+        "evidence": null
+      },
+      "experience": {
+        "min_years": null,
+        "max_years": null,
+        "raw": null,
+        "is_new_grad": "unknown",
+        "evidence": null
+      },
+      "is_new_grad": "unknown",
+      "description_text": "SEP has openings for early career software engineers for in-person work at our office in Westfield, IN with start dates in 2027.\n \nWe've been helping companies build great software products since 1988 in a wide range of industries and technologies. We provide software product and design outsource and consulting services covering all areas of the software life cycle.\n\n\nWhat we have to offer\n\n\n<li>Variety on every axis ... tools, technologies, market sectors, methodologies</li>\n<li>Flexible, reasonable work schedules</li>\n<li>Extensive opportunities to learn and develop yourself</li>\n<li>A community of friendly, talented, and effective peers</li>\n<li>Opportunities to try out different roles with minimal risk</li>\n<li>Gorgeous facilities</li>\n\n\nWhat you'll be doing\n\n\n<li>Work in cross-functional teams to collaboratively build product</li>\n<li>Work on projects in a wide variety of domains: life science, medical, aerospace, finance, heavy machinery (did we mention we have a lot of variety!?)</li>\n<li>Communicate frequently with your team (current progress, potential issues, problems, etc.)</li>\n<li>Help your team, client, and SEP constantly get better</li>\n\n\nKey attributes for applicants\n\n\n<li>A passion for great products, software development, and learning</li>\n<li>Great team skills</li>\n<li>Excellent problem solving skills</li>\n<li>Effective communication skills</li>\n<li>A Bachelor's degree in applicable major</li>\n<li>Must be legally authorized to work in the United States</li>\n<li>Must not require visa sponsorship or have work authorization based on OPT or CPT</li>\n<li>Must be able to work from our office in Westfield, IN without relocation financial assistance</li>\n\n\nSEP is a software product design and development company located in Westfield, IN. We provide powerful teams of thoughtful developers and designers to bring ideas to life. Founded in 1988, SEP is one of Indiana’s largest software development firms with 180 employees. Our clients span from Fortune 100 to scale-up companies. We are 100% employee-owned through an ESOP and are consistently recognized for our great culture (Top Workplaces, Best Place to Work in Indiana, Techpoint Mira Exceptional Employer).\n\nWe are an equal opportunity employer as to all protected groups, including protected veterans and individuals with disabilities\n",
+      "company_icon_url": null,
+      "work_auth": {
+        "value": "unknown",
+        "evidence": null
+      }
+    },
+    {
+      "type": "job",
+      "source_id": "recorded-sep",
+      "external_id": "4efbdbce-a753-41b5-8ed7-0661cd193178",
+      "title": "Software Engineering Intern (Summer 2027, In person)",
+      "company": "SEP",
+      "role_type": "internship",
+      "location": "Westfield, IN",
+      "url": "https://jobs.lever.co/sep/4efbdbce-a753-41b5-8ed7-0661cd193178",
+      "date_posted": "2026-09-10T13:50:37.394Z",
+      "provider_updated_at": null,
+      "salary": null,
+      "locations": [
+        {
+          "raw": "Westfield, IN",
+          "city": null,
+          "region_code": "US-IN",
+          "country_code": "US",
+          "is_remote": false
+        }
+      ],
+      "workplace_type": "onsite",
+      "sponsorship": {
+        "value": "unknown",
+        "evidence": null
+      },
+      "clearance": {
+        "value": "unknown",
+        "level": null,
+        "evidence": null
+      },
+      "experience": {
+        "min_years": null,
+        "max_years": null,
+        "raw": null,
+        "is_new_grad": "unknown",
+        "evidence": null
+      },
+      "is_new_grad": "unknown",
+      "description_text": "SEP is looking for Computer Science and Computer Engineering interns for summer 2027 for in-person work at our office in Westfield, IN. We provide software product and design outsource and consulting services covering all areas of the software life cycle. Our internships are structured to provide real work experience in a project-based team environment.\n \n\n\nWhat we have to offer\n\n\n<li>Variety on every axis ... tools, technologies, market sectors, methodologies</li>\n<li>Reasonable work schedules</li>\n<li>Extensive opportunities to learn and develop yourself</li>\n<li>A community of friendly, talented, and effective peers</li>\n<li>The ability to truly make a difference with our clients and within SEP</li>\n<li>Excellent facilities</li>\n\n\nWhat you'll be doing\n\n\n<li>Join an existing team of engineers building a software product</li>\n<li>Participate in all aspects of the development process</li>\n<li>Get exposure to other projects happening at SEP</li>\n<li>Ask lots of questions and learn</li>\n\n\nKey attributes for applicants\n\n\n<li>Must be pursuing a Bachelor's degree in an applicable major and continuing that pursuit after the summer</li>\n<li>Must be able to spend a minimum of 10 weeks with us over the summer (can be up to 13 weeks)</li>\n<li>A 3.0 GPA or higher</li>\n<li>A passion for great products, software development, and learning</li>\n<li>Excellent problem solving skills</li>\n<li>Effective communication skills</li>\n<li>Great team skills</li>\n<li>Must be legally authorized to work in the United States</li>\n<li>Must not require visa sponsorship or have work authorization based on OPT or CPT</li>\n<li>Must be able to work from our office in Westfield, IN without relocation financial assistance</li>\n\n\nSEP is a software product design and development company located in Westfield, IN. We provide powerful teams of thoughtful developers and designers to bring ideas to life. Founded in 1988, SEP is one of Indiana’s largest software development firms with 180 employees. Our clients span from Fortune 100 to scale-up companies. We are 100% employee-owned through an ESOP and are consistently recognized for our great culture (Top Workplaces, Best Place to Work in Indiana, Techpoint Mira Exceptional Employer).\n\nWe are an equal opportunity employer as to all protected groups, including protected veterans and individuals with disabilities\n",
+      "company_icon_url": null,
+      "work_auth": {
+        "value": "unknown",
+        "evidence": null
+      }
+    }
+  ]
+}

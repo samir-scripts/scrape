@@ -20,4 +20,10 @@ describe("explicit browser demonstration", () => {
     expect(needsDesktop()).toBe(false);
     await expect(api.listJobs()).resolves.toHaveProperty("items");
   });
+  it("recorded examples reject simulated extraction and production cannot enable synthetic fixtures", async () => {
+    vi.stubEnv("MODE", "production"); vi.stubEnv("DEV", false);
+    vi.stubGlobal("window", { location: { search: "?demo=1&fixtures=1" } });
+    await expect(api.runScrapeNow()).rejects.toThrow("Recorded examples cannot execute a scrape");
+    await expect(api.previewWorkflow({} as never, "recorded-preview")).rejects.toThrow("Open the desktop application");
+  });
 });

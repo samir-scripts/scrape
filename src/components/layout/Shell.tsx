@@ -1,4 +1,5 @@
-import { isDemoMode } from "../../lib/runtime";
+import { recordedProvenance } from "../../lib/recordedJobs";
+import { isDemoMode, isFixtureMode } from "../../lib/runtime";
 import type { ReactNode } from "react";
 import { TopNav } from "./TopNav";
 import { SubNav } from "./SubNav";
@@ -23,7 +24,7 @@ export function Shell({
   return (
     <div className="flex flex-col w-screen h-screen overflow-hidden bg-[var(--color-paper)] text-[var(--color-ink)] select-none">
       {isDemoMode() && <div role="status" className="px-4 py-2 bg-[var(--color-lime)] text-[var(--color-accent-ink)] text-sm font-bold">
-        DEMONSTRATION · Fictional postings, simulated runs, browser-only storage.
+        {isFixtureMode() ? "TEST FIXTURES · Synthetic postings and simulated runs." : `RECORDED EXAMPLES · SEP public postings captured ${new Date(recordedProvenance.captured_at).toLocaleDateString()}. Availability may have changed. Open desktop to test a live source.`}
       </div>}
       <TopNav
         discoveredCount={discoveredCount}

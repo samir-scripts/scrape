@@ -5,7 +5,9 @@ import { workflowSpecToCreateInput, workflowSpecToYaml, validateWorkflowYaml } f
 import { matchesJob } from "./filter";
 import type { RemovedPosting } from "../bindings/RemovedPosting";
 import type { RemovalResult } from "../bindings/RemovalResult";
-import { needsDesktop } from "./runtime";
+import { needsDesktop, isFixtureMode, isRecordedMode } from "./runtime";
+import { recordedJobs } from "./recordedJobs";
+const storagePrefix = isFixtureMode() ? "scrape:demo:v1" : "scrape:recorded:v1";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { Job } from "../bindings/Job";
 import type { JobStatus } from "../bindings/JobStatus";
@@ -67,7 +69,7 @@ export const DEFAULT_SETTINGS: Settings = {
 let devSettings: Settings = (() => {
   try {
     if (typeof localStorage !== "undefined") {
-      const saved = localStorage.getItem("scrape:demo:v1:settings");
+      const saved = localStorage.getItem(`${storagePrefix}:settings`);
       if (saved) {
         const parsed = JSON.parse(saved) as Record<string, unknown>;
         const normalized: Record<string, unknown> = {};
@@ -123,17 +125,17 @@ export const SAMPLE_SWE_SOURCE: Source = {
 let devSources: Source[] = (() => {
   try {
     if (typeof localStorage !== "undefined") {
-      const saved = localStorage.getItem("scrape:demo:v1:sources");
+      const saved = localStorage.getItem(`${storagePrefix}:sources`);
       if (saved) return JSON.parse(saved, (key, value) => ["retention_days", "duration_ms"].includes(key) && typeof value === "number" ? BigInt(value) : value);
     }
   } catch {}
-  return [{ ...SAMPLE_SWE_SOURCE }];
+  return isFixtureMode() ? [{ ...SAMPLE_SWE_SOURCE }] : [];
 })();
 
 function saveDevSources() {
   try {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("scrape:demo:v1:sources", JSON.stringify(devSources, (_, value) => typeof value === "bigint" ? Number(value) : value));
+      localStorage.setItem(`${storagePrefix}:sources`, JSON.stringify(devSources, (_, value) => typeof value === "bigint" ? Number(value) : value));
     }
   } catch {}
 }
@@ -141,17 +143,17 @@ function saveDevSources() {
 let devJobs: Job[] = (() => {
   try {
     if (typeof localStorage !== "undefined") {
-      const saved = localStorage.getItem("scrape:demo:v1:jobs");
+      const saved = localStorage.getItem(`${storagePrefix}:jobs`);
       if (saved) return JSON.parse(saved, (key, value) => ["retention_days", "duration_ms"].includes(key) && typeof value === "number" ? BigInt(value) : value);
     }
   } catch {}
-  return [];
+  return isFixtureMode() ? [] : recordedJobs();
 })();
 
 function saveDevJobs() {
   try {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("scrape:demo:v1:jobs", JSON.stringify(devJobs));
+      localStorage.setItem(`${storagePrefix}:jobs`, JSON.stringify(devJobs));
     }
   } catch {}
 }
@@ -159,7 +161,7 @@ function saveDevJobs() {
 let devSourceRuns: ScrapeRun[] = (() => {
   try {
     if (typeof localStorage !== "undefined") {
-      const saved = localStorage.getItem("scrape:demo:v1:runs");
+      const saved = localStorage.getItem(`${storagePrefix}:runs`);
       if (saved) return JSON.parse(saved, (key, value) => ["retention_days", "duration_ms"].includes(key) && typeof value === "number" ? BigInt(value) : value);
     }
   } catch {}
@@ -169,7 +171,7 @@ let devSourceRuns: ScrapeRun[] = (() => {
 function saveDevSourceRuns() {
   try {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("scrape:demo:v1:runs", JSON.stringify(devSourceRuns, (_, value) => typeof value === "bigint" ? Number(value) : value));
+      localStorage.setItem(`${storagePrefix}:runs`, JSON.stringify(devSourceRuns, (_, value) => typeof value === "bigint" ? Number(value) : value));
     }
   } catch {}
 }
@@ -177,7 +179,7 @@ function saveDevSourceRuns() {
 let devLogs: Record<string, ScrapeLogEntry[]> = (() => {
   try {
     if (typeof localStorage !== "undefined") {
-      const saved = localStorage.getItem("scrape:demo:v1:logs");
+      const saved = localStorage.getItem(`${storagePrefix}:logs`);
       if (saved) return JSON.parse(saved, (key, value) => ["retention_days", "duration_ms"].includes(key) && typeof value === "number" ? BigInt(value) : value);
     }
   } catch {}
@@ -187,7 +189,7 @@ let devLogs: Record<string, ScrapeLogEntry[]> = (() => {
 function saveDevLogs() {
   try {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("scrape:demo:v1:logs", JSON.stringify(devLogs));
+      localStorage.setItem(`${storagePrefix}:logs`, JSON.stringify(devLogs));
     }
   } catch {}
 }
@@ -195,7 +197,7 @@ function saveDevLogs() {
 let devDeletedJobKeys: Set<string> = (() => {
   try {
     if (typeof localStorage !== "undefined") {
-      const saved = localStorage.getItem("scrape:demo:v1:deleted_jobs");
+      const saved = localStorage.getItem(`${storagePrefix}:deleted_jobs`);
       if (saved) return new Set(JSON.parse(saved));
     }
   } catch {}
@@ -205,16 +207,16 @@ let devDeletedJobKeys: Set<string> = (() => {
 function saveDevDeletedJobKeys() {
   try {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("scrape:demo:v1:deleted_jobs", JSON.stringify([...devDeletedJobKeys]));
+      localStorage.setItem(`${storagePrefix}:deleted_jobs`, JSON.stringify([...devDeletedJobKeys]));
     }
   } catch {}
 }
 
 let demoBlocks: RemovedPosting[] = (() => {
-  try { return JSON.parse(localStorage.getItem("scrape:demo:v1:blocks") || "[]"); } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(`${storagePrefix}:blocks`) || "[]"); } catch { return []; }
 })();
 function saveDemoBlocks() {
-  try { localStorage.setItem("scrape:demo:v1:blocks", JSON.stringify(demoBlocks)); } catch {}
+  try { localStorage.setItem(`${storagePrefix}:blocks`, JSON.stringify(demoBlocks)); } catch {}
 }
 const demoIdentity = (job: Job) => job.posting_identity || job.dedupe_key;
 function removeDemoJob(id: string, block: boolean): RemovalResult {
@@ -261,6 +263,7 @@ export function __seedDevJobs(jobs: Job[]) {
 }
 
 export function generateScrapedJobsForSource(source: Source, applyFilters = true): Job[] {
+  if (!isFixtureMode()) throw new Error("Synthetic fixtures are restricted to test harnesses.");
   const now = new Date().toISOString();
   const isCloudflare = source.identifier.toLowerCase() === "cloudflare";
   const company = "Demo Company";
@@ -730,7 +733,7 @@ const apiImplementation = {
       (devSettings as unknown as Record<string, unknown>)[key] = value;
       try {
         if (typeof localStorage !== "undefined") {
-          localStorage.setItem("scrape:demo:v1:settings", JSON.stringify(devSettings));
+          localStorage.setItem(`${storagePrefix}:settings`, JSON.stringify(devSettings));
         }
       } catch {}
       return Promise.resolve({ ...devSettings });
@@ -1394,8 +1397,9 @@ export const api: typeof apiImplementation = new Proxy(apiImplementation, {
   get(target, key: keyof typeof apiImplementation) {
     const method = target[key];
     return (...args: unknown[]) => {
+      if (isRecordedMode() && ["runSourceNow", "runScrapeNow", "previewWorkflow", "dryRunSource", "detectSource", "previewSource"].includes(String(key))) return Promise.reject(new Error("Recorded examples cannot execute a scrape. Open the desktop application to test a live source."));
       if (needsDesktop()) return Promise.reject(new Error(
-        "This action requires the desktop application. Open ?demo=1 for fictional demonstration data."
+        "This action requires the desktop application. Open ?demo=1 for recorded provider examples."
       ));
       return Promise.resolve(Reflect.apply(method, target, args)).catch(error => {
         if (error instanceof Error) throw error;

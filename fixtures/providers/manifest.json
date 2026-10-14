@@ -1,0 +1,18 @@
+{
+  "sep": {
+    "kind": "lever",
+    "board": "sep",
+    "capture_url": "https://api.lever.co/v0/postings/sep?mode=json",
+    "captured_at": "2026-10-14T03:27:51.591154+00:00",
+    "sha256": "dbda1f6de673d485bb313f973afca5023f17a55b3ac536ecf8d9d1f1425e3989",
+    "extraction_version": "scrape-worker 0.1.0; protocol 2"
+  },
+  "linear": {
+    "kind": "ashby",
+    "board": "linear",
+    "capture_url": "https://api.ashbyhq.com/posting-api/job-board/linear?includeCompensation=true",
+    "captured_at": "2026-10-14T03:29:45.613116+00:00",
+    "sha256": "c312aacc520506ff64c227452540daa7036f92bb215bbf0a56ba8fededbc2a38",
+    "extraction_version": "scrape-worker 0.1.0; protocol 2"
+  }
+}

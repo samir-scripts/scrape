@@ -40,6 +40,9 @@ jobs:
       - name: Build required sidecar
         run: npm run build:sidecar
 
+      - name: Recorded provider HTTP replay through the actual worker
+        run: npm run test:providers
+
       - name: Format check (Rust)
         run: cargo fmt --all --check
 
@@ -70,7 +73,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Browser interaction regressions
-        run: npx playwright test e2e/workflows.pw.ts e2e/jobs.pw.ts
+        run: npx playwright test e2e/workflows.pw.ts e2e/jobs.pw.ts e2e/fonts.pw.ts
 
   native-and-visual:
     name: Native and visual verification
