@@ -1,8 +1,8 @@
-import { spawn } from "node:child_process";
+import { runNativeDev } from "./tauri-dev-test.mjs";
 import { createServer } from "node:http";
-import { mkdtemp, writeFile, readFile, chmod, realpath } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolve, join } from "node:path";
+import { join } from "node:path";
 const directory = await mkdtemp(join(tmpdir(), "scrape-native-smoke-"));
 let opened = 0;
 const server = createServer((request, response) => {
@@ -140,18 +140,11 @@ await writeFile(join(directory, "smoke.js"), `
 `);
 await writeFile(join(directory, "failure-worker.js"), failureWorker);
 await chmod(join(directory, "failure-worker.js"), 0o755);
-const vite = spawn(process.execPath, ["node_modules/vite/bin/vite.js", "--host", "127.0.0.1"], { stdio: "ignore" });
-let child;
 try {
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) { try { if ((await fetch("http://127.0.0.1:1420")).ok) break; } catch {} await new Promise(resolve => setTimeout(resolve, 100)); }
-  // Tauri resolves adjacent sidecars only from a canonical executable path.
-  child = spawn(await realpath(resolve("target/debug/scrape")), [], { env: { ...process.env, SCRAPE_NATIVE_SMOKE_DIR: directory }, stdio: "inherit" });
-  const timer = setTimeout(() => child.kill("SIGKILL"), 70000);
-  const code = await new Promise(resolve => child.once("exit", resolve)); clearTimeout(timer);
-  if (code !== 0) throw new Error(`Native smoke failed (${code}); isolated artifacts: ${directory}`);
+  const { code, signal, output } = await runNativeDev(directory);
+  if (code !== 0 || signal) throw new Error(`Native smoke failed (${code}/${signal}); isolated artifacts: ${directory}\n${output}`);
   const completion = JSON.parse(await readFile(join(directory, "result.json"), "utf8"));
   if (!completion.ok) throw new Error("Native smoke did not complete: " + JSON.stringify(completion));
   if (!opened) throw new Error("Native opener returned without reaching the local destination");
   console.log(`Native smoke passed; external destination reached. Isolated artifacts: ${directory}`);
-} finally { child?.kill(); vite.kill(); server.closeAllConnections(); server.close(); }
+} finally { server.closeAllConnections(); server.close(); }

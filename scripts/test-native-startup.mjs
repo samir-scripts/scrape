@@ -1,8 +1,9 @@
-import { spawn, execFileSync } from "node:child_process";
+import { runNativeDev } from "./tauri-dev-test.mjs";
+import { checkNativeAppearance } from "./native-appearance.mjs";
+import { execFileSync } from "node:child_process";
 import { mkdtemp, writeFile, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { createServer } from "node:net";
 import { createHash } from "node:crypto";
 
 const fixture = String.raw`
@@ -40,37 +41,17 @@ for (const mode of modes) {
       const invoke = window.__TAURI_INTERNALS__.invoke;
       const jobs = await invoke("list_jobs", {filter:{}});
       ${mode === "fresh" ? "" : "if (jobs.items[0]?.notes !== 'Fixture saved note' || !jobs.items[0]?.favorited || jobs.items[0]?.status !== 'applied') throw new Error('Saved state changed');"}
-      await invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:true,steps:["actual Tauri dev readiness: ${mode}"]}});
+      const appearance = ${process.env.SCRAPE_NATIVE_APPEARANCE === "1" ? `await (${checkNativeAppearance.toString()})()` : "null"};
+      await invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:true,appearance,steps:["actual Tauri dev readiness: ${mode}"]}});
     } catch(error) {
       await window.__TAURI_INTERNALS__.invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:false,error:String(error)}});
     }
   })();`);
-  // Use an isolated port while retaining the actual configured build/dev pipeline.
-  const reservation = createServer();
-  await new Promise(resolve => reservation.listen(0, "127.0.0.1", resolve));
-  const port = reservation.address().port;
-  await new Promise(resolve => reservation.close(resolve));
-  const config = JSON.stringify({build:{
-    beforeDevCommand:`npm run build:sidecar && npm run dev -- --host 127.0.0.1 --port ${port}`,
-    devUrl:`http://127.0.0.1:${port}`,
-  }, app:{windows:[{label:"main",title:"Scrape isolated startup test",visible:true,width:1280,height:800}]}});
-  const child = spawn("npm", ["run", "tauri", "--", "dev", "--no-watch", "--config", config], {
-    env: {...process.env, SCRAPE_NATIVE_SMOKE_DIR:directory}, detached:true,
-    stdio:["ignore","pipe","pipe"],
+  const { code, signal, output } = await runNativeDev(directory, {
+    width: Number(process.env.SCRAPE_NATIVE_WIDTH || 1280),
+    height: process.env.SCRAPE_NATIVE_APPEARANCE === "1" ? 600 : 800,
+    scrollbarMode: process.env.SCRAPE_SCROLLBAR_MODE || "Automatic",
   });
-  let output = "";
-  child.stdout.on("data", bytes => output += bytes);
-  child.stderr.on("data", bytes => output += bytes);
-  const timer = setTimeout(() => { try { process.kill(-child.pid, "SIGKILL"); } catch {} }, 120000);
-  let code, signal;
-  try {
-    [code, signal] = await new Promise(resolve => child.once("exit", (code,signal) => resolve([code,signal])));
-  } finally {
-    clearTimeout(timer);
-    // Clean up only this test's owned dev server/process group.
-    try { process.kill(-child.pid, "SIGTERM"); } catch {}
-  }
-  await writeFile(join(directory, "dev-startup.log"), output);
   const invalid = signal || /panicked|non-unwinding|SIGABRT/.test(output);
   if (mode.startsWith("unknown")) {
     if (invalid || code === 0 || !output.includes("STARTUP_FAILED:") || !output.includes(`version ${mode === "unknown19" ? 19 : 12}`) || hash(await readFile(database)) !== before)

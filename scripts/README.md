@@ -36,3 +36,26 @@ side effects. Playwright browser checks live in `e2e/`.
 with isolated ports and temporary database fixtures. It verifies native readiness
 on fresh and both migration-12 histories, and controlled nonzero refusal of an
 unknown checksum without a panic or database mutation. Run `npm run test:native-startup`.
+
+### Isolated native startup and appearance
+
+`test-native-startup.mjs` and `native-smoke.mjs` share `tauri-dev-test.mjs`.
+It reserves a local port, launches the actual Tauri dev pipeline with that URL,
+shows a temporary-profile window, records completion/logs, and cleans up only its
+owned process group. It does not reuse another dev server or use the live database.
+
+The startup matrix covers fresh, recognized version-12/version-19 histories and
+unknown checksums. Select specific fixtures with `SCRAPE_STARTUP_MODES`.
+`SCRAPE_NATIVE_APPEARANCE=1` additionally exercises real WKWebView theme controls,
+all five local font families, native selects, scrollbar fallback colors, icon names,
+target sizes, and workflow-dialog font inheritance. For example:
+
+```sh
+SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_APPEARANCE=1 SCRAPE_SCROLLBAR_MODE=Always npm run test:native-startup
+SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_APPEARANCE=1 SCRAPE_NATIVE_WIDTH=480 SCRAPE_SCROLLBAR_MODE=Automatic npm run test:native-startup
+```
+
+Scrollbar preference arguments are scoped to the launched macOS test process;
+the scripts do not change global OS preferences. Appearance results include the
+actual WebView user agent and computed theme/scrollbar values in `result.json`.
+Computed-style checks do not replace a native screenshot or pointer/keyboard QA.
