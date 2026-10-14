@@ -1164,6 +1164,9 @@ const apiImplementation = {
         location: j.location || "Remote",
         url: j.url,
         date_posted: j.date_posted,
+        location_data_complete: j.locations.some(
+          (location) => Boolean(location.city || location.region_code || location.country_code),
+        ),
         salary: j.salary_min
           ? {
               min: j.salary_min,
@@ -1211,6 +1214,9 @@ const apiImplementation = {
         location: j.location || "Remote",
         url: j.url,
         date_posted: j.date_posted,
+        location_data_complete: j.locations.some(
+          (location) => Boolean(location.city || location.region_code || location.country_code),
+        ),
         salary: j.salary_min
           ? {
               min: j.salary_min,

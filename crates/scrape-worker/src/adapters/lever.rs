@@ -107,7 +107,7 @@ fn parse_lever_postings(
         } else {
             loc_strings.join("; ")
         };
-        let locations = loc_enrich::parse(&location_str);
+        let mut locations = loc_enrich::parse(&location_str);
 
         // Combine description texts
         let mut desc_parts = Vec::new();
@@ -137,6 +137,16 @@ fn parse_lever_postings(
             .as_deref()
             .map(|text| normalize_description_with_format(text, DescriptionFormat::Mixed, 32768));
         let desc_text = description.as_ref().map(|d| d.plain_text.clone());
+        let section_locations = description
+            .as_ref()
+            .map(loc_enrich::from_description_sections);
+        let location_data_complete = loc_enrich::has_geographic_value(&locations)
+            || section_locations
+                .as_ref()
+                .is_some_and(|evidence| evidence.section_found);
+        if let Some(evidence) = section_locations {
+            locations.extend(evidence.locations);
+        }
 
         // Workplace type
         let workplace_type = classify_workplace(
@@ -209,6 +219,7 @@ fn parse_lever_postings(
             date_posted,
             salary,
             locations,
+            location_data_complete,
             workplace_type,
             sponsorship,
             clearance,

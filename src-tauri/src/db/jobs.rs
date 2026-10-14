@@ -196,6 +196,8 @@ pub struct ScrapedJob {
     pub url: String,
     pub date_posted: Option<String>,
     #[serde(default)]
+    pub location_data_complete: bool,
+    #[serde(default)]
     #[ts(optional = nullable)]
     pub provider_updated_at: Option<String>,
 
@@ -1151,7 +1153,7 @@ impl JobsRepo {
                     .await?;
 
                     // Replace locations child table entries
-                    if !job.locations.is_empty() {
+                    if job.location_data_complete {
                         sqlx::query("DELETE FROM job_locations WHERE job_id = ?")
                             .bind(&ex_id)
                             .execute(&mut *tx)
@@ -1258,22 +1260,25 @@ impl JobsRepo {
                     .execute(&mut *tx)
                     .await?;
 
-                    // Insert locations
-                    for loc in &job.locations {
-                        sqlx::query(
-                            r#"
-                            INSERT OR IGNORE INTO job_locations (job_id, raw, city, region_code, country_code, is_remote)
-                            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-                            "#,
-                        )
-                        .bind(&id)
-                        .bind(&loc.raw)
-                        .bind(&loc.city)
-                        .bind(&loc.region_code)
-                        .bind(&loc.country_code)
-                        .bind(if loc.is_remote { 1 } else { 0 })
-                        .execute(&mut *tx)
-                        .await?;
+                    // Insert locations only when the source exposed complete
+                    // eligibility data; an empty vector then means known empty.
+                    if job.location_data_complete {
+                        for loc in &job.locations {
+                            sqlx::query(
+                                r#"
+                                INSERT OR IGNORE INTO job_locations (job_id, raw, city, region_code, country_code, is_remote)
+                                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                                "#,
+                            )
+                            .bind(&id)
+                            .bind(&loc.raw)
+                            .bind(&loc.city)
+                            .bind(&loc.region_code)
+                            .bind(&loc.country_code)
+                            .bind(if loc.is_remote { 1 } else { 0 })
+                            .execute(&mut *tx)
+                            .await?;
+                        }
                     }
                 }
             }
@@ -1639,6 +1644,7 @@ mod tests {
                 location: Some("San Francisco, CA".to_string()),
                 url: "https://stripe.com/jobs/101".to_string(),
                 provider_updated_at: None,
+                location_data_complete: true,
                 date_posted: Some("2026-10-01T00:00:00Z".to_string()),
                 salary_min: Some(180_000),
                 salary_max: Some(240_000),
@@ -1695,6 +1701,7 @@ mod tests {
                 location: Some("Remote".to_string()),
                 url: "https://figma.com/jobs/202".to_string(),
                 provider_updated_at: None,
+                location_data_complete: true,
                 date_posted: None,
                 salary_min: Some(130_000),
                 salary_max: Some(160_000),
@@ -1881,6 +1888,7 @@ mod tests {
             location: Some("San Francisco, CA".to_string()),
             url: "https://stripe.com/jobs/eng-1".to_string(),
             provider_updated_at: None,
+            location_data_complete: true,
             date_posted: Some("2026-10-01T00:00:00Z".to_string()),
             salary_min: None,
             salary_max: None,
@@ -1952,6 +1960,7 @@ mod tests {
             location: Some("Seattle, WA".to_string()),
             url: "https://stripe.com/jobs/eng-1".to_string(),
             provider_updated_at: None,
+            location_data_complete: true,
             date_posted: Some("2026-10-01T00:00:00Z".to_string()),
             salary_min: Some(210_000),
             salary_max: Some(275_000),
@@ -1986,7 +1995,30 @@ mod tests {
             }],
         };
 
-        let result2 = JobsRepo::upsert_scraped(&pool, &[updated_job])
+        // A partial refresh that reports only Remote does not mean known
+        // eligible geography became empty; retain the last explicit location.
+        let mut incomplete_job = updated_job.clone();
+        incomplete_job.location_data_complete = false;
+        incomplete_job.location = Some("Remote".into());
+        incomplete_job.workplace_type = WorkplaceType::Remote;
+        incomplete_job.locations = vec![ParsedLocation {
+            raw: "Remote".into(),
+            city: None,
+            region_code: None,
+            country_code: None,
+            is_remote: true,
+        }];
+        JobsRepo::upsert_scraped(&pool, &[incomplete_job])
+            .await
+            .unwrap();
+        let after_partial = JobsRepo::get(&pool, &job_id).await.unwrap();
+        assert_eq!(after_partial.locations.len(), 1);
+        assert_eq!(
+            after_partial.locations[0].city.as_deref(),
+            Some("San Francisco")
+        );
+
+        let result2 = JobsRepo::upsert_scraped(&pool, std::slice::from_ref(&updated_job))
             .await
             .unwrap();
         assert_eq!(result2.inserted, 0);
@@ -2012,6 +2044,20 @@ mod tests {
             after_rescrape.locations[0].region_code.as_deref(),
             Some("US-WA")
         );
+
+        // An explicitly complete empty result is different from an
+        // incomplete refresh and can clear stale eligible locations.
+        let mut complete_empty = updated_job.clone();
+        complete_empty.location_data_complete = true;
+        complete_empty.locations.clear();
+        JobsRepo::upsert_scraped(&pool, &[complete_empty])
+            .await
+            .unwrap();
+        assert!(JobsRepo::get(&pool, &job_id)
+            .await
+            .unwrap()
+            .locations
+            .is_empty());
     }
 
     #[tokio::test]
@@ -2030,6 +2076,7 @@ mod tests {
             location: Some("Washington, DC".to_string()),
             url: "https://example.com/01".to_string(),
             provider_updated_at: None,
+            location_data_complete: true,
             date_posted: Some("2026-10-05T00:00:00Z".to_string()),
             salary_min: None,
             salary_max: None,
@@ -2130,6 +2177,7 @@ mod tests {
                 location: Some("Remote".to_string()),
                 url: "https://vercel.com/1".to_string(),
                 provider_updated_at: None,
+                location_data_complete: true,
                 date_posted: Some("2026-10-01".to_string()),
                 salary_min: Some(160_000),
                 salary_max: Some(200_000),
@@ -2182,6 +2230,7 @@ mod tests {
                 location: Some("Arlington, VA".to_string()),
                 url: "https://lockheed.com/2".to_string(),
                 provider_updated_at: None,
+                location_data_complete: true,
                 date_posted: Some("2026-10-02".to_string()),
                 salary_min: Some(130_000),
                 salary_max: Some(170_000),
@@ -2274,6 +2323,7 @@ mod tests {
             location: Some("San Francisco, CA".to_string()),
             url: "https://example.com/ca".to_string(),
             provider_updated_at: None,
+            location_data_complete: true,
             date_posted: None,
             salary_min: None,
             salary_max: None,
@@ -2319,6 +2369,7 @@ mod tests {
             location: Some("Toronto, ON".to_string()),
             url: "https://example.com/on".to_string(),
             provider_updated_at: None,
+            location_data_complete: true,
             date_posted: None,
             salary_min: None,
             salary_max: None,
@@ -2406,6 +2457,7 @@ mod tests {
             location: Some("Remote".to_string()),
             url: "https://example.com/fav/1".to_string(),
             provider_updated_at: None,
+            location_data_complete: true,
             date_posted: None,
             salary_min: None,
             salary_max: None,
@@ -2472,6 +2524,7 @@ mod tests {
             location: None,
             url: "https://example.com/a".to_string(),
             provider_updated_at: None,
+            location_data_complete: true,
             date_posted: None,
             salary_min: None,
             salary_max: None,
@@ -2511,6 +2564,7 @@ mod tests {
             location: None,
             url: "https://example.com/b".to_string(),
             provider_updated_at: None,
+            location_data_complete: true,
             date_posted: None,
             salary_min: None,
             salary_max: None,
@@ -2846,6 +2900,7 @@ mod tests {
             locations: vec![],
             url: "https://example.com/job/99999".into(),
             provider_updated_at: None,
+            location_data_complete: true,
             date_posted: None,
             salary_min: None,
             salary_max: None,

@@ -1,3 +1,4 @@
+use super::{DescriptionBlock, DescriptionInline, JobDescription};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -9,6 +10,18 @@ pub struct ParsedLocation {
     pub region_code: Option<String>, // ISO 3166-2 e.g. "US-CA", "CA-ON"
     pub country_code: Option<String>, // ISO 3166-1 alpha-2 e.g. "US", "CA", "GB"
     pub is_remote: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocationSectionExtraction {
+    pub section_found: bool,
+    pub locations: Vec<ParsedLocation>,
+}
+
+pub fn has_geographic_value(locations: &[ParsedLocation]) -> bool {
+    locations.iter().any(|location| {
+        location.city.is_some() || location.region_code.is_some() || location.country_code.is_some()
+    })
 }
 
 struct StateEntry {
@@ -583,6 +596,171 @@ pub fn parse(raw_input: &str) -> Vec<ParsedLocation> {
     parts.into_iter().map(parse_single).collect()
 }
 
+/// Extract eligible geography only from explicitly labeled location sections
+/// in a normalized job description. `raw` on each returned location retains
+/// the section label and candidate as its evidence provenance.
+pub fn from_description_sections(description: &JobDescription) -> LocationSectionExtraction {
+    const MAX_VALUES: usize = 16;
+    const MAX_VALUE_BYTES: usize = 256;
+
+    let mut active_label: Option<String> = None;
+    let mut locations = Vec::new();
+    let mut section_found = false;
+
+    for block in &description.blocks {
+        match block {
+            DescriptionBlock::Heading { children, .. } => {
+                let text = inline_text(children);
+                active_label = location_section_label(&text).map(str::to_owned);
+                section_found |= active_label.is_some();
+            }
+            DescriptionBlock::Paragraph { children } => {
+                let text = inline_text(children);
+                if let Some((label, value)) = labeled_location_value(&text) {
+                    section_found = true;
+                    add_location_value(&mut locations, label, value, MAX_VALUES, MAX_VALUE_BYTES);
+                    active_label = None;
+                } else if let Some(label) = location_section_label(&text) {
+                    active_label = Some(label.to_owned());
+                    section_found = true;
+                } else if let Some(label) = active_label.as_deref() {
+                    add_location_value(&mut locations, label, &text, MAX_VALUES, MAX_VALUE_BYTES);
+                }
+            }
+            DescriptionBlock::List { items, .. } => {
+                if let Some(label) = active_label.as_deref() {
+                    for item in items {
+                        add_location_value(
+                            &mut locations,
+                            label,
+                            &inline_text(item),
+                            MAX_VALUES,
+                            MAX_VALUE_BYTES,
+                        );
+                    }
+                }
+            }
+            DescriptionBlock::Break => {}
+        }
+        if locations.len() >= MAX_VALUES {
+            break;
+        }
+    }
+
+    LocationSectionExtraction {
+        section_found,
+        locations,
+    }
+}
+
+fn add_location_value(
+    locations: &mut Vec<ParsedLocation>,
+    label: &str,
+    raw_value: &str,
+    max_values: usize,
+    max_value_bytes: usize,
+) {
+    if locations.len() >= max_values {
+        return;
+    }
+    let value = raw_value
+        .trim()
+        .trim_matches(['•', '-', '–', '—', ':', ' ']);
+    if value.is_empty() || value.len() > max_value_bytes {
+        return;
+    }
+    let comma_parts: Vec<_> = value.split(',').map(str::trim).collect();
+    let parsed = if comma_parts.len() > 1
+        && comma_parts.iter().all(|part| {
+            let parsed = parse(part);
+            !parsed.is_empty()
+                && parsed.iter().all(|location| {
+                    location.country_code.is_some()
+                        && location.region_code.is_none()
+                        && location.city.is_none()
+                })
+        }) {
+        comma_parts.iter().flat_map(|part| parse(part)).collect()
+    } else {
+        parse(value)
+    };
+    for mut location in parsed {
+        if location.country_code.is_none()
+            && location.region_code.is_none()
+            && location.city.is_none()
+        {
+            continue;
+        }
+        location.raw = format!("{label}: {value}");
+        if !locations.iter().any(|existing| {
+            existing.city == location.city
+                && existing.region_code == location.region_code
+                && existing.country_code == location.country_code
+                && existing.is_remote == location.is_remote
+        }) {
+            locations.push(location);
+        }
+    }
+}
+
+fn inline_text(nodes: &[DescriptionInline]) -> String {
+    let mut text = String::new();
+    for node in nodes {
+        match node {
+            DescriptionInline::Text { text: value } => text.push_str(value),
+            DescriptionInline::Strong { children } | DescriptionInline::Emphasis { children } => {
+                text.push_str(&inline_text(children));
+            }
+            DescriptionInline::Link { text: value, .. } => text.push_str(value),
+        }
+    }
+    text
+}
+
+fn location_section_label(value: &str) -> Option<&'static str> {
+    let label = value
+        .trim()
+        .trim_end_matches([':', '.', ' '])
+        .to_ascii_lowercase();
+    match label.as_str() {
+        "available locations" | "available work locations" => Some("Available Locations"),
+        "eligible locations" | "eligible countries" => Some("Eligible Locations"),
+        "work location" | "work locations" => Some("Work Location"),
+        "location" | "locations" => Some("Location"),
+        _ => None,
+    }
+}
+
+fn labeled_location_value(value: &str) -> Option<(&'static str, &str)> {
+    let trimmed = value.trim();
+    for label in [
+        "available work locations",
+        "available locations",
+        "eligible locations",
+        "eligible countries",
+        "work locations",
+        "work location",
+        "locations",
+        "location",
+    ] {
+        let Some(rest) = trimmed.get(label.len()..) else {
+            continue;
+        };
+        if !trimmed[..label.len()].eq_ignore_ascii_case(label) {
+            continue;
+        }
+        let rest = rest.trim_start();
+        let rest = rest
+            .strip_prefix(':')
+            .or_else(|| rest.strip_prefix('—'))
+            .or_else(|| rest.strip_prefix('–'))
+            .or_else(|| rest.strip_prefix('-'))?;
+        let canonical = location_section_label(label).unwrap_or("Available Locations");
+        return Some((canonical, rest));
+    }
+    None
+}
+
 fn parse_single(raw: &str) -> ParsedLocation {
     let upper = raw.to_uppercase();
     let is_remote = upper.contains("REMOTE")
@@ -645,7 +823,11 @@ fn parse_single(raw: &str) -> ParsedLocation {
 
     // Check Country
     if country_code.is_none() {
-        if upper.contains("UNITED STATES")
+        let normalized_country = upper.trim_matches(|c: char| !c.is_ascii_alphanumeric());
+        if matches!(
+            normalized_country,
+            "US" | "USA" | "UNITED STATES" | "UNITED STATES OF AMERICA"
+        ) || upper.contains("UNITED STATES")
             || upper.contains("USA")
             || upper.contains("U.S.")
             || upper.ends_with(" US")
@@ -723,5 +905,41 @@ mod tests {
 
         let country_ge = parse("Tbilisi, Georgia").remove(0);
         assert_eq!(country_ge.country_code, Some("GE".to_string()));
+    }
+
+    #[test]
+    fn labeled_description_section_provides_location_evidence_and_provenance() {
+        let description = super::super::normalize_description(
+            "<h3>Available Locations</h3><ul><li>US</li><li>Canada</li><li>US, Canada</li></ul><h3>About Us</h3><p>We serve the United States.</p>",
+            4096,
+        );
+        let extracted = from_description_sections(&description);
+        let locations = extracted.locations;
+        assert_eq!(locations.len(), 2);
+        assert_eq!(locations[0].country_code.as_deref(), Some("US"));
+        assert_eq!(locations[0].raw, "Available Locations: US");
+        assert_eq!(locations[1].country_code.as_deref(), Some("CA"));
+        assert!(locations.iter().all(|location| !location.is_remote));
+    }
+
+    #[test]
+    fn general_company_prose_does_not_become_eligible_geography() {
+        let description = super::super::normalize_description(
+            "<h3>About the company</h3><p>We operate across the United States.</p>",
+            4096,
+        );
+        assert!(from_description_sections(&description).locations.is_empty());
+    }
+
+    #[test]
+    fn inline_labeled_location_is_supported_and_unknown_values_are_ignored() {
+        let description = super::super::normalize_description(
+            "<p><strong>Work Location:</strong> United States</p><p>Location: Every timezone in the galaxy</p>",
+            4096,
+        );
+        let locations = from_description_sections(&description).locations;
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].country_code.as_deref(), Some("US"));
+        assert_eq!(locations[0].raw, "Work Location: United States");
     }
 }

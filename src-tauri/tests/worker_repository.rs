@@ -121,7 +121,7 @@ async fn preview_single_global_identity_and_native_pay_survive_persistence_and_b
                 } else {
                     pages += 1;
                     r#"<script type="application/ld+json">[
-                      {"@type":"JobPosting","identifier":"42","title":"Native Hourly Engineer","url":"/apply?gh_jid=42&utm_source=test","hiringOrganization":{"name":"Fixture Co"},"datePosted":"2026-10-12T09:00:00Z","description":"&lt;h2&gt;About the role&lt;/h2&gt;&lt;p&gt;A &amp; B&lt;/p&gt;","baseSalary":{"currency":"USD","value":{"minValue":45.25,"maxValue":55.75,"unitText":"HOUR"}}},
+                      {"@type":"JobPosting","identifier":"42","title":"Native Hourly Engineer","url":"/apply?gh_jid=42&utm_source=test","jobLocationType":"TELECOMMUTE","hiringOrganization":{"name":"Fixture Co"},"datePosted":"2026-10-12T09:00:00Z","description":"&lt;h2&gt;Available Locations&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;US&lt;/li&gt;&lt;/ul&gt;&lt;h2&gt;About the role&lt;/h2&gt;&lt;p&gt;A &amp; B&lt;/p&gt;","baseSalary":{"currency":"USD","value":{"minValue":45.25,"maxValue":55.75,"unitText":"HOUR"}}},
 
                       {"@type":"JobPosting","identifier":"43","title":"Annual Engineer","url":"/apply?gh_jid=43","baseSalary":{"currency":"USD","value":{"minValue":100000,"unitText":"YEAR"}}}
                     ]</script>"#
@@ -198,7 +198,7 @@ async fn preview_single_global_identity_and_native_pay_survive_persistence_and_b
         assert_eq!(batch[0].title, "Native Hourly Engineer");
         assert_eq!(
             batch[0].description_text.as_deref(),
-            Some("About the role\n\nA & B")
+            Some("Available Locations\n\n• US\n\nAbout the role\n\nA & B")
         );
         assert!(batch[0]
             .description_source
@@ -216,6 +216,11 @@ async fn preview_single_global_identity_and_native_pay_survive_persistence_and_b
             .blocks
             .iter()
             .any(|block| matches!(block, scrape_core::enrich::DescriptionBlock::Heading { .. })));
+        assert!(batch[0].location_data_complete);
+        assert!(batch[0].locations.iter().any(|location| {
+            location.country_code.as_deref() == Some("US")
+                && location.raw == "Available Locations: US"
+        }));
         assert_eq!(batch[0].compensation[0].min_minor, Some(4525));
         assert_eq!(
             batch[0].url,
@@ -251,11 +256,23 @@ async fn preview_single_global_identity_and_native_pay_survive_persistence_and_b
                 .unwrap()
                 .items
                 .remove(0);
+            let remote_us = JobsRepo::list(
+                &pool,
+                JobFilter {
+                    countries: Some(vec!["US".into()]),
+                    remote: Some("remote".into()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+            assert_eq!(remote_us.total, 1);
+            assert_eq!(remote_us.items[0].url, batch[0].url);
             assert_eq!(job.compensation.as_ref(), Some(&batch[0].compensation));
             assert_eq!(job.url, batch[0].url);
             assert_eq!(
                 job.description_text.as_deref(),
-                Some("About the role\n\nA & B")
+                Some("Available Locations\n\n• US\n\nAbout the role\n\nA & B")
             );
             let evidence: String =
                 sqlx::query_scalar("SELECT description_source FROM jobs WHERE id = ?")
@@ -420,4 +437,149 @@ async fn recorded_lever_response_survives_actual_worker_and_repository() {
     }
     server.join().unwrap();
     pool.close().await;
+}
+
+#[tokio::test]
+async fn remote_us_eligibility_survives_greenhouse_worker_persistence_and_restart() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../fixtures/providers/regressions/remote-us-availability-authored.json"
+    ))
+    .unwrap();
+    assert_eq!(
+        fixture["fixture_kind"],
+        "authored_regression_not_raw_provider_capture"
+    );
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let server = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut requests = 0;
+        while requests < 3 && Instant::now() < deadline {
+            if let Ok((mut stream, _)) = listener.accept() {
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                let mut buffer = [0; 4096];
+                let count = stream.read(&mut buffer).unwrap();
+                let request = String::from_utf8_lossy(&buffer[..count]);
+                let path = request.split_whitespace().nth(1).unwrap_or_default();
+                let jobs = fixture["jobs"].as_array().unwrap();
+                let body = if path.ends_with("/jobs?content=true") {
+                    serde_json::json!({"jobs": jobs}).to_string()
+                } else {
+                    let id = path
+                        .rsplit('/')
+                        .next()
+                        .unwrap_or_default()
+                        .split('?')
+                        .next()
+                        .unwrap_or_default()
+                        .parse::<i64>()
+                        .unwrap();
+                    jobs.iter()
+                        .find(|job| job["id"].as_i64() == Some(id))
+                        .unwrap()
+                        .to_string()
+                };
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\nContent-Type: application/json\r\n\r\n{}",
+                    body.len(),
+                    body
+                )
+                .unwrap();
+                requests += 1;
+            } else {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+        assert_eq!(requests, 3, "one board request and two detail requests");
+    });
+
+    let directory = tempfile::tempdir().unwrap();
+    let database_path = directory.path().join("remote-us.db");
+    let pool = scrape_lib::db::init_db(&database_path).await.unwrap();
+    let source = SourcesRepo::create(
+        &pool,
+        CreateSourceInput {
+            kind: SourceKind::Greenhouse,
+            name: "Fixture Co".into(),
+            identifier: "cloudflare".into(),
+            config: Some(serde_json::json!({})),
+            enabled: Some(true),
+            cadence: Some(scrape_core::SourceCadence::Manual),
+            cadence_cron: None,
+            retention_days: Some(30),
+            retention_policy: Some("untracked_only".into()),
+            filters: None,
+        },
+    )
+    .await
+    .unwrap();
+    let config = WorkerConfig {
+        version: PROTOCOL_VERSION,
+        sources: vec![WorkerSource {
+            id: source.id.clone(),
+            kind: source.kind,
+            name: source.name.clone(),
+            identifier: source.identifier.clone(),
+            config: serde_json::json!({}),
+        }],
+        filters: WorkerFilters::default(),
+        filters_by_source: Default::default(),
+        run_started_at: Some("2026-10-14T12:00:00Z".into()),
+        limits: WorkerLimits {
+            request_timeout_s: 3,
+            per_host_delay_ms: 0,
+            concurrency: 1,
+        },
+    };
+    let origin = format!("http://{address}");
+    let events = invoke_replay(&config, false, Some(&origin));
+    server.join().unwrap();
+    let jobs: Vec<_> = events
+        .into_iter()
+        .filter(|event| matches!(event, WorkerEvent::Job { .. }))
+        .map(|event| scraped_job_from_event(event).unwrap())
+        .collect();
+    assert_eq!(jobs.len(), 2);
+    assert!(jobs
+        .iter()
+        .all(|job| job.workplace_type == scrape_core::WorkplaceType::Remote));
+    let eligible = jobs
+        .iter()
+        .find(|job| job.external_id.as_deref() == Some("4201"))
+        .unwrap();
+    assert!(eligible.location_data_complete);
+    assert!(eligible.locations.iter().any(|location| {
+        location.country_code.as_deref() == Some("US") && location.raw == "Available Locations: US"
+    }));
+    let boilerplate_only = jobs
+        .iter()
+        .find(|job| job.external_id.as_deref() == Some("4202"))
+        .unwrap();
+    assert!(!boilerplate_only.location_data_complete);
+    assert!(boilerplate_only
+        .locations
+        .iter()
+        .all(|location| location.country_code.is_none()));
+
+    JobsRepo::upsert_scraped(&pool, &jobs).await.unwrap();
+    let remote_us = JobFilter {
+        countries: Some(vec!["US".into()]),
+        remote: Some("remote".into()),
+        ..Default::default()
+    };
+    let matched = JobsRepo::list(&pool, remote_us.clone()).await.unwrap();
+    assert_eq!(matched.total, 1);
+    assert_eq!(matched.items[0].external_id.as_deref(), Some("4201"));
+
+    pool.close().await;
+    let reopened = scrape_lib::db::init_db(&database_path).await.unwrap();
+    let after_restart = JobsRepo::list(&reopened, remote_us).await.unwrap();
+    assert_eq!(after_restart.total, 1);
+    assert_eq!(after_restart.items[0].url, eligible.url);
+    reopened.close().await;
 }

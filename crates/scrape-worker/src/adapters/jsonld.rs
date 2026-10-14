@@ -191,7 +191,17 @@ fn parse_job_posting_map(
     let desc_text = description.as_ref().map(|d| d.plain_text.clone());
 
     let salary = extract_salary(map, desc_text.as_deref());
-    let locations = loc_enrich::parse(&location);
+    let mut locations = loc_enrich::parse(&location);
+    let section_locations = description
+        .as_ref()
+        .map(loc_enrich::from_description_sections);
+    let location_data_complete = loc_enrich::has_geographic_value(&locations)
+        || section_locations
+            .as_ref()
+            .is_some_and(|evidence| evidence.section_found);
+    if let Some(evidence) = section_locations {
+        locations.extend(evidence.locations);
+    }
 
     let is_telecommute = map
         .get("jobLocationType")
@@ -286,6 +296,7 @@ fn parse_job_posting_map(
         date_posted,
         salary,
         locations,
+        location_data_complete,
         workplace_type,
         sponsorship,
         work_auth,

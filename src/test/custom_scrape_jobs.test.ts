@@ -260,6 +260,7 @@ describe("Custom Scrape Jobs: Single-Source Run Isolation", () => {
         location: "San Francisco, CA",
         url: "https://acme.example.com/jobs/1",
         date_posted: null,
+        location_data_complete: false,
         salary: {
           min: 150000,
           max: 200000,

@@ -245,6 +245,8 @@ pub enum WorkerEvent {
         #[serde(default)]
         locations: Vec<ParsedLocation>,
         #[serde(default)]
+        location_data_complete: bool,
+        #[serde(default)]
         workplace_type: WorkplaceType,
         #[serde(default)]
         sponsorship: Option<ClassifiedSponsorship>,
@@ -362,6 +364,7 @@ mod tests {
             date_posted: Some("2026-10-01T00:00:00Z".to_string()),
             salary: None,
             locations: Vec::new(),
+            location_data_complete: false,
             workplace_type: WorkplaceType::Remote,
             sponsorship: None,
             clearance: None,

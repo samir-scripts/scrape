@@ -1,0 +1,31 @@
+{
+  "fixture_kind": "authored_regression_not_raw_provider_capture",
+  "purpose": "Prove that job-specific eligible geography in a labeled description section is extracted independently from remote workplace policy, and that company boilerplate is not treated as eligibility.",
+  "source_capture": null,
+  "jobs": [
+    {
+      "id": 4201,
+      "title": "Remote Systems Engineer",
+      "company_name": "Fixture Co",
+      "absolute_url": "https://jobs.example.test/postings/4201",
+      "location": { "name": "Remote" },
+      "updated_at": "2026-10-01T12:00:00Z",
+      "first_published": "2026-09-30T12:00:00Z",
+      "content": "<h3>Available Locations</h3><ul><li>US</li></ul><h3>About the role</h3><p>Build reliable systems for the team.</p>"
+    },
+    {
+      "id": 4202,
+      "title": "Remote Research Engineer",
+      "company_name": "Fixture Co",
+      "absolute_url": "https://jobs.example.test/postings/4202",
+      "location": { "name": "Remote" },
+      "updated_at": "2026-10-01T12:00:00Z",
+      "first_published": "2026-09-30T12:00:00Z",
+      "content": "<h3>About the company</h3><p>Fixture Co serves customers across the United States.</p>"
+    }
+  ],
+  "expected": {
+    "4201": { "workplace_type": "remote", "eligible_country_codes": ["US"] },
+    "4202": { "workplace_type": "remote", "eligible_country_codes": [] }
+  }
+}

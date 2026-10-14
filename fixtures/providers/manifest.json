@@ -14,5 +14,12 @@
     "captured_at": "2026-10-14T03:29:45.613116+00:00",
     "sha256": "c312aacc520506ff64c227452540daa7036f92bb215bbf0a56ba8fededbc2a38",
     "extraction_version": "scrape-worker 0.1.0; protocol 2"
+  },
+  "regressions": {
+    "remote_us_availability_authored": {
+      "fixture": "regressions/remote-us-availability-authored.json",
+      "kind": "authored_regression_not_raw_provider_capture",
+      "source_capture": null
+    }
   }
 }

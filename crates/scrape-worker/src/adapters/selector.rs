@@ -313,7 +313,17 @@ pub fn extract_jobs_with_selectors(
             }
         }
 
-        let locations = loc_enrich::parse(&location);
+        let mut locations = loc_enrich::parse(&location);
+        let section_locations = description
+            .as_ref()
+            .map(loc_enrich::from_description_sections);
+        let location_data_complete = loc_enrich::has_geographic_value(&locations)
+            || section_locations
+                .as_ref()
+                .is_some_and(|evidence| evidence.section_found);
+        if let Some(evidence) = section_locations {
+            locations.extend(evidence.locations);
+        }
         let workplace_type = classify_workplace(None, &location, desc_text.as_deref());
 
         let text_for_enrich = desc_text.as_deref().unwrap_or("");
@@ -365,6 +375,7 @@ pub fn extract_jobs_with_selectors(
             date_posted,
             salary,
             locations,
+            location_data_complete,
             workplace_type,
             sponsorship,
             work_auth,

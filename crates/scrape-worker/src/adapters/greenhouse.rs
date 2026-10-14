@@ -130,7 +130,7 @@ fn parse_greenhouse_jobs(
             .as_ref()
             .map(|offs| {
                 offs.iter()
-                    .filter_map(|o| o.name.as_deref().or(o.location.as_deref()))
+                    .filter_map(|o| o.location.as_deref().or(o.name.as_deref()))
                     .filter(|s| !s.trim().is_empty())
                     .collect::<Vec<_>>()
                     .join("; ")
@@ -145,7 +145,10 @@ fn parse_greenhouse_jobs(
             || raw_location_name.eq_ignore_ascii_case("Distributed")
             || raw_location_name.eq_ignore_ascii_case("Remote");
 
-        let effective_location_str = if is_arrangement_keyword && !offices_str.is_empty() {
+        let effective_location_str = if is_arrangement_keyword
+            && !raw_location_name.eq_ignore_ascii_case("Remote")
+            && !offices_str.is_empty()
+        {
             offices_str
         } else if !raw_location_name.is_empty() {
             raw_location_name.clone()
@@ -153,13 +156,23 @@ fn parse_greenhouse_jobs(
             offices_str
         };
 
-        let locations = loc_enrich::parse(&effective_location_str);
+        let mut locations = loc_enrich::parse(&effective_location_str);
 
         let description_source = job.content.clone();
         let description = description_source
             .as_deref()
             .map(|html| normalize_description_with_format(html, DescriptionFormat::Html, 32768));
         let desc_text = description.as_ref().map(|d| d.plain_text.clone());
+        let section_locations = description
+            .as_ref()
+            .map(loc_enrich::from_description_sections);
+        let location_data_complete = loc_enrich::has_geographic_value(&locations)
+            || section_locations
+                .as_ref()
+                .is_some_and(|evidence| evidence.section_found);
+        if let Some(evidence) = section_locations {
+            locations.extend(evidence.locations);
+        }
 
         let workplace_type = classify_workplace(
             Some(&raw_location_name),
@@ -241,6 +254,7 @@ fn parse_greenhouse_jobs(
             date_posted: job.first_published,
             salary,
             locations,
+            location_data_complete,
             workplace_type,
             sponsorship,
             clearance,
@@ -401,6 +415,119 @@ mod tests {
                 _ => panic!("Expected posting"),
             }
         }
+    }
+
+    #[test]
+    fn remote_job_uses_only_labeled_eligible_locations_from_its_description() {
+        let source = WorkerSource {
+            id: "workflow".into(),
+            kind: scrape_core::SourceKind::Greenhouse,
+            name: "Cloudflare".into(),
+            identifier: "cloudflare".into(),
+            config: serde_json::Value::Null,
+        };
+        // Authored regression payload based on the reported behavior. The raw
+        // API response for the expired posting is unavailable; this is not a
+        // captured Cloudflare response.
+        let payload = serde_json::json!({"jobs": [
+            {
+                "id": 8024849,
+                "title": "Senior Principal, Sales Compensation Design & Strategy",
+                "company_name": "Cloudflare",
+                "absolute_url": "https://careers.example.test/jobs/8024849",
+                "location": {"name": "Remote"},
+                "content": "<h3>Available Locations</h3><ul><li>US</li></ul><h3>About Cloudflare</h3><p>We operate across the United States.</p>"
+            },
+            {
+                "id": 8024850,
+                "title": "Remote Research Engineer",
+                "company_name": "Cloudflare",
+                "absolute_url": "https://careers.example.test/jobs/8024850",
+                "location": {"name": "Remote"},
+                "content": "<h3>About Cloudflare</h3><p>We operate across the United States.</p>"
+            }
+        ]}).to_string();
+
+        let events = parse_greenhouse_payload(&payload, &source).unwrap();
+        let WorkerEvent::Job {
+            workplace_type,
+            locations,
+            ..
+        } = &events[0]
+        else {
+            panic!("Expected first posting");
+        };
+        assert_eq!(*workplace_type, WorkplaceType::Remote);
+        assert!(locations
+            .iter()
+            .any(|location| location.country_code.as_deref() == Some("US")));
+
+        let WorkerEvent::Job { locations, .. } = &events[1] else {
+            panic!("Expected second posting");
+        };
+        assert!(!locations
+            .iter()
+            .any(|location| location.country_code.as_deref() == Some("US")));
+    }
+
+    #[test]
+    fn remote_jobs_do_not_inherit_office_address_as_eligibility() {
+        let source = WorkerSource {
+            id: "workflow".into(),
+            kind: scrape_core::SourceKind::Greenhouse,
+            name: "Fixture Co".into(),
+            identifier: "fixture".into(),
+            config: serde_json::Value::Null,
+        };
+        let payload = serde_json::json!({"jobs": [
+            {
+                "id": 77,
+                "title": "Remote Engineer",
+                "absolute_url": "https://jobs.example.test/77",
+                "location": {"name": "Remote"},
+                "offices": [{"name": "United States HQ", "location": "Austin, TX"}]
+            },
+            {
+                "id": 78,
+                "title": "Hybrid Engineer",
+                "absolute_url": "https://jobs.example.test/78",
+                "location": {"name": "Hybrid"},
+                "offices": [{"name": "Bay Area HQ", "location": "San Francisco, CA"}]
+            }
+        ]})
+        .to_string();
+        let events = parse_greenhouse_payload(&payload, &source).unwrap();
+        let WorkerEvent::Job {
+            location,
+            locations,
+            location_data_complete,
+            workplace_type,
+            ..
+        } = &events[0]
+        else {
+            panic!("Expected posting");
+        };
+        assert_eq!(location, "Remote");
+        assert_eq!(*workplace_type, WorkplaceType::Remote);
+        assert!(!location_data_complete);
+        assert!(locations
+            .iter()
+            .all(|location| location.country_code.is_none()));
+
+        let WorkerEvent::Job {
+            location,
+            locations,
+            location_data_complete,
+            workplace_type,
+            ..
+        } = &events[1]
+        else {
+            panic!("Expected posting");
+        };
+        assert_eq!(location, "San Francisco, CA");
+        assert_eq!(*workplace_type, WorkplaceType::Hybrid);
+        assert!(*location_data_complete);
+        assert_eq!(locations[0].city.as_deref(), Some("San Francisco"));
     }
 
     #[test]
