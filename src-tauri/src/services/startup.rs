@@ -21,10 +21,7 @@ pub fn failure(app: &mut tauri::App, message: &str) {
 <p>See <code>plans/database-recovery.md</code>. Close this window to quit.</p></body></html>"#
     );
     if let Some(window) = app.get_webview_window("main") {
-        let url = format!(
-            "data:text/html,{}",
-            url::form_urlencoded::byte_serialize(html.as_bytes()).collect::<String>()
-        );
+        let url = recovery_data_url(&html);
         let displayed = url::Url::parse(&url)
             .ok()
             .is_some_and(|url| window.navigate(url).is_ok());
@@ -42,4 +39,25 @@ pub fn failure(app: &mut tauri::App, message: &str) {
         }
     }
     app.handle().exit(1);
+}
+
+// Form encoding uses + for spaces; data URLs require percent encoding.
+fn recovery_data_url(html: &str) -> String {
+    format!(
+        "data:text/html;charset=utf-8,{}",
+        url::form_urlencoded::byte_serialize(html.as_bytes())
+            .collect::<String>()
+            .replace('+', "%20")
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn recovery_data_url_keeps_spaces_and_literal_plus_distinct() {
+        let url = super::recovery_data_url("Scrape could not start + Unicode: é");
+        assert!(url.contains("Scrape%20could%20not%20start%20%2B%20Unicode%3A%20%C3%A9"));
+        assert!(!url.contains('+'));
+        assert!(url::Url::parse(&url).is_ok());
+    }
 }

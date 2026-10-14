@@ -1,4 +1,4 @@
-//! Immutable manifests for two verified migration-12 histories. Never relabel metadata.
+//! Immutable manifests for verified migration histories. Never relabel metadata.
 use sqlx::migrate::{Migration, Migrator};
 
 pub(super) type Applied = (i64, Vec<u8>, bool);
@@ -29,6 +29,39 @@ pub(super) fn manifest(applied: &[Applied]) -> Migrator {
                     migration.migration_type,
                     include_str!("../../historical-migrations/0018_finalize_posting_removal.sql")
                         .into(),
+                    false,
+                ),
+                _ => migration.clone(),
+            })
+            .collect::<Vec<_>>()
+            .into();
+    }
+    let original = manifest
+        .iter()
+        .find(|migration| migration.version == 19)
+        .unwrap();
+    let early_description = Migration::new(
+        19,
+        original.description.clone(),
+        original.migration_type,
+        include_str!("../../historical-migrations/0019_structured_job_descriptions.sql").into(),
+        false,
+    );
+    if applied.iter().any(|(version, checksum, _)| {
+        *version == 19 && checksum.as_slice() == early_description.checksum.as_ref()
+    }) {
+        manifest.migrations = manifest
+            .iter()
+            .map(|migration| match migration.version {
+                19 => early_description.clone(),
+                20 => Migration::new(
+                    20,
+                    migration.description.clone(),
+                    migration.migration_type,
+                    include_str!(
+                        "../../historical-migrations/0020_finalize_structured_descriptions.sql"
+                    )
+                    .into(),
                     false,
                 ),
                 _ => migration.clone(),

@@ -96,3 +96,21 @@ cargo run -p scrape --example repair_database -- /absolute/path/to/existing/data
 This helper runs migrations/backfills and integrity checks without starting
 schedulers or changing application defaults. It refuses nonexistent paths.
 Required regression tests use synthetic temporary databases, never this live file.
+
+## Verified migration-19 repair (2026-10-14)
+
+[Incident 26](errors/26-native-startup-migration-19.md) identifies an exact earlier
+migration 19 that added only `description_source` and `description_json`. The
+committed version also adds `description_format`. Both SQL histories remain
+immutable. A known checksum plus the complete successful history and exact
+reconstructed schema selects the appropriate manifest. Migration 20 adds the
+missing format column for the earlier history and is a no-op for the three-column
+history. Unknown variants remain rejected; no old checksum is rewritten.
+
+The affected installation was backed up consistently and upgraded to migration 20.
+All original data across 13 tables and migration records through 19 were unchanged;
+integrity was `ok`. Retain backup
+`scrape_data.db.pre-migration-2f3f55eb-9e4f-4cd9-b591-9c704b3c9db1.db` beside the database.
+The same repair helper documented above is safe to run again: recognized migrated
+histories have no pending schema upgrade. Rebuild/relaunch the updated desktop
+application so its embedded migration manifest includes this repair.

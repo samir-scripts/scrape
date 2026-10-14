@@ -177,6 +177,155 @@ mod tests {
     use sqlx::Row;
 
     #[tokio::test]
+    async fn migration_nineteen_histories_preserve_saved_state_and_metadata() {
+        for (legacy_twelve, legacy) in [(false, true), (false, false), (true, true), (true, false)]
+        {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("version19.db");
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(
+                    SqliteConnectOptions::new()
+                        .filename(&path)
+                        .create_if_missing(true),
+                )
+                .await
+                .unwrap();
+            let legacy12 = sqlx::migrate::Migration::new(
+                12,
+                "posting removal".into(),
+                sqlx::migrate::MigrationType::Simple,
+                include_str!("../../historical-migrations/0012_posting_removal.sql").into(),
+                false,
+            );
+            let applied = if legacy_twelve {
+                vec![(12, legacy12.checksum.to_vec(), true)]
+            } else {
+                vec![]
+            };
+            let mut manifest = history::manifest(&applied);
+            manifest.migrations = manifest.iter().take(19).map(|migration| {
+                if legacy && migration.version == 19 {
+                    sqlx::migrate::Migration::new(19, migration.description.clone(), migration.migration_type,
+                        "ALTER TABLE jobs ADD COLUMN description_source TEXT;\nALTER TABLE jobs ADD COLUMN description_json TEXT;\n".into(), false)
+                } else { migration.clone() }
+            }).collect::<Vec<_>>().into();
+            manifest.run(&pool).await.unwrap();
+            sqlx::query("INSERT INTO sources(id,kind,name,identifier,created_at,enabled,cadence) VALUES ('saved-source','greenhouse','Saved workflow','acme','2026-01-01',0,'manual')").execute(&pool).await.unwrap();
+            sqlx::query("INSERT INTO jobs(id,dedupe_key,source_id,external_id,title,company,role_type,url,date_added,last_seen_at,status,status_changed_at,notes,favorited,description_source,description_json) VALUES ('saved','saved-source:42','saved-source','42','Engineer','Acme','full_time','https://example.com/42','2026-01-01','2026-01-01','applied','2026-01-01','Preserved note',1,'<p>Evidence</p>','{}')").execute(&pool).await.unwrap();
+            sqlx::query("INSERT INTO job_status_events(job_id,from_status,to_status,changed_at) VALUES ('saved','scraped','applied','2026-01-01')").execute(&pool).await.unwrap();
+            sqlx::query("INSERT INTO app_settings VALUES ('custom.preserved','42','2026-01-01')")
+                .execute(&pool)
+                .await
+                .unwrap();
+            let before: Vec<(i64, Vec<u8>, String)> = sqlx::query_as(
+                "SELECT version,checksum,installed_on FROM _sqlx_migrations ORDER BY version",
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            pool.close().await;
+            let upgraded = init_db(&path).await.unwrap();
+            let after: Vec<(i64, Vec<u8>, String)> = sqlx::query_as("SELECT version,checksum,installed_on FROM _sqlx_migrations WHERE version<=19 ORDER BY version").fetch_all(&upgraded).await.unwrap();
+            assert_eq!(before, after);
+            let saved: (String, bool, String, String, String) = sqlx::query_as("SELECT notes,favorited,status,description_source,description_json FROM jobs WHERE id='saved'").fetch_one(&upgraded).await.unwrap();
+            assert_eq!(
+                saved,
+                (
+                    "Preserved note".into(),
+                    true,
+                    "applied".into(),
+                    "<p>Evidence</p>".into(),
+                    "{}".into()
+                )
+            );
+            let format: Option<String> =
+                sqlx::query_scalar("SELECT description_format FROM jobs WHERE id='saved'")
+                    .fetch_one(&upgraded)
+                    .await
+                    .unwrap();
+            assert_eq!(format, None);
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT count(*) FROM job_status_events WHERE job_id='saved'"
+                )
+                .fetch_one(&upgraded)
+                .await
+                .unwrap(),
+                1
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, String>(
+                    "SELECT value FROM app_settings WHERE key='custom.preserved'"
+                )
+                .fetch_one(&upgraded)
+                .await
+                .unwrap(),
+                "42"
+            );
+            assert!(std::fs::read_dir(directory.path())
+                .unwrap()
+                .any(|entry| entry
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .contains("pre-migration")));
+            upgraded.close().await;
+            init_db(&path).await.unwrap().close().await;
+        }
+    }
+
+    #[tokio::test]
+    async fn migration_nineteen_unknown_or_drift_is_rejected_without_writes() {
+        for drift in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("rejected19.db");
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(
+                    SqliteConnectOptions::new()
+                        .filename(&path)
+                        .create_if_missing(true),
+                )
+                .await
+                .unwrap();
+            let legacy = sqlx::migrate::Migration::new(
+                19,
+                "structured job descriptions".into(),
+                sqlx::migrate::MigrationType::Simple,
+                include_str!("../../historical-migrations/0019_structured_job_descriptions.sql")
+                    .into(),
+                false,
+            );
+            let mut manifest = history::manifest(&[(19, legacy.checksum.to_vec(), true)]);
+            manifest.migrations = manifest.iter().take(19).cloned().collect::<Vec<_>>().into();
+            manifest.run(&pool).await.unwrap();
+            if drift {
+                sqlx::query("ALTER TABLE jobs ADD COLUMN unexpected TEXT")
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+            } else {
+                sqlx::query("UPDATE _sqlx_migrations SET checksum=X'12345678' WHERE version=19")
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+            }
+            pool.close().await;
+            let before = std::fs::read(&path).unwrap();
+            assert!(init_db(&path).await.is_err());
+            assert_eq!(before, std::fs::read(&path).unwrap());
+            assert!(!std::fs::read_dir(directory.path())
+                .unwrap()
+                .any(|entry| entry
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .contains("pre-migration")));
+        }
+    }
+
+    #[tokio::test]
     async fn failed_forward_repair_rolls_back_and_can_resume() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("interrupted.db");
@@ -255,7 +404,7 @@ mod tests {
                 .fetch_one(&restarted)
                 .await
                 .unwrap(),
-            19
+            20
         );
         assert_eq!(
             sqlx::query_scalar::<_, Vec<u8>>(
@@ -336,7 +485,7 @@ mod tests {
                     .fetch_one(&upgraded)
                     .await
                     .unwrap(),
-                19
+                20
             );
             let states: Vec<(String, bool, String, Option<String>, String)> = sqlx::query_as("SELECT notes,favorited,status,removed_at,source_name_snapshot FROM jobs ORDER BY id").fetch_all(&upgraded).await.unwrap();
             assert_eq!(states.len(), 4);

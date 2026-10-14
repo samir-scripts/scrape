@@ -106,3 +106,25 @@ Native macOS UI verification remains outstanding, and the Cloudflare API bytes r
 ## Branch merge decision
 
 Before Section 2B implementation, local `develop` was the merge base and `git rev-list --left-right --count develop...HEAD` reported `0 60`: even then, a fast-forward would have brought in 60 branch commits covering broader in-progress work, rather than just this section. Tests are green, but native visual/interaction acceptance is still open and Sections 3–7 remain. Do not merge this branch into `develop` yet; revisit after the remaining acceptance and review gates.
+
+## Startup regression discovered before Section 3 (2026-10-14)
+
+The user's migration-19 recovery screen is logged in [incident 26](errors/26-native-startup-migration-19.md).
+Read-only inspection confirmed the exact two-column historical SQL by its SHA-384
+checksum and schema. Added immutable historical manifests and forward migration 20;
+kept all applied SQL/checksums unchanged. Fixed form-encoded spaces on the recovery
+screen. The new version-19 regression first reproduced the reported failure.
+Populated upgrades pass for all four recognized version-12/version-19 combinations;
+unknown version-19 history and schema drift remain untouched on refusal.
+
+The reviewed repair helper upgraded the authorized existing database to version 20,
+created the backup recorded in incident 26, and reported integrity `ok`. All original
+column values across 13 tables and prior migration metadata were fingerprinted
+before/after and remained unchanged. These were repair checks, not live-profile tests.
+
+`npm run test:native-startup` passed all seven actual Tauri dev fixtures: fresh,
+legacy/current version 12, unknown version 12, early/current version 19, and unknown
+version 19. Fixtures use temporary directories and isolated local Vite ports. The
+startup harness now explicitly shows its test window so WKWebView loads and emits
+an IPC completion result. This proves actual native startup/IPC readiness or controlled
+failure; it does not by itself prove every visual/interaction acceptance criterion.

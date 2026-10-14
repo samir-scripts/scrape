@@ -12,11 +12,12 @@ c=sqlite3.connect(database)
 c.executescript('CREATE TABLE _sqlx_migrations(version BIGINT PRIMARY KEY, description TEXT NOT NULL, installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, success BOOLEAN NOT NULL, checksum BLOB NOT NULL, execution_time BIGINT NOT NULL);')
 for migration in sorted((root/'src-tauri/migrations').glob('*.sql')):
  version=int(migration.name.split('_')[0])
- if version>12:break
+ if version>(19 if mode.endswith("19") else 12):break
  sql=migration.read_bytes()
- if version==12 and mode!='current':sql=(root/'src-tauri/historical-migrations/0012_posting_removal.sql').read_bytes()
+ if version==12 and mode in ('legacy','unknown'):sql=(root/'src-tauri/historical-migrations/0012_posting_removal.sql').read_bytes()
+ if version==19 and mode in ('legacy19','unknown19'):sql=(root/'src-tauri/historical-migrations/0019_structured_job_descriptions.sql').read_bytes()
  c.executescript(sql.decode())
- checksum=hashlib.sha384(sql).digest() if not(version==12 and mode=='unknown') else bytes.fromhex('12345678')
+ checksum=hashlib.sha384(sql).digest() if not((version==12 and mode=='unknown') or (version==19 and mode=='unknown19')) else bytes.fromhex('12345678')
  c.execute('INSERT INTO _sqlx_migrations(version,description,success,checksum,execution_time) VALUES (?,?,1,?,0)',(version,migration.stem.split('_',1)[1].replace('_',' '),checksum))
  c.commit()
 c.execute("INSERT INTO sources(id,kind,name,identifier,created_at,enabled,cadence) VALUES ('fixture','greenhouse','Fixture Co','fixture','2026-01-01',0,'manual')")
@@ -26,11 +27,14 @@ c.commit();c.close()
 `;
 
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
-for (const mode of ["fresh", "legacy", "current", "unknown"]) {
+const supportedModes = ["fresh", "legacy", "current", "unknown", "legacy19", "current19", "unknown19"];
+const modes = process.env.SCRAPE_STARTUP_MODES?.split(",") ?? supportedModes;
+if (modes.some(mode => !supportedModes.includes(mode))) throw new Error("Unsupported startup fixture mode");
+for (const mode of modes) {
   const directory = await mkdtemp(join(tmpdir(), "scrape-native-smoke-"));
   const database = join(directory, "scrape_data.db");
   if (mode !== "fresh") execFileSync("python3", ["-c", fixture, resolve("."), database, mode]);
-  const before = mode === "unknown" ? hash(await readFile(database)) : null;
+  const before = mode.startsWith("unknown") ? hash(await readFile(database)) : null;
   await writeFile(join(directory, "smoke.js"), `(async () => {
     try {
       const invoke = window.__TAURI_INTERNALS__.invoke;
@@ -49,7 +53,7 @@ for (const mode of ["fresh", "legacy", "current", "unknown"]) {
   const config = JSON.stringify({build:{
     beforeDevCommand:`npm run build:sidecar && npm run dev -- --host 127.0.0.1 --port ${port}`,
     devUrl:`http://127.0.0.1:${port}`,
-  }});
+  }, app:{windows:[{label:"main",title:"Scrape isolated startup test",visible:true,width:1280,height:800}]}});
   const child = spawn("npm", ["run", "tauri", "--", "dev", "--no-watch", "--config", config], {
     env: {...process.env, SCRAPE_NATIVE_SMOKE_DIR:directory}, detached:true,
     stdio:["ignore","pipe","pipe"],
@@ -68,8 +72,8 @@ for (const mode of ["fresh", "legacy", "current", "unknown"]) {
   }
   await writeFile(join(directory, "dev-startup.log"), output);
   const invalid = signal || /panicked|non-unwinding|SIGABRT/.test(output);
-  if (mode === "unknown") {
-    if (invalid || code === 0 || !output.includes("STARTUP_FAILED:") || !output.includes("version 12") || hash(await readFile(database)) !== before)
+  if (mode.startsWith("unknown")) {
+    if (invalid || code === 0 || !output.includes("STARTUP_FAILED:") || !output.includes(`version ${mode === "unknown19" ? 19 : 12}`) || hash(await readFile(database)) !== before)
       throw new Error(`Unknown history did not fail safely: ${directory}\n${output}`);
     if ((await readdir(directory)).some(name => name.includes("pre-migration"))) throw new Error("Rejected history was backed up/mutated");
   } else if (invalid || code !== 0 || !output.includes('"ok":true')) {
