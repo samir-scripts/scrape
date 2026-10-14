@@ -71,7 +71,18 @@ export function WorkflowSections({
       <div className="grid gap-3">
         <label className="grid gap-2 text-sm">
           Source URL or board identifier
-          <Input aria-label="Source URL or board identifier" value={draft.extractor.url} placeholder="https://boards.greenhouse.io/company" onBlur={onSourceBlur} onChange={e => change({ ...draft, extractor: { ...draft.extractor, url: e.target.value } })} />
+          <Input
+            aria-label="Source URL or board identifier"
+            value={draft.extractor.url}
+            placeholder="https://boards.greenhouse.io/company"
+            onBlur={onSourceBlur}
+            onChange={(e) =>
+              change({
+                ...draft,
+                extractor: { ...draft.extractor, url: e.target.value },
+              })
+            }
+          />
         </label>
         {field("Workflow name", draft.metadata.name, (name) =>
           change({ ...draft, metadata: { ...draft.metadata, name } }),

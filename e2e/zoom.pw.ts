@@ -11,7 +11,7 @@ test("both themes remain operable at actual 200% browser zoom", async () => {
   try {
     await context.route("**/*", route => new URL(route.request().url()).hostname === "127.0.0.1" ? route.continue() : route.abort());
     const page = await context.newPage();
-    await page.goto("http://127.0.0.1:1420/?demo=1");
+    await page.goto("http://127.0.0.1:1420/?demo=1&fixtures=1");
     await expect.poll(() => page.evaluate(() => innerWidth)).toBeLessThanOrEqual(640);
     const worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
     const zoom = await worker.evaluate(async () => {

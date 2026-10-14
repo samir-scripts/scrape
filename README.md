@@ -190,11 +190,26 @@ npm run gen:types
 git diff --exit-code src/bindings
 ```
 
-Browser checks exercise the explicitly labeled fictional demonstration, real DOM
+Browser checks exercise recorded public-provider examples and an explicit development-only synthetic fixture harness, real DOM
 controls, both themes, contrast, keyboard focus narrow reflow and actual 200% browser zoom.
 Screenshot baselines target macOS Chromium; Linux CI runs interaction tests.
 The separate native harness exercises real Tauri IPC and the packaged sidecar,
-including cancellation, malformed output, timeout, partial-result recovery and
+including bundled font loading, global font selection, cancellation, malformed output, timeout, partial-result recovery and
 external opening. It skips normal tray/autostart setup and cannot use the live
 application database. Release builds ignore its debug-only opt-in. Required checks
 use local fixtures; they do not establish current public-provider availability.
+
+
+### Interface and source verification
+
+Interface font selection applies globally, including dialogs; licensed font assets are bundled for offline use. Workflow creation uses a continuous Source, Matching, and Schedule form. Preview validates the current draft before save; advanced controls and YAML preserve the same configuration. Discovered and tracked postings share one details inspector. The application List defaults to six columns and recent stage activity, with optional persisted columns. Kanban labels its page-local counts explicitly.
+
+Browser `?demo=1` shows recorded SEP public postings, with capture provenance in `fixtures/providers/manifest.json`. It cannot run a scraper. Synthetic fixtures require an explicit development-only `?demo=1&fixtures=1` harness; production ignores that fixture flag. Desktop previews use the actual adapter/worker and do not persist jobs.
+
+```bash
+npm run build:sidecar
+npm run test:providers        # Recorded HTTP → actual worker; no public network needed.
+npm run test:providers:live   # Bounded, timestamped public-provider verification.
+```
+
+The live check currently covers Lever/SEP, Ashby/Linear, and Greenhouse/Bitwarden. Generic JSON-LD and selector behavior is covered by local fixtures and native smoke, rather than a claim of live-provider verification. Required CI uses deterministic recordings. Regenerate the browser artifact with `node scripts/provider-verification.mjs --refresh-example` only after reviewing the raw captures and their checksums; preserve original provider IDs, titles and URLs.

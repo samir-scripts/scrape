@@ -2,7 +2,7 @@ import { test, expect } from "./fixtures";
 test("create a workflow through actual controls without an implicit scrape", async ({
   page,
 }) => {
-  await page.goto("/?demo=1");
+  await page.goto("/?demo=1&fixtures=1");
   await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
   await page
     .getByRole("button", { name: /add workflow|new workflow|create workflow/i })

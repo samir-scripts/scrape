@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 
 test('selected fonts load locally and apply to navigation, body, fields and dialogs', async ({ page }) => {
-  await page.goto('/?demo=1');
+  await page.goto('/?demo=1&fixtures=1');
   await page.getByRole('button', { name: 'SETTINGS', exact: true }).click();
   await page.getByRole('button', { name: /APPEARANCE/ }).click();
   const picker = page.getByLabel('Interface font');

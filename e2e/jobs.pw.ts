@@ -1,17 +1,5 @@
 import { test, expect } from "./fixtures";
-import type { Page } from "@playwright/test";
-export async function discoverFixtures(page: Page) {
-  await page.goto("/?demo=1");
-  await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
-  await page.getByRole("button", { name: "RUN", exact: true }).first().click();
-  await expect(
-    page.getByRole("button", { name: "RUNNING…", exact: true }),
-  ).toHaveCount(0, { timeout: 15000 });
-  await page.getByRole("button", { name: /^DISCOVERED/ }).click();
-  await expect(
-    page.getByRole("button", { name: /^Remove .* at / }).first(),
-  ).toBeVisible();
-}
+import { discoverFixtures } from "./jobFixtures";
 test("removal, Undo, blocking, unblocking and restoration operate through actual controls", async ({
   page,
 }) => {
