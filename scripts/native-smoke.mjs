@@ -64,14 +64,24 @@ await writeFile(join(directory, "smoke.js"), `
     const source = await invoke("save_workflow", { spec, id: null });
     assert((await invoke("list_jobs", { filter: {} })).total === before.total, "Saving scraped implicitly");
     steps.push("startup, canonical IPC and read-only preview/save");
+    const uiDeadline = Date.now() + 15000;
+    let settingsButton;
+    while (Date.now() < uiDeadline && !settingsButton) {
+      settingsButton = [...document.querySelectorAll("button")].find(button => button.textContent.trim() === "SETTINGS");
+      if (!settingsButton) await pause(100);
+    }
+    assert(settingsButton, "Native settings navigation unavailable"); settingsButton.click();
+    let picker;
+    while (Date.now() < uiDeadline && !picker) {
+      picker = document.querySelector('[aria-label="Interface font"]');
+      if (!picker) await pause(100);
+    }
+    assert(picker, "Native font picker unavailable");
     for (const family of ["Inter Variable", "JetBrains Mono Variable", "Geist Mono Variable", "Fira Code Variable", "IBM Plex Mono"]) {
       const faces = await document.fonts.load('14px "' + family + '"', "Software Engineer 45.25");
       assert(faces.length > 0 && faces.every(face => face.status === "loaded"), "Native bundled font did not load: " + family);
     }
-    const settingsButton = [...document.querySelectorAll("button")].find(button => button.textContent.trim() === "SETTINGS");
-    assert(settingsButton, "Native settings navigation unavailable"); settingsButton.click(); await pause(300);
-    const picker = document.querySelector('[aria-label="Interface font"]');
-    assert(picker, "Native font picker unavailable"); picker.value = "jetbrains"; picker.dispatchEvent(new Event("change", { bubbles: true }));
+    picker.value = "jetbrains"; picker.dispatchEvent(new Event("change", { bubbles: true }));
     await pause(500);
     assert(document.documentElement.getAttribute("data-font") === "jetbrains", "Native font selection was not applied");
     assert(getComputedStyle(settingsButton).fontFamily.includes("JetBrains Mono Variable"), "Native navigation retained another family");

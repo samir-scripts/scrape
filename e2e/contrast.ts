@@ -1,5 +1,8 @@
 import type { Page } from "@playwright/test";
 export async function contrastFailures(page: Page) {
+  // Capture a deliberate resting state, rather than incidental hover/tooltip timing.
+  await page.mouse.move(0, 0);
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   return page.evaluate(() => {
     const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;
     const context = canvas.getContext("2d", { willReadFrequently: true })!;
