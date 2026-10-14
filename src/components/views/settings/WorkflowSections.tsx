@@ -31,7 +31,9 @@ export function WorkflowSections({
   change,
   advanced,
   section,
+  onSourceBlur,
 }: {
+  onSourceBlur?: () => void;
   draft: WorkflowSpec;
   change: (next: WorkflowSpec) => void;
   advanced: boolean;
@@ -67,9 +69,10 @@ export function WorkflowSections({
   if (section === "Source")
     return (
       <div className="grid gap-3">
-        {field("Source URL or board identifier", draft.extractor.url, (url) =>
-          change({ ...draft, extractor: { ...draft.extractor, url } }),
-        )}
+        <label className="grid gap-2 text-sm">
+          Source URL or board identifier
+          <Input aria-label="Source URL or board identifier" value={draft.extractor.url} placeholder="https://boards.greenhouse.io/company" onBlur={onSourceBlur} onChange={e => change({ ...draft, extractor: { ...draft.extractor, url: e.target.value } })} />
+        </label>
         {field("Workflow name", draft.metadata.name, (name) =>
           change({ ...draft, metadata: { ...draft.metadata, name } }),
         )}
@@ -148,8 +151,6 @@ export function WorkflowSections({
     return (
       <div className="grid gap-3">
         <p className="text-sm text-[var(--color-ink-mute)]">
-          Absent fields inherit global defaults. Explicit empty arrays override
-          the corresponding field only; YAML exposes every inheritance setting.
           Separate terms with commas.
         </p>
         {(["any", ...(advanced ? ["all", "exclude"] : [])] as const).map(

@@ -11,13 +11,13 @@ test("create a workflow through actual controls without an implicit scrape", asy
   await dialog
     .getByRole("textbox", { name: "Source URL or board identifier" })
     .fill("https://boards.greenhouse.io/fixture-board");
-  await dialog.getByRole("button", { name: "Detect source" }).click();
+  await dialog.getByRole("textbox", { name: "Source URL or board identifier" }).blur();
+  await expect(dialog.getByRole("textbox", { name: "Workflow name" })).toHaveValue("fixture-board");
   await dialog
     .getByRole("textbox", { name: "Title keywords (any)" })
     .fill("NoSuchRole");
   await dialog.getByRole("button", { name: "Preview matches" }).click();
   await expect(dialog.getByText(/No eligible postings/)).toBeVisible();
-  await dialog.getByRole("button", { name: "Continue to schedule" }).click();
   await expect(
     dialog.getByRole("textbox", { name: "IANA timezone" }),
   ).toHaveValue("America/New_York");

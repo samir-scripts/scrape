@@ -19,12 +19,12 @@ describe("one workflow draft", () => {
     vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => preview(spec));
     render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
     await user.type(screen.getByRole("textbox", { name: "Source URL or board identifier" }), "https://boards.greenhouse.io/acme");
-    await user.click(screen.getByRole("button", { name: "Detect source" }));
+    await user.tab();
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Workflow name" })).toHaveProperty("value", "acme"));
     await screen.findByRole("textbox", { name: "Title keywords (any)" });
     await user.type(screen.getByRole("textbox", { name: "Title keywords (any)" }), "Engineer");
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
     await screen.findByText(/3 fetched/);
-    await user.click(screen.getByRole("button", { name: "Continue to schedule" }));
     // Schedule editing invalidates the old preview.
     await user.selectOptions(screen.getByRole("combobox", { name: "Schedule" }), "manual");
     expect((screen.getByRole("button", { name: "Save workflow" }) as HTMLButtonElement).disabled).toBe(true);
@@ -42,7 +42,7 @@ describe("one workflow draft", () => {
     const mock = vi.spyOn(api, "previewWorkflow").mockImplementation(spec => new Promise(resolve => { finish = resolve; expect(spec.filters?.matching?.compensation?.min_minor).toBe(5025); }));
     const cancel = vi.spyOn(api, "cancelWorkflowPreview").mockResolvedValue(true);
     render(<AddSourceModal isOpen initialSource={source} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
     await user.click(screen.getByRole("button", { name: "Edit YAML" }));
     expect((screen.getByRole("textbox", { name: "Workflow YAML" }) as HTMLTextAreaElement).value).toContain("5025");
     await user.click(screen.getByRole("button", { name: "Apply YAML to form" }));
