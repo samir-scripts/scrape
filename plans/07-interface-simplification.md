@@ -134,6 +134,26 @@ Also make board counts truthful under pagination: the current board groups the f
 
 Implement each step in small coherent commits, with the relevant behavior tests and documentation. Frontend changes can be reviewed independently of the real-source verification work, but both are required for completion. Do not sweep unrelated backend work into this revision.
 
+#### Required test creation, adaptation, and execution
+
+Testing is part of every implementation step, not a final cleanup task. Before changing a feature, identify its existing tests and the dependent features it can affect. Run the relevant baseline tests and record existing failures separately. For each confirmed defect, add a regression test that reproduces it before the fix where practical; add behavior coverage for newly introduced interactions and failure states.
+
+Adapt existing tests when intended behavior changes: replace workflow-step navigation assertions with the continuous form journey, update shared-inspector interactions and accessible names, and update table/board expectations for the new presentation. Preserve assertions for unchanged domain contracts. Do not delete useful coverage, weaken assertions, skip failing tests, or blindly regenerate screenshots to obtain a passing suite. Review each changed visual baseline against the design requirements.
+
+| Changed area | Tests to create or adapt | Related features to regression-test |
+| --- | --- | --- |
+| Global fonts and shared UI primitives | Real font loading offline, global application including portals, persistence/reload, save failures, spacing and focus states | Settings hydration, all dialogs/tooltips/toasts, themes, zoom, keyboard navigation |
+| Continuous workflow editor | Detection, preview/save progression, inline errors, zero matches, cancellation, stale-response rejection, advanced summaries | Edit/reopen, YAML import/export, hidden-field preservation, inheritance, timezone/scheduling, preview/execution parity |
+| Real-source verification and recorded examples | Recorded HTTP payload through actual adapter/worker, provenance and destination assertions, explicit example/live modes, timestamped live checks | Extraction failures, filtering, identity, compensation, persistence, native IPC and external opening |
+| Shared job inspector and SVG actions | Discovered-to-tracked journey, stage controls, notes save/error/job-switch races, icon accessible names, focus restoration | Favorites, history, shortcuts during typing, removal confirmation, blocking, Undo, restoration |
+| Simplified List and Kanban | Optional-column persistence/reset, sorting/pagination, accurate stage totals, long titles, selection, drag/drop/cancel and keyboard movement | Active filters, more than 2,000 records, cross-view state, failed status-update rollback, empty/loading/error states |
+
+Use interaction tests for controls, integration tests for service/persistence boundaries, browser tests for complete journeys and visual/accessibility checks, and native tests for Tauri startup/IPC/worker behavior. Prefer observable outcomes over component internals or static markup. Use isolated storage, temporary databases, local HTTP fixtures, and controlled clocks; never the user's live database.
+
+Run the new/adapted tests and the relevant dependent-feature suites after each coherent change; resolve introduced failures before moving on. At completion, run the complete frontend test command, TypeScript checking, production build, browser suite, native startup and IPC smoke, and the required clean-checkout CI checks, including Rust formatting, Clippy, workspace tests and generated-binding drift checks. Live-provider checks remain separately reported from deterministic CI. Re-run checks after fixes that invalidate their prior results.
+
+Each implementation step must record changed test files, commands actually run, results, and any remaining gap. The final handoff must distinguish passed, failed, skipped, and unperformed checks; a required blocked or unperformed check prevents an unqualified completion claim. Documentation-only edits need document/link/diff validation rather than an unrelated full application test run.
+
 Required task walkthroughs:
 
 - Select every interface font → navigate all screens → open workflow and removal dialogs → reload offline. Check actual loaded fonts and persistence errors.
@@ -157,6 +177,7 @@ Usability review: ask a reviewer to create a workflow, identify a job's pay/loca
 - Kanban has distinct solid cards and reliable accessible stage movement.
 - Shared spacing, typography, contrast, loading/empty/error states and focus behavior are verified across the complete journey.
 - Data protection, preview parity, schedules, canonical workflow round trips and removal semantics remain intact.
+- Every behavior change has new or adapted tests, affected dependent features have regression coverage, and the required suites have been run with results recorded.
 - Evidence states exactly which checks were run and which were not. Passing Vite/browser/fixture tests is never described as successful native startup or live scraping.
 
 ## 5. Research-session verification limits
