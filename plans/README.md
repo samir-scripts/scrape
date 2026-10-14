@@ -1,3 +1,5 @@
+The latest proposed desktop repair is [Desktop usability and extraction](08-desktop-usability-and-extraction.md). It documents the screenshot-reported regressions, replaces conflicting plan 07 layout decisions, and requires actual native interaction verification before completion.
+
 # Plan status
 
 [Interface simplification and real-source verification](07-interface-simplification.md)
