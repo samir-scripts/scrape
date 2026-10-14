@@ -1,6 +1,6 @@
 # Desktop usability and extraction repair
 
-Status: proposed implementation handoff; application code has not changed for this plan.
+Status: implementation in progress. Section 1 and Section 2A are complete at the code/test level; native visual verification for Section 2A remains pending. Sections 2B–7 are not started.
 
 **Luna: execute the implementation workbook below in order.** Sections 1–8 specify behavior; the workbook specifies how to research, implement, test, and deliver it. Do not treat a passing unit suite or a completed visual change as completion of a phase whose native acceptance remains unverified.
 

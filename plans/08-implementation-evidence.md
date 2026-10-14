@@ -1,6 +1,6 @@
 # Desktop usability repair: implementation evidence
 
-Status: Section 1 research and test foundation complete. Native gesture reproduction remains pending and must precede choosing the corresponding implementation. No product code has changed for this plan.
+Status: Section 1 and Section 2A implementation are complete. The native description-rendering visual check remains pending because the native smoke harness timed out before injecting its page script. Sections 2B–7 have not started.
 
 This document records results for [the implementation plan](08-desktop-usability-and-extraction.md). Each new result must include the environment, command or interaction, expected behavior, observed outcome, and evidence. Do not upgrade a hypothesis to a confirmed cause without a reproduction.
 
@@ -17,7 +17,7 @@ This document records results for [the implementation plan](08-desktop-usability
 
 | ID | Report / expected observable result | Existing coverage and gaps | Section / test layer | Reproduction in Section 1 |
 |---|---|---|---|---|
-| D1 | Encoded HTML descriptions display readable headings, paragraphs, and lists; raw tags are absent. | `enrich::html::tests::test_to_plain_text` covers ordinary HTML only. `job_inspector_interaction.test.tsx` covers notes/actions, not structured descriptions. | 2A: Rust normalization; worker/repository integration; inspector interaction; native visual. | Source proves entity decoding may create markup after the stripping pass. No new failing test yet. |
+| D1 | Encoded HTML descriptions display readable headings, paragraphs, and lists; raw tags are absent. | Baseline covered ordinary HTML only. Section 2A now adds core, actual-worker/repository, and inspector-interaction regressions. | 2A: Rust normalization; worker/repository integration; inspector interaction; native visual. | Encoded markup regression added and observed against the prior implementation; it failed because markup tags leaked into output. The fixed path now passes focused Rust, integration, and UI checks. Native visual check is pending. |
 | D2 | Remote + US finds the Cloudflare posting; workplace and eligible geography remain separate. | Location parser and matching tests cover ordinary locations and stored-country predicates. No fixture contains Remote plus a labeled Available Locations section; no end-to-end test checks extraction→persistence→filter. | 2B: Rust enrichment and matching; worker→repository; filter UI; native journey. | Official posting corroborates Remote and Available Locations: US; exact raw API response is absent. Evidence envelope at `fixtures/providers/regressions/cloudflare-8024849.json`. |
 | D3 | User can resize Discovered list/details panes; sizing persists and keyboard works. | Existing inspector tests cover details interactions; `layout/ThreeColumn.tsx` and `DiscoveredTwoColumn.tsx` have unrelated splitters. No current test proves this inspector is adjustable. | 4: split primitive interaction, keyboard, persistence, native pointer. | Static code confirms 480px inspector width; no native pointer reproduction this section. |
 | D4 | Kanban columns are visually distinct and a card move persists to another stage. | `kanban_board.test.ts` (10) passes, but its scope is component behavior and does not prove native drag delivery/persistence. Existing native smoke tests status persistence generally, not pointer drag. | 5: component and IPC tests plus native pointer movement/restart. | Source contains HTML5 drag handlers, so root cause is unknown. No native drag reproduction this section. |
@@ -53,4 +53,28 @@ The user screenshots are preserved and establish what the reported UI looked lik
 
 Every report now has an affected path, an existing-coverage assessment, and an assigned regression layer. Reproductions supported by source inspection or official page evidence are identified as such; native-only gestures have an explicit limitation and were not guessed at. The exact Cloudflare title/ID/Remote/US evidence is recorded, with the missing raw API response clearly called out. Baseline tests are green. Section 1 is complete at this documented gate; native interaction reproduction remains a required gate before selecting the drag/splitter fix.
 
-The next authorized unit is Section 2A (description normalization/display and safe historical repair); do not bundle Sections 2B–7 into that change. Section 2A must add and observe its focused failing regression immediately before the repair, as the implementation workbook specifies.
+Section 2A is implemented and its code-level checks pass. Do not start Sections 2B–7 until the user requests the next section. The remaining Section 2A gate is native visual verification of the formatted description in the inspector; the attempted `npm run test:native` timed out before its injected page script ran, so it is not evidence of a pass.
+
+## Section 2A implementation evidence
+
+**Research and design.** Traced the Greenhouse, Ashby, Lever, JSON-LD, and selector adapters through the worker event, ingestion, repository, and shared inspector. The workspace already had the maintained `scraper` HTML parser available, so the normalizer uses that parser instead of adding another HTML parser. Input encoding is explicit (`html`, `plain_text`, `mixed`); only recognized single-layer encoded tags are decoded before parsing. HTML is bounded to 512 KiB input and 20,000 parsed nodes, production adapter output is bounded to 32 KiB, and truncation is Unicode-safe and reported. Text content that merely contains angle brackets remains text. Script/style and other non-display content is excluded; the output contract contains paragraphs, headings, lists, emphasis, and safe absolute HTTP(S) links.
+
+**Regression and implementation.** Added a Rust regression for an entity-encoded paragraph that failed against the old strip-then-decode path, as well as cases for script elements with attributes, literal comparison text, double encoding, plain-text input, structure, unsafe links, and UTF-8 truncation. Adapter events now carry the structured description, original source, and input format. Canonical plain text remains the searchable/snippet representation. The React inspector renderer creates elements from the restricted structure and routes safe links through the existing checked opener; it never inserts provider markup as HTML.
+
+**Persistence and repair.** Added forward migration 0019 with nullable source, structured JSON, and source-format fields. Repository reads expose the structured contract while retaining canonical text. Historical re-enrichment reads preserved source when available, otherwise uses the existing description as legacy HTML/unknown input; it processes at most 200 records per invocation, backs up a file-backed database with SQLite `VACUUM INTO` before a nonempty repair batch, and leaves user state columns/history/removals/blocks untouched. It is idempotent and retries remaining old-version rows on a later startup. The populated-record regression checks repair twice and verifies notes, favorite, and applied status survive.
+
+**Verification.** On 2026-10-14, from the implementation checkout:
+
+| Check | Result |
+|---|---|
+| `cargo fmt --all -- --check` | Passed after final Rust edits. |
+| `cargo clippy --workspace --all-targets -- -D warnings` | Passed. |
+| `cargo test --workspace` | Passed; full Rust workspace suite, including binding export tests. |
+| `cargo test -p scrape --test worker_repository` | Passed: 2 tests, including local HTTP → actual worker → NDJSON → SQLite description/source/format round trip. The harness drains process pipes concurrently. |
+| `npm run gen:types` | Passed; Rust-derived TypeScript bindings generated. |
+| `npm test` | Passed: 366 tests across 52 files; included development HTML-transformation startup smoke. |
+| `npm run build` | Passed; Vite reported its existing large-chunk advisory. |
+| `npm run test:native-startup` | Passed: fresh, legacy, current, and unknown schema startup cases in isolated temporary profiles. |
+| `npm run test:native` | **Not verified:** exceeded its deadline before the injected page script ran. It did not exercise description rendering. |
+
+The native limitation is explicit: startup fixtures demonstrate database/core startup handling, not actual macOS WKWebView rendering. No claim is made that the description was visually inspected in the native application. Do not advance this plan's section until that check is completed or the user explicitly directs work to another section.
