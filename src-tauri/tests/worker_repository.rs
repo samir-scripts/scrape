@@ -308,7 +308,11 @@ async fn recorded_lever_response_survives_actual_worker_and_repository() {
     let saved = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
     assert_eq!(saved.total, jobs.len() as i64);
     let recent_id = saved.items[0].id.clone();
-    sqlx::query("UPDATE jobs SET status_changed_at = '2030-01-01T00:00:00Z' WHERE id = ?")
+    sqlx::query("UPDATE jobs SET status_changed_at = '2030-01-01T03:00:00Z'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE jobs SET status_changed_at = '2030-01-01 12:00:00' WHERE id = ?")
         .bind(&recent_id)
         .execute(&pool)
         .await

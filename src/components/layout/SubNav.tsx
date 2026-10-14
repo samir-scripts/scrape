@@ -23,9 +23,9 @@ export function SubNav() {
 
   return (
     <div className="flex flex-col w-full shrink-0 select-none">
-      <div className="flex items-center justify-between h-9 px-3 border-b border-[var(--color-ink)] bg-[var(--color-paper-2)]/40">
+      <div className="flex flex-wrap gap-2 items-center justify-between min-h-9 py-1 px-3 border-b border-[var(--color-ink)] bg-[var(--color-paper-2)]/40">
         {/* Left: View-specific sub-categories & consolidated Filters button */}
-        <div className="flex items-center gap-4 text-xs font-mono">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs font-mono">
           {view === "discovered" && (
             <div className="flex items-center gap-2">
               <span className="text-xs font-mono uppercase tracking-wider text-[var(--color-ink-mute)]">

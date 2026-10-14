@@ -107,10 +107,10 @@ for (const provider of providers) {
   };
   try {
     const output = await new Promise((resolve, reject) => {
+      const executable = `src-tauri/binaries/scrape-worker-${process.arch === "arm64" ? "aarch64" : "x86_64"}-${process.platform === "darwin" ? "apple-darwin" : "unknown-linux-gnu"}`;
+      if (!existsSync(executable)) throw new Error("Build the packaged worker with npm run build:sidecar before provider verification.");
       const child = spawn(
-        existsSync("target/debug/scrape-worker")
-          ? "target/debug/scrape-worker"
-          : `src-tauri/binaries/scrape-worker-${process.arch === "arm64" ? "aarch64" : "x86_64"}-${process.platform === "darwin" ? "apple-darwin" : "unknown-linux-gnu"}`,
+        executable,
         ["--stdin", ...(origin ? ["--replay-origin", origin] : [])],
         { stdio: ["pipe", "pipe", "pipe"] },
       );

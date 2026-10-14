@@ -85,7 +85,7 @@ export function AddSourceModal({
     setDraft(next);
     setPreview(null);
     setError("");
-    if (next.extractor.url !== draft.extractor.url) setDetected("");
+    if (next.extractor.url !== draft.extractor.url) setDetected(advanced ? next.extractor.url : "");
   };
   const close = () => {
     cancel();
@@ -99,7 +99,7 @@ export function AddSourceModal({
     try {
       const result = await api.detectSource(draft.extractor.url);
       if (revision.current !== current) return;
-      setDraft({
+      const detectedDraft: WorkflowSpec = {
         ...draft,
         metadata: {
           ...draft.metadata,
@@ -111,8 +111,10 @@ export function AddSourceModal({
           kind: result.kind as WorkflowSpec["extractor"]["kind"],
           url: canonicalizeAtsUrl(result.kind, result.identifier),
         },
-      });
+      };
+      setDraft(detectedDraft);
       setDetected(canonicalizeAtsUrl(result.kind, result.identifier));
+      return detectedDraft;
     } catch (e) {
       if (revision.current === current)
         setError(
@@ -139,6 +141,12 @@ export function AddSourceModal({
       setError("Fix the highlighted inputs before previewing.");
       return;
     }
+    let effectiveDraft = draft;
+    if (!advanced && !detected) {
+      const detectedDraft = await detect();
+      if (!detectedDraft) return;
+      effectiveDraft = detectedDraft;
+    }
     const current = ++revision.current;
     const id = crypto.randomUUID();
     request.current = id;
@@ -146,7 +154,7 @@ export function AddSourceModal({
     setError("");
     setPreview(null);
     try {
-      const result = await api.previewWorkflow(draft, id);
+      const result = await api.previewWorkflow(effectiveDraft, id);
       if (revision.current === current) {
         setPreview(result);
         setDraft(result.spec);

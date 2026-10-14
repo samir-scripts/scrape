@@ -16,10 +16,12 @@ test('selected fonts load locally and apply to navigation, body, fields and dial
       expect(await target.evaluate(el => getComputedStyle(el).fontFamily)).toContain(family);
     }
   }
+  await page.clock.setFixedTime(new Date("2026-10-13T13:00:00Z"));
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-font', 'ibm_plex');
   await page.getByRole('button', { name: 'SCRAPER', exact: true }).click();
   await page.getByRole('button', { name: /ADD WORKFLOW/ }).click();
   expect(await page.getByRole('dialog').evaluate(el => getComputedStyle(el).fontFamily)).toContain('IBM Plex Mono');
   expect(await page.getByLabel('Source URL or board identifier').evaluate(el => getComputedStyle(el).fontFamily)).toContain('IBM Plex Mono');
+  await expect(page).toHaveScreenshot('bundled-mono-workflow.png', {animations:'disabled'});
 });

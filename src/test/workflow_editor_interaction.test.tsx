@@ -54,4 +54,22 @@ describe("one workflow draft", () => {
     finish(preview(mock.mock.calls[0][0]));
     await waitFor(() => expect(screen.queryByText(/3 fetched/)).toBeNull());
   });
+  it("re-detects an interrupted source before preview without losing the latest matching rule", async () => {
+    const user = userEvent.setup(); let finishDetection!: (result: {kind:string;identifier:string;name:string}) => void;
+    const result = {kind:"greenhouse",identifier:"acme",name:"Acme"};
+    const detection = vi.spyOn(api,"detectSource").mockImplementationOnce(() => new Promise(resolve => {finishDetection=resolve;})).mockResolvedValue(result);
+    const extraction = vi.spyOn(api,"previewWorkflow").mockImplementation(async spec => preview(spec));
+    render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    await user.type(screen.getByRole("textbox",{name:"Source URL or board identifier"}),"https://boards.greenhouse.io/acme");
+    await user.click(screen.getByRole("textbox",{name:"Title keywords (any)"}));
+    await user.type(screen.getByRole("textbox",{name:"Title keywords (any)"}),"Engineer");
+    await user.click(screen.getByRole("button",{name:"Preview matches"}));
+    await screen.findByText(/No eligible postings/);
+    expect(detection).toHaveBeenCalledTimes(2);
+    expect(extraction.mock.calls[0][0].extractor.kind).toBe("greenhouse");
+    expect(extraction.mock.calls[0][0].filters?.matching?.keywords?.any).toEqual(["Engineer"]);
+    finishDetection(result);
+    await waitFor(() => expect(screen.getByText(/No eligible postings/)).toBeTruthy());
+  });
+
 });
