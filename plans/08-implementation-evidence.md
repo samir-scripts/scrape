@@ -105,4 +105,4 @@ Native macOS UI verification remains outstanding, and the Cloudflare API bytes r
 
 ## Branch merge decision
 
-At the Section 2B checkpoint, local `develop` is the merge base and `git rev-list --left-right --count develop...HEAD` reports `0 60`: a fast-forward would bring in all 60 branch commits, covering the broader in-progress implementation rather than just the current section. Tests are green, but native visual/interaction acceptance is still open and Sections 3–7 remain. Do not merge this branch into `develop` yet; revisit after the remaining acceptance and review gates.
+After the Section 2B commits, local `develop` is the merge base and `git rev-list --left-right --count develop...HEAD` reports `0 63`: a fast-forward would bring in all 63 branch commits, covering the broader in-progress implementation rather than just the current section. Tests are green, but native visual/interaction acceptance is still open and Sections 3–7 remain. Do not merge this branch into `develop` yet; revisit after the remaining acceptance and review gates.
