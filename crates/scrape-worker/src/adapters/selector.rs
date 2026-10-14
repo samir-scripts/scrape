@@ -1,7 +1,8 @@
 use crate::client::{ClientError, HttpClient};
 use scrape_core::enrich::{
     classify_clearance, classify_sponsorship, classify_work_auth, classify_workplace,
-    extract_experience, location as loc_enrich, to_plain_text, Salary,
+    extract_experience, location as loc_enrich, normalize_description_with_format,
+    DescriptionFormat, Salary,
 };
 use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource};
 use scraper::{Html, Selector};
@@ -295,11 +296,13 @@ pub fn extract_jobs_with_selectors(
             raw_salary_text
         };
 
-        let desc_text = desc_sel.as_ref().and_then(|s| {
-            item.select(s)
-                .next()
-                .map(|el| to_plain_text(&el.html(), 32768))
-        });
+        let description_source = desc_sel
+            .as_ref()
+            .and_then(|s| item.select(s).next().map(|el| el.html()));
+        let description = description_source
+            .as_deref()
+            .map(|html| normalize_description_with_format(html, DescriptionFormat::Html, 32768));
+        let desc_text = description.as_ref().map(|d| d.plain_text.clone());
 
         let mut salary = salary_text.as_deref().and_then(|t| {
             Salary::from_text(t).or_else(|| Salary::from_text(&format!("salary: {t}")))
@@ -369,6 +372,9 @@ pub fn extract_jobs_with_selectors(
             experience,
             is_new_grad,
             description_text: desc_text,
+            description,
+            description_format: description_source.as_ref().map(|_| DescriptionFormat::Html),
+            description_source,
             company_icon_url,
         });
     }

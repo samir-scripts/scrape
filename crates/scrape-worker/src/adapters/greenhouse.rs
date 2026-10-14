@@ -1,7 +1,8 @@
 use crate::client::{ClientError, HttpClient};
 use scrape_core::enrich::{
     classify_clearance, classify_sponsorship, classify_work_auth, classify_workplace,
-    extract_experience, location as loc_enrich, to_plain_text, Salary,
+    extract_experience, location as loc_enrich, normalize_description_with_format,
+    DescriptionFormat, Salary,
 };
 use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource};
 use serde::Deserialize;
@@ -154,10 +155,11 @@ fn parse_greenhouse_jobs(
 
         let locations = loc_enrich::parse(&effective_location_str);
 
-        let desc_text = job
-            .content
+        let description_source = job.content.clone();
+        let description = description_source
             .as_deref()
-            .map(|html| to_plain_text(html, 32768));
+            .map(|html| normalize_description_with_format(html, DescriptionFormat::Html, 32768));
+        let desc_text = description.as_ref().map(|d| d.plain_text.clone());
 
         let workplace_type = classify_workplace(
             Some(&raw_location_name),
@@ -246,6 +248,9 @@ fn parse_greenhouse_jobs(
             experience,
             is_new_grad,
             description_text: desc_text,
+            description,
+            description_format: description_source.as_ref().map(|_| DescriptionFormat::Html),
+            description_source,
             company_icon_url,
         });
     }

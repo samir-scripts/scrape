@@ -255,7 +255,7 @@ mod tests {
                 .fetch_one(&restarted)
                 .await
                 .unwrap(),
-            18
+            19
         );
         assert_eq!(
             sqlx::query_scalar::<_, Vec<u8>>(
@@ -336,7 +336,7 @@ mod tests {
                     .fetch_one(&upgraded)
                     .await
                     .unwrap(),
-                18
+                19
             );
             let states: Vec<(String, bool, String, Option<String>, String)> = sqlx::query_as("SELECT notes,favorited,status,removed_at,source_name_snapshot FROM jobs ORDER BY id").fetch_all(&upgraded).await.unwrap();
             assert_eq!(states.len(), 4);

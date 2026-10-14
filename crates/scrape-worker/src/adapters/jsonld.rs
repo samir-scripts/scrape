@@ -1,7 +1,8 @@
 use crate::client::{ClientError, HttpClient};
 use scrape_core::enrich::{
     classify_clearance, classify_sponsorship, classify_work_auth, classify_workplace,
-    extract_experience, location as loc_enrich, to_plain_text, Salary,
+    extract_experience, location as loc_enrich, normalize_description_with_format,
+    DescriptionFormat, Salary,
 };
 use scrape_core::{RoleType, TriState, WorkAuthRequirement, WorkerEvent, WorkerSource};
 use scraper::{Html, Selector};
@@ -180,10 +181,14 @@ fn parse_job_posting_map(
         .and_then(|dp| dp.as_str())
         .map(|s| s.to_string());
 
-    let desc_text = map
+    let description_source = map
         .get("description")
         .and_then(|v| v.as_str())
-        .map(|html| to_plain_text(html, 32768));
+        .map(str::to_owned);
+    let description = description_source
+        .as_deref()
+        .map(|html| normalize_description_with_format(html, DescriptionFormat::Html, 32768));
+    let desc_text = description.as_ref().map(|d| d.plain_text.clone());
 
     let salary = extract_salary(map, desc_text.as_deref());
     let locations = loc_enrich::parse(&location);
@@ -288,6 +293,9 @@ fn parse_job_posting_map(
         experience,
         is_new_grad,
         description_text: desc_text,
+        description,
+        description_format: description_source.as_ref().map(|_| DescriptionFormat::Html),
+        description_source,
         company_icon_url,
     })
 }

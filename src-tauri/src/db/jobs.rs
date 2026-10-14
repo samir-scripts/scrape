@@ -70,6 +70,9 @@ pub struct Job {
     pub is_new_grad: TriState,
     pub experience_evidence: Option<String>,
     pub description_text: Option<String>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub description: Option<scrape_core::enrich::JobDescription>,
     pub company_icon_url: Option<String>,
     pub enrichment_version: i32,
     #[serde(default)]
@@ -223,6 +226,15 @@ pub struct ScrapedJob {
     pub is_new_grad: TriState,
     pub experience_evidence: Option<String>,
     pub description_text: Option<String>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub description: Option<scrape_core::enrich::JobDescription>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub description_source: Option<String>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub description_format: Option<scrape_core::enrich::DescriptionFormat>,
     pub company_icon_url: Option<String>,
     #[serde(default)]
     pub locations: Vec<ParsedLocation>,
@@ -252,7 +264,7 @@ impl JobsRepo {
                    sponsorship_evidence, clearance, clearance_level,
                    clearance_evidence, experience_min, experience_max,
                    experience_raw, is_new_grad, experience_evidence,
-                   description_text, company_icon_url, enrichment_version, favorited, favorited_at,
+                   description_text, description_json, description_source, company_icon_url, enrichment_version, favorited, favorited_at,
                    work_auth, work_auth_evidence
             FROM jobs
             WHERE id = ?
@@ -455,6 +467,10 @@ impl JobsRepo {
             is_new_grad,
             experience_evidence: r.get("experience_evidence"),
             description_text: r.get("description_text"),
+            description: r
+                .try_get::<Option<String>, _>("description_json")?
+                .map(|json| serde_json::from_str(&json))
+                .transpose()?,
             company_icon_url: r.try_get("company_icon_url").unwrap_or(None),
             enrichment_version: r.get("enrichment_version"),
             locations,
@@ -667,7 +683,7 @@ impl JobsRepo {
                    sponsorship_evidence, clearance, clearance_level,
                    clearance_evidence, experience_min, experience_max,
                    experience_raw, is_new_grad, experience_evidence,
-                   description_text, enrichment_version, favorited, favorited_at,
+                   description_text, description_json, description_source, enrichment_version, favorited, favorited_at,
                    company_icon_url, work_auth, work_auth_evidence
             FROM jobs
             {}
@@ -1086,10 +1102,13 @@ impl JobsRepo {
                             is_new_grad = CASE WHEN ?23 != 'unknown' THEN ?23 ELSE is_new_grad END,
                             experience_evidence = COALESCE(?24, experience_evidence),
                             description_text = COALESCE(?25, description_text),
-                            company_icon_url = COALESCE(?26, company_icon_url),
-                            work_auth = CASE WHEN ?27 != 'unknown' THEN ?27 ELSE work_auth END,
-                            work_auth_evidence = COALESCE(?28, work_auth_evidence)
-                        WHERE id = ?29
+                            description_json = COALESCE(?26, description_json),
+                            description_source = COALESCE(?27, description_source),
+                            description_format = COALESCE(?28, description_format),
+                            company_icon_url = COALESCE(?29, company_icon_url),
+                            work_auth = CASE WHEN ?30 != 'unknown' THEN ?30 ELSE work_auth END,
+                            work_auth_evidence = COALESCE(?31, work_auth_evidence)
+                        WHERE id = ?32
                         "#,
                     )
                     .bind(&job.title)
@@ -1117,6 +1136,13 @@ impl JobsRepo {
                     .bind(new_grad_str)
                     .bind(&job.experience_evidence)
                     .bind(&job.description_text)
+                    .bind(job.description.as_ref().map(serde_json::to_string).transpose()?)
+                    .bind(&job.description_source)
+                    .bind(job.description_format.map(|format| match format {
+                        scrape_core::enrich::DescriptionFormat::Html => "html",
+                        scrape_core::enrich::DescriptionFormat::PlainText => "plain_text",
+                        scrape_core::enrich::DescriptionFormat::Mixed => "mixed",
+                    }))
                     .bind(&job.company_icon_url)
                     .bind(work_auth_str)
                     .bind(&job.work_auth_evidence)
@@ -1164,7 +1190,7 @@ impl JobsRepo {
                             sponsorship_evidence, clearance, clearance_level,
                             clearance_evidence, experience_min, experience_max,
                             experience_raw, is_new_grad, experience_evidence,
-                            description_text, enrichment_version, company_icon_url,
+                            description_text, description_json, description_source, description_format, enrichment_version, company_icon_url,
                             work_auth, work_auth_evidence
                         )
                         VALUES (
@@ -1172,7 +1198,7 @@ impl JobsRepo {
                             ?11, ?12, 'scraped', ?13, ?14, ?15, ?16, ?17,
                             ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25,
                             ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33,
-                            ?34, ?35
+                            ?34, ?35, ?36, ?37, ?38
                         )
                         "#,
                     )
@@ -1207,6 +1233,13 @@ impl JobsRepo {
                     .bind(new_grad_str)
                     .bind(&job.experience_evidence)
                     .bind(&job.description_text)
+                    .bind(job.description.as_ref().map(serde_json::to_string).transpose()?)
+                    .bind(&job.description_source)
+                    .bind(job.description_format.map(|format| match format {
+                        scrape_core::enrich::DescriptionFormat::Html => "html",
+                        scrape_core::enrich::DescriptionFormat::PlainText => "plain_text",
+                        scrape_core::enrich::DescriptionFormat::Mixed => "mixed",
+                    }))
                     .bind(ENRICHMENT_VERSION)
                     .bind(&job.company_icon_url)
                     .bind(work_auth_str)
@@ -1263,26 +1296,67 @@ impl JobsRepo {
         use sqlx::Row;
         let rows = sqlx::query(
             r#"
-            SELECT id, title, description_text
+            SELECT id, title, description_text, description_source, description_format
             FROM jobs
             WHERE enrichment_version < ?1 AND description_text IS NOT NULL
+            ORDER BY id
+            LIMIT ?2
             "#,
         )
         .bind(ENRICHMENT_VERSION)
+        .bind(200i64)
         .fetch_all(pool)
         .await?;
+
+        if !rows.is_empty() {
+            let database: sqlx::sqlite::SqliteRow =
+                sqlx::query("PRAGMA database_list").fetch_one(pool).await?;
+            let database_file: String = database.get("file");
+            if !database_file.is_empty() {
+                let database_path = std::path::PathBuf::from(database_file);
+                let backup_path = database_path.with_file_name(format!(
+                    "{}.pre-description-repair-{}.db",
+                    database_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
+                    Uuid::now_v7()
+                ));
+                sqlx::query("VACUUM INTO ?")
+                    .bind(backup_path.to_string_lossy().as_ref())
+                    .execute(pool)
+                    .await?;
+            }
+        }
 
         let mut updated = 0i64;
         for r in rows {
             let id: String = r.get("id");
             let title: String = r.get("title");
-            let desc: String = r.get("description_text");
+            let stored_desc: String = r.get("description_text");
+            let source: Option<String> = r.try_get("description_source").unwrap_or(None);
+            let stored_format: Option<String> = r.try_get("description_format").unwrap_or(None);
+            let repaired_input = source.as_deref().unwrap_or(&stored_desc);
+            let repaired = match stored_format.as_deref() {
+                Some("plain_text") => scrape_core::enrich::normalize_description_with_format(
+                    repaired_input,
+                    scrape_core::enrich::DescriptionFormat::PlainText,
+                    32768,
+                ),
+                Some("mixed") => scrape_core::enrich::normalize_description_with_format(
+                    repaired_input,
+                    scrape_core::enrich::DescriptionFormat::Mixed,
+                    32768,
+                ),
+                _ => scrape_core::enrich::normalize_description(repaired_input, 32768),
+            };
+            let desc = repaired.plain_text.as_str();
 
-            let spon = scrape_core::enrich::classify_sponsorship(&desc);
-            let clr = scrape_core::enrich::classify_clearance(&desc);
-            let wa = scrape_core::enrich::classify_work_auth(&desc);
-            let exp = scrape_core::enrich::extract_experience(&title, &desc);
-            let sal = scrape_core::enrich::Salary::from_text(&desc);
+            let spon = scrape_core::enrich::classify_sponsorship(desc);
+            let clr = scrape_core::enrich::classify_clearance(desc);
+            let wa = scrape_core::enrich::classify_work_auth(desc);
+            let exp = scrape_core::enrich::extract_experience(&title, desc);
+            let sal = scrape_core::enrich::Salary::from_text(desc);
 
             let clr_lvl_str = clr.level.map(|cl| match cl {
                 ClearanceLevel::PublicTrust => "public_trust",
@@ -1361,6 +1435,7 @@ impl JobsRepo {
                     work_auth = ?17, work_auth_evidence = ?18,
                     enrichment_version = ?19,
                     compensation_json = CASE WHEN compensation_json = '[]' THEN ?21 ELSE compensation_json END,
+                    description_text = ?22, description_json = ?23,
                     compensation_migrated = 1
                 WHERE id = ?20
                 "#,
@@ -1386,6 +1461,8 @@ impl JobsRepo {
             .bind(ENRICHMENT_VERSION)
             .bind(&id)
             .bind(serde_json::to_string(&compensation)?)
+            .bind(desc)
+            .bind(serde_json::to_string(&repaired)?)
             .execute(pool)
             .await?;
 
@@ -1587,6 +1664,9 @@ mod tests {
                 description_text: Some(
                     "5+ years experience required. No visa sponsorship.".to_string(),
                 ),
+                description: None,
+                description_source: None,
+                description_format: None,
                 company_icon_url: None,
                 locations: vec![ParsedLocation {
                     raw: "San Francisco, CA".to_string(),
@@ -1636,6 +1716,9 @@ mod tests {
                 is_new_grad: TriState::Yes,
                 experience_evidence: Some("New Grad 2026".to_string()),
                 description_text: Some("New Grad role. Visa sponsorship available.".to_string()),
+                description: None,
+                description_source: None,
+                description_format: None,
                 company_icon_url: None,
                 locations: vec![ParsedLocation {
                     raw: "Remote".to_string(),
@@ -1819,6 +1902,9 @@ mod tests {
             is_new_grad: TriState::No,
             experience_evidence: None,
             description_text: Some("Initial posting text".to_string()),
+            description: None,
+            description_source: None,
+            description_format: None,
             company_icon_url: None,
             locations: vec![ParsedLocation {
                 raw: "San Francisco, CA".to_string(),
@@ -1887,6 +1973,9 @@ mod tests {
             is_new_grad: TriState::No,
             experience_evidence: None,
             description_text: Some("Updated description text".to_string()),
+            description: None,
+            description_source: None,
+            description_format: None,
             company_icon_url: None,
             locations: vec![ParsedLocation {
                 raw: "Seattle, WA".to_string(),
@@ -1962,13 +2051,16 @@ mod tests {
             is_new_grad: TriState::Unknown,
             experience_evidence: None,
             description_text: Some(
-                "Annual compensation: $140,000 to $170,000. \
+                "<h2>Requirements</h2><p>Annual compensation: $140,000 to $170,000. \
                  Requires 4+ years of relevant experience. \
                  Must hold an active Secret security clearance. \
                  Must be a U.S. Person (US citizen or lawful permanent resident / green card holder) under ITAR. \
-                 Unfortunately, we cannot sponsor work visas."
+                 Unfortunately, we cannot sponsor work visas.</p>"
                     .to_string(),
             ),
+            description: None,
+            description_source: None,
+                description_format: None,
             company_icon_url: None,
             locations: vec![],
         };
@@ -1986,10 +2078,16 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
+        sqlx::query("UPDATE jobs SET notes='keep me', favorited=1, status='applied' WHERE id = ?")
+            .bind(&initial.items[0].id)
+            .execute(&pool)
+            .await
+            .unwrap();
 
         // Run reclassification engine
         let updated_count = JobsRepo::reclassify_jobs(&pool).await.unwrap();
         assert_eq!(updated_count, 1);
+        assert_eq!(JobsRepo::reclassify_jobs(&pool).await.unwrap(), 0);
 
         // Verify natural language enrichment populated columns
         let reclassified = JobsRepo::get(&pool, &initial.items[0].id).await.unwrap();
@@ -2002,6 +2100,9 @@ mod tests {
         assert!(reclassified.clearance_evidence.is_some());
         assert!(reclassified.sponsorship_evidence.is_some());
         assert!(reclassified.work_auth_evidence.is_some());
+        assert_eq!(reclassified.notes.as_deref(), Some("keep me"));
+        assert!(reclassified.favorited);
+        assert_eq!(reclassified.status, JobStatus::Applied);
     }
 
     #[tokio::test]
@@ -2050,6 +2151,9 @@ mod tests {
                 is_new_grad: TriState::No,
                 experience_evidence: None,
                 description_text: None,
+                description: None,
+                description_source: None,
+                description_format: None,
                 company_icon_url: None,
                 locations: vec![ParsedLocation {
                     raw: "Remote, US".to_string(),
@@ -2099,6 +2203,9 @@ mod tests {
                 is_new_grad: TriState::No,
                 experience_evidence: None,
                 description_text: None,
+                description: None,
+                description_source: None,
+                description_format: None,
                 company_icon_url: None,
                 locations: vec![ParsedLocation {
                     raw: "Arlington, VA, US".to_string(),
@@ -2188,6 +2295,9 @@ mod tests {
             is_new_grad: TriState::Unknown,
             experience_evidence: None,
             description_text: None,
+            description: None,
+            description_source: None,
+            description_format: None,
             company_icon_url: None,
             locations: vec![ParsedLocation {
                 raw: "San Francisco, CA".to_string(),
@@ -2230,6 +2340,9 @@ mod tests {
             is_new_grad: TriState::Unknown,
             experience_evidence: None,
             description_text: None,
+            description: None,
+            description_source: None,
+            description_format: None,
             company_icon_url: None,
             locations: vec![ParsedLocation {
                 raw: "Toronto, ON".to_string(),
@@ -2314,6 +2427,9 @@ mod tests {
             is_new_grad: TriState::Unknown,
             experience_evidence: None,
             description_text: None,
+            description: None,
+            description_source: None,
+            description_format: None,
             company_icon_url: None,
             locations: vec![],
         };
@@ -2377,6 +2493,9 @@ mod tests {
             is_new_grad: TriState::Unknown,
             experience_evidence: None,
             description_text: None,
+            description: None,
+            description_source: None,
+            description_format: None,
             company_icon_url: None,
             locations: vec![],
         };
@@ -2413,6 +2532,9 @@ mod tests {
             is_new_grad: TriState::Unknown,
             experience_evidence: None,
             description_text: None,
+            description: None,
+            description_source: None,
+            description_format: None,
             company_icon_url: None,
             locations: vec![],
         };
@@ -2745,6 +2867,9 @@ mod tests {
             work_auth: scrape_core::WorkAuthRequirement::Unknown,
             work_auth_evidence: None,
             description_text: None,
+            description: None,
+            description_source: None,
+            description_format: None,
             company_icon_url: None,
         }];
 

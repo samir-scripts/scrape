@@ -553,6 +553,9 @@ mod tests {
             is_new_grad: scrape_core::TriState::Unknown,
             experience_evidence: None,
             description_text: None,
+            description: None,
+            description_source: None,
+            description_format: None,
             company_icon_url: None,
             locations: vec![],
         }

@@ -257,6 +257,15 @@ pub enum WorkerEvent {
         #[serde(default)]
         description_text: Option<String>,
         #[serde(default)]
+        #[ts(optional = nullable)]
+        description: Option<crate::enrich::JobDescription>,
+        #[serde(default)]
+        #[ts(optional = nullable)]
+        description_source: Option<String>,
+        #[serde(default)]
+        #[ts(optional = nullable)]
+        description_format: Option<crate::enrich::DescriptionFormat>,
+        #[serde(default)]
         company_icon_url: Option<String>,
         #[serde(default)]
         work_auth: Option<ClassifiedWorkAuth>,
@@ -359,6 +368,9 @@ mod tests {
             experience: None,
             is_new_grad: TriState::Unknown,
             description_text: None,
+            description: None,
+            description_source: None,
+            description_format: None,
             company_icon_url: None,
             work_auth: None,
         };

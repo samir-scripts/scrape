@@ -11,11 +11,12 @@ pub use eligibility::{
 };
 pub use experience::{extract_experience, ExperienceClassification};
 pub use html::{
-    normalize_description, to_plain_text, DescriptionBlock, DescriptionInline, JobDescription,
+    normalize_description, normalize_description_with_format, to_plain_text, DescriptionBlock,
+    DescriptionFormat, DescriptionInline, JobDescription,
 };
 pub use location::ParsedLocation;
 pub use salary::{CompensationFilter, CompensationRange, Salary};
 pub use workplace::classify_workplace;
 
 /// Current version of the enrichment extraction engine. Bump this when heuristics or classifiers change.
-pub const ENRICHMENT_VERSION: i32 = 2;
+pub const ENRICHMENT_VERSION: i32 = 3;

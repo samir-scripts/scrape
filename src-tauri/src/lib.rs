@@ -11,6 +11,9 @@ pub async fn bootstrap_database_and_services(
 ) -> Result<(sqlx::SqlitePool, services::runner::ScrapeRunner), error::AppError> {
     tracing::info!("Initializing SQLite database at: {:?}", db_path);
     let pool = db::init_db(db_path).await?;
+    // Reprocess historical descriptions in bounded, versioned batches after
+    // migrations; the repair service takes its own consistent SQLite backup.
+    db::jobs::JobsRepo::reclassify_jobs(&pool).await?;
     services::system::SystemService::initialize_system_defaults(&pool).await?;
     let _ = db::sources::SourcesRepo::seed_default_sample_if_empty(&pool).await;
     let runner = services::runner::ScrapeRunner::new(pool.clone());
@@ -218,6 +221,7 @@ mod bindings_test {
         scrape_core::enrich::ParsedLocation::export().unwrap();
         scrape_core::enrich::DescriptionInline::export().unwrap();
         scrape_core::enrich::DescriptionBlock::export().unwrap();
+        scrape_core::enrich::DescriptionFormat::export().unwrap();
         scrape_core::enrich::JobDescription::export().unwrap();
         scrape_core::enrich::ClassifiedSponsorship::export().unwrap();
         scrape_core::enrich::ClassifiedClearance::export().unwrap();

@@ -1,7 +1,8 @@
 use crate::client::{ClientError, HttpClient};
 use scrape_core::enrich::{
     classify_clearance, classify_sponsorship, classify_work_auth, classify_workplace,
-    extract_experience, location as loc_enrich, to_plain_text, Salary,
+    extract_experience, location as loc_enrich, normalize_description_with_format,
+    DescriptionFormat, Salary,
 };
 use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource};
 use serde::Deserialize;
@@ -114,17 +115,32 @@ fn parse_ashby_jobs(
         let locations = loc_enrich::parse(&location_str);
 
         // Description
-        let desc_text = if let Some(dp) = &job.description_plain {
-            if !dp.trim().is_empty() {
-                Some(dp.chars().take(32768).collect::<String>())
-            } else {
-                None
-            }
-        } else {
-            job.description_html
-                .as_ref()
-                .map(|dh| to_plain_text(dh, 32768))
-        };
+        let description_is_html = job
+            .description_html
+            .as_ref()
+            .is_some_and(|html| !html.trim().is_empty());
+        let description_source = job
+            .description_html
+            .as_ref()
+            .filter(|html| !html.trim().is_empty())
+            .or_else(|| {
+                job.description_plain
+                    .as_ref()
+                    .filter(|text| !text.trim().is_empty())
+            })
+            .cloned();
+        let description = description_source.as_deref().map(|input| {
+            normalize_description_with_format(
+                input,
+                if description_is_html {
+                    DescriptionFormat::Html
+                } else {
+                    DescriptionFormat::PlainText
+                },
+                32768,
+            )
+        });
+        let desc_text = description.as_ref().map(|d| d.plain_text.clone());
 
         // Workplace type
         let explicit = if job.is_remote == Some(true) {
@@ -206,6 +222,15 @@ fn parse_ashby_jobs(
             experience,
             is_new_grad,
             description_text: desc_text,
+            description,
+            description_format: description_source.as_ref().map(|_| {
+                if description_is_html {
+                    DescriptionFormat::Html
+                } else {
+                    DescriptionFormat::PlainText
+                }
+            }),
+            description_source,
             company_icon_url,
         });
     }

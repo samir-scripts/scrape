@@ -4,6 +4,7 @@ use scrape_core::enrich::{
     classify_clearance, classify_sponsorship, classify_work_auth, classify_workplace,
     extract_experience, location as loc_enrich, Salary,
 };
+use scrape_core::enrich::{normalize_description_with_format, DescriptionFormat};
 use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource};
 use serde::Deserialize;
 
@@ -131,11 +132,11 @@ fn parse_lever_postings(
             }
         }
         let full_description = desc_parts.join("\n\n");
-        let desc_text = if full_description.is_empty() {
-            None
-        } else {
-            Some(full_description.chars().take(32768).collect::<String>())
-        };
+        let description_source = (!full_description.is_empty()).then(|| full_description.clone());
+        let description = description_source
+            .as_deref()
+            .map(|text| normalize_description_with_format(text, DescriptionFormat::Mixed, 32768));
+        let desc_text = description.as_ref().map(|d| d.plain_text.clone());
 
         // Workplace type
         let workplace_type = classify_workplace(
@@ -215,6 +216,11 @@ fn parse_lever_postings(
             experience,
             is_new_grad,
             description_text: desc_text,
+            description,
+            description_format: description_source
+                .as_ref()
+                .map(|_| DescriptionFormat::Mixed),
+            description_source,
             company_icon_url,
         });
     }

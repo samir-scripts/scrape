@@ -6,6 +6,15 @@ use url::Url;
 const MAX_DESCRIPTION_INPUT_BYTES: usize = 512 * 1024;
 const MAX_DESCRIPTION_NODES: usize = 20_000;
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum DescriptionFormat {
+    Html,
+    PlainText,
+    Mixed,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
 #[ts(export)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -47,6 +56,17 @@ pub struct JobDescription {
 /// layer only when a recognized encoded tag is present; normal text is never
 /// repeatedly decoded or interpreted as markup.
 pub fn normalize_description(input: &str, max_bytes: usize) -> JobDescription {
+    normalize_description_with_format(input, DescriptionFormat::Html, max_bytes)
+}
+
+pub fn normalize_description_with_format(
+    input: &str,
+    format: DescriptionFormat,
+    max_bytes: usize,
+) -> JobDescription {
+    if format == DescriptionFormat::PlainText {
+        return normalize_plain_text(input, max_bytes);
+    }
     if input.trim().is_empty() {
         return JobDescription {
             plain_text: String::new(),
@@ -55,7 +75,8 @@ pub fn normalize_description(input: &str, max_bytes: usize) -> JobDescription {
         };
     }
 
-    let bounded_input = truncate_utf8(input, MAX_DESCRIPTION_INPUT_BYTES);
+    let limit = max_bytes.min(MAX_DESCRIPTION_INPUT_BYTES);
+    let bounded_input = truncate_utf8(input, limit);
     let input_truncated = bounded_input.len() < input.len();
     let decoded;
     let html = if has_encoded_html_tag(bounded_input) {
@@ -76,7 +97,6 @@ pub fn normalize_description(input: &str, max_bytes: usize) -> JobDescription {
     }
 
     let mut plain_text = blocks_to_text(&blocks);
-    let limit = max_bytes.min(MAX_DESCRIPTION_INPUT_BYTES);
     let was_truncated = input_truncated || plain_text.len() > limit;
     if plain_text.len() > limit {
         plain_text = truncate_utf8(&plain_text, limit).trim_end().to_string();
@@ -85,6 +105,30 @@ pub fn normalize_description(input: &str, max_bytes: usize) -> JobDescription {
         plain_text,
         blocks,
         truncated: was_truncated,
+    }
+}
+
+fn normalize_plain_text(input: &str, max_bytes: usize) -> JobDescription {
+    let limit = max_bytes.min(MAX_DESCRIPTION_INPUT_BYTES);
+    let source = truncate_utf8(input, limit);
+    let plain_text = source
+        .split("\n\n")
+        .map(|paragraph| paragraph.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|paragraph| !paragraph.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let blocks = plain_text
+        .split("\n\n")
+        .map(|paragraph| DescriptionBlock::Paragraph {
+            children: vec![DescriptionInline::Text {
+                text: paragraph.to_owned(),
+            }],
+        })
+        .collect();
+    JobDescription {
+        plain_text,
+        blocks,
+        truncated: source.len() < input.len(),
     }
 }
 
@@ -327,6 +371,30 @@ mod tests {
     }
 
     #[test]
+    fn double_encoded_markup_is_not_decoded_repeatedly() {
+        let desc =
+            normalize_description("&amp;lt;p&amp;gt;Visible literal&amp;lt;/p&amp;gt;", 1024);
+        assert_eq!(desc.plain_text, "&lt;p&gt;Visible literal&lt;/p&gt;");
+        assert!(desc
+            .blocks
+            .iter()
+            .all(|block| !matches!(block, DescriptionBlock::Heading { .. })));
+    }
+
+    #[test]
+    fn plain_text_format_keeps_literal_tags_as_text() {
+        let desc = normalize_description_with_format(
+            "Use the <section> element only as a literal example.",
+            DescriptionFormat::PlainText,
+            1024,
+        );
+        assert_eq!(
+            desc.plain_text,
+            "Use the <section> element only as a literal example."
+        );
+    }
+
+    #[test]
     fn structures_lists_and_only_http_links_are_retained() {
         let desc = normalize_description("<h2>Role</h2><p><strong>Build</strong> <a href=\"https://example.com/apply\">systems</a> <a href=\"javascript:alert(1)\">unsafe</a></p><ul><li>One</li><li>Two</li></ul>", 1024);
         assert_eq!(desc.blocks.len(), 3);
@@ -346,5 +414,6 @@ mod tests {
         assert!(desc.truncated);
         assert!(desc.plain_text.is_char_boundary(desc.plain_text.len()));
         assert!(desc.plain_text.len() <= 8);
+        assert!(blocks_to_text(&desc.blocks).len() <= 8);
     }
 }

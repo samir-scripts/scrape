@@ -56,22 +56,39 @@ fn invoke_replay(config: &WorkerConfig, preview: bool, origin: Option<&str>) -> 
         .unwrap()
         .write_all(&serde_json::to_vec(config).unwrap())
         .unwrap();
+    // Drain both pipes while the worker is running. Structured source evidence
+    // can exceed the OS pipe buffer, and waiting before reading would deadlock.
+    let mut stdout = child.stdout.take().unwrap();
+    let stdout_reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        stdout.read_to_end(&mut bytes).unwrap();
+        bytes
+    });
+    let mut stderr = child.stderr.take().unwrap();
+    let stderr_reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        stderr.read_to_end(&mut bytes).unwrap();
+        bytes
+    });
     let deadline = Instant::now() + Duration::from_secs(15);
     while child.try_wait().unwrap().is_none() {
         if Instant::now() > deadline {
             child.kill().unwrap();
             child.wait().unwrap();
-            panic!("Sidecar fixture timed out");
+            let stderr = stderr_reader.join().unwrap();
+            let _ = stdout_reader.join();
+            panic!(
+                "Sidecar fixture timed out: {}",
+                String::from_utf8_lossy(&stderr)
+            );
         }
         std::thread::sleep(Duration::from_millis(10));
     }
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let events: Vec<WorkerEvent> = String::from_utf8(output.stdout)
+    let status = child.wait().unwrap();
+    let stdout = stdout_reader.join().unwrap();
+    let stderr = stderr_reader.join().unwrap();
+    assert!(status.success(), "{}", String::from_utf8_lossy(&stderr));
+    let events: Vec<WorkerEvent> = String::from_utf8(stdout)
         .unwrap()
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
@@ -104,7 +121,8 @@ async fn preview_single_global_identity_and_native_pay_survive_persistence_and_b
                 } else {
                     pages += 1;
                     r#"<script type="application/ld+json">[
-                      {"@type":"JobPosting","identifier":"42","title":"Native Hourly Engineer","url":"/apply?gh_jid=42&utm_source=test","hiringOrganization":{"name":"Fixture Co"},"datePosted":"2026-10-12T09:00:00Z","baseSalary":{"currency":"USD","value":{"minValue":45.25,"maxValue":55.75,"unitText":"HOUR"}}},
+                      {"@type":"JobPosting","identifier":"42","title":"Native Hourly Engineer","url":"/apply?gh_jid=42&utm_source=test","hiringOrganization":{"name":"Fixture Co"},"datePosted":"2026-10-12T09:00:00Z","description":"&lt;h2&gt;About the role&lt;/h2&gt;&lt;p&gt;A &amp; B&lt;/p&gt;","baseSalary":{"currency":"USD","value":{"minValue":45.25,"maxValue":55.75,"unitText":"HOUR"}}},
+
                       {"@type":"JobPosting","identifier":"43","title":"Annual Engineer","url":"/apply?gh_jid=43","baseSalary":{"currency":"USD","value":{"minValue":100000,"unitText":"YEAR"}}}
                     ]</script>"#
                 };
@@ -178,6 +196,26 @@ async fn preview_single_global_identity_and_native_pay_survive_persistence_and_b
             .collect();
         assert_eq!(batch.len(), 1);
         assert_eq!(batch[0].title, "Native Hourly Engineer");
+        assert_eq!(
+            batch[0].description_text.as_deref(),
+            Some("About the role\n\nA & B")
+        );
+        assert!(batch[0]
+            .description_source
+            .as_deref()
+            .unwrap()
+            .contains("&lt;h2&gt;"));
+        assert_eq!(
+            batch[0].description_format,
+            Some(scrape_core::enrich::DescriptionFormat::Html)
+        );
+        assert!(batch[0]
+            .description
+            .as_ref()
+            .unwrap()
+            .blocks
+            .iter()
+            .any(|block| matches!(block, scrape_core::enrich::DescriptionBlock::Heading { .. })));
         assert_eq!(batch[0].compensation[0].min_minor, Some(4525));
         assert_eq!(
             batch[0].url,
@@ -215,6 +253,34 @@ async fn preview_single_global_identity_and_native_pay_survive_persistence_and_b
                 .remove(0);
             assert_eq!(job.compensation.as_ref(), Some(&batch[0].compensation));
             assert_eq!(job.url, batch[0].url);
+            assert_eq!(
+                job.description_text.as_deref(),
+                Some("About the role\n\nA & B")
+            );
+            let evidence: String =
+                sqlx::query_scalar("SELECT description_source FROM jobs WHERE id = ?")
+                    .bind(&job.id)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert!(evidence.contains("&lt;h2&gt;"));
+            let format: String =
+                sqlx::query_scalar("SELECT description_format FROM jobs WHERE id = ?")
+                    .bind(&job.id)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(format, "html");
+            assert!(job
+                .description
+                .as_ref()
+                .unwrap()
+                .blocks
+                .iter()
+                .any(|block| matches!(
+                    block,
+                    scrape_core::enrich::DescriptionBlock::Heading { .. }
+                )));
             postings::remove(&pool, &job.id, true).await.unwrap();
         } else {
             assert_eq!(

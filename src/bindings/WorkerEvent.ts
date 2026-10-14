@@ -2,7 +2,9 @@
 import type { ClassifiedClearance } from "./ClassifiedClearance";
 import type { ClassifiedSponsorship } from "./ClassifiedSponsorship";
 import type { ClassifiedWorkAuth } from "./ClassifiedWorkAuth";
+import type { DescriptionFormat } from "./DescriptionFormat";
 import type { ExperienceClassification } from "./ExperienceClassification";
+import type { JobDescription } from "./JobDescription";
 import type { ParsedLocation } from "./ParsedLocation";
 import type { RoleType } from "./RoleType";
 import type { Salary } from "./Salary";
@@ -13,4 +15,4 @@ import type { WorkplaceType } from "./WorkplaceType";
 /**
  * NDJSON events streamed by scrape-worker over stdout.
  */
-export type WorkerEvent = { "type": "job", source_id: string, external_id: string, title: string, company: string, role_type: RoleType, location: string, url: string, date_posted: string | null, provider_updated_at?: string | null, salary: Salary | null, locations: Array<ParsedLocation>, workplace_type: WorkplaceType, sponsorship: ClassifiedSponsorship | null, clearance: ClassifiedClearance | null, experience: ExperienceClassification | null, is_new_grad: TriState, description_text: string | null, company_icon_url: string | null, work_auth: ClassifiedWorkAuth | null, } | { "type": "progress", source_id: string, fetched: bigint, matched: bigint, } | { "type": "error", invalid_posting?: boolean | null, source_id: string, message: string, retryable: boolean, } | { "type": "done", stats: WorkerStats, };
+export type WorkerEvent = { "type": "job", source_id: string, external_id: string, title: string, company: string, role_type: RoleType, location: string, url: string, date_posted: string | null, provider_updated_at?: string | null, salary: Salary | null, locations: Array<ParsedLocation>, workplace_type: WorkplaceType, sponsorship: ClassifiedSponsorship | null, clearance: ClassifiedClearance | null, experience: ExperienceClassification | null, is_new_grad: TriState, description_text: string | null, description?: JobDescription | null, description_source?: string | null, description_format?: DescriptionFormat | null, company_icon_url: string | null, work_auth: ClassifiedWorkAuth | null, } | { "type": "progress", source_id: string, fetched: bigint, matched: bigint, } | { "type": "error", invalid_posting?: boolean | null, source_id: string, message: string, retryable: boolean, } | { "type": "done", stats: WorkerStats, };
