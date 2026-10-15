@@ -1,3 +1,4 @@
+import { Icon } from "../../ui/Icon";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ScrapeRun } from "../../../bindings/ScrapeRun";
@@ -344,9 +345,9 @@ export function LogsSettings() {
                                   setView("scraper");
                                   setScraperCategory("sources");
                                 }}
-                                className="px-2 py-0.5 border border-[var(--color-danger)] bg-white text-[var(--color-danger)] hover:bg-[var(--color-paper-2)] hover:text-white text-xs font-bold uppercase cursor-pointer"
+                                className="px-2 py-0.5 border border-[var(--color-danger)] bg-white text-[var(--color-danger)] hover:bg-[var(--color-paper-2)] hover:text-white text-xs font-bold uppercase cursor-pointer inline-flex items-center gap-2"
                               >
-                                [EDIT SOURCE IN SCRAPER →]
+                                <span>EDIT SOURCE IN SCRAPER</span><Icon name="right" />
                               </button>
                             </div>
                           )}

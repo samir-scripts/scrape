@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AddSourceModal } from "../components/views/settings/AddSourceModal";
 import { SourcesSettings } from "../components/views/settings/SourcesSettings";
+import { ToastContainer } from "../components/ui/Toast";
 import { api, SAMPLE_SWE_SOURCE, DEFAULT_SETTINGS } from "../lib/api";
 import { workflowSpecToYaml, sourceToWorkflowSpec } from "../lib/yamlWorkflow";
 import { useToastStore } from "../lib/toast";
@@ -63,4 +64,19 @@ it('shows cancellation while Run all is pending and refreshes after controlled c
  await user.click(await screen.findByRole('button', { name: 'Cancel active run' })); expect(cancel).toHaveBeenCalledTimes(1);
  finish({ id: 'cancelled-fixture', status: 'partial', trigger: 'manual', started_at: '2026-10-15', finished_at: '2026-10-15', jobs_found: 1n, jobs_new: 1n, error: 'Cancelled after partial fixture result', source_id: null });
  await waitFor(() => expect(screen.queryByRole('button', { name: 'Cancel active run' })).toBeNull());
+});
+
+it('offers a named SVG trash action for each workflow and reports delete failure', async () => {
+ vi.spyOn(api, 'listSources').mockResolvedValue([SAMPLE_SWE_SOURCE]);
+ const remove = vi.spyOn(api, 'deleteSource').mockRejectedValue(new Error('database unavailable'));
+ const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+ const queryClient = new QueryClient();
+ render(<QueryClientProvider client={queryClient}><SourcesSettings settings={DEFAULT_SETTINGS} /><ToastContainer /></QueryClientProvider>);
+ const user = userEvent.setup();
+ const deleteButton = await screen.findByRole('button', { name: `Delete workflow ${SAMPLE_SWE_SOURCE.name}` });
+ expect(deleteButton.querySelector('svg')).toBeTruthy();
+ await user.click(deleteButton);
+ await waitFor(() => expect(remove).toHaveBeenCalledWith(SAMPLE_SWE_SOURCE.id));
+ expect(confirm).toHaveBeenCalledWith(`DELETE WORKFLOW ${SAMPLE_SWE_SOURCE.name.toUpperCase()}?`);
+ expect((await screen.findByRole("alert")).textContent).toContain("database unavailable");
 });

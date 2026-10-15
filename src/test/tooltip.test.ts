@@ -168,8 +168,8 @@ describe("NieR Brutalist Tooltip Mechanics & Coordinate Engine", () => {
       }
     });
 
-    it("preserves 12px viewport padding on extreme right-edge action buttons (RUN/TEST/LOGS/DEL)", () => {
-      // Extreme right button like DEL in SourcesSettings (left 980, width 32 on 1024px display)
+    it("preserves 12px viewport padding on extreme right-edge action buttons (RUN/TEST/LOGS/delete workflow)", () => {
+      // Extreme right button like workflow deletion in SourcesSettings (left 980, width 32 on 1024px display)
       const rightButton = { top: 300, bottom: 322, left: 980, width: 32 };
       const bounds = getTooltipVisualBounds(
         rightButton,

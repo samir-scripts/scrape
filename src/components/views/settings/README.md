@@ -43,4 +43,5 @@ Test and transient-test APIs cannot manufacture scrape results in recorded mode.
 See [workflow field ownership](../../../../plans/08-workflow-fields.md) for controls,
 YAML-only expert fields and inheritance. Native file-chooser gestures remain an
 acceptance gate even though browser file-chooser and native local-worker wizard
-checks are automated.
+checks are automated. Workflow deletion uses a named SVG trash action and reports
+persistence failures through the shared accessible toast.

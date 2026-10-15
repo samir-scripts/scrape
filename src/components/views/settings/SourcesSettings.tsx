@@ -156,11 +156,14 @@ export function SourcesSettings({ settings, onOpenSettings }: SourcesSettingsPro
     catch (error) { notifyError(String(error), "WORKFLOW UPDATE FAILED"); }
   };
 
-  const handleDeleteSource = async (id: string) => {
-    if (window.confirm("ARE YOU SURE YOU WANT TO DELETE THIS SCRAPE WORKFLOW?")) {
-      await api.deleteSource(id);
-      if (inspectedSource?.id === id) setInspectedSource(null);
+  const handleDeleteSource = async (source: Source) => {
+    if (!window.confirm(`DELETE WORKFLOW ${source.name.toUpperCase()}?`)) return;
+    try {
+      await api.deleteSource(source.id);
+      if (inspectedSource?.id === source.id) setInspectedSource(null);
       fetchSources();
+    } catch (error) {
+      notifyError(String(error), "WORKFLOW DELETE FAILED");
     }
   };
 
@@ -549,13 +552,15 @@ export function SourcesSettings({ settings, onOpenSettings }: SourcesSettingsPro
                         </button>
                       </Tooltip>
 
-                      <Tooltip content="Delete scrape workflow">
-                        <button
-                          onClick={() => handleDeleteSource(s.id)}
-                          className="px-2 py-0.5 border border-[var(--color-danger)] text-[var(--color-danger)] hover:bg-[var(--color-danger)] hover:text-[var(--color-paper)] text-xs font-mono uppercase cursor-pointer"
+                      <Tooltip content={`Delete workflow ${s.name}`}>
+                        <IconButton
+                          label={`Delete workflow ${s.name}`}
+                          variant="danger"
+                          onClick={() => void handleDeleteSource(s)}
+                          className="min-h-8 min-w-8"
                         >
-                          DEL
-                        </button>
+                          <Icon name="trash" />
+                        </IconButton>
                       </Tooltip>
                     </div>
                   </TableCell>
@@ -592,16 +597,13 @@ export function SourcesSettings({ settings, onOpenSettings }: SourcesSettingsPro
               </button>
               <button
                 onClick={() => handleViewInInbox(inspectedSource)}
-                className="px-2.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-xs uppercase font-bold cursor-pointer"
+                className="px-2.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-xs uppercase font-bold cursor-pointer inline-flex items-center gap-2"
               >
-                VIEW JOBS IN INBOX →
+                <span>VIEW JOBS IN INBOX</span><Icon name="right" />
               </button>
-              <button
-                onClick={() => setInspectedSource(null)}
-                className="text-xs hover:opacity-75 cursor-pointer ml-1"
-              >
-                [CLOSE]
-              </button>
+              <IconButton label={`Close workflow logs for ${inspectedSource.name}`} onClick={() => setInspectedSource(null)} variant="ghost-danger">
+                <Icon name="close" />
+              </IconButton>
             </div>
           </div>
 

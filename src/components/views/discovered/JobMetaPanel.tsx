@@ -1,3 +1,4 @@
+import { Icon } from "../../ui/Icon";
 import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
 import { Button } from "../../ui/Button";
@@ -258,7 +259,7 @@ export function JobMetaPanel({
             className="w-full justify-between"
             shortcut="S"
           >
-            {job.favorited ? "■ FAVORITED (PROTECTED)" : "□ FAVORITE POSTING"}
+            <span className="inline-flex items-center gap-2"><Icon name="star" filled={job.favorited} />{job.favorited ? "FAVORITED (PROTECTED)" : "FAVORITE POSTING"}</span>
           </Button>
         )}
 
