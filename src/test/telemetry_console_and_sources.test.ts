@@ -35,29 +35,13 @@ describe("Telemetry Console & Source Workflow UI Hardening", () => {
   });
 
   describe("AddSourceModal & SourcesSettings UI Cleanliness", () => {
-    it("ensures source settings and add source files contain no leftover sample SWE tags", async () => {
-      const fs = await import("fs/promises");
-      const path = await import("path");
-
-      const addSourceModalContent = await fs.readFile(
-        path.resolve(process.cwd(), "src/components/views/settings/AddSourceModal.tsx"),
-        "utf-8"
-      );
-      const sourcesSettingsContent = await fs.readFile(
-        path.resolve(process.cwd(), "src/components/views/settings/SourcesSettings.tsx"),
-        "utf-8"
-      );
-
-      // Verify no '[ SAMPLE SWE ]' button or tag in AddSourceModal
-      expect(addSourceModalContent).not.toContain("[ SAMPLE SWE ]");
-      expect(addSourceModalContent).not.toContain("SAMPLE SWE");
-
-      // Verify no '+ SAMPLE SWE' button in SourcesSettings
-      expect(sourcesSettingsContent).not.toContain("+ SAMPLE SWE");
-
-      // Verify SVG upload icon replaces text '[ IMPORT YAML ]'
-      expect(addSourceModalContent).not.toContain("[ IMPORT YAML ]");
-      expect(addSourceModalContent).toContain('aria-label="Import YAML"');
+    it("offers an SVG upload action for an unsaved workflow draft", async () => {
+      const { WorkflowImportButton } = await import("../components/views/settings/WorkflowImportButton");
+      render(React.createElement(WorkflowImportButton, { onImport: vi.fn() }));
+      const upload = screen.getByRole("button", { name: "Import workflow YAML" });
+      expect(upload.querySelector("svg")).toBeTruthy();
+      expect(upload.textContent).toBe("");
+      expect(screen.getByLabelText("Workflow YAML file")).toBeTruthy();
     });
   });
 });
