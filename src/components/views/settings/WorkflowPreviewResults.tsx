@@ -38,9 +38,8 @@ export function WorkflowPreviewResults({ preview, draft, setError }: { preview: 
                 )}
                 {preview.sampled && (
                   <p>
-                    Showing a sample of {preview.jobs.length} eligible postings.
-                    Counts describe fetched postings; extraction errors may
-                    leave the board incomplete.
+                    Preview stopped at its limit or is showing a sample of {preview.jobs.length} eligible postings.
+                    Counts cover examined postings only; the source may contain more jobs.
                   </p>
                 )}
                 {preview.jobs.map(

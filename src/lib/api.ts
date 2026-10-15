@@ -1,3 +1,4 @@
+import { INGESTION_LIMITS } from "../bindings/ingestionLimits";
 import { errorMessage } from "./errors";
 import type { WorkflowSpec } from "../bindings/WorkflowSpec";
 import type { WorkflowPreview } from "../bindings/WorkflowPreview";
@@ -1136,7 +1137,7 @@ const apiImplementation = {
     if (!result.isValid) throw new Error(result.errors.map(e => e.message).join("; "));
     // Demonstration validates the form shape; expert syntax requires the desktop validator.
     if (result.parsedSpec?.filters?.query || result.parsedSpec?.filters?.policy) throw new Error("Expert queries and policies require desktop validation.");
-    return { ...result.parsedSpec!, version: 3 };
+    return { ...result.parsedSpec!, version: 3, max_jobs_per_run: result.parsedSpec!.max_jobs_per_run ?? INGESTION_LIMITS.default };
   },
   saveWorkflow: async (spec: WorkflowSpec, id?: string): Promise<Source> => {
     if (isTauri()) return invoke("save_workflow", { spec, id: id ?? null });
@@ -1154,7 +1155,8 @@ const apiImplementation = {
     const fixtures = generateScrapedJobsForSource(source, false);
     const matched = events.filter(event => event.type === "job" && matchesDemoWorkflow(fixtures.find(job => job.external_id === event.external_id)!, source));
     const eligible = matched.filter(event => event.type === "job" && !demoBlocks.some(block => block.identity === fixtures.find(job => job.external_id === event.external_id)?.posting_identity));
-    return { spec: validated, jobs: eligible.slice(0, 10).map(job => ({ identity: job.type === "job" ? `demo:${source.identifier}:${job.external_id}` : "", job })), fetched: events.length, matched: matched.length, rejected: events.length - matched.length, blocked: matched.length - eligible.length, invalid: 0, sampled: eligible.length > 10, errors: [], next_run_at: null };
+    const previewLimit = Math.min(validated.max_jobs_per_run ?? INGESTION_LIMITS.default, INGESTION_LIMITS.preview);
+    return { spec: validated, jobs: eligible.slice(0, previewLimit).map(job => ({ identity: job.type === "job" ? `demo:${source.identifier}:${job.external_id}` : "", job })), fetched: events.length, matched: matched.length, rejected: events.length - matched.length, blocked: matched.length - eligible.length, invalid: 0, sampled: eligible.length >= previewLimit, errors: [], next_run_at: null };
   },
 
   testSource: (id: string): Promise<WorkerEvent[]> => {

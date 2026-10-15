@@ -13,6 +13,38 @@ beforeAll(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const preview = (spec: WorkflowSpec): WorkflowPreview => ({ spec, jobs: [], fetched: 3, matched: 0, rejected: 3, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: "2026-10-14T13:00:00Z" });
 describe("one workflow draft", () => {
+  it("defaults to 20, invalidates previews for limit edits, rejects invalid input and saves the configured limit", async () => {
+    const user = userEvent.setup();
+    const extract = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => preview(spec));
+    const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_SWE_SOURCE);
+    render(<AddSourceModal isOpen initialSource={SAMPLE_SWE_SOURCE} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
+    const limit = screen.getByRole("textbox", { name: "Maximum matching jobs per run" });
+    expect((limit as HTMLInputElement).value).toBe("20");
+    await user.click(screen.getByRole("button", { name: "Preview matches" }));
+    await screen.findByText(/3 fetched/);
+    for (const invalid of ["0", "1.5", "10001", "abc"]) {
+      await user.clear(limit); await user.type(limit, invalid);
+      expect(limit.getAttribute("aria-invalid")).toBe("true");
+      expect(screen.queryByText(/3 fetched/)).toBeNull();
+      await user.click(screen.getByRole("button", { name: "Preview matches" }));
+      expect(extract).toHaveBeenCalledTimes(1);
+    }
+    await user.clear(limit); await user.type(limit, "7");
+    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+    await user.click(screen.getByRole("button", { name: "Edit YAML" }));
+    expect((screen.getByRole("textbox", { name: "Workflow YAML" }) as HTMLTextAreaElement).value).toContain("max_jobs_per_run: 7");
+    await user.click(screen.getByRole("button", { name: "Apply YAML to form" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
+    await user.click(screen.getByRole("button", { name: "Review workflow" }));
+    expect(screen.getByText(/Maximum 7 matching jobs per run/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Preview matches" }));
+    await screen.findByText(/3 fetched/);
+    await user.click(screen.getByRole("button", { name: "Save workflow" }));
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    expect(save.mock.calls[0][0].max_jobs_per_run).toBe(7);
+    expect(extract.mock.calls[1][0].max_jobs_per_run).toBe(7);
+  });
   it("creates URL → preview → save with zero matches, preserves cents and does not run implicitly", async () => {
     const user = userEvent.setup(); const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_SWE_SOURCE);
     const run = vi.spyOn(api, "runSourceNow");

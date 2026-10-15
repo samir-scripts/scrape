@@ -1,3 +1,4 @@
+import { INGESTION_LIMITS } from "../bindings/ingestionLimits";
 import { useEffect, useRef, useState } from "react";
 import type { Source } from "../bindings/Source";
 import type { WorkflowSpec } from "../bindings/WorkflowSpec";
@@ -9,7 +10,7 @@ import { sourceToWorkflowSpec, canonicalizeAtsUrl } from "../lib/yamlWorkflow";
 export const WORKFLOW_STEPS = ["Source", "Matching", "Schedule", "Review"] as const;
 export type WorkflowStep = typeof WORKFLOW_STEPS[number];
 const newDraft = (): WorkflowSpec => ({
-  version: 3, metadata: { name: "", enabled: true }, extractor: { kind: "jsonld", url: "" },
+  version: 3, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true }, extractor: { kind: "jsonld", url: "" },
   schedule: { cadence: "daily", time: "09:00", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
   filters: {}, retention: { days: 30, policy: "untracked_only" },
 });
@@ -50,7 +51,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   const setYaml = (value: string | null) => { invalidate(); setDirty(true); setYamlState(value); };
   const report = (value: unknown, fallback: WorkflowStep = step) => {
     const message = String(value); setError(message);
-    setErrorStep(/filters|query|matching|compensation/i.test(message) ? "Matching" : /schedule|timezone|retention/i.test(message) ? "Schedule" : /extractor|metadata|source|url/i.test(message) ? "Source" : fallback);
+    setErrorStep(/filters|query|matching|compensation|max_jobs_per_run/i.test(message) ? "Matching" : /schedule|timezone|retention/i.test(message) ? "Schedule" : /extractor|metadata|source|url/i.test(message) ? "Source" : fallback);
   };
   const detect = async () => {
     const current = ++revision.current; setOperation("detect"); setError(""); setPreview(null);

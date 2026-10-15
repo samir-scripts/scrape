@@ -8,6 +8,8 @@ YAML. Simple creation is URL → actual preview → schedule/save, with an expli
 Run now afterward. Advanced settings remain intact and are summarized in Simple
 mode. Source configuration and YAML use the canonical desktop v3 validator.
 
+Matching includes Maximum matching jobs per run: default 20, positive whole numbers up to 10,000, preserved through YAML/edit/reopen. Changing any limit draft invalidates preview; invalid text prevents continuing or previewing. Review explains the run/preview caps. `JobLimitInput` and other consumers use constants generated from Rust by `export_bindings_ingestion_limits`. Preview accepts at most 10 (or the lower configured limit) and labels partial coverage. Existing records refreshed by a run count toward the limit; saved jobs are not removed by changing it.
+
 `RemovedJobsSettings` searches and paginates removed and blocked postings. Restore
 restores saved state and clears suppression atomically; Unblock permits later
 rediscovery. Job removal always offers the initially unchecked block option.

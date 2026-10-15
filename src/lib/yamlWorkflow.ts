@@ -1,3 +1,4 @@
+import { INGESTION_LIMITS } from "../bindings/ingestionLimits";
 import { parseDocument, stringify } from "yaml";
 import type { SourceKind } from "../bindings/SourceKind";
 import type { SourceCadence } from "../bindings/SourceCadence";
@@ -149,6 +150,10 @@ export function validateWorkflowYaml(
     errors.push({
       message: `Unsupported workflow version ${json.version}. Expected supported version: 2 or 3`,
     });
+  }
+
+  if (json.max_jobs_per_run != null && (!Number.isInteger(json.max_jobs_per_run) || json.max_jobs_per_run < 1 || json.max_jobs_per_run > INGESTION_LIMITS.maximum)) {
+    errors.push({ message: `max_jobs_per_run: enter a whole number from 1 to ${INGESTION_LIMITS.maximum.toLocaleString("en-US")}` });
   }
 
   // Metadata check
@@ -367,6 +372,7 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
   return {
     ...snapshot,
     version: 3,
+    max_jobs_per_run: snapshot?.max_jobs_per_run ?? INGESTION_LIMITS.default,
     metadata: {
       ...snapshot?.metadata,
       name: source.name,

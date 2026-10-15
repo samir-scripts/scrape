@@ -1,9 +1,11 @@
+import { INGESTION_LIMITS } from "../../../bindings/ingestionLimits";
 import type { Settings } from "../../../bindings/Settings";
 import { SalaryRangeFilter } from "../../filters/SalaryRangeFilter";
 import type { WorkflowSpec } from "../../../bindings/WorkflowSpec";
 import type { PostingRules } from "../../../bindings/PostingRules";
 import { Input } from "../../ui/Input";
 import { Select } from "../../ui/Select";
+import { JobLimitInput } from "./JobLimitInput";
 
 export const emptyRules = (): PostingRules => ({
   keywords: null,
@@ -164,6 +166,7 @@ export function WorkflowSections({
   if (section === "Matching")
     return (
       <div className="grid gap-3">
+        <JobLimitInput value={draft.max_jobs_per_run ?? INGESTION_LIMITS.default} onChange={value => change(value == null ? { ...draft } : { ...draft, max_jobs_per_run: value })} />
         <p className="text-sm text-[var(--color-ink-mute)]">
           Separate terms with commas.
         </p>

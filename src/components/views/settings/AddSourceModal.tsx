@@ -1,3 +1,4 @@
+import { INGESTION_LIMITS } from "../../../bindings/ingestionLimits";
 import { useLayoutEffect, useRef } from "react";
 import { api } from "../../../lib/api";
 import type { Source } from "../../../bindings/Source";
@@ -121,6 +122,7 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
         </fieldset>
         {step === "Review" && yaml == null && <section data-workflow-step="Review" className="grid gap-3">
           <h3 className="font-bold text-base">Review {draft.metadata.name}</h3>
+          <p>Maximum {draft.max_jobs_per_run ?? INGESTION_LIMITS.default} matching jobs per run; preview accepts at most {Math.min(draft.max_jobs_per_run ?? INGESTION_LIMITS.default, INGESTION_LIMITS.preview)}.</p>
           <p className="break-words">{draft.extractor.kind} · {draft.extractor.url}</p>
           <p>{draft.metadata.enabled === false ? "Disabled" : "Enabled"} · {draft.schedule?.cadence || "Inherited global schedule"} {draft.schedule?.time || ""} · {draft.schedule?.timezone || settings?.system_timezone || "Global timezone"}</p>
           <p>Retention: {draft.retention?.days ?? "inherited"} days. Tracked jobs, notes and favorites are protected.</p>

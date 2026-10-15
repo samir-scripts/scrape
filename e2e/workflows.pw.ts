@@ -12,6 +12,9 @@ test("create a workflow through actual controls without an implicit scrape", asy
     .getByRole("textbox", { name: "Source URL or board identifier" })
     .fill("https://boards.greenhouse.io/fixture-board");
   await dialog.getByRole("button", { name: "Continue to Matching" }).click();
+  const limit = dialog.getByRole("textbox", { name: "Maximum matching jobs per run" });
+  await expect(limit).toHaveValue("20");
+  await limit.fill("7");
   await dialog
     .getByRole("textbox", { name: "Title keywords (any)" })
     .fill("NoSuchRole");
@@ -34,6 +37,7 @@ test("create a workflow through actual controls without an implicit scrape", asy
   const edit = page.getByRole("dialog", { name: "Edit workflow" });
   await expect(edit.getByLabel("Workflow name")).toHaveValue("fixture-board");
   await edit.getByRole("button", { name: "Continue to Matching" }).click();
+  await expect(edit.getByRole("textbox", { name: "Maximum matching jobs per run" })).toHaveValue("7");
   await expect(edit.getByLabel("Title keywords (any)")).toHaveValue("NoSuchRole");
   await edit.getByRole("button", { name: "Back", exact: true }).click();
   await expect(edit.getByLabel("Workflow name")).toHaveValue("fixture-board");
