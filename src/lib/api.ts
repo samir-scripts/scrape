@@ -519,6 +519,15 @@ function matchesDemoWorkflow(job: Job, source: Source): boolean {
 }
 
 const apiImplementation = {
+  previewDataCleanup: (mode: import("../bindings/CleanupMode").CleanupMode): Promise<import("../bindings/CleanupPreview").CleanupPreview> => {
+    if (!isTauri()) return Promise.reject(new Error("Data cleanup is available in the desktop app only. Browser previews cannot clear the desktop database."));
+    return invoke("preview_data_cleanup", { mode });
+  },
+  executeDataCleanup: (request: import("../bindings/CleanupRequest").CleanupRequest): Promise<import("../bindings/CleanupResult").CleanupResult> => {
+    if (!isTauri()) return Promise.reject(new Error("Data cleanup is available in the desktop app only. Browser previews cannot clear the desktop database."));
+    return invoke("execute_data_cleanup", { request });
+  },
+
   // Jobs
   listJobs: (filter?: ApiJobFilter): Promise<Page<Job>> => {
     if (!isTauri()) {

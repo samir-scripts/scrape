@@ -1,6 +1,6 @@
 # Settings and workflow configuration
 
-Settings provides Appearance, System, Logs, and Removed & blocked jobs. Scraper
+Settings provides Appearance, System, Removed & blocked jobs, and Data management. Scraper
 provides source workflows, automatic scheduling and global matching defaults.
 
 `AddSourceModal` and `WorkflowSections` share one draft across Simple, Advanced and
@@ -49,3 +49,25 @@ YAML-only expert fields and inheritance. Native file-chooser gestures remain an
 acceptance gate even though browser file-chooser and native local-worker wizard
 checks are automated. Workflow deletion uses a named SVG trash action and reports
 persistence failures through the shared accessible toast.
+
+
+## Explicit bulk cleanup
+
+`DataManagementSettings` previews affected postings, saved records, notes and history
+before submitting one generated Rust `CleanupRequest`. Delete all, keep favorites,
+keep tracked applications, and reset all use one backend selection rule. A qualifying
+copy protects all copies of its posting identity, including soft-removed jobs.
+These operations permanently delete records; they do not add discovery blocks.
+
+Cancel receives focus. Escape cancels before execution; buttons and dismissal are
+blocked during execution. Reset requires exact `RESET` and always pauses scraping.
+Other operations default to pausing but allow leaving the current scheduling state.
+Every action requires a successful SQLite recovery snapshot; its path and recovery
+instructions are shown after success. See [database recovery](../../../../plans/database-recovery.md).
+
+Browser mode disables these controls and cannot simulate clearing a desktop database.
+`applyDataCleanup` is shared by the response and `data://cleaned` event. It clears
+stale selection/Undo, resets pagination and query caches, and clears only `scrape:`
+frontend preferences on full reset. Errors preserve caches and require fresh counts
+before another destructive submission. Preview requests cannot repopulate a closed
+dialog. Native checks use temporary profiles and never the user's active database.

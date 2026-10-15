@@ -1,3 +1,4 @@
+import { DataManagementSettings } from "./DataManagementSettings";
 import { Icon } from "../../ui/Icon";
 import { RemovedJobsSettings } from "./RemovedJobsSettings";
 import type { Settings } from "../../../bindings/Settings";
@@ -15,9 +16,11 @@ const CATEGORIES: { id: SettingsCategory; label: string }[] = [
   { id: "appearance", label: "APPEARANCE" },
   { id: "system", label: "SYSTEM" },
   { id: "removed", label: "REMOVED & BLOCKED JOBS" },
+  { id: "data", label: "DATA MANAGEMENT" },
 ];
 
 const CATEGORY_TOOLTIPS: Record<SettingsCategory, string> = {
+  data: "Permanently clear saved jobs or reset application data",
   removed: "Restore saved postings and manage future discovery blocks",
   appearance: "Theme, motion, dither patterns, and interface tooltips",
   system: "Locale, timezone, time formats, and data export",
@@ -73,6 +76,7 @@ export function SettingsView({
 
       {/* Right Content: Active Category Panel */}
       <main className="flex-1 min-w-0 overflow-y-auto p-3 sm:p-6 bg-[var(--color-paper)]">
+        {settingsCategory === "data" && <DataManagementSettings />}
         {settingsCategory === "removed" && <RemovedJobsSettings />}
         {settingsCategory === "appearance" && (
           <AppearanceSettings

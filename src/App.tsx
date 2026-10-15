@@ -51,7 +51,8 @@ export default function App() {
     };
   }, [queryClient]);
 
-  const pageKey = JSON.stringify({ view, filterSpec });
+  const dataRevision = useUIStore(state => state.dataRevision);
+  const pageKey = JSON.stringify({ view, filterSpec, dataRevision });
   const [pageState, setPageState] = useState({ key: pageKey, page: 1 });
   const page = pageState.key === pageKey ? pageState.page : 1;
   if (pageState.key !== pageKey) setPageState({ key: pageKey, page: 1 });

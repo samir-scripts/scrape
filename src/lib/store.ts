@@ -14,7 +14,8 @@ export type ScraperCategory =
 export type SettingsCategory =
   | "appearance"
   | "system"
-  | "removed";
+  | "removed"
+  | "data";
 
 export interface UndoItem {
   jobId: string;
@@ -43,6 +44,7 @@ export const DEFAULT_FILTER_SPEC: Partial<JobFilter> = {
 };
 
 interface UIState {
+  dataRevision: number;
   // Navigation
   view: NavTabId;
   setView: (view: NavTabId) => void;
@@ -129,6 +131,7 @@ const setStored = (key: string, value: string): void => {
 };
 
 export const useUIStore = create<UIState>((set, get) => ({
+  dataRevision: 0,
   view: (getStored("scrape:view") as NavTabId) || "discovered",
   setView: (view) => {
     setStored("scrape:view", view);

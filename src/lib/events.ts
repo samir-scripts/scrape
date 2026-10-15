@@ -1,3 +1,5 @@
+import { applyDataCleanup } from "./dataCleanup";
+import type { CleanupResult } from "../bindings/CleanupResult";
 import { isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { QueryClient } from "@tanstack/react-query";
@@ -28,6 +30,7 @@ export async function setupAppEventListeners(
     return () => {};
   }
   const unlisteners: UnlistenFn[] = [];
+  unlisteners.push(await listen<CleanupResult>("data://cleaned", event => { void applyDataCleanup(queryClient, event.payload); }));
 
   const unlistenJobs = await listen("jobs://changed", () => {
     queryClient.invalidateQueries({ queryKey: ["jobs"] });
