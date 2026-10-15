@@ -27,6 +27,128 @@ impl<'a> FilterMatcher<'a> {
     }
 }
 
+/// One source's acceptance budget, shared by every adapter and execution route.
+pub struct PostingGate<'a> {
+    matcher: FilterMatcher<'a>,
+    source: &'a scrape_core::WorkerSource,
+    blocked: &'a std::collections::HashSet<String>,
+    seen: std::collections::HashSet<String>,
+    started: chrono::DateTime<chrono::Utc>,
+    pub summary: scrape_core::protocol::SourceScanStats,
+    pub accepted: u32,
+}
+impl<'a> PostingGate<'a> {
+    pub fn new(
+        source: &'a scrape_core::WorkerSource,
+        filters: &'a WorkerFilters,
+        blocked: &'a std::collections::HashSet<String>,
+        started: chrono::DateTime<chrono::Utc>,
+        preview: bool,
+    ) -> Result<Self, String> {
+        let limit = source.max_jobs_per_run()?;
+        Ok(Self {
+            matcher: FilterMatcher::new(filters)?,
+            source,
+            blocked,
+            seen: Default::default(),
+            started,
+            accepted: 0,
+            summary: scrape_core::protocol::SourceScanStats {
+                source_id: source.id.clone(),
+                limit: if preview {
+                    limit.min(scrape_core::protocol::PREVIEW_MAX_JOBS)
+                } else {
+                    limit
+                },
+                ..Default::default()
+            },
+        })
+    }
+    pub fn full(&self) -> bool {
+        self.accepted >= self.summary.limit
+    }
+    pub fn accept(&mut self, event: scrape_core::WorkerEvent) -> Option<scrape_core::WorkerEvent> {
+        use scrape_core::WorkerEvent;
+        if self.full() {
+            return None;
+        }
+        if let WorkerEvent::Error {
+            invalid_posting: Some(true),
+            ..
+        } = &event
+        {
+            self.summary.examined += 1;
+            self.summary.invalid += 1;
+        }
+        if let WorkerEvent::Job {
+            external_id,
+            title,
+            location,
+            company,
+            description_text,
+            salary,
+            role_type,
+            url,
+            ..
+        } = &event
+        {
+            self.summary.examined += 1;
+            let identity = match scrape_core::PostingIdentity::for_posting(
+                Some(self.source.kind),
+                Some(&self.source.identifier),
+                Some(external_id),
+                url,
+            ) {
+                Ok(identity) => identity.key,
+                Err(message) => {
+                    self.summary.invalid += 1;
+                    return Some(WorkerEvent::Error {
+                        source_id: self.source.id.clone(),
+                        message,
+                        retryable: false,
+                        invalid_posting: Some(true),
+                    });
+                }
+            };
+            if !self.seen.insert(identity.clone()) {
+                self.summary.duplicates += 1;
+                return None;
+            }
+            let filters = self.matcher.filters;
+            let ctx = JobFilterContext {
+                title,
+                location,
+                company,
+                description: description_text.as_deref().unwrap_or(""),
+                role_type: *role_type,
+            };
+            if !self.matcher.matches_context(&ctx)
+                || !filters
+                    .matching
+                    .as_ref()
+                    .is_none_or(|rules| rules.matches_event_at(&event, self.started))
+                || !filters.compensation.as_ref().is_none_or(|pay| {
+                    pay.matches(salary.as_ref().map(|s| s.ranges.as_slice()).unwrap_or(&[]))
+                })
+            {
+                return None;
+            }
+            self.summary.matched += 1;
+            if self.blocked.contains(&identity)
+                || self
+                    .blocked
+                    .contains(&format!("{}:{}", self.source.id, external_id))
+            {
+                self.summary.blocked += 1;
+                return None;
+            }
+            self.accepted += 1;
+            self.summary.limit_reached = self.full();
+        }
+        Some(event)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

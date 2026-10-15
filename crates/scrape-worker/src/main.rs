@@ -4,7 +4,7 @@ use scrape_core::{
     PROTOCOL_VERSION,
 };
 use scrape_worker::client::{self, HttpClient};
-use scrape_worker::filter::FilterMatcher;
+use scrape_worker::filter::{FilterMatcher, PostingGate};
 use scrape_worker::{adapters, detect};
 
 use std::io::{self, Read};
@@ -24,6 +24,10 @@ struct Cli {
     /// Test a single source in format <kind>:<identifier> (e.g. greenhouse:stripe)
     #[arg(long)]
     source: Option<String>,
+
+    /// Maximum matching postings for --source (default 20).
+    #[arg(long, requires = "source")]
+    max_jobs_per_run: Option<u32>,
 
     /// Replay provider HTTP through a loopback fixture server (never live).
     #[arg(long)]
@@ -55,7 +59,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if let Some(source_spec) = args.source {
-        run_single_source(&source_spec, args.dry_run, args.replay_origin.as_deref()).await?;
+        run_single_source(
+            &source_spec,
+            args.dry_run,
+            args.replay_origin.as_deref(),
+            args.max_jobs_per_run,
+        )
+        .await?;
         return Ok(());
     }
 
@@ -99,6 +109,7 @@ async fn run_single_source(
     spec: &str,
     dry_run: bool,
     replay_origin: Option<&str>,
+    max_jobs_per_run: Option<u32>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (kind_str, identifier) = spec
         .split_once(':')
@@ -123,7 +134,7 @@ async fn run_single_source(
         kind,
         name: name.to_string(),
         identifier: identifier.to_string(),
-        config: serde_json::Value::Null,
+        config: serde_json::json!({"__workflow_spec": {"max_jobs_per_run": max_jobs_per_run.unwrap_or(scrape_core::protocol::DEFAULT_MAX_JOBS_PER_RUN)}}),
     };
 
     let config = WorkerConfig {
@@ -133,6 +144,7 @@ async fn run_single_source(
         sources: vec![source],
         filters: WorkerFilters::default(),
         limits: WorkerLimits::default(),
+        blocked_postings: vec![],
     };
 
     execute_worker(config, dry_run, replay_origin).await
@@ -170,110 +182,63 @@ async fn execute_worker(
         client = client.with_replay_origin(origin)?;
         tracing::info!("Recorded provider replay via {origin}; no live-provider verification");
     }
-    let max_dry_run_jobs = 10u64;
-
+    let blocked = config.blocked_postings.iter().cloned().collect();
+    // Validate every source before making any provider requests.
+    for source in &config.sources {
+        source.max_jobs_per_run()?;
+    }
     for source in &config.sources {
         let filters = config
             .filters_by_source
             .get(&source.id)
             .unwrap_or(&config.filters);
-        let matcher = FilterMatcher::new(filters)?;
-        if dry_run && total_emitted >= max_dry_run_jobs {
-            break;
-        }
-
-        tracing::info!("Scraping source: {} ({:?})", source.name, source.kind);
-
-        match adapters::scrape_source(&client, source).await {
-            Ok(events) => {
-                let has_invalid = events
-                    .iter()
-                    .any(|event| matches!(event, WorkerEvent::Error { .. }));
-                if has_invalid {
-                    stats.sources_failed += 1;
-                } else {
-                    stats.sources_ok += 1;
+        let mut gate = PostingGate::new(source, filters, &blocked, started, dry_run)?;
+        let mut output_error = None;
+        let mut source_failed = false;
+        tracing::info!(
+            "Scraping source: {} ({:?}), limit {}",
+            source.name,
+            source.kind,
+            gate.summary.limit
+        );
+        let result = adapters::scrape_source_with(&client, source, &mut |event| {
+            if let Some(event) = gate.accept(event) {
+                source_failed |= matches!(event, WorkerEvent::Error { .. });
+                if let Err(error) = emit_event(&event) {
+                    output_error = Some(error);
+                    return false;
                 }
-                let fetched_count = events
-                    .iter()
-                    .filter(|event| {
-                        matches!(
-                            event,
-                            WorkerEvent::Job { .. }
-                                | WorkerEvent::Error {
-                                    invalid_posting: Some(true),
-                                    ..
-                                }
-                        )
-                    })
-                    .count() as u64;
-                let mut matched_count = 0u64;
-
-                for event in events {
-                    if let WorkerEvent::Error { .. } = &event {
-                        emit_event(&event)?;
-                        continue;
-                    }
-                    if let WorkerEvent::Job {
-                        ref title,
-                        ref location,
-                        ref company,
-                        ref description_text,
-                        ref salary,
-                        role_type,
-                        ..
-                    } = event
-                    {
-                        let ctx = scrape_core::JobFilterContext {
-                            title,
-                            location,
-                            description: description_text.as_deref().unwrap_or(""),
-                            company,
-                            role_type,
-                        };
-                        if matcher.matches_context(&ctx)
-                            && filters
-                                .matching
-                                .as_ref()
-                                .is_none_or(|rules| rules.matches_event_at(&event, started))
-                            && filters.compensation.as_ref().is_none_or(|pay| {
-                                pay.matches(
-                                    salary.as_ref().map(|s| s.ranges.as_slice()).unwrap_or(&[]),
-                                )
-                            })
-                        {
-                            matched_count += 1;
-                            total_emitted += 1;
-                            emit_event(&event)?;
-
-                            if dry_run && total_emitted >= max_dry_run_jobs {
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                let progress = WorkerEvent::Progress {
-                    source_id: source.id.clone(),
-                    fetched: fetched_count,
-                    matched: matched_count,
-                };
-                emit_event(&progress)?;
             }
-            Err(err) => {
-                stats.sources_failed += 1;
-                let error_event = WorkerEvent::Error {
-                    invalid_posting: Some(false),
-                    source_id: source.id.clone(),
-                    message: err.to_string(),
-                    retryable: matches!(
-                        err,
-                        client::ClientError::Reqwest(_) | client::ClientError::HttpStatus(..)
-                    ),
-                };
-                emit_event(&error_event)?;
-            }
+            !gate.full()
+        })
+        .await;
+        if let Some(error) = output_error {
+            return Err(error.into());
         }
+        if let Err(error) = result {
+            source_failed = true;
+            emit_event(&WorkerEvent::Error {
+                invalid_posting: Some(false),
+                source_id: source.id.clone(),
+                message: error.to_string(),
+                retryable: matches!(
+                    error,
+                    client::ClientError::Reqwest(_) | client::ClientError::HttpStatus(..)
+                ),
+            })?;
+        }
+        if source_failed {
+            stats.sources_failed += 1;
+        } else {
+            stats.sources_ok += 1;
+        }
+        total_emitted += u64::from(gate.accepted);
+        emit_event(&WorkerEvent::Progress {
+            source_id: source.id.clone(),
+            fetched: gate.summary.examined,
+            matched: gate.summary.matched,
+        })?;
+        stats.sources.push(gate.summary);
     }
 
     stats.jobs_emitted = total_emitted;

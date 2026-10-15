@@ -14,31 +14,60 @@ pub async fn scrape_jsonld(
     client: &HttpClient,
     source: &WorkerSource,
 ) -> Result<Vec<WorkerEvent>, ClientError> {
+    let mut events = Vec::new();
+    scrape_jsonld_with(client, source, &mut |event| {
+        events.push(event);
+        true
+    })
+    .await?;
+    Ok(events)
+}
+
+pub async fn scrape_jsonld_with(
+    client: &HttpClient,
+    source: &WorkerSource,
+    sink: &mut dyn FnMut(WorkerEvent) -> bool,
+) -> Result<(), ClientError> {
     let base_url = Url::parse(&source.identifier)?;
     let html_text = client.fetch_text(base_url.as_str(), true).await?;
-
-    let mut all_events = extract_job_postings_from_html(&html_text, base_url.as_str(), source);
-
-    // Check if follow_links is configured
-    let follow_links_selector = source.config.get("follow_links").and_then(|v| v.as_str());
-
-    if let Some(sel_str) = follow_links_selector {
+    if !extract_job_postings_with(&html_text, base_url.as_str(), source, sink) {
+        return Ok(());
+    }
+    if let Some(selector) = source.config.get("follow_links").and_then(|v| v.as_str()) {
         let max_pages = source
             .config
             .get("max_pages")
             .and_then(|v| v.as_u64())
             .unwrap_or(25) as usize;
-
-        Selector::parse(sel_str).map_err(|e| {
+        Selector::parse(selector).map_err(|e| {
             ClientError::HttpStatus(
                 reqwest::StatusCode::BAD_REQUEST,
                 format!("Invalid follow_links selector: {e}"),
             )
         })?;
-        let mut links = find_links(&html_text, &base_url, sel_str, max_pages + 1);
-        if links.len() > max_pages {
-            links.truncate(max_pages);
-            all_events.push(WorkerEvent::Error {
+        let links = find_links(&html_text, &base_url, selector, max_pages.saturating_add(1));
+        let truncated = links.len() > max_pages;
+        for link in links.into_iter().take(max_pages) {
+            match client.fetch_text(link.as_str(), true).await {
+                Ok(page) => {
+                    if !extract_job_postings_with(&page, link.as_str(), source, sink) {
+                        return Ok(());
+                    }
+                }
+                Err(error) => {
+                    if !sink(WorkerEvent::Error {
+                        source_id: source.id.clone(),
+                        message: format!("Could not extract detail page {link}: {error}"),
+                        retryable: true,
+                        invalid_posting: Some(false),
+                    }) {
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        if truncated {
+            sink(WorkerEvent::Error {
                 source_id: source.id.clone(),
                 message: format!(
                     "Detail-page limit of {max_pages} reached; results cover fetched pages only"
@@ -47,24 +76,8 @@ pub async fn scrape_jsonld(
                 invalid_posting: Some(false),
             });
         }
-        for link in links {
-            match client.fetch_text(link.as_str(), true).await {
-                Ok(page_html) => all_events.extend(extract_job_postings_from_html(
-                    &page_html,
-                    link.as_str(),
-                    source,
-                )),
-                Err(error) => all_events.push(WorkerEvent::Error {
-                    source_id: source.id.clone(),
-                    message: format!("Could not extract detail page {link}: {error}"),
-                    retryable: true,
-                    invalid_posting: Some(false),
-                }),
-            }
-        }
     }
-
-    Ok(all_events)
+    Ok(())
 }
 
 pub fn extract_job_postings_from_html(
@@ -72,45 +85,61 @@ pub fn extract_job_postings_from_html(
     page_url: &str,
     source: &WorkerSource,
 ) -> Vec<WorkerEvent> {
-    let document = Html::parse_document(html_text);
-    let script_selector = Selector::parse(r#"script[type="application/ld+json"]"#).unwrap();
-
     let mut events = Vec::new();
+    extract_job_postings_with(html_text, page_url, source, &mut |event| {
+        events.push(event);
+        true
+    });
+    events
+}
 
-    for script in document.select(&script_selector) {
-        let text = script.text().collect::<String>();
-        if let Ok(json_val) = serde_json::from_str::<Value>(&text) {
-            extract_job_postings_from_value(&json_val, page_url, source, &mut events);
+fn extract_job_postings_with(
+    html_text: &str,
+    page_url: &str,
+    source: &WorkerSource,
+    sink: &mut dyn FnMut(WorkerEvent) -> bool,
+) -> bool {
+    let document = Html::parse_document(html_text);
+    let selector = Selector::parse(r#"script[type="application/ld+json"]"#).unwrap();
+    for script in document.select(&selector) {
+        if let Ok(value) = serde_json::from_str::<Value>(&script.text().collect::<String>()) {
+            if !extract_job_postings_from_value(&value, page_url, source, sink) {
+                return false;
+            }
         }
     }
-
-    events
+    true
 }
 
 fn extract_job_postings_from_value(
     value: &Value,
     page_url: &str,
     source: &WorkerSource,
-    out: &mut Vec<WorkerEvent>,
-) {
+    sink: &mut dyn FnMut(WorkerEvent) -> bool,
+) -> bool {
     match value {
         Value::Object(map) => {
             if is_job_posting(map.get("@type")) {
                 if let Some(event) = parse_job_posting_map(map, page_url, source) {
-                    out.push(event);
+                    if !sink(event) {
+                        return false;
+                    }
                 }
             }
             if let Some(graph) = map.get("@graph") {
-                extract_job_postings_from_value(graph, page_url, source, out);
+                return extract_job_postings_from_value(graph, page_url, source, sink);
             }
         }
-        Value::Array(arr) => {
-            for item in arr {
-                extract_job_postings_from_value(item, page_url, source, out);
+        Value::Array(items) => {
+            for item in items {
+                if !extract_job_postings_from_value(item, page_url, source, sink) {
+                    return false;
+                }
             }
         }
         _ => {}
     }
+    true
 }
 
 fn is_job_posting(type_val: Option<&Value>) -> bool {

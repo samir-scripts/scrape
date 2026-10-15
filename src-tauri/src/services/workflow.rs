@@ -90,6 +90,9 @@ optional_fields!(WorkflowRetention {
 #[ts(export)]
 pub struct WorkflowSpec {
     pub version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub max_jobs_per_run: Option<u32>,
     pub metadata: WorkflowMetadata,
     pub extractor: WorkflowExtractor,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -251,6 +254,13 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
     let mut deserializer = serde_json::Deserializer::from_str(&text);
     let mut spec: WorkflowSpec = serde_path_to_error::deserialize(&mut deserializer)
         .map_err(|e| AppError::Validation(format!("{}: {}", e.path(), e.inner())))?;
+    spec.max_jobs_per_run = Some(
+        scrape_core::protocol::validate_job_limit(
+            spec.max_jobs_per_run
+                .unwrap_or(scrape_core::protocol::DEFAULT_MAX_JOBS_PER_RUN),
+        )
+        .map_err(AppError::Validation)?,
+    );
     spec.metadata.name = spec.metadata.name.trim().into();
     if spec.metadata.name.is_empty() {
         return Err(AppError::Validation(
@@ -277,6 +287,11 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
 }
 
 pub fn source_input(spec: &WorkflowSpec, timezone: &str) -> Result<CreateSourceInput> {
+    scrape_core::protocol::validate_job_limit(
+        spec.max_jobs_per_run
+            .unwrap_or(scrape_core::protocol::DEFAULT_MAX_JOBS_PER_RUN),
+    )
+    .map_err(AppError::Validation)?;
     let extractor = &spec.extractor;
     let identifier = if extractor.kind.expects_url() {
         scrape_core::identity::normalized_detail_url(&extractor.url)
@@ -569,6 +584,46 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn job_limit_defaults_validates_and_survives_stored_configuration() {
+        let base = serde_json::json!({"version":3,"metadata":{"name":"Careers"},"extractor":{"kind":"lever","url":"acme"}});
+        assert_eq!(
+            validate(base.clone(), "UTC").unwrap().max_jobs_per_run,
+            Some(20)
+        );
+        for limit in [1, 7, 20, 10000] {
+            let mut value = base.clone();
+            value["max_jobs_per_run"] = Value::from(limit);
+            let spec = validate(value, "UTC").unwrap();
+            let input = source_input(&spec, "UTC").unwrap();
+            let worker_source = scrape_core::WorkerSource {
+                id: "test".into(),
+                kind: input.kind,
+                name: input.name,
+                identifier: input.identifier,
+                config: input.config.unwrap(),
+            };
+            assert_eq!(worker_source.max_jobs_per_run().unwrap(), limit);
+            let reopened =
+                validate(worker_source.config["__workflow_spec"].clone(), "UTC").unwrap();
+            assert_eq!(reopened.max_jobs_per_run, Some(limit));
+        }
+        for invalid in [
+            serde_json::json!(0),
+            serde_json::json!(-1),
+            serde_json::json!(1.5),
+            serde_json::json!(10001),
+            serde_json::json!("20"),
+            serde_json::json!(true),
+        ] {
+            let mut value = base.clone();
+            value["max_jobs_per_run"] = invalid;
+            assert!(validate(value, "UTC")
+                .unwrap_err()
+                .to_string()
+                .contains("max_jobs_per_run"));
+        }
+    }
     #[test]
     fn malformed_root_and_version_values_return_errors_without_mutation_or_panics() {
         for value in [

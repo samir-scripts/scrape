@@ -64,10 +64,13 @@ The worker binary supports standalone manual execution for debugging and dry-run
 cargo run -p scrape-worker -- --detect https://stripe.com/jobs
 
 # Run with config passed through stdin
-cat config.json | cargo run -p scrape-worker
+cat config.json | cargo run -p scrape-worker -- --stdin
 
-# Run a specific source ID with custom filter SQL
-cargo run -p scrape-worker -- --source-id "src-stripe" --filter-sql "role = 'swe'" < config.json
+# Stop after 20 matching jobs from one source (the default)
+cargo run -p scrape-worker -- --source lever:example --max-jobs-per-run 20
+
+# Test source extraction with an output cap of 10
+cargo run -p scrape-worker -- --source jsonld:https://example.com/careers --dry-run
 ```
 
 ## Extraction integrity
@@ -76,7 +79,9 @@ Invalid queries fail worker startup before extraction. `--source` splits only th
 first colon, so JSON-LD and selector identifiers can be complete URLs.
 Provider destinations are retained; Greenhouse URLs are not rewritten. Its update
 time is not a posting date: publication stays unknown when `first_published` is
-absent (detail fetching is still pending). ATS board slugs are not company domains.
+absent. Detail requests are bounded and cached. ATS board slugs are not company domains.
 JSON-LD relative destinations resolve against their extraction page; missing or
 unsafe destinations emit errors rather than borrowing the listing URL. Worker
 HTTP fixtures and process tests are deterministic and do not verify live providers.
+
+Worker protocol version 3 adds a suppression snapshot and per-source scan summaries. Rebuild the packaged sidecar with `npm run build:sidecar` after updating host/worker code. The authoritative workflow parameter is `max_jobs_per_run` (default 20, range 1–10,000); Preview/Test accepts at most 10. Each workflow stops after its own eligible budget, including refreshed records. Rejected/invalid/duplicate/blocked postings do not consume that budget. Summary counts cover examined records only and identify limit-reached coverage. The shared Rust constants also generate frontend defaults and bounds during binding export.

@@ -56,13 +56,26 @@ pub async fn scrape_lever(
     client: &HttpClient,
     source: &WorkerSource,
 ) -> Result<Vec<WorkerEvent>, ClientError> {
+    let mut events = Vec::new();
+    scrape_lever_with(client, source, &mut |event| {
+        events.push(event);
+        true
+    })
+    .await?;
+    Ok(events)
+}
+pub async fn scrape_lever_with(
+    client: &HttpClient,
+    source: &WorkerSource,
+    sink: &mut dyn FnMut(WorkerEvent) -> bool,
+) -> Result<(), ClientError> {
     let url = format!(
         "https://api.lever.co/v0/postings/{}?mode=json",
         source.identifier.trim()
     );
 
     let postings: Vec<LeverPosting> = client.fetch_json(&url).await?;
-    parse_lever_postings(postings, source)
+    parse_lever_postings_with(postings, source, sink)
 }
 
 pub fn parse_lever_payload(
@@ -77,8 +90,19 @@ fn parse_lever_postings(
     postings: Vec<LeverPosting>,
     source: &WorkerSource,
 ) -> Result<Vec<WorkerEvent>, ClientError> {
-    let mut events = Vec::with_capacity(postings.len());
+    let mut events = Vec::new();
+    parse_lever_postings_with(postings, source, &mut |event| {
+        events.push(event);
+        true
+    })?;
+    Ok(events)
+}
 
+fn parse_lever_postings_with(
+    postings: Vec<LeverPosting>,
+    source: &WorkerSource,
+    sink: &mut dyn FnMut(WorkerEvent) -> bool,
+) -> Result<(), ClientError> {
     for posting in postings {
         let commitment = posting
             .categories
@@ -207,7 +231,7 @@ fn parse_lever_postings(
 
         let company_icon_url = None;
 
-        events.push(WorkerEvent::Job {
+        if !sink(WorkerEvent::Job {
             source_id: source.id.clone(),
             external_id: posting.id,
             title: posting.text,
@@ -233,10 +257,12 @@ fn parse_lever_postings(
                 .map(|_| DescriptionFormat::Mixed),
             description_source,
             company_icon_url,
-        });
+        }) {
+            break;
+        }
     }
 
-    Ok(events)
+    Ok(())
 }
 
 #[cfg(test)]

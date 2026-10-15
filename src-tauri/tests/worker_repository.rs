@@ -166,6 +166,7 @@ async fn preview_single_global_identity_and_native_pay_survive_persistence_and_b
     let filters: WorkerFilters = serde_json::from_value(serde_json::json!({"compensation":{"min_minor":5000,"max_minor":6000,"currency":"USD","interval":"hour","include_unknown":false}})).unwrap();
     let mut config = WorkerConfig {
         version: PROTOCOL_VERSION,
+        blocked_postings: vec![],
         sources: vec![WorkerSource {
             id: source.id.clone(),
             kind: source.kind,
@@ -363,6 +364,7 @@ async fn recorded_lever_response_survives_actual_worker_and_repository() {
     .unwrap();
     let config = WorkerConfig {
         version: PROTOCOL_VERSION,
+        blocked_postings: vec![],
         sources: vec![WorkerSource {
             id: source.id.clone(),
             kind: source.kind,
@@ -524,6 +526,7 @@ async fn remote_us_eligibility_survives_greenhouse_worker_persistence_and_restar
     .unwrap();
     let config = WorkerConfig {
         version: PROTOCOL_VERSION,
+        blocked_postings: vec![],
         sources: vec![WorkerSource {
             id: source.id.clone(),
             kind: source.kind,
@@ -585,5 +588,133 @@ async fn remote_us_eligibility_survives_greenhouse_worker_persistence_and_restar
     let after_restart = JobsRepo::list(&reopened, remote_us).await.unwrap();
     assert_eq!(after_restart.total, 1);
     assert_eq!(after_restart.items[0].url, eligible.url);
+    reopened.close().await;
+}
+
+#[tokio::test]
+async fn bounded_worker_refresh_preview_and_lower_override_preserve_saved_state() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let server = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut pages = 0;
+        while pages < 4 && Instant::now() < deadline {
+            if let Ok((mut stream, _)) = listener.accept() {
+                stream.set_nonblocking(false).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                let mut buf = [0; 4096];
+                let n = stream.read(&mut buf).unwrap();
+                let request = String::from_utf8_lossy(&buf[..n]);
+                let body = if request.starts_with("GET /robots.txt ") {
+                    "User-agent: *\nAllow: /".into()
+                } else {
+                    assert!(
+                        request.starts_with("GET /careers "),
+                        "Unnecessary detail request after reaching budget: {request}"
+                    );
+                    pages += 1;
+                    let jobs: Vec<_> = (0..120).map(|id| serde_json::json!({"@type":"JobPosting","identifier":id.to_string(),"title":format!("Engineer {id}"),"url":format!("/jobs/{id}")})).collect();
+                    format!("<script type=\"application/ld+json\">{}</script><a class=detail href=/unnecessary>More</a>", serde_json::json!(jobs))
+                };
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                )
+                .unwrap();
+            } else {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+        assert_eq!(pages, 4);
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("bounded.db");
+    let pool = scrape_lib::db::init_db(&db).await.unwrap();
+    let spec = scrape_lib::services::workflow::validate(serde_json::json!({"version":3,"metadata":{"name":"Bounded fixture"},"extractor":{"kind":"jsonld","url":format!("http://{address}/careers"),"source_config":{"follow_links":"a.detail"}},"schedule":{"cadence":"manual"}}),"UTC").unwrap();
+    let source = SourcesRepo::create(
+        &pool,
+        scrape_lib::services::workflow::source_input(&spec, "UTC").unwrap(),
+    )
+    .await
+    .unwrap();
+    let mut config = WorkerConfig {
+        version: PROTOCOL_VERSION,
+        blocked_postings: vec![],
+        run_started_at: None,
+        filters: WorkerFilters::default(),
+        filters_by_source: Default::default(),
+        limits: WorkerLimits {
+            per_host_delay_ms: 0,
+            request_timeout_s: 3,
+            ..Default::default()
+        },
+        sources: vec![WorkerSource {
+            id: source.id,
+            kind: source.kind,
+            name: source.name,
+            identifier: source.identifier,
+            config: source.config,
+        }],
+    };
+    let batch = |events: Vec<WorkerEvent>| {
+        events
+            .into_iter()
+            .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+            .map(|e| scraped_job_from_event(e).unwrap())
+            .collect::<Vec<_>>()
+    };
+    let first = batch(invoke(&config, false));
+    assert_eq!(first.len(), 20);
+    assert_eq!(
+        JobsRepo::upsert_scraped(&pool, &first)
+            .await
+            .unwrap()
+            .inserted,
+        20
+    );
+    let saved = JobsRepo::list(&pool, JobFilter::default())
+        .await
+        .unwrap()
+        .items
+        .remove(0);
+    JobsRepo::update_notes(&pool, &saved.id, Some("Keep my notes"))
+        .await
+        .unwrap();
+    JobsRepo::set_favorite(&pool, &saved.id, true)
+        .await
+        .unwrap();
+    JobsRepo::update_status(&pool, &saved.id, scrape_core::JobStatus::Applied)
+        .await
+        .unwrap();
+    let preview = batch(invoke(&config, true));
+    assert_eq!(preview.len(), 10);
+    assert_eq!(
+        JobsRepo::list(&pool, JobFilter::default())
+            .await
+            .unwrap()
+            .total,
+        20
+    );
+    let refreshed = batch(invoke(&config, false));
+    let result = JobsRepo::upsert_scraped(&pool, &refreshed).await.unwrap();
+    assert_eq!((result.inserted, result.updated), (0, 20));
+    config.sources[0].config["__workflow_spec"]["max_jobs_per_run"] = 7.into();
+    assert_eq!(batch(invoke(&config, false)).len(), 7);
+    server.join().unwrap();
+    pool.close().await;
+    let reopened = scrape_lib::db::init_db(&db).await.unwrap();
+    let preserved = JobsRepo::get(&reopened, &saved.id).await.unwrap();
+    assert_eq!(preserved.notes.as_deref(), Some("Keep my notes"));
+    assert!(preserved.favorited);
+    assert_eq!(preserved.status, scrape_core::JobStatus::Applied);
+    assert!(!JobsRepo::get_status_events(&reopened, &saved.id)
+        .await
+        .unwrap()
+        .is_empty());
     reopened.close().await;
 }

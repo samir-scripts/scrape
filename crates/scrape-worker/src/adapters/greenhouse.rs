@@ -53,59 +53,86 @@ pub async fn scrape_greenhouse(
 ) -> Result<Vec<WorkerEvent>, ClientError> {
     scrape_greenhouse_at(client, source, "https://boards-api.greenhouse.io").await
 }
-
 async fn scrape_greenhouse_at(
     client: &HttpClient,
     source: &WorkerSource,
     base: &str,
 ) -> Result<Vec<WorkerEvent>, ClientError> {
+    let mut events = Vec::new();
+    scrape_greenhouse_at_with(client, source, base, &mut |event| {
+        events.push(event);
+        true
+    })
+    .await?;
+    Ok(events)
+}
+pub async fn scrape_greenhouse_with(
+    client: &HttpClient,
+    source: &WorkerSource,
+    sink: &mut dyn FnMut(WorkerEvent) -> bool,
+) -> Result<(), ClientError> {
+    scrape_greenhouse_at_with(client, source, "https://boards-api.greenhouse.io", sink).await
+}
+async fn scrape_greenhouse_at_with(
+    client: &HttpClient,
+    source: &WorkerSource,
+    base: &str,
+    sink: &mut dyn FnMut(WorkerEvent) -> bool,
+) -> Result<(), ClientError> {
     let board_url = format!("{base}/v1/boards/{}/jobs", source.identifier.trim());
-    let mut resp: GreenhouseResponse = client
+    let resp: GreenhouseResponse = client
         .fetch_json(&format!("{board_url}?content=true"))
         .await?;
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(45);
-    let mut diagnostics = vec![];
-    for (index, job) in resp.jobs.iter_mut().enumerate() {
-        if index >= 100 || tokio::time::Instant::now() >= deadline {
-            diagnostics.push(WorkerEvent::Error { source_id: source.id.clone(), message: "Greenhouse detail enrichment reached its bound; remaining posting dates and structured pay are unknown".into(), retryable: true, invalid_posting: Some(false) });
-            break;
+    let mut bound_reported = false;
+    for (index, mut job) in resp.jobs.into_iter().enumerate() {
+        if !bound_reported && (index >= 100 || tokio::time::Instant::now() >= deadline) {
+            if !sink(WorkerEvent::Error { source_id: source.id.clone(), message: "Greenhouse detail enrichment reached its bound; remaining posting dates and structured pay are unknown".into(), retryable: true, invalid_posting: Some(false) }) { return Ok(()); }
+            bound_reported = true;
         }
-        let url = format!("{board_url}/{}?pay_transparency=true", job.id);
-        match tokio::time::timeout_at(deadline, client.fetch_json_cached::<GreenhouseJob>(&url))
-            .await
-        {
-            Ok(Ok(detail)) if detail.id == job.id => {
-                // Use provider fields without constructing a destination or publication date.
-                job.title = detail.title;
-                job.absolute_url = detail.absolute_url;
-                if detail.location.is_some() {
-                    job.location = detail.location;
+        if !bound_reported {
+            let url = format!("{board_url}/{}?pay_transparency=true", job.id);
+            match tokio::time::timeout_at(deadline, client.fetch_json_cached::<GreenhouseJob>(&url))
+                .await
+            {
+                Ok(Ok(detail)) if detail.id == job.id => {
+                    // Use provider fields without constructing a destination or publication date.
+                    job.title = detail.title;
+                    job.absolute_url = detail.absolute_url;
+                    if detail.location.is_some() {
+                        job.location = detail.location;
+                    }
+                    if detail.offices.is_some() {
+                        job.offices = detail.offices;
+                    }
+                    job.first_published = detail.first_published;
+                    job.updated_at = detail.updated_at;
+                    job.pay_input_ranges = detail.pay_input_ranges;
+                    job.company_name = detail.company_name;
+                    if detail.content.is_some() {
+                        job.content = detail.content;
+                    }
                 }
-                if detail.offices.is_some() {
-                    job.offices = detail.offices;
-                }
-                job.first_published = detail.first_published;
-                job.updated_at = detail.updated_at;
-                job.pay_input_ranges = detail.pay_input_ranges;
-                job.company_name = detail.company_name;
-                if detail.content.is_some() {
-                    job.content = detail.content;
+                result => {
+                    if !sink(WorkerEvent::Error {
+                        source_id: source.id.clone(),
+                        message: format!(
+                            "Greenhouse detail {} unavailable or has a mismatched ID: {result:?}",
+                            job.id
+                        ),
+                        retryable: true,
+                        invalid_posting: Some(false),
+                    }) {
+                        return Ok(());
+                    }
                 }
             }
-            result => diagnostics.push(WorkerEvent::Error {
-                source_id: source.id.clone(),
-                message: format!(
-                    "Greenhouse detail {} unavailable or has a mismatched ID: {result:?}",
-                    job.id
-                ),
-                retryable: true,
-                invalid_posting: Some(false),
-            }),
+        }
+        if !parse_greenhouse_jobs_with(vec![job], source, sink)? {
+            break;
         }
     }
-    let mut events = parse_greenhouse_jobs(resp.jobs, source)?;
-    events.extend(diagnostics);
-    Ok(events)
+    Ok(())
 }
 
 pub fn parse_greenhouse_payload(
@@ -120,8 +147,19 @@ fn parse_greenhouse_jobs(
     jobs: Vec<GreenhouseJob>,
     source: &WorkerSource,
 ) -> Result<Vec<WorkerEvent>, ClientError> {
-    let mut events = Vec::with_capacity(jobs.len());
+    let mut events = Vec::new();
+    parse_greenhouse_jobs_with(jobs, source, &mut |event| {
+        events.push(event);
+        true
+    })?;
+    Ok(events)
+}
 
+fn parse_greenhouse_jobs_with(
+    jobs: Vec<GreenhouseJob>,
+    source: &WorkerSource,
+    sink: &mut dyn FnMut(WorkerEvent) -> bool,
+) -> Result<bool, ClientError> {
     for job in jobs {
         let role_type = RoleType::infer(&job.title, None);
         let raw_location_name = job.location.and_then(|l| l.name).unwrap_or_default();
@@ -242,7 +280,7 @@ fn parse_greenhouse_jobs(
         let company_icon_url = None;
         let url = job.absolute_url;
 
-        events.push(WorkerEvent::Job {
+        if !sink(WorkerEvent::Job {
             source_id: source.id.clone(),
             external_id: job.id.to_string(),
             title: job.title,
@@ -266,10 +304,12 @@ fn parse_greenhouse_jobs(
             description_format: description_source.as_ref().map(|_| DescriptionFormat::Html),
             description_source,
             company_icon_url,
-        });
+        }) {
+            return Ok(false);
+        }
     }
 
-    Ok(events)
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -289,6 +329,8 @@ mod tests {
             let mut requests = 0;
             while requests < 3 && std::time::Instant::now() < deadline {
                 if let Ok((mut stream, _)) = listener.accept() {
+                    // macOS can inherit the listener's nonblocking mode.
+                    stream.set_nonblocking(false).unwrap();
                     stream
                         .set_read_timeout(Some(std::time::Duration::from_secs(2)))
                         .unwrap();

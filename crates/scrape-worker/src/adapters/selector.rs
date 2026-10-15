@@ -12,11 +12,23 @@ pub async fn scrape_selector(
     client: &HttpClient,
     source: &WorkerSource,
 ) -> Result<Vec<WorkerEvent>, ClientError> {
+    let mut events = Vec::new();
+    scrape_selector_with(client, source, &mut |event| {
+        events.push(event);
+        true
+    })
+    .await?;
+    Ok(events)
+}
+pub async fn scrape_selector_with(
+    client: &HttpClient,
+    source: &WorkerSource,
+    sink: &mut dyn FnMut(WorkerEvent) -> bool,
+) -> Result<(), ClientError> {
     let base_url = Url::parse(&source.identifier)?;
     let html_text = client.fetch_text(base_url.as_str(), true).await?;
 
-    let events = extract_jobs_with_selectors(&html_text, &base_url, source)?;
-    Ok(events)
+    extract_jobs_with_selectors_with(&html_text, &base_url, source, sink)
 }
 
 fn apply_regex_capture(re: &regex::Regex, text: &str) -> Option<String> {
@@ -76,6 +88,20 @@ pub fn extract_jobs_with_selectors(
     base_url: &Url,
     source: &WorkerSource,
 ) -> Result<Vec<WorkerEvent>, ClientError> {
+    let mut events = Vec::new();
+    extract_jobs_with_selectors_with(html_text, base_url, source, &mut |event| {
+        events.push(event);
+        true
+    })?;
+    Ok(events)
+}
+
+pub fn extract_jobs_with_selectors_with(
+    html_text: &str,
+    base_url: &Url,
+    source: &WorkerSource,
+    sink: &mut dyn FnMut(WorkerEvent) -> bool,
+) -> Result<(), ClientError> {
     let item_sel_str = source
         .config
         .get("item")
@@ -184,7 +210,6 @@ pub fn extract_jobs_with_selectors(
     let date_sel = optional_selector("date", source.config.get("date").and_then(|v| v.as_str()))?;
 
     let document = Html::parse_document(html_text);
-    let mut events = Vec::new();
 
     for item in document.select(&item_sel) {
         let item_full_text = item.text().collect::<Vec<_>>().join(" ");
@@ -240,12 +265,14 @@ pub fn extract_jobs_with_selectors(
         let job_url = match base_url.join(&clean_href) {
             Ok(u) if matches!(u.scheme(), "http" | "https") => u.to_string(),
             _ => {
-                events.push(WorkerEvent::Error {
+                if !sink(WorkerEvent::Error {
                     invalid_posting: Some(true),
                     source_id: source.id.clone(),
                     message: format!("Posting '{title}' has an invalid HTTP(S) destination"),
                     retryable: false,
-                });
+                }) {
+                    break;
+                }
                 continue;
             }
         };
@@ -363,7 +390,7 @@ pub fn extract_jobs_with_selectors(
             .host_str()
             .map(|h| format!("https://www.google.com/s2/favicons?domain={h}&sz=64"));
 
-        events.push(WorkerEvent::Job {
+        if !sink(WorkerEvent::Job {
             source_id: source.id.clone(),
             external_id: job_url.clone(),
             title,
@@ -387,10 +414,12 @@ pub fn extract_jobs_with_selectors(
             description_format: description_source.as_ref().map(|_| DescriptionFormat::Html),
             description_source,
             company_icon_url,
-        });
+        }) {
+            break;
+        }
     }
 
-    Ok(events)
+    Ok(())
 }
 
 #[cfg(test)]

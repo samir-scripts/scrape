@@ -4,6 +4,8 @@
 
 The `crates/scrape-worker/src/adapters` directory contains specialized parsers that ingest job listings from diverse web formats and Applicant Tracking Systems (ATS). Each adapter fetches raw data (via REST API endpoints or HTML documents), parses the platform's specific schema, applies the enrichment heuristics from `scrape-core::enrich`, and produces standardized `WorkerEvent::Job` events.
 
+Production dispatch uses `scrape_source_with` and a stopping candidate sink. `PostingGate` owns matching, canonical identity deduplication, the suppression snapshot, and the per-workflow acceptance budget (20 by default; Preview/Test at most 10). All five adapters stop record processing when the sink returns false. Greenhouse stops additional detail enrichment; JSON-LD stops recursive extraction and followed-page requests. Existing vector-returning entry points collect this same path for raw adapter tests. Whole-board JSON response downloads/deserialization can be unavoidable; the cap does not imply provider-side pagination support.
+
 ---
 
 ## File Manifest

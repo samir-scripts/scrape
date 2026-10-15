@@ -65,13 +65,26 @@ pub async fn scrape_ashby(
     client: &HttpClient,
     source: &WorkerSource,
 ) -> Result<Vec<WorkerEvent>, ClientError> {
+    let mut events = Vec::new();
+    scrape_ashby_with(client, source, &mut |event| {
+        events.push(event);
+        true
+    })
+    .await?;
+    Ok(events)
+}
+pub async fn scrape_ashby_with(
+    client: &HttpClient,
+    source: &WorkerSource,
+    sink: &mut dyn FnMut(WorkerEvent) -> bool,
+) -> Result<(), ClientError> {
     let url = format!(
         "https://api.ashbyhq.com/posting-api/job-board/{}?includeCompensation=true",
         source.identifier.trim()
     );
 
     let resp: AshbyResponse = client.fetch_json(&url).await?;
-    parse_ashby_jobs(resp.jobs, source)
+    parse_ashby_jobs_with(resp.jobs, source, sink)
 }
 
 pub fn parse_ashby_payload(
@@ -86,8 +99,19 @@ fn parse_ashby_jobs(
     jobs: Vec<AshbyJob>,
     source: &WorkerSource,
 ) -> Result<Vec<WorkerEvent>, ClientError> {
-    let mut events = Vec::with_capacity(jobs.len());
+    let mut events = Vec::new();
+    parse_ashby_jobs_with(jobs, source, &mut |event| {
+        events.push(event);
+        true
+    })?;
+    Ok(events)
+}
 
+fn parse_ashby_jobs_with(
+    jobs: Vec<AshbyJob>,
+    source: &WorkerSource,
+    sink: &mut dyn FnMut(WorkerEvent) -> bool,
+) -> Result<(), ClientError> {
     for job in jobs {
         let role_type = RoleType::infer(&job.title, job.employment_type.as_deref());
 
@@ -213,7 +237,7 @@ fn parse_ashby_jobs(
 
         let company_icon_url = None;
 
-        events.push(WorkerEvent::Job {
+        if !sink(WorkerEvent::Job {
             source_id: source.id.clone(),
             external_id: job.id,
             title: job.title,
@@ -243,10 +267,12 @@ fn parse_ashby_jobs(
             }),
             description_source,
             company_icon_url,
-        });
+        }) {
+            break;
+        }
     }
 
-    Ok(events)
+    Ok(())
 }
 
 #[cfg(test)]

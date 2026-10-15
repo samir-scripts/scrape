@@ -5,6 +5,24 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 #[test]
+fn invalid_cli_job_limits_fail_before_provider_requests() {
+    for limit in ["0", "10001"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+            .args([
+                "--source",
+                "lever:unused-fixture",
+                "--max-jobs-per-run",
+                limit,
+            ])
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("max_jobs_per_run"));
+    }
+}
+
+#[test]
 fn invalid_filters_fail_before_extraction() {
     let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
         .arg("--stdin")
@@ -17,7 +35,7 @@ fn invalid_filters_fail_before_extraction() {
         .stdin
         .take()
         .unwrap()
-        .write_all(br#"{"version":2,"sources":[],"filters":{"query":"title LIKE"}}"#)
+        .write_all(&serde_json::to_vec(&serde_json::json!({"version": scrape_core::PROTOCOL_VERSION, "sources": [], "filters": {"query": "title LIKE"}})).unwrap())
         .unwrap();
     let output = child.wait_with_output().unwrap();
     assert!(!output.status.success());
@@ -143,7 +161,7 @@ fn source_specific_invalid_filters_fail_even_when_global_filters_are_valid() {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    child.stdin.take().unwrap().write_all(br#"{"version":2,"sources":[],"filters_by_source":{"workflow":{"query":"title LIKE"}}}"#).unwrap();
+    child.stdin.take().unwrap().write_all(&serde_json::to_vec(&serde_json::json!({"version": scrape_core::PROTOCOL_VERSION, "sources": [], "filters_by_source": {"workflow": {"query": "title LIKE"}}})).unwrap()).unwrap();
     let output = child.wait_with_output().unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("Invalid workflow filters"));

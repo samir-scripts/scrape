@@ -5,4 +5,4 @@ import type { WorkflowMetadata } from "./WorkflowMetadata";
 import type { WorkflowRetention } from "./WorkflowRetention";
 import type { WorkflowSchedule } from "./WorkflowSchedule";
 
-export type WorkflowSpec = { version: number, metadata: WorkflowMetadata, extractor: WorkflowExtractor, schedule?: WorkflowSchedule | null, filters?: WorkflowFilters | null, retention?: WorkflowRetention | null, };
+export type WorkflowSpec = { version: number, max_jobs_per_run?: number | null, metadata: WorkflowMetadata, extractor: WorkflowExtractor, schedule?: WorkflowSchedule | null, filters?: WorkflowFilters | null, retention?: WorkflowRetention | null, };

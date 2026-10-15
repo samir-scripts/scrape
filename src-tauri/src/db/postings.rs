@@ -4,6 +4,12 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use ts_rs::TS;
 
+/// Snapshot for pre-ingestion budget checks; persistence still rechecks atomically.
+pub async fn suppression_snapshot(pool: &SqlitePool) -> Result<Vec<String>> {
+    Ok(sqlx::query_scalar("SELECT identity FROM blocked_postings UNION SELECT identity FROM posting_legacy_blocks UNION SELECT legacy_key FROM posting_legacy_blocks UNION SELECT dedupe_key FROM deleted_jobs")
+        .fetch_all(pool).await?)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct RemovedPosting {

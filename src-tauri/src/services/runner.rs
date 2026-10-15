@@ -235,6 +235,7 @@ impl ScrapeRunner {
             filters: globals,
             filters_by_source,
             limits: WorkerLimits::default(),
+            blocked_postings: crate::db::postings::suppression_snapshot(&self.pool).await?,
         };
 
         // 4. Run sidecar with 10 minute timeout
@@ -424,6 +425,7 @@ impl ScrapeRunner {
             }],
             filters,
             limits: WorkerLimits::default(),
+            blocked_postings: crate::db::postings::suppression_snapshot(&self.pool).await?,
         };
 
         let start_time = Instant::now();
@@ -583,6 +585,7 @@ impl ScrapeRunner {
         run_id: &str,
         config: WorkerConfig,
     ) -> Result<(i64, i64, HashMap<String, (String, Option<String>)>)> {
+        let mut budget = super::ingestion::RunPostingBudget::new(&config.sources)?;
         RunsRepo::record_config(&self.pool, run_id, &config).await?;
         let mut counts = RunCounts::default();
         let mut invalid = 0i64;
@@ -708,6 +711,13 @@ impl ScrapeRunner {
                         {
                             match worker_event {
                                 event @ WorkerEvent::Job { .. } => {
+                                    if let WorkerEvent::Job { ref source_id, .. } = event {
+                                        if let Err(error) = budget.take(source_id) {
+                                            sidecar_err = Some(error.to_string());
+                                            counts.failed += 1;
+                                            continue;
+                                        }
+                                    }
                                     job_buffer
                                         .push(super::ingestion::scraped_job_from_event(event)?);
                                     total_found += 1;
@@ -807,7 +817,19 @@ impl ScrapeRunner {
                                         }),
                                     );
                                 }
-                                WorkerEvent::Done { .. } => {
+                                WorkerEvent::Done { stats } => {
+                                    for scan in stats.sources {
+                                        if !config.sources.iter().any(|s| s.id == scan.source_id) {
+                                            sidecar_err = Some(
+                                                "Worker summary contains an unknown workflow ID"
+                                                    .into(),
+                                            );
+                                            continue;
+                                        }
+                                        counts.blocked += scan.blocked as i64;
+                                        self.log_event(app, run_id, LogLevel::Info, Some(&scan.source_id), &format!("Examined {} postings; {} matched, {} blocked, {} duplicates; limit {}{}. Counts cover examined postings only.", scan.examined, scan.matched, scan.blocked, scan.duplicates, scan.limit, if scan.limit_reached { " reached; stopped early, source coverage may be incomplete" } else { " not reached" })).await;
+                                    }
+                                    RunsRepo::record_counts(&self.pool, run_id, &counts).await?;
                                     saw_done = true;
                                 }
                             }

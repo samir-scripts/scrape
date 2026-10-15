@@ -81,14 +81,15 @@ for (const provider of providers) {
     origin = `http://127.0.0.1:${server.address().port}`;
   }
   const config = {
-    version: 2,
+    version: 3,
     sources: [
       {
         id: "recorded-" + provider.identifier,
         kind: provider.kind,
         name: provider.name,
         identifier: provider.identifier,
-        config: {},
+        // Verification intentionally examines the complete captured response.
+        config: { __workflow_spec: { max_jobs_per_run: 10000 } },
       },
     ],
     filters: {

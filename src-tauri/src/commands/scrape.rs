@@ -146,7 +146,7 @@ async fn execute_dry_run_worker(
     app: &AppHandle,
     worker_source: WorkerSource,
     filters: WorkerFilters,
-    full_preview: bool,
+    blocked_postings: Vec<String>,
     cancel: Option<Arc<AtomicBool>>,
 ) -> Result<Vec<WorkerEvent>> {
     let config = WorkerConfig {
@@ -156,14 +156,11 @@ async fn execute_dry_run_worker(
         sources: vec![worker_source],
         filters,
         limits: WorkerLimits::default(),
+        blocked_postings,
     };
 
     let (mut rx, child) = crate::services::process::worker_command(app)?
-        .args(if full_preview {
-            vec!["--stdin"]
-        } else {
-            vec!["--stdin", "--dry-run"]
-        })
+        .args(["--stdin", "--dry-run"])
         .spawn()
         .map_err(|e| AppError::Internal(format!("Failed to spawn sidecar: {}", e)))?;
 
@@ -260,7 +257,14 @@ pub async fn test_source_transient(
         identifier: input.identifier,
         config: input.config.unwrap_or_else(|| serde_json::json!({})),
     };
-    execute_dry_run_worker(&app, worker_source, filters, false, None).await
+    execute_dry_run_worker(
+        &app,
+        worker_source,
+        filters,
+        crate::db::postings::suppression_snapshot(&state.db).await?,
+        None,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -281,7 +285,14 @@ pub async fn test_source(
         identifier: source.identifier,
         config: source.config,
     };
-    execute_dry_run_worker(&app, worker_source, filters, false, None).await
+    execute_dry_run_worker(
+        &app,
+        worker_source,
+        filters,
+        crate::db::postings::suppression_snapshot(&state.db).await?,
+        None,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -364,7 +375,7 @@ pub async fn preview_workflow(
             config: source.config.clone().unwrap_or(serde_json::Value::Null),
         },
         filters,
-        true,
+        crate::db::postings::suppression_snapshot(&state.db).await?,
         Some(cancel),
     )
     .await?;
@@ -410,7 +421,7 @@ pub async fn preview_workflow(
                 .await?;
                 if blocked {
                     result.blocked += 1;
-                } else if result.jobs.len() < 10 {
+                } else if result.jobs.len() < scrape_core::protocol::PREVIEW_MAX_JOBS as usize {
                     result.jobs.push(PreviewPosting {
                         identity,
                         job: event,
@@ -433,13 +444,18 @@ pub async fn preview_workflow(
                 }
                 result.errors.push(message);
             }
-            _ => {}
+            WorkerEvent::Done { stats } => {
+                for scan in stats.sources {
+                    result.blocked += scan.blocked;
+                    result.sampled |= scan.limit_reached;
+                }
+            }
         }
     }
     result.rejected = result
         .fetched
         .saturating_sub(result.matched + result.invalid);
-    result.sampled = result.matched.saturating_sub(result.blocked) > result.jobs.len() as u64;
+    result.sampled |= result.matched.saturating_sub(result.blocked) > result.jobs.len() as u64;
     Ok(result)
 }
 #[tauri::command]
