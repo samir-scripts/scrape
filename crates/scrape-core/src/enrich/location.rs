@@ -12,6 +12,22 @@ pub struct ParsedLocation {
     pub is_remote: bool,
 }
 
+impl ParsedLocation {
+    /// A fully qualified subdivision is country evidence even in a partial legacy row.
+    pub fn effective_country(&self) -> Option<&str> {
+        self.country_code
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .or_else(|| {
+                self.region_code
+                    .as_deref()?
+                    .split_once('-')
+                    .map(|(prefix, _)| prefix)
+            })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocationSectionExtraction {
     pub section_found: bool,
@@ -24,366 +40,48 @@ pub fn has_geographic_value(locations: &[ParsedLocation]) -> bool {
     })
 }
 
-struct StateEntry {
-    name: &'static str,
-    abbr: &'static str,
-    region_code: &'static str,
-    country_code: &'static str,
+/// Preserve the meaning of explicitly named address fields before free-text inference.
+pub fn from_address(city: &str, region: &str, country: &str) -> Option<ParsedLocation> {
+    use crate::geography::{country_code, normalize, REGIONS};
+    let country_code = country_code(country)?;
+    let region_code = if region.trim().is_empty() {
+        None
+    } else {
+        REGIONS
+            .iter()
+            .find(|entry| {
+                entry.country_code == country_code
+                    && (entry.code.eq_ignore_ascii_case(region)
+                        || normalize(&entry.name) == normalize(region))
+            })
+            .map(|entry| format!("{}-{}", entry.country_code, entry.code))
+            .or_else(|| {
+                if let Some((prefix, suffix)) = region.split_once('-') {
+                    (prefix.eq_ignore_ascii_case(&country_code)
+                        && !suffix.is_empty()
+                        && suffix.len() <= 3
+                        && suffix.chars().all(|ch| ch.is_ascii_alphanumeric()))
+                    .then(|| region.to_ascii_uppercase())
+                } else {
+                    (!region.is_empty()
+                        && region.len() <= 3
+                        && region.chars().all(|ch| ch.is_ascii_alphanumeric()))
+                    .then(|| format!("{country_code}-{}", region.to_ascii_uppercase()))
+                }
+            })
+    };
+    Some(ParsedLocation {
+        raw: [city, region, country]
+            .into_iter()
+            .filter(|value| !value.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join(", "),
+        city: (!city.trim().is_empty()).then(|| city.to_string()),
+        region_code,
+        country_code: Some(country_code),
+        is_remote: false,
+    })
 }
-
-static US_STATES: &[StateEntry] = &[
-    StateEntry {
-        name: "ALABAMA",
-        abbr: "AL",
-        region_code: "US-AL",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "ALASKA",
-        abbr: "AK",
-        region_code: "US-AK",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "ARIZONA",
-        abbr: "AZ",
-        region_code: "US-AZ",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "ARKANSAS",
-        abbr: "AR",
-        region_code: "US-AR",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "CALIFORNIA",
-        abbr: "CA",
-        region_code: "US-CA",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "COLORADO",
-        abbr: "CO",
-        region_code: "US-CO",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "CONNECTICUT",
-        abbr: "CT",
-        region_code: "US-CT",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "DELAWARE",
-        abbr: "DE",
-        region_code: "US-DE",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "DISTRICT OF COLUMBIA",
-        abbr: "DC",
-        region_code: "US-DC",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "FLORIDA",
-        abbr: "FL",
-        region_code: "US-FL",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "GEORGIA",
-        abbr: "GA",
-        region_code: "US-GA",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "HAWAII",
-        abbr: "HI",
-        region_code: "US-HI",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "IDAHO",
-        abbr: "ID",
-        region_code: "US-ID",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "ILLINOIS",
-        abbr: "IL",
-        region_code: "US-IL",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "INDIANA",
-        abbr: "IN",
-        region_code: "US-IN",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "IOWA",
-        abbr: "IA",
-        region_code: "US-IA",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "KANSAS",
-        abbr: "KS",
-        region_code: "US-KS",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "KENTUCKY",
-        abbr: "KY",
-        region_code: "US-KY",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "LOUISIANA",
-        abbr: "LA",
-        region_code: "US-LA",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "MAINE",
-        abbr: "ME",
-        region_code: "US-ME",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "MARYLAND",
-        abbr: "MD",
-        region_code: "US-MD",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "MASSACHUSETTS",
-        abbr: "MA",
-        region_code: "US-MA",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "MICHIGAN",
-        abbr: "MI",
-        region_code: "US-MI",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "MINNESOTA",
-        abbr: "MN",
-        region_code: "US-MN",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "MISSISSIPPI",
-        abbr: "MS",
-        region_code: "US-MS",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "MISSOURI",
-        abbr: "MO",
-        region_code: "US-MO",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "MONTANA",
-        abbr: "MT",
-        region_code: "US-MT",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "NEBRASKA",
-        abbr: "NE",
-        region_code: "US-NE",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "NEVADA",
-        abbr: "NV",
-        region_code: "US-NV",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "NEW HAMPSHIRE",
-        abbr: "NH",
-        region_code: "US-NH",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "NEW JERSEY",
-        abbr: "NJ",
-        region_code: "US-NJ",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "NEW MEXICO",
-        abbr: "NM",
-        region_code: "US-NM",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "NEW YORK",
-        abbr: "NY",
-        region_code: "US-NY",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "NORTH CAROLINA",
-        abbr: "NC",
-        region_code: "US-NC",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "NORTH DAKOTA",
-        abbr: "ND",
-        region_code: "US-ND",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "OHIO",
-        abbr: "OH",
-        region_code: "US-OH",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "OKLAHOMA",
-        abbr: "OK",
-        region_code: "US-OK",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "OREGON",
-        abbr: "OR",
-        region_code: "US-OR",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "PENNSYLVANIA",
-        abbr: "PA",
-        region_code: "US-PA",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "RHODE ISLAND",
-        abbr: "RI",
-        region_code: "US-RI",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "SOUTH CAROLINA",
-        abbr: "SC",
-        region_code: "US-SC",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "SOUTH DAKOTA",
-        abbr: "SD",
-        region_code: "US-SD",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "TENNESSEE",
-        abbr: "TN",
-        region_code: "US-TN",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "TEXAS",
-        abbr: "TX",
-        region_code: "US-TX",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "UTAH",
-        abbr: "UT",
-        region_code: "US-UT",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "VERMONT",
-        abbr: "VT",
-        region_code: "US-VT",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "VIRGINIA",
-        abbr: "VA",
-        region_code: "US-VA",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "WASHINGTON",
-        abbr: "WA",
-        region_code: "US-WA",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "WEST VIRGINIA",
-        abbr: "WV",
-        region_code: "US-WV",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "WISCONSIN",
-        abbr: "WI",
-        region_code: "US-WI",
-        country_code: "US",
-    },
-    StateEntry {
-        name: "WYOMING",
-        abbr: "WY",
-        region_code: "US-WY",
-        country_code: "US",
-    },
-];
-
-static CA_PROVINCES: &[StateEntry] = &[
-    StateEntry {
-        name: "ONTARIO",
-        abbr: "ON",
-        region_code: "CA-ON",
-        country_code: "CA",
-    },
-    StateEntry {
-        name: "BRITISH COLUMBIA",
-        abbr: "BC",
-        region_code: "CA-BC",
-        country_code: "CA",
-    },
-    StateEntry {
-        name: "QUEBEC",
-        abbr: "QC",
-        region_code: "CA-QC",
-        country_code: "CA",
-    },
-    StateEntry {
-        name: "ALBERTA",
-        abbr: "AB",
-        region_code: "CA-AB",
-        country_code: "CA",
-    },
-    StateEntry {
-        name: "MANITOBA",
-        abbr: "MB",
-        region_code: "CA-MB",
-        country_code: "CA",
-    },
-    StateEntry {
-        name: "SASKATCHEWAN",
-        abbr: "SK",
-        region_code: "CA-SK",
-        country_code: "CA",
-    },
-    StateEntry {
-        name: "NOVA SCOTIA",
-        abbr: "NS",
-        region_code: "CA-NS",
-        country_code: "CA",
-    },
-];
 
 struct CityEntry {
     name: &'static str,
@@ -581,10 +279,12 @@ pub fn parse(raw_input: &str) -> Vec<ParsedLocation> {
         return Vec::new();
     }
 
-    // Split on compound delimiters: ";", "|", "/", " or "
-    let parts: Vec<&str> = trimmed
-        .split([';', '|', '/'])
-        .flat_map(|p| p.split(" or "))
+    // Keep country/subdivision names containing "and" intact.
+    static SEPARATORS: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"(?i)\s+or\s+|[;|/]").expect("valid location separators")
+    });
+    let parts: Vec<&str> = SEPARATORS
+        .split(trimmed)
         .map(|p| p.trim())
         .filter(|p| !p.is_empty())
         .collect();
@@ -762,96 +462,128 @@ fn labeled_location_value(value: &str) -> Option<(&'static str, &str)> {
 }
 
 fn parse_single(raw: &str) -> ParsedLocation {
-    let upper = raw.to_uppercase();
-    let is_remote = upper.contains("REMOTE")
-        || upper.contains("TELECOMMUTE")
-        || upper.contains("ANYWHERE")
-        || upper.contains("WORK FROM HOME")
-        || upper.contains("VIRTUAL");
-
-    let mut city: Option<String> = None;
-    let mut region_code: Option<String> = None;
-    let mut country_code: Option<String> = None;
-
-    // Check city mapping
-    for entry in TOP_CITIES {
-        if upper.contains(entry.name) {
-            city = Some(entry.city.to_string());
-            region_code = Some(entry.region_code.to_string());
-            country_code = Some(entry.country_code.to_string());
-            break;
-        }
-    }
-
-    // Check US state
-    if region_code.is_none() {
-        // Look for state abbreviation e.g. ", CA", " CA ", " CA," or full name
-        for state in US_STATES {
-            let abbr_pattern = format!(", {}", state.abbr);
-            let abbr_pattern_end = format!(" {}", state.abbr);
-            let is_match = upper.contains(state.name)
-                || upper.ends_with(&abbr_pattern)
-                || upper.ends_with(&abbr_pattern_end)
-                || upper.contains(&format!("{}, ", state.abbr));
-
-            if is_match {
-                // Ambiguity check: "Georgia" vs "Tbilisi, Georgia"
-                if state.abbr == "GA" && upper.contains("TBILISI") {
-                    country_code = Some("GE".to_string());
-                    region_code = None;
-                    break;
-                }
-                region_code = Some(state.region_code.to_string());
-                country_code = Some(state.country_code.to_string());
-                break;
+    use crate::geography::{contains_phrase, country_code as country, normalize, REGIONS};
+    // Exclusions are not positive eligibility evidence. Keep the complete raw text.
+    let upper = raw.to_ascii_uppercase();
+    let evidence = [" EXCEPT ", " EXCLUDING ", " NOT ELIGIBLE "]
+        .iter()
+        .filter_map(|marker| upper.find(marker))
+        .min()
+        .map(|end| &raw[..end])
+        .unwrap_or(raw);
+    let normalized = normalize(evidence);
+    let is_remote = [
+        "REMOTE",
+        "TELECOMMUTE",
+        "ANYWHERE",
+        "WORK FROM HOME",
+        "VIRTUAL",
+        "WORLDWIDE",
+    ]
+    .iter()
+    .any(|word| contains_phrase(evidence, word));
+    let city = TOP_CITIES
+        .iter()
+        .find(|city| contains_phrase(evidence, city.name));
+    let parts: Vec<_> = evidence
+        .split([',', '(', ')', ':', '[', ']'])
+        .map(normalize)
+        .filter(|p| !p.is_empty())
+        .collect();
+    let policy_stripped = |part: &str| {
+        let mut value = part.to_string();
+        for prefix in [
+            "REMOTE ",
+            "HYBRID ",
+            "ON SITE ",
+            "ONSITE ",
+            "IN OFFICE ",
+            "IN PERSON ",
+            "BASED IN ",
+        ] {
+            if let Some(rest) = value.strip_prefix(prefix) {
+                value = rest.to_string();
             }
         }
-    }
-
-    // Check CA provinces
-    if region_code.is_none() {
-        for prov in CA_PROVINCES {
-            let abbr_pattern = format!(", {}", prov.abbr);
-            let is_match = upper.contains(prov.name) || upper.ends_with(&abbr_pattern);
-            if is_match {
-                region_code = Some(prov.region_code.to_string());
-                country_code = Some(prov.country_code.to_string());
-                break;
+        value
+            .strip_suffix(" ONLY")
+            .unwrap_or(&value)
+            .trim()
+            .to_string()
+    };
+    let ambiguous_code = |part: &str| REGIONS.iter().any(|r| r.code == part);
+    let explicit_country = parts
+        .iter()
+        .find_map(|part| {
+            let candidate = policy_stripped(part);
+            if candidate == "GEORGIA" {
+                return if contains_phrase(evidence, "TBILISI") {
+                    Some("GE".into())
+                } else {
+                    None
+                };
             }
-        }
-    }
-
-    // Check Country
-    if country_code.is_none() {
-        let normalized_country = upper.trim_matches(|c: char| !c.is_ascii_alphanumeric());
-        if matches!(
-            normalized_country,
-            "US" | "USA" | "UNITED STATES" | "UNITED STATES OF AMERICA"
-        ) || upper.contains("UNITED STATES")
-            || upper.contains("USA")
-            || upper.contains("U.S.")
-            || upper.ends_with(" US")
-        {
-            country_code = Some("US".to_string());
-        } else if upper.contains("CANADA") || upper.ends_with(" CA") {
-            country_code = Some("CA".to_string());
-        } else if upper.contains("UNITED KINGDOM") || upper.contains("UK") || upper.ends_with(" GB")
-        {
-            country_code = Some("GB".to_string());
-        } else if upper.contains("GERMANY") || upper.contains("DEUTSCHLAND") {
-            country_code = Some("DE".to_string());
-        } else if upper.contains("IRELAND") {
-            country_code = Some("IE".to_string());
-        } else if upper.contains("NETHERLANDS") {
-            country_code = Some("NL".to_string());
-        } else if is_remote {
-            country_code = None; // Global remote
-        }
-    }
-
+            if candidate.len() == 2 && ambiguous_code(&candidate) && normalized != candidate {
+                return city
+                    .filter(|c| c.country_code == candidate)
+                    .map(|c| c.country_code.to_string());
+            }
+            country(&candidate)
+        })
+        .or_else(|| {
+            let last = evidence.split_whitespace().next_back()?;
+            (last.len() <= 3 && last == last.to_uppercase() && !ambiguous_code(last))
+                .then(|| country(last))
+                .flatten()
+        });
+    let region = REGIONS
+        .iter()
+        .filter_map(|region| {
+            if explicit_country
+                .as_ref()
+                .is_some_and(|code| code != &region.country_code)
+            {
+                return None;
+            }
+            let canonical = format!("{}-{}", region.country_code, region.code);
+            let name = normalize(&region.name);
+            let full_name = parts.iter().any(|part| policy_stripped(part) == name)
+                || normalized.ends_with(&format!(" {name}"));
+            let iso = contains_phrase(evidence, &canonical);
+            let abbreviation = parts.iter().any(|part| part == &region.code)
+                || normalized.ends_with(&format!(" {}", region.code));
+            let ambiguous_name = name == "GEORGIA" && explicit_country.is_none() && city.is_none();
+            let abbreviation_safe = explicit_country.as_ref() == Some(&region.country_code)
+                || city.is_some_and(|c| c.country_code == region.country_code)
+                || (country(&region.code).is_none()
+                    && REGIONS.iter().filter(|r| r.code == region.code).count() == 1);
+            let priority = if iso {
+                0
+            } else if abbreviation && abbreviation_safe {
+                1
+            } else if full_name && !ambiguous_name {
+                2
+            } else {
+                return None;
+            };
+            Some((priority, region))
+        })
+        .min_by_key(|(priority, _)| *priority)
+        .map(|(_, region)| region);
+    let country_code = explicit_country
+        .or_else(|| region.map(|r| r.country_code.clone()))
+        .or_else(|| city.map(|c| c.country_code.to_string()));
+    let region_code = region
+        .map(|r| format!("{}-{}", r.country_code, r.code))
+        .or_else(|| {
+            city.filter(|c| Some(c.country_code) == country_code.as_deref())
+                .map(|c| c.region_code.to_string())
+        });
     ParsedLocation {
         raw: raw.to_string(),
-        city,
+        city: city
+            .filter(|c| Some(c.country_code) == country_code.as_deref())
+            .map(|c| c.city.to_string()),
         region_code,
         country_code,
         is_remote,
@@ -861,6 +593,33 @@ fn parse_single(raw: &str) -> ParsedLocation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn country_region_aliases_are_bounded_and_do_not_guess_ambiguous_codes() {
+        for (raw, country, region) in [
+            ("remote - us", Some("US"), None),
+            ("Remote (U.S.A.)", Some("US"), None),
+            ("Remote - US-CA", Some("US"), Some("US-CA")),
+            ("London, Ontario, Canada", Some("CA"), Some("CA-ON")),
+            ("Québec, Canada", Some("CA"), Some("CA-QC")),
+            ("New Mexico", Some("US"), Some("US-NM")),
+            ("Indiana", Some("US"), Some("US-IN")),
+            ("Washington, DC, US", Some("US"), Some("US-DC")),
+            ("Ukraine", Some("UA"), None),
+            ("Remote (CA)", None, None),
+            ("Georgia", None, None),
+            ("Sukkur", None, None),
+            ("Worldwide except US", None, None),
+        ] {
+            let location = parse(raw).remove(0);
+            assert_eq!(location.country_code.as_deref(), country, "{raw}");
+            assert_eq!(location.region_code.as_deref(), region, "{raw}");
+        }
+        let remote = parse("Remote - US; Toronto, Canada");
+        assert_eq!(remote.len(), 2);
+        assert_eq!(remote[0].country_code.as_deref(), Some("US"));
+        assert_eq!(remote[1].country_code.as_deref(), Some("CA"));
+    }
 
     #[test]
     fn test_location_cities() {

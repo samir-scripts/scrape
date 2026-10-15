@@ -17,6 +17,7 @@ pub struct KeywordRules {
     pub exclude: Vec<String>,
     pub fields: Vec<FilterField>,
 }
+
 impl Default for KeywordRules {
     fn default() -> Self {
         Self {
@@ -80,6 +81,44 @@ pub struct PostingRules {
 }
 impl PostingRules {
     pub fn validate(&self) -> Result<(), String> {
+        if self.countries.iter().any(|value| {
+            !crate::geography::country_code(value)
+                .is_some_and(|code| code.eq_ignore_ascii_case(value))
+        }) {
+            return Err(
+                "matching.countries: expected ISO country codes such as US, CA or GB".into(),
+            );
+        }
+        if self.regions.iter().any(|value| {
+            let short = value
+                .split_once('-')
+                .map_or(value.as_str(), |(_, suffix)| suffix);
+            let prefix_valid = value.split_once('-').is_none_or(|(prefix, _)| {
+                crate::geography::country_code(prefix)
+                    .is_some_and(|code| code.eq_ignore_ascii_case(prefix))
+            });
+            !prefix_valid
+                || short.is_empty()
+                || short.len() > 3
+                || !short.chars().all(|ch| ch.is_ascii_alphanumeric())
+        }) {
+            return Err("matching.regions: expected subdivision codes such as US-CA, CA-ON, or legacy short codes".into());
+        }
+        if !self.countries.is_empty()
+            && !self.regions.is_empty()
+            && !self.regions.iter().any(|region| {
+                region.split_once('-').is_none_or(|(prefix, _)| {
+                    self.countries
+                        .iter()
+                        .any(|country| country.eq_ignore_ascii_case(prefix))
+                })
+            })
+        {
+            return Err(
+                "matching.regions: subdivision countries do not overlap the selected countries"
+                    .into(),
+            );
+        }
         if let Some(keywords) = &self.keywords {
             if keywords
                 .any
@@ -121,25 +160,43 @@ impl PostingRules {
         if self.countries.is_empty() && self.regions.is_empty() {
             return true;
         }
-        if locations.is_empty() {
+        let known: Vec<_> = locations
+            .iter()
+            .filter(|loc| {
+                loc.effective_country().is_some()
+                    || loc
+                        .region_code
+                        .as_ref()
+                        .is_some_and(|v| !v.trim().is_empty())
+            })
+            .collect();
+        if known.is_empty() {
             return self.location_include_unknown;
         }
-        locations.iter().any(|loc| {
+        known.into_iter().any(|loc| {
+            let country = loc.effective_country();
             (self.countries.is_empty()
-                || self.countries.iter().any(|country| {
-                    loc.country_code
-                        .as_ref()
-                        .is_some_and(|code| code.eq_ignore_ascii_case(country))
+                || country.map_or(self.location_include_unknown, |code| {
+                    self.countries.iter().any(|c| c.eq_ignore_ascii_case(code))
                 }))
                 && (self.regions.is_empty()
-                    || self.regions.iter().any(|region| {
-                        loc.region_code.as_ref().is_some_and(|code| {
+                    || if let Some(code) =
+                        loc.region_code.as_deref().filter(|v| !v.trim().is_empty())
+                    {
+                        self.regions.iter().any(|region| {
                             code.eq_ignore_ascii_case(region)
                                 || code
                                     .to_ascii_uppercase()
                                     .ends_with(&format!("-{}", region.to_ascii_uppercase()))
                         })
-                    }))
+                    } else {
+                        self.location_include_unknown
+                            && self.regions.iter().any(|region| {
+                                region.split_once('-').is_none_or(|(prefix, _)| {
+                                    country.is_none_or(|code| code.eq_ignore_ascii_case(prefix))
+                                })
+                            })
+                    })
         })
     }
     pub fn matches_event(&self, event: &WorkerEvent) -> bool {
@@ -374,11 +431,17 @@ impl PostingRules {
         }
         if !self.countries.is_empty() || !self.regions.is_empty() {
             let mut geo = Vec::new();
+            let country = "coalesce(NULLIF(trim(jl.country_code),''), CASE WHEN instr(jl.region_code,'-') > 0 THEN substr(jl.region_code,1,instr(jl.region_code,'-')-1) END)";
             if !self.countries.is_empty() {
-                geo.push(format!(
-                    "upper(jl.country_code) IN ({})",
+                let condition = format!(
+                    "upper({country}) IN ({})",
                     vec!["?"; self.countries.len()].join(",")
-                ));
+                );
+                geo.push(if self.location_include_unknown {
+                    format!("({condition} OR {country} IS NULL)")
+                } else {
+                    condition
+                });
                 bindings.extend(
                     self.countries
                         .iter()
@@ -388,18 +451,74 @@ impl PostingRules {
             if !self.regions.is_empty() {
                 let mut parts = Vec::new();
                 for region in &self.regions {
-                    parts.push("(upper(jl.region_code) = ? OR substr(upper(jl.region_code), instr(jl.region_code, '-') + 1) = ?)");
+                    let condition = "(upper(jl.region_code) = ? OR substr(upper(jl.region_code), instr(jl.region_code, '-') + 1) = ?)";
                     bindings.push(Bind::Text(region.to_ascii_uppercase()));
                     bindings.push(Bind::Text(region.to_ascii_uppercase()));
+                    parts.push(if self.location_include_unknown {
+                        if let Some((prefix,_)) = region.split_once('-') {
+                            bindings.push(Bind::Text(prefix.to_ascii_uppercase()));
+                            format!("({condition} OR (NULLIF(trim(jl.region_code),'') IS NULL AND ({country} IS NULL OR upper({country}) = ?)))")
+                        } else { format!("({condition} OR NULLIF(trim(jl.region_code),'') IS NULL)") }
+                    } else { condition.to_string() });
                 }
                 geo.push(format!("({})", parts.join(" OR ")));
             }
-            let exists = format!(
-                "EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id=jobs.id AND ({}))",
-                geo.join(" AND ")
-            );
-            clauses.push(if self.location_include_unknown { format!("({exists} OR NOT EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id=jobs.id))") } else { exists });
+            let known = "(NULLIF(trim(jl.country_code),'') IS NOT NULL OR NULLIF(trim(jl.region_code),'') IS NOT NULL)";
+            let exists = format!("EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id=jobs.id AND {known} AND ({}))", geo.join(" AND "));
+            clauses.push(if self.location_include_unknown { format!("({exists} OR NOT EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id=jobs.id AND {known}))") } else { exists });
         }
         (clauses, bindings)
+    }
+}
+
+#[cfg(test)]
+mod geography_tests {
+    use super::*;
+    fn location(country: Option<&str>, region: Option<&str>) -> ParsedLocation {
+        ParsedLocation {
+            raw: "fixture".into(),
+            city: None,
+            country_code: country.map(str::to_string),
+            region_code: region.map(str::to_string),
+            is_remote: true,
+        }
+    }
+    #[test]
+    fn unknown_geography_and_qualified_subdivisions_do_not_broaden_known_mismatches() {
+        let mut rules = PostingRules {
+            countries: vec!["US".into()],
+            regions: vec!["US-CA".into()],
+            ..Default::default()
+        };
+        assert!(!rules.geography_matches(&[location(None, None)]));
+        rules.location_include_unknown = true;
+        assert!(rules.geography_matches(&[location(None, None)]));
+        assert!(rules.geography_matches(&[location(Some("US"), None)]));
+        assert!(!rules.geography_matches(&[location(None, None), location(Some("CA"), None)]));
+        assert!(!rules.geography_matches(&[location(None, Some("CA-ON"))]));
+        rules.countries.push("CA".into());
+        rules.regions = vec!["CA-ON".into()];
+        assert!(!rules.geography_matches(&[location(Some("US"), None)]));
+        assert!(rules.geography_matches(&[location(None, Some("CA-ON"))]));
+    }
+    #[test]
+    fn malformed_or_impossible_geography_fails_validation() {
+        for rules in [
+            PostingRules {
+                countries: vec!["ZZ".into()],
+                ..Default::default()
+            },
+            PostingRules {
+                regions: vec!["US/CA".into()],
+                ..Default::default()
+            },
+            PostingRules {
+                countries: vec!["US".into()],
+                regions: vec!["CA-ON".into()],
+                ..Default::default()
+            },
+        ] {
+            assert!(rules.validate().is_err());
+        }
     }
 }

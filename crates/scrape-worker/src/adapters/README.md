@@ -23,6 +23,8 @@ Production dispatch uses `scrape_source_with` and a stopping candidate sink. `Po
 
 ## Adapter Data Flow
 
+Geography uses the shared Rust country/subdivision catalog and bounded alias rules. Structured JSON-LD address fields retain their meaning (for example CA country with NL province is Canada/Newfoundland, not California/Netherlands). All location-array entries survive extraction and nested Country objects are supported. Remote applicant eligibility overrides office geography; labeled eligible-location sections precede physical fallback for remote roles. Explicit workplace fields override weaker location/description hints, with word-boundary aliases for in-person/in-office/on-site, Remote and Hybrid.
+
 ```
                       WorkerSource Config
                                │

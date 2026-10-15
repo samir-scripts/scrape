@@ -7,128 +7,156 @@ pub fn classify_workplace(
     location_str: &str,
     description: Option<&str>,
 ) -> WorkplaceType {
-    // 1. Check explicit ATS workplace_type field if provided
-    if let Some(exp) = explicit_type {
-        let trimmed = exp.trim();
-        if !trimmed.is_empty() {
-            let upper = trimmed.to_uppercase();
-            if upper.contains("HYBRID") {
-                return WorkplaceType::Hybrid;
-            }
-            if upper.contains("IN-OFFICE")
-                || upper.contains("IN OFFICE")
-                || upper.contains("ON-SITE")
-                || upper.contains("ONSITE")
-                || upper.contains("IN-PERSON")
-                || upper.contains("IN PERSON")
-                || upper == "OFFICE"
-            {
-                return WorkplaceType::Onsite;
-            }
-            if upper.contains("REMOTE")
-                || upper.contains("DISTRIBUTED")
-                || upper.contains("TELECOMMUTE")
-                || upper.contains("VIRTUAL")
-                || upper.contains("WORK FROM HOME")
-                || upper.contains("ANYWHERE")
-            {
-                return WorkplaceType::Remote;
-            }
+    use crate::geography::normalize;
+    let patterns = &*PATTERNS;
+    let hint = |value: &str| {
+        let value = normalize(value);
+        if patterns.hybrid.is_match(&value) && !patterns.not_hybrid.is_match(&value) {
+            Some(WorkplaceType::Hybrid)
+        } else if ((patterns.onsite.is_match(&value) || value == "OFFICE")
+            && !patterns.not_onsite.is_match(&value))
+            || patterns.not_remote.is_match(&value)
+        {
+            Some(WorkplaceType::Onsite)
+        } else if patterns.remote.is_match(&value) {
+            Some(WorkplaceType::Remote)
+        } else {
+            None
         }
+    };
+    if let Some(result) = explicit_type.and_then(hint) {
+        return result;
     }
-
-    let loc_upper = location_str.trim().to_uppercase();
-
-    // 2. Check location string for explicit workplace arrangement indicators
-    if !loc_upper.is_empty() {
-        if loc_upper.contains("HYBRID") {
-            return WorkplaceType::Hybrid;
-        }
-        if loc_upper.contains("IN-OFFICE")
-            || loc_upper.contains("IN OFFICE")
-            || loc_upper.contains("ON-SITE")
-            || loc_upper.contains("ONSITE")
-            || loc_upper.contains("IN-PERSON")
-            || loc_upper.contains("IN PERSON")
-        {
-            return WorkplaceType::Onsite;
-        }
-        if (loc_upper.contains("REMOTE")
-            || loc_upper.contains("DISTRIBUTED")
-            || loc_upper.contains("TELECOMMUTE")
-            || loc_upper.contains("VIRTUAL")
-            || loc_upper.contains("ANYWHERE"))
-            && !loc_upper.contains("NOT REMOTE")
-            && !loc_upper.contains("NO REMOTE")
-            && !loc_upper.contains("NOT CONSIDERING REMOTE")
-        {
-            return WorkplaceType::Remote;
-        }
+    if let Some(result) = hint(location_str) {
+        return result;
     }
-
-    // 3. Check description text for strong signals
-    if let Some(desc) = description {
-        let desc_upper = desc.to_uppercase();
-
-        // Strong In-Office / On-Site negation of remote or in-person mandate
-        if desc_upper.contains("NOT CONSIDERING REMOTE")
-            || desc_upper.contains("NO REMOTE")
-            || desc_upper.contains("NOT REMOTE")
-            || desc_upper.contains("NOT OPEN TO REMOTE")
-            || desc_upper.contains("NOT AVAILABLE FOR REMOTE")
-            || desc_upper.contains("IN-PERSON EXPECTATIONS")
-            || desc_upper.contains("IN OFFICE 3-5 DAYS")
-            || desc_upper.contains("IN OFFICE 4-5 DAYS")
-            || desc_upper.contains("IN OFFICE 5 DAYS")
-            || desc_upper.contains("100% ON-SITE")
-            || desc_upper.contains("100% ONSITE")
-            || desc_upper.contains("100% IN-OFFICE")
-            || desc_upper.contains("MANDATORY IN-OFFICE")
-            || desc_upper.contains("REQUIRED IN-OFFICE")
-        {
-            return WorkplaceType::Onsite;
-        }
-
-        // Hybrid signals in description
-        if desc_upper.contains("HYBRID WORK")
-            || desc_upper.contains("HYBRID MODEL")
-            || desc_upper.contains("HYBRID SCHEDULE")
-            || desc_upper.contains("HYBRID ROLE")
-            || desc_upper.contains("HYBRID ENVIRONMENT")
-            || desc_upper.contains("2-3 DAYS IN OFFICE")
-            || desc_upper.contains("2-3 DAYS PER WEEK IN OFFICE")
-            || desc_upper.contains("3 DAYS A WEEK IN OFFICE")
-            || desc_upper.contains("3 DAYS PER WEEK IN OFFICE")
-            || desc_upper.contains("DAYS IN OFFICE,")
-            || desc_upper.contains("DAYS IN OFFICE AND")
+    if let Some(description) = description {
+        let description = normalize(description);
+        if patterns.description_hybrid.is_match(&description)
+            && !patterns.not_hybrid.is_match(&description)
         {
             return WorkplaceType::Hybrid;
         }
-
-        // Remote signals in description (ensure not negated)
-        if (desc_upper.contains("100% REMOTE")
-            || desc_upper.contains("FULLY REMOTE")
-            || desc_upper.contains("REMOTE-FIRST")
-            || desc_upper.contains("WORK FROM ANYWHERE")
-            || desc_upper.contains("REMOTE ELIGIBLE"))
-            && !desc_upper.contains("NOT 100% REMOTE")
-            && !desc_upper.contains("NOT FULLY REMOTE")
+        if patterns.not_remote.is_match(&description)
+            || (patterns.description_onsite.is_match(&description)
+                && !patterns.not_onsite.is_match(&description))
         {
+            return WorkplaceType::Onsite;
+        }
+        if patterns.description_remote.is_match(&description) {
             return WorkplaceType::Remote;
         }
     }
-
-    // 4. Fallback based on physical location presence
-    if !loc_upper.is_empty() && loc_upper != "UNKNOWN" && loc_upper != "N/A" {
-        WorkplaceType::Onsite
-    } else {
+    let location = normalize(location_str);
+    if location.is_empty()
+        || matches!(location.as_str(), "UNKNOWN" | "N A")
+        || patterns.not_onsite.is_match(&location)
+        || patterns.not_hybrid.is_match(&location)
+    {
         WorkplaceType::Unknown
+    } else {
+        WorkplaceType::Onsite
     }
 }
+
+struct Patterns {
+    onsite: regex::Regex,
+    remote: regex::Regex,
+    hybrid: regex::Regex,
+    not_remote: regex::Regex,
+    not_onsite: regex::Regex,
+    not_hybrid: regex::Regex,
+    description_remote: regex::Regex,
+    description_hybrid: regex::Regex,
+    description_onsite: regex::Regex,
+}
+static PATTERNS: std::sync::LazyLock<Patterns> = std::sync::LazyLock::new(|| {
+    let re = |value| regex::Regex::new(value).expect("valid workplace pattern");
+    Patterns {
+        onsite: re(r"\b(?:ON SITE|ONSITE|IN OFFICE|IN PERSON|OFFICE BASED)\b"),
+        remote: re(
+            r"\b(?:REMOTE|DISTRIBUTED|TELECOMMUTE|TELECOMMUTING|VIRTUAL|WORK FROM HOME|ANYWHERE|WORLDWIDE)\b",
+        ),
+        hybrid: re(r"\bHYBRID\b"),
+        not_remote: re(
+            r"\b(?:NOT(?: OPEN TO| AVAILABLE FOR| CONSIDERING| ELIGIBLE FOR)?|NO) (?:FULLY |100 )?(?:REMOTE|WORK FROM HOME)\b",
+        ),
+        not_onsite: re(r"\b(?:NOT|NO) (?:ON SITE|ONSITE|IN OFFICE|IN PERSON)\b"),
+        not_hybrid: re(r"\b(?:NOT|NO) HYBRID\b"),
+        description_remote: re(
+            r"\b(?:100 REMOTE|FULLY REMOTE|REMOTE FIRST|WORK FROM ANYWHERE|WORK FROM HOME|REMOTE ELIGIBLE)\b",
+        ),
+        description_hybrid: re(
+            r"\bHYBRID (?:WORK|MODEL|SCHEDULE|ROLE|ENVIRONMENT)\b|\b(?:2 3|3|2) DAYS(?: A WEEK| PER WEEK)? IN (?:THE )?OFFICE\b|\bDAYS IN OFFICE (?:AND|THEN)\b",
+        ),
+        description_onsite: re(
+            r"\b(?:MANDATORY|REQUIRED|100) (?:ON SITE|ONSITE|IN OFFICE|IN PERSON)\b|\bIN PERSON EXPECTATIONS\b|\bIN OFFICE (?:3 5|4 5|5) DAYS\b",
+        ),
+    }
+});
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn aliases_negations_and_unrelated_words_remain_distinct() {
+        for alias in [
+            "in person",
+            "IN-PERSON",
+            "in_office",
+            "on-site",
+            "OnSite",
+            "office based",
+        ] {
+            assert_eq!(
+                classify_workplace(Some(alias), "", None),
+                WorkplaceType::Onsite,
+                "{alias}"
+            );
+            assert_eq!(
+                classify_workplace(None, &format!("US ({alias})"), None),
+                WorkplaceType::Onsite,
+                "{alias}"
+            );
+        }
+        assert_eq!(
+            classify_workplace(
+                Some("REMOTE"),
+                "US",
+                Some("In-person expectations elsewhere")
+            ),
+            WorkplaceType::Remote
+        );
+        assert_eq!(
+            classify_workplace(None, "Remoteville, US", None),
+            WorkplaceType::Onsite
+        );
+        assert_eq!(
+            classify_workplace(
+                None,
+                "",
+                Some("We build hybrid cloud and remotely operated sensors")
+            ),
+            WorkplaceType::Unknown
+        );
+        assert_eq!(
+            classify_workplace(None, "", Some("This is not fully-remote")),
+            WorkplaceType::Onsite
+        );
+        assert_eq!(
+            classify_workplace(None, "", Some("Hybrid work, not fully remote")),
+            WorkplaceType::Hybrid
+        );
+        assert_eq!(
+            classify_workplace(None, "not onsite", None),
+            WorkplaceType::Unknown
+        );
+        assert_eq!(
+            classify_workplace(Some("work_from_home"), "", None),
+            WorkplaceType::Remote
+        );
+    }
 
     #[test]
     fn test_classify_explicit_in_office() {

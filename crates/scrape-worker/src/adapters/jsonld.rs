@@ -220,26 +220,38 @@ fn parse_job_posting_map(
     let desc_text = description.as_ref().map(|d| d.plain_text.clone());
 
     let salary = extract_salary(map, desc_text.as_deref());
-    let mut locations = loc_enrich::parse(&location);
+    let physical_locations = extract_geography(map.get("jobLocation"));
     let section_locations = description
         .as_ref()
         .map(loc_enrich::from_description_sections);
-    let location_data_complete = loc_enrich::has_geographic_value(&locations)
-        || section_locations
-            .as_ref()
-            .is_some_and(|evidence| evidence.section_found);
-    if let Some(evidence) = section_locations {
-        locations.extend(evidence.locations);
-    }
-
     let is_telecommute = map
         .get("jobLocationType")
         .and_then(|v| v.as_str())
-        .map(|s| s.eq_ignore_ascii_case("TELECOMMUTE"))
-        .unwrap_or(false);
-
+        .is_some_and(|v| v.eq_ignore_ascii_case("TELECOMMUTE"));
     let explicit = if is_telecommute { Some("Remote") } else { None };
     let workplace_type = classify_workplace(explicit, &location, desc_text.as_deref());
+    let is_remote = workplace_type == scrape_core::WorkplaceType::Remote;
+    let requirements = if is_remote {
+        map.get("applicantLocationRequirements")
+    } else {
+        None
+    };
+    let location_data_complete = requirements.is_some()
+        || loc_enrich::has_geographic_value(&physical_locations)
+        || section_locations.as_ref().is_some_and(|e| e.section_found);
+    let locations = if let Some(requirements) = requirements {
+        let mut eligible = loc_enrich::parse(&extract_location(Some(requirements)));
+        for item in &mut eligible {
+            item.raw = format!("applicantLocationRequirements: {}", item.raw);
+        }
+        eligible
+    } else if let Some(evidence) = section_locations.filter(|e| {
+        e.section_found && (is_remote || !loc_enrich::has_geographic_value(&physical_locations))
+    }) {
+        evidence.locations
+    } else {
+        physical_locations
+    };
 
     let text_for_enrich = desc_text.as_deref().unwrap_or("");
 
@@ -373,6 +385,35 @@ fn extract_salary(map: &serde_json::Map<String, Value>, desc_text: Option<&str>)
     None
 }
 
+fn extract_geography(value: Option<&Value>) -> Vec<loc_enrich::ParsedLocation> {
+    let Some(value) = value else {
+        return vec![];
+    };
+    if let Some(array) = value.as_array() {
+        return array
+            .iter()
+            .flat_map(|item| extract_geography(Some(item)))
+            .collect();
+    }
+    if let Some(address) = value.get("address").and_then(Value::as_object) {
+        let country = extract_location(address.get("addressCountry"));
+        if let Some(location) = loc_enrich::from_address(
+            address
+                .get("addressLocality")
+                .and_then(Value::as_str)
+                .unwrap_or(""),
+            address
+                .get("addressRegion")
+                .and_then(Value::as_str)
+                .unwrap_or(""),
+            &country,
+        ) {
+            return vec![location];
+        }
+    }
+    loc_enrich::parse(&extract_location(Some(value)))
+}
+
 fn extract_location(loc_val: Option<&Value>) -> String {
     let loc_val = match loc_val {
         Some(v) => v,
@@ -384,9 +425,12 @@ fn extract_location(loc_val: Option<&Value>) -> String {
     }
 
     if let Some(arr) = loc_val.as_array() {
-        if let Some(first) = arr.first() {
-            return extract_location(Some(first));
-        }
+        return arr
+            .iter()
+            .map(|item| extract_location(Some(item)))
+            .filter(|value| !value.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("; ");
     }
 
     if let Some(map) = loc_val.as_object() {
@@ -403,10 +447,7 @@ fn extract_location(loc_val: Option<&Value>) -> String {
                     .get("addressRegion")
                     .and_then(|v| v.as_str())
                     .unwrap_or_default();
-                let country = addr_map
-                    .get("addressCountry")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default();
+                let country = extract_location(addr_map.get("addressCountry"));
 
                 let mut parts = Vec::new();
                 if !locality.is_empty() {
@@ -416,7 +457,7 @@ fn extract_location(loc_val: Option<&Value>) -> String {
                     parts.push(region);
                 }
                 if !country.is_empty() {
-                    parts.push(country);
+                    parts.push(country.as_str());
                 }
                 return parts.join(", ");
             }
@@ -476,6 +517,61 @@ fn max_pages_cap(max_links: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn structured_locations_keep_arrays_and_remote_eligibility_over_office_geography() {
+        let source = WorkerSource {
+            id: "fixture".into(),
+            kind: scrape_core::SourceKind::Jsonld,
+            name: "Fixture".into(),
+            identifier: "https://fixture.test/careers".into(),
+            config: serde_json::json!({}),
+        };
+        let payload = serde_json::json!([
+            {"@type":"JobPosting","title":"Multiple locations","url":"/multiple","jobLocation":[
+                {"address":{"addressRegion":"CA","addressCountry":{"@type":"Country","name":"US"}}},
+                {"address":{"addressRegion":"ON","addressCountry":"Canada"}},
+                {"address":{"addressRegion":"NL","addressCountry":"CA"}}
+            ]},
+            {"@type":"JobPosting","title":"Remote eligibility","url":"/remote","jobLocationType":"TELECOMMUTE","jobLocation":{"address":{"addressLocality":"London","addressCountry":"UK"}},"applicantLocationRequirements":{"@type":"Country","name":"United States"}},
+            {"@type":"JobPosting","title":"Remote description","url":"/description","description":"Fully remote role","jobLocation":{"address":{"addressCountry":"UK"}},"applicantLocationRequirements":[{"@type":"AdministrativeArea","name":"CA-ON"},{"@type":"AdministrativeArea","name":"US-CA"}]}
+        ]);
+        let events = extract_job_postings_from_html(
+            &format!("<script type=\"application/ld+json\">{payload}</script>"),
+            &source.identifier,
+            &source,
+        );
+        assert_eq!(events.len(), 3);
+        for (index, event) in events.into_iter().enumerate() {
+            let WorkerEvent::Job {
+                locations,
+                workplace_type,
+                ..
+            } = event
+            else {
+                panic!("Expected posting");
+            };
+            match index {
+                0 => {
+                    assert_eq!(locations.len(), 3);
+                    assert_eq!(locations[2].region_code.as_deref(), Some("CA-NL"));
+                    assert_eq!(locations[0].region_code.as_deref(), Some("US-CA"));
+                    assert_eq!(locations[1].region_code.as_deref(), Some("CA-ON"));
+                }
+                1 => {
+                    assert_eq!(workplace_type, scrape_core::WorkplaceType::Remote);
+                    assert_eq!(locations.len(), 1);
+                    assert_eq!(locations[0].country_code.as_deref(), Some("US"));
+                    assert!(locations[0].raw.contains("applicantLocationRequirements"));
+                }
+                _ => {
+                    assert_eq!(workplace_type, scrape_core::WorkplaceType::Remote);
+                    assert_eq!(locations.len(), 2);
+                    assert_eq!(locations[0].region_code.as_deref(), Some("CA-ON"));
+                    assert_eq!(locations[1].region_code.as_deref(), Some("US-CA"));
+                }
+            }
+        }
+    }
     use scrape_core::SourceKind;
 
     #[test]

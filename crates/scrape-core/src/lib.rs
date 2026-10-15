@@ -6,6 +6,7 @@
 
 pub mod enrich;
 pub mod filter;
+pub mod geography;
 pub mod identity;
 pub mod matching;
 pub mod posting_date;

@@ -718,3 +718,161 @@ async fn bounded_worker_refresh_preview_and_lower_override_preserve_saved_state(
         .is_empty());
     reopened.close().await;
 }
+
+#[tokio::test]
+async fn country_subdivision_workplace_and_unknown_rules_match_worker_and_sql() {
+    use scrape_core::matching::PostingRules;
+    let cases: Vec<serde_json::Value> = vec![
+        serde_json::json!({"countries":["US"]}),
+        serde_json::json!({"countries":["US"],"workplaces":["remote"]}),
+        serde_json::json!({"countries":["US"],"regions":["US-CA"],"workplaces":["remote"]}),
+        serde_json::json!({"countries":["CA"],"regions":["CA-ON"],"workplaces":["hybrid"]}),
+        serde_json::json!({"countries":["US"],"regions":["ON"]}),
+        serde_json::json!({"countries":["US"],"regions":["US-TX"],"workplaces":["onsite"]}),
+        serde_json::json!({"countries":["US"],"location_include_unknown":true}),
+        serde_json::json!({"countries":["US"],"regions":["US-CA"],"location_include_unknown":true}),
+        serde_json::json!({"workplaces":["hybrid","onsite"]}),
+        serde_json::json!({"countries":["US","CA"],"regions":["CA-ON"],"location_include_unknown":true}),
+    ];
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let requests = cases.len() + 1;
+    let server = std::thread::spawn(move || {
+        let postings: Vec<_> = [
+            ("remote-us","Remote - US","Remote"),
+            ("remote-ca-state","Remote - US-CA","Remote"),
+            ("hybrid-on","Toronto, Ontario, Canada","Hybrid"),
+            ("onsite-tx","Austin, TX, United States","In-Office"),
+            ("onsite-gb","London, England, UK","On-site"),
+            ("unknown","Remote","Remote"),
+            ("us-unknown-state","United States","Remote"),
+            ("remote-canada","Remote (Canada)","Remote"),
+            ("unknown-plus-canada","Remote; Canada","Remote"),
+            ("onsite-ny","New York, US","In-Person"),
+            ("multi","Remote - US-WA; Toronto, Ontario, Canada","Remote"),
+            ("unknown-plus-us","Remote; US-CA","Remote"),
+        ].into_iter().map(|(id,location,workplace)| serde_json::json!({"id":id,"title":"Engineer","jobUrl":format!("https://fixture.test/{id}"),"location":location,"workplaceType":workplace})).collect();
+        let body = serde_json::json!({"jobs":postings}).to_string();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let mut count = 0;
+        while count < requests && Instant::now() < deadline {
+            if let Ok((mut stream, _)) = listener.accept() {
+                stream.set_nonblocking(false).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                let mut bytes = [0; 4096];
+                let n = stream.read(&mut bytes).unwrap();
+                assert!(String::from_utf8_lossy(&bytes[..n]).starts_with("GET /api.ashbyhq.com/posting-api/job-board/geography?includeCompensation=true "));
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                )
+                .unwrap();
+                count += 1;
+            } else {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+        assert_eq!(count, requests);
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&dir.path().join("geography.db"))
+        .await
+        .unwrap();
+    let spec=scrape_lib::services::workflow::validate(serde_json::json!({"version":3,"metadata":{"name":"Geography fixture"},"extractor":{"kind":"ashby","url":"geography"},"schedule":{"cadence":"manual"}}),"UTC").unwrap();
+    let source = SourcesRepo::create(
+        &pool,
+        scrape_lib::services::workflow::source_input(&spec, "UTC").unwrap(),
+    )
+    .await
+    .unwrap();
+    let mut config = WorkerConfig {
+        version: PROTOCOL_VERSION,
+        run_started_at: None,
+        blocked_postings: vec![],
+        filters: WorkerFilters::default(),
+        filters_by_source: Default::default(),
+        limits: WorkerLimits {
+            per_host_delay_ms: 0,
+            request_timeout_s: 3,
+            ..Default::default()
+        },
+        sources: vec![WorkerSource {
+            id: source.id,
+            kind: source.kind,
+            name: source.name,
+            identifier: source.identifier,
+            config: source.config,
+        }],
+    };
+    let origin = format!("http://{address}");
+    let unfiltered = invoke_replay(&config, false, Some(&origin));
+    let rows: Vec<_> = unfiltered
+        .into_iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .map(|e| scraped_job_from_event(e).unwrap())
+        .collect();
+    assert_eq!(rows.len(), 12);
+    JobsRepo::upsert_scraped(&pool, &rows).await.unwrap();
+    // Historical partial rows can retain a qualified subdivision without country.
+    let changed =
+        sqlx::query("UPDATE job_locations SET country_code=NULL WHERE region_code='US-CA'")
+            .execute(&pool)
+            .await
+            .unwrap();
+    assert!(changed.rows_affected() > 0);
+    for value in cases {
+        let rules: PostingRules = serde_json::from_value(value.clone()).unwrap();
+        config.filters.matching = Some(rules.clone());
+        let mut actual: Vec<_> = invoke_replay(&config, false, Some(&origin))
+            .into_iter()
+            .filter_map(|e| {
+                if let WorkerEvent::Job { external_id, .. } = e {
+                    Some(external_id)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let mut expected: Vec<_> = JobsRepo::list(
+            &pool,
+            JobFilter {
+                matching: Some(rules),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap()
+        .items
+        .into_iter()
+        .map(|job| job.external_id.unwrap())
+        .collect();
+        actual.sort();
+        expected.sort();
+        if value
+            == serde_json::json!({"countries":["US","CA"],"regions":["CA-ON"],"location_include_unknown":true})
+        {
+            assert!(!actual.contains(&"us-unknown-state".to_string()));
+        }
+        assert_eq!(actual, expected, "{value}");
+        if value == serde_json::json!({"countries":["US"],"regions":["ON"]}) {
+            assert!(
+                actual.is_empty(),
+                "country and region must match the same entry"
+            );
+        }
+        if value == serde_json::json!({"countries":["US"],"location_include_unknown":true}) {
+            assert!(actual.contains(&"unknown".to_string()));
+            assert!(
+                !actual.contains(&"unknown-plus-canada".to_string()),
+                "a bare Remote row cannot override known Canadian geography"
+            );
+        }
+    }
+    server.join().unwrap();
+    pool.close().await;
+}

@@ -1,0 +1,462 @@
+[
+  {
+    "code": "CA",
+    "name": "California",
+    "countryCode": "US"
+  },
+  {
+    "code": "NY",
+    "name": "New York",
+    "countryCode": "US"
+  },
+  {
+    "code": "TX",
+    "name": "Texas",
+    "countryCode": "US"
+  },
+  {
+    "code": "WA",
+    "name": "Washington",
+    "countryCode": "US"
+  },
+  {
+    "code": "MA",
+    "name": "Massachusetts",
+    "countryCode": "US"
+  },
+  {
+    "code": "IL",
+    "name": "Illinois",
+    "countryCode": "US"
+  },
+  {
+    "code": "CO",
+    "name": "Colorado",
+    "countryCode": "US"
+  },
+  {
+    "code": "NC",
+    "name": "North Carolina",
+    "countryCode": "US"
+  },
+  {
+    "code": "VA",
+    "name": "Virginia",
+    "countryCode": "US"
+  },
+  {
+    "code": "FL",
+    "name": "Florida",
+    "countryCode": "US"
+  },
+  {
+    "code": "GA",
+    "name": "Georgia",
+    "countryCode": "US"
+  },
+  {
+    "code": "PA",
+    "name": "Pennsylvania",
+    "countryCode": "US"
+  },
+  {
+    "code": "OH",
+    "name": "Ohio",
+    "countryCode": "US"
+  },
+  {
+    "code": "MI",
+    "name": "Michigan",
+    "countryCode": "US"
+  },
+  {
+    "code": "NJ",
+    "name": "New Jersey",
+    "countryCode": "US"
+  },
+  {
+    "code": "AZ",
+    "name": "Arizona",
+    "countryCode": "US"
+  },
+  {
+    "code": "MN",
+    "name": "Minnesota",
+    "countryCode": "US"
+  },
+  {
+    "code": "MD",
+    "name": "Maryland",
+    "countryCode": "US"
+  },
+  {
+    "code": "TN",
+    "name": "Tennessee",
+    "countryCode": "US"
+  },
+  {
+    "code": "IN",
+    "name": "Indiana",
+    "countryCode": "US"
+  },
+  {
+    "code": "MO",
+    "name": "Missouri",
+    "countryCode": "US"
+  },
+  {
+    "code": "WI",
+    "name": "Wisconsin",
+    "countryCode": "US"
+  },
+  {
+    "code": "OR",
+    "name": "Oregon",
+    "countryCode": "US"
+  },
+  {
+    "code": "SC",
+    "name": "South Carolina",
+    "countryCode": "US"
+  },
+  {
+    "code": "AL",
+    "name": "Alabama",
+    "countryCode": "US"
+  },
+  {
+    "code": "LA",
+    "name": "Louisiana",
+    "countryCode": "US"
+  },
+  {
+    "code": "KY",
+    "name": "Kentucky",
+    "countryCode": "US"
+  },
+  {
+    "code": "UT",
+    "name": "Utah",
+    "countryCode": "US"
+  },
+  {
+    "code": "IA",
+    "name": "Iowa",
+    "countryCode": "US"
+  },
+  {
+    "code": "NV",
+    "name": "Nevada",
+    "countryCode": "US"
+  },
+  {
+    "code": "AR",
+    "name": "Arkansas",
+    "countryCode": "US"
+  },
+  {
+    "code": "MS",
+    "name": "Mississippi",
+    "countryCode": "US"
+  },
+  {
+    "code": "KS",
+    "name": "Kansas",
+    "countryCode": "US"
+  },
+  {
+    "code": "NM",
+    "name": "New Mexico",
+    "countryCode": "US"
+  },
+  {
+    "code": "NE",
+    "name": "Nebraska",
+    "countryCode": "US"
+  },
+  {
+    "code": "WV",
+    "name": "West Virginia",
+    "countryCode": "US"
+  },
+  {
+    "code": "ID",
+    "name": "Idaho",
+    "countryCode": "US"
+  },
+  {
+    "code": "HI",
+    "name": "Hawaii",
+    "countryCode": "US"
+  },
+  {
+    "code": "NH",
+    "name": "New Hampshire",
+    "countryCode": "US"
+  },
+  {
+    "code": "ME",
+    "name": "Maine",
+    "countryCode": "US"
+  },
+  {
+    "code": "MT",
+    "name": "Montana",
+    "countryCode": "US"
+  },
+  {
+    "code": "RI",
+    "name": "Rhode Island",
+    "countryCode": "US"
+  },
+  {
+    "code": "DE",
+    "name": "Delaware",
+    "countryCode": "US"
+  },
+  {
+    "code": "SD",
+    "name": "South Dakota",
+    "countryCode": "US"
+  },
+  {
+    "code": "ND",
+    "name": "North Dakota",
+    "countryCode": "US"
+  },
+  {
+    "code": "AK",
+    "name": "Alaska",
+    "countryCode": "US"
+  },
+  {
+    "code": "CT",
+    "name": "Connecticut",
+    "countryCode": "US"
+  },
+  {
+    "code": "OK",
+    "name": "Oklahoma",
+    "countryCode": "US"
+  },
+  {
+    "code": "DC",
+    "name": "District of Columbia",
+    "countryCode": "US"
+  },
+  {
+    "code": "VT",
+    "name": "Vermont",
+    "countryCode": "US"
+  },
+  {
+    "code": "WY",
+    "name": "Wyoming",
+    "countryCode": "US"
+  },
+  {
+    "code": "ON",
+    "name": "Ontario",
+    "countryCode": "CA"
+  },
+  {
+    "code": "BC",
+    "name": "British Columbia",
+    "countryCode": "CA"
+  },
+  {
+    "code": "QC",
+    "name": "Quebec",
+    "countryCode": "CA"
+  },
+  {
+    "code": "AB",
+    "name": "Alberta",
+    "countryCode": "CA"
+  },
+  {
+    "code": "MB",
+    "name": "Manitoba",
+    "countryCode": "CA"
+  },
+  {
+    "code": "SK",
+    "name": "Saskatchewan",
+    "countryCode": "CA"
+  },
+  {
+    "code": "NS",
+    "name": "Nova Scotia",
+    "countryCode": "CA"
+  },
+  {
+    "code": "NB",
+    "name": "New Brunswick",
+    "countryCode": "CA"
+  },
+  {
+    "code": "NL",
+    "name": "Newfoundland & Labrador",
+    "countryCode": "CA"
+  },
+  {
+    "code": "PE",
+    "name": "Prince Edward Island",
+    "countryCode": "CA"
+  },
+  {
+    "code": "NT",
+    "name": "Northwest Territories",
+    "countryCode": "CA"
+  },
+  {
+    "code": "YT",
+    "name": "Yukon",
+    "countryCode": "CA"
+  },
+  {
+    "code": "NU",
+    "name": "Nunavut",
+    "countryCode": "CA"
+  },
+  {
+    "code": "ENG",
+    "name": "England",
+    "countryCode": "GB"
+  },
+  {
+    "code": "SCT",
+    "name": "Scotland",
+    "countryCode": "GB"
+  },
+  {
+    "code": "WLS",
+    "name": "Wales",
+    "countryCode": "GB"
+  },
+  {
+    "code": "NIR",
+    "name": "Northern Ireland",
+    "countryCode": "GB"
+  },
+  {
+    "code": "BE",
+    "name": "Berlin",
+    "countryCode": "DE"
+  },
+  {
+    "code": "BY",
+    "name": "Bavaria",
+    "countryCode": "DE"
+  },
+  {
+    "code": "BW",
+    "name": "Baden-Württemberg",
+    "countryCode": "DE"
+  },
+  {
+    "code": "NW",
+    "name": "North Rhine-Westphalia",
+    "countryCode": "DE"
+  },
+  {
+    "code": "HE",
+    "name": "Hesse",
+    "countryCode": "DE"
+  },
+  {
+    "code": "HH",
+    "name": "Hamburg",
+    "countryCode": "DE"
+  },
+  {
+    "code": "SN",
+    "name": "Saxony",
+    "countryCode": "DE"
+  },
+  {
+    "code": "IDF",
+    "name": "Île-de-France",
+    "countryCode": "FR"
+  },
+  {
+    "code": "ARA",
+    "name": "Auvergne-Rhône-Alpes",
+    "countryCode": "FR"
+  },
+  {
+    "code": "PAC",
+    "name": "Provence-Alpes-Côte d'Azur",
+    "countryCode": "FR"
+  },
+  {
+    "code": "KA",
+    "name": "Karnataka",
+    "countryCode": "IN"
+  },
+  {
+    "code": "MH",
+    "name": "Maharashtra",
+    "countryCode": "IN"
+  },
+  {
+    "code": "DL",
+    "name": "Delhi NCR",
+    "countryCode": "IN"
+  },
+  {
+    "code": "TS",
+    "name": "Telangana",
+    "countryCode": "IN"
+  },
+  {
+    "code": "TN",
+    "name": "Tamil Nadu",
+    "countryCode": "IN"
+  },
+  {
+    "code": "HR",
+    "name": "Haryana",
+    "countryCode": "IN"
+  },
+  {
+    "code": "NSW",
+    "name": "New South Wales",
+    "countryCode": "AU"
+  },
+  {
+    "code": "VIC",
+    "name": "Victoria",
+    "countryCode": "AU"
+  },
+  {
+    "code": "QLD",
+    "name": "Queensland",
+    "countryCode": "AU"
+  },
+  {
+    "code": "WA",
+    "name": "Western Australia",
+    "countryCode": "AU"
+  },
+  {
+    "code": "ACT",
+    "name": "Australian Capital Territory",
+    "countryCode": "AU"
+  },
+  {
+    "code": "SA",
+    "name": "South Australia",
+    "countryCode": "AU"
+  },
+  {
+    "code": "TAS",
+    "name": "Tasmania",
+    "countryCode": "AU"
+  },
+  {
+    "code": "NT",
+    "name": "Northern Territory",
+    "countryCode": "AU"
+  }
+]
