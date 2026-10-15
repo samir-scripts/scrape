@@ -1,6 +1,6 @@
 # Project instructions
 
-Implement [Trustworthy scraping](plans/06-trustworthy-scraping.md) and [Interface simplification](plans/07-interface-simplification.md). Visual references: [NieR menu](plans/assets/ref-nier-menu.png), [dither](plans/assets/ref-dither.png), [palette](plans/assets/ref-palette.png).
+Implement [Bounded ingestion and data management](plans/09-bounded-ingestion-and-data-management.md), one section at a time, before the final handoff for [Desktop usability](plans/08-desktop-usability-and-extraction.md). Preserve the domain/data-protection rules from [Trustworthy scraping](plans/06-trustworthy-scraping.md) and [Interface simplification](plans/07-interface-simplification.md). Visual references: [NieR menu](plans/assets/ref-nier-menu.png), [dither](plans/assets/ref-dither.png), [palette](plans/assets/ref-palette.png).
 
 1. Protect the working tree. Inspect changes before editing; never discard unrelated work or use destructive reset/clean as routine recovery.
 2. Commit early and often. Checkpoint existing work first; commit each coherent behavior with relevant tests. Separate mechanical formatting.

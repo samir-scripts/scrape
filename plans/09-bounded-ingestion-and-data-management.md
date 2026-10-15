@@ -1,6 +1,6 @@
 # Bounded ingestion, location targeting, and data management
 
-Status: Approved addition; ingestion limits are the first implementation section. Execute one section at a time before finishing Section 8 of [desktop usability](08-desktop-usability-and-extraction.md).
+Status: Section 2 (bounded ingestion, configuration and adapter stopping) is implemented and verified; see [implementation evidence](09-implementation-evidence.md). Sections 3 (geography/workplace controls) and 4 (confirmed bulk cleanup) are next and have not been implemented by this addition. Execute one section at a time before finishing Section 8 of [desktop usability](08-desktop-usability-and-extraction.md).
 
 ## 1. Decisions and priority
 
