@@ -460,7 +460,7 @@ mod tests {
     }
 
     #[test]
-    fn remote_job_uses_only_labeled_eligible_locations_from_its_description() {
+    fn captured_cloudflare_remote_posting_extracts_us_eligibility_and_preserves_source() {
         let source = WorkerSource {
             id: "workflow".into(),
             kind: scrape_core::SourceKind::Greenhouse,
@@ -468,48 +468,48 @@ mod tests {
             identifier: "cloudflare".into(),
             config: serde_json::Value::Null,
         };
-        // Authored regression payload based on the reported behavior. The raw
-        // API response for the expired posting is unavailable; this is not a
-        // captured Cloudflare response.
-        let payload = serde_json::json!({"jobs": [
-            {
-                "id": 8024849,
-                "title": "Senior Principal, Sales Compensation Design & Strategy",
-                "company_name": "Cloudflare",
-                "absolute_url": "https://careers.example.test/jobs/8024849",
-                "location": {"name": "Remote"},
-                "content": "<h3>Available Locations</h3><ul><li>US</li></ul><h3>About Cloudflare</h3><p>We operate across the United States.</p>"
-            },
-            {
-                "id": 8024850,
-                "title": "Remote Research Engineer",
-                "company_name": "Cloudflare",
-                "absolute_url": "https://careers.example.test/jobs/8024850",
-                "location": {"name": "Remote"},
-                "content": "<h3>About Cloudflare</h3><p>We operate across the United States.</p>"
-            }
-        ]}).to_string();
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../fixtures/providers/regressions/cloudflare-8024849.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            fixture["fixture_kind"],
+            "captured_provider_field_projection"
+        );
+        let payload = serde_json::json!({
+            "jobs": [fixture["provider_job"].clone()]
+        })
+        .to_string();
 
         let events = parse_greenhouse_payload(&payload, &source).unwrap();
+        assert_eq!(events.len(), 1);
         let WorkerEvent::Job {
+            external_id,
+            title,
+            url,
+            date_posted,
             workplace_type,
             locations,
             ..
         } = &events[0]
         else {
-            panic!("Expected first posting");
+            panic!("Expected captured Cloudflare posting");
         };
+        assert_eq!(external_id, "8024849");
+        assert_eq!(
+            title,
+            "Senior Principal, Sales Compensation Design & Strategy"
+        );
+        assert_eq!(
+            url,
+            "https://boards.greenhouse.io/cloudflare/jobs/8024849?gh_jid=8024849"
+        );
+        assert_eq!(date_posted.as_deref(), Some("2026-07-15T20:21:45-04:00"));
         assert_eq!(*workplace_type, WorkplaceType::Remote);
         assert!(locations
             .iter()
-            .any(|location| location.country_code.as_deref() == Some("US")));
-
-        let WorkerEvent::Job { locations, .. } = &events[1] else {
-            panic!("Expected second posting");
-        };
-        assert!(!locations
-            .iter()
-            .any(|location| location.country_code.as_deref() == Some("US")));
+            .any(|location| location.country_code.as_deref() == Some("US")
+                && location.raw == "Available Locations: US"));
     }
 
     #[test]

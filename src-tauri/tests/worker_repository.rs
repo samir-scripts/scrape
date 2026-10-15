@@ -445,14 +445,26 @@ async fn recorded_lever_response_survives_actual_worker_and_repository() {
 
 #[tokio::test]
 async fn remote_us_eligibility_survives_greenhouse_worker_persistence_and_restart() {
-    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+    let captured: serde_json::Value = serde_json::from_str(include_str!(
+        "../../fixtures/providers/regressions/cloudflare-8024849.json"
+    ))
+    .unwrap();
+    assert_eq!(
+        captured["fixture_kind"],
+        "captured_provider_field_projection"
+    );
+    assert_eq!(captured["provider_job"]["id"], 8024849);
+    let control: serde_json::Value = serde_json::from_str(include_str!(
         "../../fixtures/providers/regressions/remote-us-availability-authored.json"
     ))
     .unwrap();
     assert_eq!(
-        fixture["fixture_kind"],
+        control["fixture_kind"],
         "authored_regression_not_raw_provider_capture"
     );
+    // Pair the captured Cloudflare posting with the authored negative control
+    // that ensures unrelated company prose does not grant US eligibility.
+    let jobs = vec![captured["provider_job"].clone(), control["jobs"][1].clone()];
 
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
@@ -471,7 +483,6 @@ async fn remote_us_eligibility_survives_greenhouse_worker_persistence_and_restar
                 let count = stream.read(&mut buffer).unwrap();
                 let request = String::from_utf8_lossy(&buffer[..count]);
                 let path = request.split_whitespace().nth(1).unwrap_or_default();
-                let jobs = fixture["jobs"].as_array().unwrap();
                 let body = if path.ends_with("/jobs?content=true") {
                     serde_json::json!({"jobs": jobs}).to_string()
                 } else {
@@ -511,7 +522,7 @@ async fn remote_us_eligibility_survives_greenhouse_worker_persistence_and_restar
         &pool,
         CreateSourceInput {
             kind: SourceKind::Greenhouse,
-            name: "Fixture Co".into(),
+            name: "Cloudflare".into(),
             identifier: "cloudflare".into(),
             config: Some(serde_json::json!({})),
             enabled: Some(true),
@@ -557,7 +568,7 @@ async fn remote_us_eligibility_survives_greenhouse_worker_persistence_and_restar
         .all(|job| job.workplace_type == scrape_core::WorkplaceType::Remote));
     let eligible = jobs
         .iter()
-        .find(|job| job.external_id.as_deref() == Some("4201"))
+        .find(|job| job.external_id.as_deref() == Some("8024849"))
         .unwrap();
     assert!(eligible.location_data_complete);
     assert!(eligible.locations.iter().any(|location| {
@@ -581,7 +592,7 @@ async fn remote_us_eligibility_survives_greenhouse_worker_persistence_and_restar
     };
     let matched = JobsRepo::list(&pool, remote_us.clone()).await.unwrap();
     assert_eq!(matched.total, 1);
-    assert_eq!(matched.items[0].external_id.as_deref(), Some("4201"));
+    assert_eq!(matched.items[0].external_id.as_deref(), Some("8024849"));
 
     pool.close().await;
     let reopened = scrape_lib::db::init_db(&database_path).await.unwrap();

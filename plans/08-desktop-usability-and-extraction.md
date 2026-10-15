@@ -2,7 +2,7 @@
 
 Priority addition: implement [bounded ingestion, location targeting, and data management](09-bounded-ingestion-and-data-management.md), one section at a time, before final Section 8 handoff.
 
-Status: Sections 1–7 are implemented and documented. Automated browser and isolated native IPC checks pass. Native manual visual/pointer verification, the native workflow file chooser, and exact captured-provider evidence remain open; see [Section 8 integration evidence](08-implementation-evidence.md#section-8--final-integration-and-handoff). Section 8 is an integration/handoff gate and is not complete until limitations are recorded.
+Status: Sections 1–7 are implemented and documented. Automated browser, isolated native startup/migration, sidecar, and WKWebView integration checks pass. Real native pointer/visual verification and the native workflow file chooser remain open; exact Cloudflare source fields are now captured and regression-tested. See [Section 8 integration evidence](08-implementation-evidence.md#section-8--final-integration-and-handoff). Section 8 is not complete until the remaining native limitations are explicitly accepted or verified.
 
 **Implementation workbook.** Sections 1–8 specify behavior; the workbook specifies how to research, implement, test, and deliver it. Do not treat a passing unit suite or a completed visual change as completion of a phase whose native acceptance remains unverified.
 
@@ -15,7 +15,7 @@ The message ends with “all SVG.” Assumption: standardize action icons as ori
 | Report | Evidence in current implementation | Investigation still required |
 |---|---|---|
 | HTML appears in descriptions | `crates/scrape-core/src/enrich/html.rs` decodes entities directly into output, so encoded tags bypass tag stripping. `JobInspector.tsx` displays this as text. | Capture the affected provider payload and distinguish newly extracted from historical malformed records. |
-| Remote US jobs disappear under US filters | Greenhouse uses location/offices only for geography; it does not extract the description's Available Locations section. Office name currently takes precedence over its location. | Identify the exact posting ID/URL from the screenshot, capture API/detail evidence, and trace matching end to end. Never infer the country from company headquarters. |
+| Remote US jobs disappear under US filters | The exact screenshot posting was identified as Cloudflare Greenhouse ID `8024849`. Its captured API response says workplace `Remote` and has `US` under the labeled `Available Locations` section. The adapter now keeps those facts separate and the captured posting passes the US+Remote repository filter after restart. | Manual native visual/click-through remains part of Section 8. The full raw API response is retained locally for this verification; the repository fixture stores only the minimum field projection and response hash. |
 | Details cannot resize | `JobInspectorPanel` hardcodes 480px with a 45vw cap. | Audit the existing `ResizableSplitPane` before reuse; verify sizing in native WebView. |
 | Board looks undivided | Column and board share a surface; columns have a header rule but no full-height outline. | Native screenshots with populated and empty columns. |
 | Moving a card fails | `KanbanColumn` already uses HTML5 drag events; its apparent handle is a decorative span. | Reproduce with actual macOS pointer input, then inspect event delivery, status IPC, repository mutation, and query refresh. Root cause is not yet established. |

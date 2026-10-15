@@ -1,34 +1,29 @@
 {
-  "fixture_kind": "review_evidence_envelope_not_raw_provider_capture",
-  "source": {
-    "adapter": "greenhouse",
-    "board": "cloudflare",
-    "posting_id": "8024849",
-    "canonical_url": "https://job-boards.greenhouse.io/cloudflare/jobs/8024849",
-    "official_page_checked_on": "2026-10-14",
+  "fixture_kind": "captured_provider_field_projection",
+  "capture": {
+    "provider": "Greenhouse Job Board API",
+    "request_url": "https://boards-api.greenhouse.io/v1/boards/cloudflare/jobs/8024849?questions=false",
     "official_page": "https://job-boards.greenhouse.io/cloudflare/jobs/8024849",
-    "reference_screenshot": "plans/assets/08-desktop-review/05-provider-location.png",
-    "raw_api_response_in_repository": false,
-    "raw_response_sha256": null,
-    "limitations": [
-      "The official public job page corroborates the title, Remote workplace label, and Available Locations: US.",
-      "No raw Greenhouse API response was captured or hashed for this envelope.",
-      "This envelope must not be fed to the worker as if it were an authentic provider response. Capture a deterministic raw response before writing adapter-level regression tests."
-    ]
+    "captured_on": "2026-10-15",
+    "raw_response_sha256": "20e0e48e9e2ca890b690bcf5232ad8ca7a1f5ef5cd05c372104ca6f32eef8bcc",
+    "raw_response_in_repository": false,
+    "note": "Projection of the source fields used by the regression. The full 18,972-byte response was captured locally for this verification; only the short eligible-location excerpt is kept here."
   },
-  "observed": {
+  "provider_job": {
+    "id": 8024849,
     "title": "Senior Principal, Sales Compensation Design & Strategy",
-    "company": "Cloudflare",
-    "workplace_label": "Remote",
-    "eligible_locations_section": "Available Locations",
-    "eligible_location_text": "US",
-    "application_deadline": "2026-10-13"
+    "company_name": "Cloudflare",
+    "absolute_url": "https://boards.greenhouse.io/cloudflare/jobs/8024849?gh_jid=8024849",
+    "location": { "name": "Remote" },
+    "first_published": "2026-07-15T20:21:45-04:00",
+    "updated_at": "2026-10-13T20:57:01-04:00",
+    "content": "<h3>Available Locations</h3>\n<ul>\n<li>US</li>\n</ul>\n<p><strong>Applications will be accepted until October 13, 2026.</strong></p>"
   },
-  "expected_contract": {
+  "expected": {
     "external_id": "8024849",
     "workplace_type": "remote",
     "eligible_country_codes": ["US"],
     "remote_and_us_filter_matches": true,
-    "identity_url": "https://job-boards.greenhouse.io/cloudflare/jobs/8024849"
+    "identity_url": "https://boards.greenhouse.io/cloudflare/jobs/8024849?gh_jid=8024849"
   }
 }
