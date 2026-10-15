@@ -1524,6 +1524,75 @@ mod tests {
     use crate::db::init_memory_db;
 
     #[tokio::test]
+    async fn stage_transitions_are_atomic_noops_do_not_add_history_and_state_survives_reopen() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("stage-fixture.db");
+        let pool = crate::db::init_db(&path).await.unwrap();
+        sqlx::query("INSERT INTO jobs(id,dedupe_key,title,company,role_type,url,date_added,last_seen_at,status,status_changed_at,notes,favorited) VALUES ('stage-job','stage-job','Stage fixture','Fixture Co','full_time','https://fixture.example/job','2026-01-01','2026-01-01','applied','2026-01-01','Keep note',1)")
+            .execute(&pool).await.unwrap();
+        JobsRepo::update_status(&pool, "stage-job", JobStatus::Applied)
+            .await
+            .unwrap();
+        assert!(JobsRepo::get_status_events(&pool, "stage-job")
+            .await
+            .unwrap()
+            .is_empty());
+        JobsRepo::update_status(&pool, "stage-job", JobStatus::Interviewing)
+            .await
+            .unwrap();
+        JobsRepo::update_status(&pool, "stage-job", JobStatus::Interviewing)
+            .await
+            .unwrap();
+        assert_eq!(
+            JobsRepo::get_status_events(&pool, "stage-job")
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        // Simulate a real history-persistence failure after the UPDATE. The whole
+        // transition must roll back, including status_changed_at and annotations.
+        sqlx::query("CREATE TRIGGER reject_history BEFORE INSERT ON job_status_events BEGIN SELECT RAISE(ABORT, 'fixture disk failure'); END")
+            .execute(&pool).await.unwrap();
+        let before = JobsRepo::get(&pool, "stage-job").await.unwrap();
+        assert!(
+            JobsRepo::update_status(&pool, "stage-job", JobStatus::Offer)
+                .await
+                .is_err()
+        );
+        let after = JobsRepo::get(&pool, "stage-job").await.unwrap();
+        assert_eq!(after.status, before.status);
+        assert_eq!(after.status_changed_at, before.status_changed_at);
+        assert_eq!(
+            JobsRepo::get_status_events(&pool, "stage-job")
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        sqlx::query("DROP TRIGGER reject_history")
+            .execute(&pool)
+            .await
+            .unwrap();
+        JobsRepo::update_status(&pool, "stage-job", JobStatus::Offer)
+            .await
+            .unwrap();
+        pool.close().await;
+        let reopened = crate::db::init_db(&path).await.unwrap();
+        let saved = JobsRepo::get(&reopened, "stage-job").await.unwrap();
+        assert_eq!(saved.status, JobStatus::Offer);
+        assert_eq!(saved.notes.as_deref(), Some("Keep note"));
+        assert!(saved.favorited);
+        assert_eq!(
+            JobsRepo::get_status_events(&reopened, "stage-job")
+                .await
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+
+    #[tokio::test]
     async fn repointing_a_workflow_never_transfers_saved_state_to_a_reused_provider_id() {
         let pool = init_memory_db().await.unwrap();
         let source = crate::db::sources::SourcesRepo::create(
