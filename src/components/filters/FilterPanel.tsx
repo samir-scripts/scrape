@@ -12,6 +12,9 @@ import { LocationFilter } from "./LocationFilter";
 import { TriStateFilter } from "./TriStateFilter";
 import { RoleTypeFilter } from "./RoleTypeFilter";
 import { Rule } from "../ui/Rule";
+import type { JobSort } from "../../bindings/JobSort";
+import { JOB_SORT_OPTIONS } from "../../lib/jobSort";
+import { Select } from "../ui/Select";
 export {
   calculateFilterDropdownCoordinates,
   type FilterDropdownCoordinates,
@@ -27,6 +30,10 @@ export interface FilterPanelProps {
   filterSpec: Partial<JobFilter>;
   onUpdateFilter: (updater: (prev: Partial<JobFilter>) => Partial<JobFilter>) => void;
   onResetFilters: () => void;
+  sort: JobSort;
+  defaultSort: JobSort;
+  onSortChange: (sort: JobSort) => void;
+  onResetSort: () => void;
   anchorId?: string;
   anchorEl?: HTMLElement | null;
 }
@@ -37,6 +44,10 @@ export function FilterPanel({
   filterSpec,
   onUpdateFilter,
   onResetFilters,
+  sort,
+  defaultSort,
+  onSortChange,
+  onResetSort,
   anchorId = "subnav-filters-trigger",
   anchorEl,
 }: FilterPanelProps) {
@@ -194,7 +205,7 @@ export function FilterPanel({
       id="subnav-filters-dropdown"
       role="dialog"
       aria-modal="false"
-      aria-label="Filter Engine"
+      aria-label="Filters and sort"
       style={{
         position: "fixed",
         top: `${coords.top}px`,
@@ -208,7 +219,7 @@ export function FilterPanel({
       <div className="flex items-center justify-between p-3 border-b border-[var(--color-ink)] bg-[var(--color-paper-2)]/50 shrink-0">
         <div className="flex items-center gap-2 font-mono">
           <span className="text-xs font-black uppercase tracking-wider text-[var(--color-ink)]">
-            FILTER ENGINE
+            FILTERS & SORT
           </span>
           {activeCount > 0 && (
             <span className="bg-[var(--color-ink)] text-[var(--color-paper)] px-1.5 py-0.5 text-[9px] font-bold">
@@ -217,15 +228,6 @@ export function FilterPanel({
           )}
         </div>
         <div className="flex items-center gap-1.5 font-mono text-xs">
-          {activeCount > 0 && (
-            <button
-              type="button"
-              onClick={onResetFilters}
-              className="px-1.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-[var(--color-ink)] uppercase font-bold cursor-pointer"
-            >
-              [RESET]
-            </button>
-          )}
           <IconButton label="Close filters" onClick={onClose} variant="outlined">
             <Icon name="close" />
           </IconButton>
@@ -234,6 +236,15 @@ export function FilterPanel({
 
       {/* Scrollable Filter Form */}
       <div className="flex-1 overflow-y-auto p-3.5 flex flex-col gap-4">
+        <section aria-label="Sort results" className="flex flex-col gap-2 font-mono text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-bold uppercase tracking-wider">SORT RESULTS</span>
+            <button type="button" onClick={onResetSort} disabled={sort === defaultSort}
+              className="underline disabled:no-underline disabled:opacity-50">Reset sort</button>
+          </div>
+          <Select aria-label="Sort jobs" value={sort} onChange={value => onSortChange(value as JobSort)} options={JOB_SORT_OPTIONS} />
+        </section>
+        <Rule />
         {/* Contains / Keywords Filter */}
         <div className="flex flex-col gap-1.5 font-mono text-xs select-none">
           <div className="flex justify-between items-center">
@@ -376,7 +387,7 @@ export function FilterPanel({
             onClick={onResetFilters}
             className="flex-1 py-1.5 px-2 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-xs font-bold uppercase cursor-pointer"
           >
-            [RESET ALL]
+            [CLEAR FILTERS]
           </button>
           <button
             type="button"

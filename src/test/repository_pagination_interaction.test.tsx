@@ -63,7 +63,8 @@ describe("repository pages and response ordering", () => {
     await waitFor(() => expect((input as HTMLInputElement).value).toBe("1"));
     expect(listing.mock.calls.at(-1)?.[0]?.offset).toBe(0);
     const toolbar = screen.getByRole("toolbar", { name: "Job controls" });
-    expect(toolbar.contains(screen.getByLabelText("Sort jobs"))).toBe(true);
+    expect(toolbar.querySelector('[aria-label="Sort jobs"]')).toBeNull();
+    expect(toolbar.querySelector("button")?.textContent).toContain("FILTERS & SORT");
     expect(Boolean(screen.getByRole("navigation", { name: "Job pagination" }).compareDocumentPosition(toolbar) & Node.DOCUMENT_POSITION_PRECEDING)).toBe(true);
   });
   it("hands a pending note to its original job on page change, and offers retry after persistence failure", async () => {

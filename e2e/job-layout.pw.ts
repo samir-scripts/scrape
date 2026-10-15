@@ -21,7 +21,8 @@ async function seed(page: Page, count: number) {
 test('one toolbar, bottom page jumps, pending notes, and filter resets', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 }); await seed(page, 105);
   const toolbar = page.getByRole('toolbar', { name: 'Job controls' });
-  await expect(toolbar.getByLabel('Sort jobs')).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: /FILTERS & SORT/ })).toBeVisible();
+  await expect(toolbar.getByLabel('Sort jobs')).toHaveCount(0);
   await expect(toolbar.getByRole('textbox', { name: 'Search jobs' })).toBeVisible();
   const paginator = page.getByRole('navigation', { name: 'Job pagination' });
   const list = page.getByRole('region', { name: 'Job results' });
@@ -40,7 +41,14 @@ test('one toolbar, bottom page jumps, pending notes, and filter resets', async (
   await input.press('Escape'); await expect(input).toHaveValue('3');
   await paginator.getByRole('button', { name: 'First page' }).click(); await expect(input).toHaveValue('1');
   await title.click(); await expect(page.getByLabel('Notes', { exact: true })).toHaveValue('Draft before page jump');
-  await toolbar.getByLabel('Sort jobs').selectOption('title_asc');
+  await toolbar.getByRole('button', { name: /FILTERS & SORT/ }).click();
+  const filterPanel = page.getByRole('dialog', { name: 'Filters and sort' });
+  await filterPanel.getByRole('button', { name: 'Sort jobs' }).click();
+  await page.getByRole('option', { name: 'Title A to Z' }).click();
+  await expect(filterPanel.getByRole('button', { name: 'Reset sort' })).toBeEnabled();
+  await filterPanel.getByRole('button', { name: 'Reset sort' }).click();
+  await expect(filterPanel.getByRole('button', { name: 'Sort jobs' })).toContainText('Newest discoveries');
+  await expect(filterPanel.getByRole('button', { name: 'Reset sort' })).toBeDisabled();
   await expect(page.getByRole('complementary', { name: 'Job details' })).toHaveCount(0);
   await paginator.getByRole('button', { name: 'Last page' }).click();
   await toolbar.getByRole('textbox', { name: 'Search jobs' }).fill('Layout fixture 000');
@@ -48,6 +56,25 @@ test('one toolbar, bottom page jumps, pending notes, and filter resets', async (
   await toolbar.getByRole('button', { name: 'Clear search' }).click();
   await expect(input).toHaveValue('1'); await expect(paginator.getByRole('status')).toHaveText('1–50 of 105');
 });
+for (const theme of ['paper', 'obsidian']) {
+  test(`${theme} themed sort options stay inside Filters & sort`, async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/?demo=1&fixtures=1');
+    if (theme === 'obsidian') {
+      await page.getByRole('button', { name: 'SETTINGS', exact: true }).click();
+      await page.getByRole('button', { name: /^OBSIDIAN/ }).click();
+      await page.getByRole('button', { name: /^DISCOVERED/ }).click();
+    }
+    const toolbar = page.getByRole('toolbar', { name: 'Job controls' });
+    await expect(toolbar.getByRole('button', { name: /^FILTERS & SORT/ })).toBeVisible();
+    await expect(toolbar.getByRole('button', { name: 'Sort jobs' })).toHaveCount(0);
+    await toolbar.getByRole('button', { name: /^FILTERS & SORT/ }).click();
+    const panel = page.getByRole('dialog', { name: 'Filters and sort' });
+    await panel.getByRole('button', { name: 'Sort jobs' }).click();
+    await expect(page.getByRole('option', { name: 'Title A to Z' })).toBeVisible();
+    await page.screenshot({ path: `plans/assets/10-ui-review/sort-options-${theme}.png`, fullPage: true });
+  });
+}
 for (const theme of ['paper', 'obsidian']) {
   test(`${theme} real pointer resizing, keyboard bounds, reload, and narrow draft preservation`, async ({ page }, info) => {
     await page.setViewportSize({ width: 1280, height: 900 }); await seed(page, 5);

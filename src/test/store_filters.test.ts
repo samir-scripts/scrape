@@ -40,6 +40,15 @@ describe("UI Store - Filters & Logs State", () => {
     expect(updated.new_grad).toBe("only");
   });
 
+  it("clears matching criteria while retaining the persisted sort preference", () => {
+    const store = useUIStore.getState();
+    store.setFilterSpec({ search: "fixture", role_types: ["full_time"], sort: "title_asc" });
+    store.clearFilters();
+    expect(useUIStore.getState().filterSpec.search).toBeNull();
+    expect(useUIStore.getState().filterSpec.role_types).toBeNull();
+    expect(useUIStore.getState().filterSpec.sort).toBe("title_asc");
+  });
+
   it("resets filter spec to defaults", () => {
     const store = useUIStore.getState();
     store.setFilterSpec({

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `src/components/filters` directory contains components dedicated to search filtering, query constraints, and job sorting. These controls feed directly into the client-side filtering algorithms in `src/lib/filter.ts` and the Zustand store in `src/lib/store.ts`.
+The `src/components/filters` directory contains matching filters and persisted query sorting. The toolbar opens a single **Filters & sort** panel with sorting above match criteria. These controls feed the repository query in `src/lib/store.ts` and preserve page, selection, and pending-note behavior.
 
 ---
 
@@ -10,8 +10,8 @@ The `src/components/filters` directory contains components dedicated to search f
 
 | Component | File | Responsibilities & Controls |
 |---|---|---|
-| **FilterPanel** | [`FilterPanel.tsx`](FilterPanel.tsx) | Collapsible sidebar housing all filtering sections: keyword search, role types, locations, compensation sliders, experience bounds, workplace arrangements, and eligibility constraints. |
-| **FilterChips** | [`FilterChips.tsx`](FilterChips.tsx) | Horizontal summary strip displaying currently active filters as dismissible tags, complete with a "CLEAR ALL" action button. |
+| **FilterPanel** | [`FilterPanel.tsx`](FilterPanel.tsx) | Popover with persisted sort at the top, followed by keyword search, role types, locations, compensation sliders, experience bounds, workplace arrangements, and eligibility constraints. |
+| **FilterChips** | [`FilterChips.tsx`](FilterChips.tsx) | Horizontal summary strip for active matching criteria and a removable nondefault sort chip. Clearing criteria preserves sort; resetting sort returns to the view's contextual default. |
 | **RoleTypeFilter** | [`RoleTypeFilter.tsx`](RoleTypeFilter.tsx) | Multi-select toggle group for filtering jobs by role category (`SWE`, `DATA`, `PRODUCT`, `DESIGN`, `SEASONAL`, `OTHER`). |
 | **LocationFilter** | [`LocationFilter.tsx`](LocationFilter.tsx) | Location input with autocomplete dropdown powered by `src/lib/locationData.ts`. Supports multi-city selection and remote-only toggling. |
 | **SalaryRangeFilter** | [`SalaryRangeFilter.tsx`](SalaryRangeFilter.tsx) | Compensation filter featuring a dual-thumb slider, manual min/max number inputs, interval selector (`YEARLY` vs `HOURLY`), and currency filters. |

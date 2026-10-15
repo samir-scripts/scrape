@@ -14,6 +14,7 @@ import type { JobStatus } from "./bindings/JobStatus";
 import type { JobFilter } from "./bindings/JobFilter";
 import type { Page } from "./bindings/Page";
 import type { Settings } from "./bindings/Settings";
+import { contextualJobSort } from "./lib/jobSort";
 import { Shell } from "./components/layout/Shell";
 import { DiscoveredView } from "./components/views/discovered/DiscoveredView";
 import { TrackedView } from "./components/views/tracked/TrackedView";
@@ -32,7 +33,7 @@ export default function App() {
     popUndo,
     filterSpec,
     setFilterSpec,
-    resetFilterSpec,
+    clearFilters,
     isFilterPanelOpen,
     setFilterPanelOpen,
   } = useUIStore();
@@ -62,7 +63,8 @@ export default function App() {
     useUIStore.setState({ selectedJobId: null, drawerJobId: null, selectedJobIds: [] });
   }, [pageKey, page]);
   const pageStatuses: JobStatus[] = view === "tracked" ? ["applied", "interviewing", "offer", "rejected"] : ["scraped", "viewed"];
-  const effectiveFilter: Partial<JobFilter> = { ...filterSpec, sort: filterSpec.sort || (view === "tracked" ? "status_changed_at_desc" : "date_added_desc"), statuses: filterSpec.statuses?.length ? pageStatuses.filter((status) => filterSpec.statuses!.includes(status)) : pageStatuses, limit: pageSize, offset };
+  const defaultSort = contextualJobSort(view === "tracked" ? "tracked" : "discovered");
+  const effectiveFilter: Partial<JobFilter> = { ...filterSpec, sort: filterSpec.sort || defaultSort, statuses: filterSpec.statuses?.length ? pageStatuses.filter((status) => filterSpec.statuses!.includes(status)) : pageStatuses, limit: pageSize, offset };
   const { data: counts } = useQuery({
     queryKey: ["job_counts"],
     queryFn: async () => {
@@ -354,7 +356,7 @@ export default function App() {
       trackedCount={counts?.tracked ?? 0}
       scheduleControl={<ScheduleControl />}
       jobSort={effectiveFilter.sort ?? undefined}
-      onJobSortChange={sort => setFilterSpec({ sort })}
+      onJobSortReset={() => setFilterSpec(prev => ({ ...prev, sort: null }))}
     >
       {(view === "discovered" || view === "tracked") && <>
         {jobsError && <div role="alert" className="p-4 text-sm">Could not load this page: {String(jobsError)} <button className="border px-3 py-1" onClick={() => refetchJobs()}>Retry loading page</button></div>}
@@ -421,7 +423,11 @@ export default function App() {
         onClose={() => setFilterPanelOpen(false)}
         filterSpec={filterSpec}
         onUpdateFilter={setFilterSpec}
-        onResetFilters={resetFilterSpec}
+        onResetFilters={clearFilters}
+        sort={effectiveFilter.sort!}
+        defaultSort={defaultSort}
+        onSortChange={sort => setFilterSpec(prev => ({ ...prev, sort }))}
+        onResetSort={() => setFilterSpec(prev => ({ ...prev, sort: null }))}
       />
 
       {/* Delete Job Confirmation Modal */}

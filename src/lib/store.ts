@@ -65,6 +65,7 @@ interface UIState {
   filterSpec: Partial<JobFilter>;
   setFilterSpec: (updater: Partial<JobFilter> | ((prev: Partial<JobFilter>) => Partial<JobFilter>)) => void;
   resetFilterSpec: () => void;
+  clearFilters: () => void;
 
   // Tracked View state
   trackedViewMode: "kanban" | "list";
@@ -179,6 +180,11 @@ export const useUIStore = create<UIState>((set, get) => ({
     setStored("scrape:job_filters:v2", JSON.stringify(DEFAULT_FILTER_SPEC));
     set({ filterSpec: { ...DEFAULT_FILTER_SPEC } });
   },
+  clearFilters: () => set((state) => {
+    const filterSpec = { ...DEFAULT_FILTER_SPEC, sort: state.filterSpec.sort ?? null };
+    setStored("scrape:job_filters:v2", JSON.stringify(filterSpec));
+    return { filterSpec };
+  }),
 
   trackedViewMode:
     (getStored("scrape:trackedMode") as "kanban" | "list") || "kanban",

@@ -6,21 +6,23 @@ import { KeyHint } from "../ui/KeyHint";
 import { FilterChips } from "../filters/FilterChips";
 import { countActiveFilters } from "../../lib/filter";
 import { Tooltip } from "../ui/Tooltip";
-import { Select } from "../ui/Select";
+import { contextualJobSort } from "../../lib/jobSort";
 
-export function SubNav({ sort, onSortChange }: { sort?: JobSort; onSortChange?: (sort: JobSort) => void }) {
+export function SubNav({ sort, onResetSort }: { sort?: JobSort; onResetSort?: () => void }) {
   const {
     view,
     trackedViewMode,
     setTrackedViewMode,
     filterSpec,
     setFilterSpec,
-    resetFilterSpec,
+    clearFilters,
     isFilterPanelOpen,
     toggleFilterPanel,
   } = useUIStore();
 
   const activeCount = countActiveFilters(filterSpec);
+  const defaultSort = view === "tracked" || view === "discovered" ? contextualJobSort(view) : undefined;
+  const customSort = Boolean(sort && defaultSort && sort !== defaultSort);
   const showFilters = view === "discovered" || view === "tracked";
 
   if (!showFilters) return null;
@@ -61,21 +63,21 @@ export function SubNav({ sort, onSortChange }: { sort?: JobSort; onSortChange?: 
 
           {/* Filter Dropdown Toggle Button */}
           {showFilters && (
-            <Tooltip content="Toggle query-level criteria dropdown [F]" position="bottom">
+              <Tooltip content="Toggle filters and sorting [F]" position="bottom">
               <button
                 id="subnav-filters-trigger"
                 onClick={toggleFilterPanel}
                 className={`flex items-center gap-1.5 min-h-[var(--control-height-sm)] px-2.5 py-0.5 border text-xs font-mono font-bold uppercase tracking-wider cursor-pointer ${
-                  isFilterPanelOpen || activeCount > 0
+                  isFilterPanelOpen || activeCount > 0 || customSort
                     ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
                     : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
                 }`}
               >
-                <span>FILTERS {activeCount > 0 ? `(${activeCount})` : ""}</span>
+                <span>FILTERS &amp; SORT {activeCount > 0 ? `(${activeCount})` : ""}</span>
                 <KeyHint
                   keys="F"
                   className={`text-[9px] ${
-                    isFilterPanelOpen || activeCount > 0
+                    isFilterPanelOpen || activeCount > 0 || customSort
                       ? "border-[var(--color-paper)] text-[var(--color-paper)]"
                       : ""
                   }`}
@@ -135,11 +137,6 @@ export function SubNav({ sort, onSortChange }: { sort?: JobSort; onSortChange?: 
                 />
               )}
             </div>
-            {sort && onSortChange && <label className="flex items-center gap-2 text-xs">Sort
-              <Select aria-label="Sort jobs" value={sort} onChange={value => onSortChange(value as JobSort)} options={[
-                { value: "status_changed_at_desc", label: "Recent stage activity" }, { value: "date_added_desc", label: "Newest discoveries" }, { value: "date_added_asc", label: "Oldest discoveries" }, { value: "date_posted_desc", label: "Newest postings" }, { value: "company_asc", label: "Company" }, { value: "title_asc", label: "Title" }, { value: "salary_desc", label: "Derived annual pay" }, { value: "favorited_desc", label: "Favorites first" },
-              ]} />
-            </label>}
           </div>
         )}
       </div>
@@ -149,7 +146,10 @@ export function SubNav({ sort, onSortChange }: { sort?: JobSort; onSortChange?: 
         <FilterChips
           filter={filterSpec}
           onUpdate={setFilterSpec}
-          onClearAll={resetFilterSpec}
+          onClearAll={clearFilters}
+          sort={sort}
+          defaultSort={defaultSort}
+          onResetSort={onResetSort}
         />
       )}
     </div>

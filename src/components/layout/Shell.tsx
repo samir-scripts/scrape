@@ -13,7 +13,7 @@ interface ShellProps {
   scheduleControl?: ReactNode;
   footerStatus?: string;
   jobSort?: JobSort;
-  onJobSortChange?: (sort: JobSort) => void;
+  onJobSortReset?: () => void;
   children: ReactNode;
 }
 
@@ -23,7 +23,7 @@ export function Shell({
   scheduleControl,
   footerStatus,
   jobSort,
-  onJobSortChange,
+  onJobSortReset,
   children,
 }: ShellProps) {
   return (
@@ -36,7 +36,7 @@ export function Shell({
         trackedCount={trackedCount}
         scheduleControl={scheduleControl}
       />
-      <SubNav sort={jobSort} onSortChange={onJobSortChange} />
+      <SubNav sort={jobSort} onResetSort={onJobSortReset} />
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</div>
       <Footer statusMessage={footerStatus} />
       <ToastContainer />

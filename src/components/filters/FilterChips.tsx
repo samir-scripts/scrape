@@ -2,14 +2,19 @@ import { Icon } from "../ui/Icon";
 import { IconButton } from "../ui/IconButton";
 import type { JobFilter } from "../../bindings/JobFilter";
 import { ROLE_TYPE_LABELS } from "../../lib/constants";
+import type { JobSort } from "../../bindings/JobSort";
+import { jobSortLabel } from "../../lib/jobSort";
 
 export interface FilterChipsProps {
   filter: Partial<JobFilter>;
   onUpdate: (updater: (prev: Partial<JobFilter>) => Partial<JobFilter>) => void;
   onClearAll: () => void;
+  sort?: JobSort;
+  defaultSort?: JobSort;
+  onResetSort?: () => void;
 }
 
-export function FilterChips({ filter, onUpdate, onClearAll }: FilterChipsProps) {
+export function FilterChips({ filter, onUpdate, onClearAll, sort, defaultSort, onResetSort }: FilterChipsProps) {
   const chips: { id: string; label: string; onRemove: () => void }[] = [];
 
   // Contains (Keywords / Text)
@@ -142,13 +147,12 @@ export function FilterChips({ filter, onUpdate, onClearAll }: FilterChipsProps) 
     });
   }
 
-  if (chips.length === 0) return null;
+  const showSort = Boolean(sort && defaultSort && sort !== defaultSort && onResetSort);
+  if (chips.length === 0 && !showSort) return null;
 
   return (
     <div className="flex items-center flex-wrap gap-1.5 px-3 py-1 bg-[var(--color-paper-2)]/30 border-b border-[var(--color-ink)]/30 select-none">
-      <span className="text-xs font-mono font-bold text-[var(--color-ink-mute)] uppercase tracking-wider mr-1">
-        ACTIVE:
-      </span>
+      {chips.length > 0 && <span className="text-xs font-mono font-bold text-[var(--color-ink-mute)] uppercase tracking-wider mr-1">ACTIVE:</span>}
       {chips.map((chip) => (
         <span
           key={chip.id}
@@ -160,13 +164,17 @@ export function FilterChips({ filter, onUpdate, onClearAll }: FilterChipsProps) 
           </IconButton>
         </span>
       ))}
-      <button
+      {showSort && <span className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] text-xs font-mono font-bold uppercase tracking-wider">
+        <span>SORT: {jobSortLabel(sort!)}</span>
+        <IconButton label="Reset sort" onClick={onResetSort!}><Icon name="close" size="sm" /></IconButton>
+      </span>}
+      {chips.length > 0 && <button
         type="button"
         onClick={onClearAll}
         className="px-2 py-0.5 text-xs font-mono uppercase text-[var(--color-ink-mute)] hover:text-[var(--color-danger)] underline cursor-pointer ml-1"
       >
-        [RESET ALL]
-      </button>
+        [CLEAR FILTERS]
+      </button>}
     </div>
   );
 }
