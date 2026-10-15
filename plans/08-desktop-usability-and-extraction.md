@@ -1,5 +1,7 @@
 # Desktop usability and extraction repair
 
+Priority addition: implement [bounded ingestion, location targeting, and data management](09-bounded-ingestion-and-data-management.md), one section at a time, before final Section 8 handoff.
+
 Status: Sections 1–7 are implemented and documented. Automated browser and isolated native IPC checks pass. Native manual visual/pointer verification, the native workflow file chooser, and exact captured-provider evidence remain open; see [Section 8 integration evidence](08-implementation-evidence.md#section-8--final-integration-and-handoff). Section 8 is an integration/handoff gate and is not complete until limitations are recorded.
 
 **Implementation workbook.** Sections 1–8 specify behavior; the workbook specifies how to research, implement, test, and deliver it. Do not treat a passing unit suite or a completed visual change as completion of a phase whose native acceptance remains unverified.
