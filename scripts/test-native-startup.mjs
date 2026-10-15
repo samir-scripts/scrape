@@ -1,3 +1,5 @@
+import { checkNativeWorkflow } from "./native-workflow.mjs";
+import { createServer } from "node:http";
 import { checkNativeKanban } from "./native-kanban.mjs";
 import { checkNativeJobLayout } from "./native-job-layout.mjs";
 import { runNativeDev } from "./tauri-dev-test.mjs";
@@ -37,6 +39,20 @@ const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const supportedModes = ["fresh", "legacy", "current", "unknown", "legacy19", "current19", "unknown19"];
 const modes = process.env.SCRAPE_STARTUP_MODES?.split(",") ?? supportedModes;
 if (modes.some(mode => !supportedModes.includes(mode))) throw new Error("Unsupported startup fixture mode");
+let workflowServer;
+let workflowOrigin = "";
+if (process.env.SCRAPE_NATIVE_WORKFLOW === "1") {
+  workflowServer = createServer((request, response) => {
+    if (request.url === "/robots.txt") { response.end("User-agent: *\nAllow: /"); return; }
+    response.end(`<script type="application/ld+json">${JSON.stringify([
+      { "@type": "JobPosting", identifier: "wizard-1", title: "Native workflow engineer", url: "/jobs/wizard-1", hiringOrganization: { name: "Fixture Co" } },
+      { "@type": "JobPosting", identifier: "wizard-2", title: "Unrelated role", url: "/jobs/wizard-2", hiringOrganization: { name: "Fixture Co" } },
+    ])}</script>`);
+  });
+  await new Promise(resolve => workflowServer.listen(0, "127.0.0.1", resolve));
+  workflowOrigin = `http://127.0.0.1:${workflowServer.address().port}`;
+}
+try {
 for (const mode of modes) {
   const directory = await mkdtemp(join(tmpdir(), "scrape-native-smoke-"));
   const database = join(directory, "scrape_data.db");
@@ -48,9 +64,10 @@ for (const mode of modes) {
       const jobs = await invoke("list_jobs", {filter:{}});
       ${mode === "fresh" ? "" : "const saved = await invoke('get_job', {id:'saved'}); if (saved.notes !== 'Fixture saved note' || !saved.favorited || saved.status !== (sessionStorage.getItem('kanban-reloaded') ? 'offer' : 'applied')) throw new Error('Saved state changed');"}
       const appearance = ${process.env.SCRAPE_NATIVE_APPEARANCE === "1" ? `await (${checkNativeAppearance.toString()})()` : "null"};
+      const workflow = ${process.env.SCRAPE_NATIVE_WORKFLOW === "1" ? `await (${checkNativeWorkflow.toString()})(${JSON.stringify(workflowOrigin)})` : "null"};
       const kanban = ${process.env.SCRAPE_NATIVE_KANBAN === "1" ? `await (${checkNativeKanban.toString()})()` : "null"};
       const layout = ${process.env.SCRAPE_NATIVE_LAYOUT === "1" ? `await (${checkNativeJobLayout.toString()})()` : "null"};
-      await invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:true,appearance,layout,kanban,steps:["actual Tauri dev readiness: ${mode}"]}});
+      await invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:true,appearance,layout,kanban,workflow,steps:["actual Tauri dev readiness: ${mode}"]}});
     } catch(error) {
       await window.__TAURI_INTERNALS__.invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:false,error:String(error)}});
     }
@@ -70,3 +87,5 @@ for (const mode of modes) {
   }
   console.log(`PASS actual Tauri dev startup ${mode}; artifacts ${directory}`);
 }
+
+} finally { if (workflowServer) { workflowServer.closeAllConnections(); await new Promise(resolve => workflowServer.close(resolve)); } }
