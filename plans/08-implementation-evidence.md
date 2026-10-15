@@ -448,3 +448,30 @@ Commits: `7738245` controller extraction, `945456b` shared importer, `ba878bc`
 wizard, `f9f0c34` registry/guards, `bcaf391` native worker wizard, `6887233` optional
 fixture rendering, `69950c3` in-app replacement/partial feedback and `6bbc929`
 inherited schedule regression.
+
+## Section 7 — Truthful scheduling control
+
+Implemented 2026-10-15 on `implementation/trustworthy-scraping`; Section 8 remains separate.
+
+- Wrote the [state/priority table](section7-scheduling-states.md) before implementation. One Rust response now includes enabled-workflow count and automatic workflow names, IANA timezones and normalized dispatch instants. Global cadence uses the dispatcher's global instant only when an enabled global workflow exists. Disabled/manual workflows contribute no next run; missing/invalid instants remain unknown. No migration or user database change was required.
+- One frontend formatter owns header/summary presentation and absolute date/time formatting. It never calculates calendar occurrences. Loading, failed IPC, paused, no enabled workflows, manual-only, invalid schedules, next run, and active-run states are distinct. Running remains compact; running while paused displays both facts. Stale IPC responses cannot substantiate a next-run label. Browser examples explicitly require desktop.
+- The focusable header button opens a shared Modal summary with workflow times/timezones, refresh/retry, pause/resume, active-run cancellation and a Scraper route. Errors stay visible; a rejected cancellation does not claim completion. Existing modal Escape/focus restoration is retained.
+- Source create/update/toggle/delete and schedule settings now refresh the canonical query through backend events. Run start, source finish and terminal events refresh the same query. Pause IPC emits settings changes; no component timer was added. Manual Run all remains available while paused.
+- Found and fixed completion ordering separately: terminal notifications previously preceded release of the worker lock, allowing status refresh to retain Running. Every existing terminal branch now releases its guard before notifying. A regression observes the released lock inside completion notification; actual native success/cancellation status also passes.
+
+| Verification | Result |
+|---|---|
+| Rust workspace tests | 279 passed, including generated bindings, controlled-clock status/dispatch agreement, manual/disabled exclusion, global timestamp normalization, paused+running, missing timestamps and existing DST/catch-up tests. |
+| Rust formatting / Clippy warnings denied | Passed. Generated status bindings committed; no generated drift remains. |
+| Shared-tree frontend suite | 407 passed across 65 files, including one pre-existing user card test. |
+| Isolated frontend `npm test` | 406 passed across 65 files, plus Vite HTML transformation startup smoke. |
+| TypeScript / frontend production build / style guard | Passed. Existing bundle-size advisory remains. Final compact-running-label refinement also passed targeted interaction/event tests and TypeScript. |
+| Isolated browser comparisons | 26 passed after reviewing 35 images (33 changed header baselines and two new summary baselines). Both themes, narrow/wide layouts, keyboard/focus, contrast, reduced motion, fonts, workflow/import flows, real pointer resize/drag, removal and 200% zoom pass. No screenshot tolerance was relaxed. |
+| Actual desktop scheduling summary | Passed in isolated current-19 profile `scrape-native-smoke-73JBTZ`: actual WKWebView summary, create/update/toggle/delete, pause/resume, manual-only/no enabled workflows, Pacific/Auckland instant agreement with backend, focus restoration, no implicit scrape. |
+| Full actual native IPC/sidecar smoke | Passed in isolated profile `scrape-native-smoke-eP90fc`: running while paused, completion, cancellation/reaping, protocol failures/timeouts, persistence/restoration and external opener. |
+
+The browser verification used isolated checkout `14faf06` plus the new scheduling browser test and reviewed screenshots. The subsequent header refinement only shortens desktop Running text; it has targeted test/TypeScript coverage and the native smoke ran afterward. Logs: `/tmp/section7-*`. The first sandboxed integration attempt could not bind localhost; the complete suite passed with local fixture access. Early native attempts were interrupted by concurrent file edits/binding generation causing Vite reloads; rerunning without edits passed. The native harness now documents that constraint.
+
+Browser screenshots demonstrate browser fixture rendering, not live-provider verification or native visual QA. Native checks operate actual WebView controls and IPC programmatically; native visual/manual pointer gates from earlier sections remain open. No live database was tested, no remote CI run was claimed, and no merge into develop was performed. The four pre-existing user changes are byte-for-byte unchanged against `/tmp/scrape-pre-section7.patch`.
+
+Behavior commits: `440fd01` canonical dispatch-derived status; `240a7f4` completion ordering; `14faf06` summary/refresh wiring; `8d6500b` native/browser regressions and CI.
