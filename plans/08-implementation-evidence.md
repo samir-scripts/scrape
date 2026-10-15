@@ -372,3 +372,79 @@ to the initial checkpoint and remained byte-for-byte unchanged.
 The isolated checkout also passed 393 frontend tests plus startup smoke (the shared
 workspace count includes one pre-existing added test), TypeScript, production build
 and style guard. Verification checkout: `/tmp/scrape-step5-verify`.
+
+
+## Section 6 — Workflow wizard, YAML import and Scraper layout (2026-10-15)
+
+This section implements only step 6. Step 7 and the outstanding native
+pointer/visual acceptance gates remain open. The four pre-existing card/icon/test
+diffs were checkpointed in `/tmp/scrape-pre-section6.patch`, compared byte-for-byte,
+and left unchanged. Visual verification used `/tmp/scrape-step6-verify` with local
+copied dependencies so those unrelated changes were excluded from baselines.
+
+Research traced AddSourceModal, WorkflowSections, SourcesSettings, ScheduleSettings,
+YAML conversion, generated v3 contracts, canonical workflow validation and the
+preview/run entry points. The old continuous editor combined request state,
+validation, YAML parsing and rendering. Field ownership and all YAML-only supported
+fields are recorded in [the v3 field manifest](08-workflow-fields.md). No schema
+migration, boundary type copy or new orchestration framework was introduced.
+
+Implementation:
+
+- `useWorkflowDraft` owns the complete draft, step/visited state, operation,
+  configuration revision, preview revision, cancellation, validation errors and
+  saving. Source, Matching, Schedule and Review share one footer and ordered step
+  navigation (`aria-current=step`). Backtracking preserves hidden controls and
+  advanced configuration. Navigation alone does not write settings or save.
+- Simple source detection happens on Continue; Advanced configures explicit
+  adapters/selectors. Schedule includes collapsed retention. Review exposes the
+  configured rules, preview results and next run. A current successful preview is
+  required for Save; zero matches is valid, errors are not. Save never runs a scrape.
+- Registry and editor use the same SVG upload component, YAML parser and canonical
+  validator. Invalid imports retain the current draft. Replacement of edited input
+  uses an in-app confirmation with Keep editing / Replace draft and focus return.
+  Late validation considers the latest edits and ignores closed/disabled importers.
+  Resetting the input allows selecting the same file again; empty selection is a
+  no-op. Expert YAML fields and explicit empty overrides remain intact.
+- Run all moved to the registry header; truly global controls moved into an
+  explicit settings dialog. Source actions share active-run/progress/cancel state
+  and post-run refreshes. Partial/failed results remain visible, including useful
+  persisted results. Maintenance is secondary; inherited values are explicit.
+- Recorded examples now reject saved and transient Test APIs as well as Run and
+  Preview; the UI explains that live execution requires desktop. Explicit fixture
+  Run all iterates every enabled source and never falls back to a disabled one.
+  Its regression exposed timestamp-colliding fixture IDs; fixture workflow/run IDs
+  now use UUIDs. Production provider/posting identity was not changed.
+
+The behavior-preserving controller extraction passed the original interactions
+before navigation expectations were adapted. Tests retain zero-match save, hidden
+hourly cents, expert keyword/YAML preservation, stale preview and interrupted
+source detection assertions. New coverage adds import-before-save, invalid version,
+replacement rejection/acceptance, same-file selection, edits during validation,
+empty selection, manual Run all while paused, partial/error/cancel feedback,
+enabled-source dispatch and explicit inherited schedule preservation with no global
+writes. A duplicate inherited option found during review was corrected.
+
+Verification:
+
+| Check | Observed result |
+|---|---|
+| Isolated complete frontend suite | 400 tests across 63 files plus Vite HTML startup smoke passed. The shared workspace additionally contains the pre-existing card test. |
+| TypeScript / production build / production style guard | Passed. Existing large-bundle advisory remains. |
+| Rust fmt, Clippy warnings denied, workspace tests | Passed, including canonical version/unknown-field validation, preview/single/global rules and protected-state regressions. Generated binding tests left bindings unchanged. |
+| Complete isolated browser suite | 24 passed. Create, edit/reopen, real browser file chooser, invalid import, replacement decision/focus, fonts, Paper/Obsidian contrast, keyboard, reduced motion, 200% zoom and existing job flows were exercised. |
+| Reviewed screenshots | Five workflow baselines reviewed at wide/narrow sizes in both themes and bundled mono. Other screen baselines remained unchanged; no tolerances were relaxed. |
+| Actual native wizard and extraction | Passed: local HTTP JSON-LD → actual sidecar → current-rule preview → manual workflow save. One eligible match; no discovered jobs persisted and no additional run started during Preview/Save. Final artifact profile: `scrape-native-smoke-qdnA7d`. |
+| Unknown migration history | Controlled refusal passed without panic or database mutation (`scrape-native-smoke-XQfUBd`). No live database was opened. |
+| Full native IPC/worker/persistence/cancellation/opener smoke | Passed (`scrape-native-smoke-SJkLGY`). |
+
+The native wizard command is documented in `scripts/README.md` and wired into CI.
+The native test does not synthesize a file chooser or claim live-provider
+verification. An actual native file-chooser gesture and native visual/manual review
+remain pending, as do the earlier real native pointer gates. No remote CI run or
+merge was performed.
+
+Commits: `7738245` controller extraction, `945456b` shared importer, `ba878bc`
+wizard, `f9f0c34` registry/guards, `bcaf391` native worker wizard, `6887233` optional
+fixture rendering, `69950c3` in-app replacement/partial feedback and `6bbc929`
+inherited schedule regression.

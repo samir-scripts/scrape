@@ -86,3 +86,16 @@ cancellation and restart, including notes/favorite preservation. It does not
 synthesize pointer events or claim to validate OS pointer delivery. Real native
 pointer dragging remains an acceptance gate; browser pointer tests live in
 `e2e/kanban.pw.ts` and share the pointer helper with the full job journey.
+
+### Native workflow wizard
+
+```sh
+SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_WORKFLOW=1 npm run test:native-startup
+```
+
+This runs the actual WKWebView Source/Matching/Schedule/Review controls against a
+bounded local JSON-LD fixture and the actual sidecar. It verifies the latest keyword
+rule, manual schedule, preview counts, persisted spec, unchanged jobs and no extra
+run on Save. The temporary HTTP server and test process are closed by their owners.
+This check does not automate the native file chooser; browser chooser coverage
+uses `e2e/workflows.pw.ts` and native chooser/visual acceptance remains manual.

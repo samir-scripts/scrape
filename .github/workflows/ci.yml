@@ -111,3 +111,6 @@ jobs:
 
       - name: Native Kanban stage controls and history persistence
         run: SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_KANBAN=1 npm run test:native-startup
+
+      - name: Native workflow wizard and real local preview
+        run: SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_WORKFLOW=1 npm run test:native-startup

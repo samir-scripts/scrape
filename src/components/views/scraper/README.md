@@ -1,13 +1,18 @@
-# `src/components/views/scraper` — Crawler Control Room & Telemetry
+# Scraper view
 
-## Overview
+`ScraperView` hosts the workflow registry and an explicit Scraper settings dialog.
+The registry header provides YAML upload, Run all, Add workflow, cancellation while
+active, and secondary maintenance. Run all uses each enabled workflow's existing
+backend rules and remains available while automatic scheduling is paused.
 
-The `src/components/views/scraper` directory contains the control center for configuring, testing, manually executing, and monitoring job board crawl passes.
+Global schedule and matching defaults live in Scraper settings. Opening the dialog
+performs reads; changing a control is an explicit global edit. Per-workflow values
+and inheritance stay in the Source → Matching → Schedule → Review wizard.
 
----
+Source/run logs are loaded for the selected workflow/run and refreshed on execution
+completion. Error and cancellation messages remain visible; partial results are
+not reported as successful runs. Recorded examples disable execution, including
+saved and transient Test APIs. Browser fixtures are explicitly labeled.
 
-## File Manifest
-
-| Component | File | Responsibilities & UI Features |
-|---|---|---|
-| **ScraperView** | [`ScraperView.tsx`](ScraperView.tsx) | Complete crawler control center. Features: <br>• **Source Inventory**: Lists all configured scraping targets with platform badges, cadence tags, last run timestamps, and direct `RUN` / `TEST` / `EDIT` buttons.<br>• **Global Controls**: One-click `[RUN ALL NOW]` trigger and emergency stop controls.<br>• **Active Execution Telemetry**: Live progress card showing the running sidecar process, current target source, duration, and jobs found vs. filtered.<br>• **Live Log Stream**: Embedded terminal console displaying real-time NDJSON logs emitted by `scrape-worker`, with severity level filters (`ALL`, `DEBUG`, `INFO`, `WARN`, `ERROR`) and text search.<br>• **Run History**: Table of historical crawl executions with status badges, run durations, discovered job counts, and error inspector drawers. |
+See [workflow editor ownership](../settings/README.md) and
+[field representation](../../../../plans/08-workflow-fields.md).

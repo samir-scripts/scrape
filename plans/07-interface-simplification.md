@@ -1,6 +1,6 @@
 # Interface simplification and real-source verification
 
-Status: implemented and verified. See [implementation evidence](07-interface-implementation-evidence.md) for checks actually run, fixes discovered during verification, and scope limits.
+Status: historical implementation phase. Its continuous workflow form is superseded by Section 6 of [desktop usability and extraction](08-desktop-usability-and-extraction.md); other domain contracts remain in force. See [implementation evidence](07-interface-implementation-evidence.md) for checks actually run, fixes discovered during verification, and scope limits.
 Date: 2026-10-13. Implementer: Sol or Luna.
 
 This updates the presentation decisions in [06-trustworthy-scraping.md](06-trustworthy-scraping.md), particularly its separate Simple workflow steps. Preserve that plan's data protection, canonical workflow specification, filtering, scheduling, identity, removal, and migration contracts. Do not reopen the database repair or redesign the backend merely to rearrange controls.
