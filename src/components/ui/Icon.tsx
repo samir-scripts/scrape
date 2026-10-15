@@ -2,6 +2,7 @@ import type { SVGProps } from "react";
 
 // Original rectilinear paths on one 24-unit grid; no font or external asset dependency.
 const paths = {
+  settings: "M3 6h7M14 6h7M3 18h7M14 18h7M3 12h3M10 12h11M10 3h4v6h-4zM6 9h4v6H6zM10 15h4v6h-4z",
   upload: "M4 16v5h16v-5M12 17V3M6 9h3V6h3M18 9h-3V6h-3",
   download: "M4 16v5h16v-5M12 3v14M6 11h3v3h3M18 11h-3v3h-3",
   left: "M20 12H4M10 6H7v3H4v6h3v3h3",

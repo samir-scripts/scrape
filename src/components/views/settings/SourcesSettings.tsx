@@ -1,3 +1,7 @@
+import type { WorkflowSpec } from "../../../bindings/WorkflowSpec";
+import { WorkflowImportButton } from "./WorkflowImportButton";
+import { IconButton } from "../../ui/IconButton";
+import { Icon } from "../../ui/Icon";
 import { isRecordedMode } from "../../../lib/runtime";
 import { useState, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -24,9 +28,10 @@ type FilterTab = "all" | "ats" | "custom" | "errors";
 
 interface SourcesSettingsProps {
   settings?: Settings;
+  onOpenSettings?: () => void;
 }
 
-export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
+export function SourcesSettings({ settings, onOpenSettings }: SourcesSettingsProps = {}) {
   const queryClient = useQueryClient();
   const [sources, setSources] = useState<Source[]>([]);
   const [sourceLoadError, setSourceLoadError] = useState("");
@@ -35,6 +40,9 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
 
   // Modals & drawers
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [importedSpec, setImportedSpec] = useState<WorkflowSpec | null>(null);
+  const [runningAll, setRunningAll] = useState(false);
+  const [showMaintenance, setShowMaintenance] = useState(false);
   const [editingSource, setEditingSource] = useState<Source | null>(null);
 
   // Per-job execution state
@@ -51,7 +59,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [logFilter, setLogFilter] = useState<"all" | "successes" | "errors">("all");
 
-  const { setView, setFilterSpec, runningSourceIds } = useUIStore();
+  const { setView, setFilterSpec, runningSourceIds, isScanning, scanStatusText } = useUIStore();
 
   const fetchSources = () => {
     api.listSources().then(sources => { setSources(sources); setSourceLoadError(""); }).catch(error => setSourceLoadError(String(error)));
@@ -144,11 +152,8 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   }, [selectedRunId]);
 
   const handleToggleSource = async (source: Source, enabled: boolean) => {
-    await api.updateSource({
-      id: source.id,
-      enabled,
-    });
-    fetchSources();
+    try { await api.updateSource({ id: source.id, enabled }); fetchSources(); }
+    catch (error) { notifyError(String(error), "WORKFLOW UPDATE FAILED"); }
   };
 
   const handleDeleteSource = async (id: string) => {
@@ -159,33 +164,46 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
     }
   };
 
+  const activeRun = runningAll || !!runningSourceId || isScanning || runningSourceIds.length > 0;
+  const refreshAfterRun = () => {
+    fetchSources();
+    for (const key of ["jobs", "job_counts", "metrics", "scheduler_status", "scrape_runs"]) void queryClient.invalidateQueries({ queryKey: [key] });
+  };
+  const handleRunAll = async () => {
+    if (isRecordedMode() || activeRun) return;
+    setRunningAll(true);
+    try { const run = await api.runScrapeNow(); if (["failed", "incomplete"].includes(run.status)) throw new Error(run.error || "Run all did not complete."); }
+    catch (error) { notifyError(String(error), "RUN ALL FAILED"); }
+    finally { setRunningAll(false); refreshAfterRun(); }
+  };
   const handleRunSourceNow = async (source: Source) => {
+    if (isRecordedMode() || activeRun) return;
     try {
       setRunningSourceId(source.id);
       setInspectedSource(source);
       const runPromise = api.runSourceNow(source.id);
       await refreshInspectedRunsAndLogs(source.id);
-      await runPromise;
+      const run = await runPromise;
+      if (["failed", "incomplete"].includes(run.status)) throw new Error(run.error || "Workflow run did not complete.");
     } catch (e) {
-      console.error("Run single source error:", e);
+      notifyError(String(e), "WORKFLOW RUN FAILED");
     } finally {
       setRunningSourceId(null);
       fetchSources();
       await refreshInspectedRunsAndLogs(source.id);
-      queryClient.invalidateQueries({ queryKey: ["jobs"] });
-      queryClient.invalidateQueries({ queryKey: ["job_counts"] });
-      queryClient.invalidateQueries({ queryKey: ["metrics"] });
+      refreshAfterRun();
     }
   };
 
   const handleTestSource = async (id: string) => {
+    if (isRecordedMode()) return;
     try {
       setTestingSourceId(id);
       setTestEvents(null);
       const events = await api.testSource(id);
       setTestEvents(events);
     } catch (e) {
-      console.error("Test source error:", e);
+      notifyError(String(e), "WORKFLOW PREVIEW FAILED");
     } finally {
       setTestingSourceId(null);
     }
@@ -196,8 +214,8 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
       const pruned = await api.cleanupExpiredJobs();
       notifySuccess(`Pruned ${pruned} expired postings according to TTL policies.`, "TTL PRUNE COMPLETE");
       fetchSources();
-    } catch (_e) {
-      notifyInfo("No expired postings eligible for pruning.", "TTL RETENTION");
+    } catch (error) {
+      notifyError(String(error), "RETENTION CLEANUP FAILED");
     }
   };
 
@@ -285,30 +303,22 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
       {/* Header */}
       <div className="flex flex-wrap gap-3 items-center justify-between">
         <div>
-          <h2 className="text-base font-black uppercase tracking-tight text-[var(--color-ink)]">
-            WORKFLOWS REGISTRY ({sources.length})
-          </h2>
-          <span className="text-xs text-[var(--color-ink-mute)] uppercase">
-            AUTONOMOUS STATIC WORKFLOWS & CONSOLIDATED EXECUTION LOGS
-          </span>
+          <h2 className="text-base font-bold text-[var(--color-ink)]">Workflows ({sources.length})</h2>
+          <p className="text-xs text-[var(--color-ink-mute)]">Sources, schedules and recent results</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-            {runningSourceIds.length > 0 && <Button variant="danger" onClick={() => api.cancelScrape().then(() => notifyInfo("Cancellation requested; committed results remain saved.")).catch(e => notifyError(String(e)))}>Cancel active run</Button>}
-          <Tooltip content="Prune untracked postings past retention TTL. Favorited and tracked jobs are strictly protected.">
-          <Button
-              variant="default"
-              onClick={handlePruneExpired}
-            >
-              CLEANUP EXPIRED
-            </Button>
-          </Tooltip>
-
-          <Tooltip content="Create a new autonomous scrape workflow for a company careers site">
+          {onOpenSettings && <Button onClick={onOpenSettings}>Scraper settings</Button>}
+          <WorkflowImportButton disabled={isRecordedMode() || isAddModalOpen} onImport={spec => { setEditingSource(null); setImportedSpec(spec); setIsAddModalOpen(true); }} />
+          <Button variant="default" disabled={isRecordedMode() || activeRun || !sources.some(source => source.enabled)} onClick={() => void handleRunAll()}>Run all</Button>
+          {activeRun && <Button variant="danger" onClick={() => api.cancelScrape().then(cancelled => notifyInfo(cancelled ? "Cancellation requested; committed results remain saved." : "No active run to cancel.")).catch(error => notifyError(String(error)))}>Cancel active run</Button>}
+          <IconButton label="Workflow maintenance" onClick={() => setShowMaintenance(value => !value)}><Icon name="settings" /></IconButton>
+          <Tooltip content="Configure a careers source and review its matches before saving">
             <Button
               variant="inverted"
               disabled={isRecordedMode()}
               onClick={() => {
                 setEditingSource(null);
+                setImportedSpec(null);
                 setIsAddModalOpen(true);
               }}
               shortcut="+ ADD"
@@ -319,9 +329,12 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
         </div>
       </div>
 
+      {isRecordedMode() && <p className="text-sm text-[var(--color-ink-mute)]">Recorded examples cannot run, test or import workflows. Open the desktop application to use live sources.</p>}
+      {activeRun && <p role="status" className="text-sm">{scanStatusText || "Running workflows…"}</p>}
+      {showMaintenance && <div className="border p-3"><Button onClick={handlePruneExpired}>Cleanup expired discoveries</Button><p className="text-xs">Tracked jobs, notes and favorites are protected.</p></div>}
       {/* Sub-Filter Segmented Row + Search */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex gap-1">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap gap-1">
           <button
             onClick={() => setActiveTab("all")}
             className={`px-3 py-1 text-xs uppercase tracking-wider font-bold cursor-pointer border ${
@@ -385,7 +398,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
               NO WORKFLOWS IN REGISTRY
             </span>
             <span className="text-xs text-[var(--color-ink-mute)]">
-              The application ships with a pre-configured Software Engineering Internships workflow for Cloudflare so you can immediately see autonomous scraping in action.
+              Add a careers URL or import workflow YAML to begin. You can also load the sample Cloudflare configuration.
             </span>
           </div>
           <Button
@@ -470,8 +483,9 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                   </TableCell>
                   <TableCell>
                     <span className="px-1.5 py-0.5 text-xs font-mono uppercase font-bold border border-[var(--color-ink)]">
-                      {s.cadence === "cron" ? "CRON" : s.cadence.replace("_", " ")}
+                      {s.cadence === "manual" ? "Manual" : s.cadence.replace("_", " ")}
                     </span>
+                    {s.next_run_at && <p className="text-xs mt-1">Next: {formatDateTime(s.next_run_at, settings)}</p>}
                   </TableCell>
                   <TableCell className="text-xs font-mono whitespace-nowrap">
                     {Number(s.retention_days) === 0
@@ -493,7 +507,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       <Tooltip content="Run this workflow immediately into database">
                         <button
                           onClick={() => handleRunSourceNow(s)}
-                          disabled={isRecordedMode() || isRunning}
+                          disabled={isRecordedMode() || activeRun}
                           className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-80 text-xs font-mono uppercase cursor-pointer disabled:opacity-50"
                         >
                           {isRunning ? "RUNNING…" : "RUN"}
@@ -503,7 +517,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       <Tooltip content="Dry run extraction without writing to database">
                         <button
                           onClick={() => handleTestSource(s.id)}
-                          disabled={isTesting}
+                          disabled={isRecordedMode() || isTesting || activeRun}
                           className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-xs font-mono uppercase cursor-pointer"
                         >
                           {isTesting ? "…" : "TEST"}
@@ -526,7 +540,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       <Tooltip content="Edit workflow target, cadence, or filters">
                         <button
                           onClick={() => {
-                            setEditingSource(s);
+                            setImportedSpec(null); setEditingSource(s);
                             setIsAddModalOpen(true);
                           }}
                           className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-xs font-mono uppercase cursor-pointer"
@@ -571,7 +585,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => handleRunSourceNow(inspectedSource)}
-                disabled={isRecordedMode() || runningSourceId === inspectedSource.id}
+                disabled={isRecordedMode() || activeRun}
                 className="px-2.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-85 text-xs uppercase font-bold cursor-pointer disabled:opacity-50"
               >
                 {runningSourceId === inspectedSource.id ? "RUNNING WORKFLOW…" : "RUN WORKFLOW NOW"}
@@ -785,7 +799,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                 <div key={i} className="text-xs truncate">
                   {ev.type === "job" ? (
                     <span>
-                      <strong className="text-[var(--color-ink)]">{ev.title}</strong> · {ev.company} · {ev.location || "REMOTE"} ({ev.role_type})
+                      <strong className="text-[var(--color-ink)]">{ev.title}</strong> · {ev.company} · {ev.location || "Location unknown"} ({ev.role_type})
                       {ev.salary?.raw ? ` · ${ev.salary.raw}` : ""}
                     </span>
                   ) : ev.type === "error" ? (
@@ -809,10 +823,12 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
         onClose={() => {
           setIsAddModalOpen(false);
           setEditingSource(null);
+          setImportedSpec(null);
         }}
         onSourceSaved={fetchSources}
         initialSource={editingSource}
         settings={settings}
+        initialSpec={importedSpec}
       />
     </div>
   );

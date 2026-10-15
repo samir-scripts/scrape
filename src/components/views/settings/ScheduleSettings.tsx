@@ -44,7 +44,6 @@ export function ScheduleSettings({
 
   const [validation, setValidation] = useState<CronValidationResult | null>(null);
   const [recentRuns, setRecentRuns] = useState<ScrapeRun[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
 
   // Synchronize when settings.scraper_cron changes externally
   useEffect(() => {
@@ -109,16 +108,6 @@ export function ScheduleSettings({
     }
   };
 
-  const handleRunNow = async () => {
-    try {
-      setIsRunning(true);
-      await api.runScrapeNow();
-      fetchRecentRuns();
-    } finally {
-      setIsRunning(false);
-    }
-  };
-
   const isCustomCronOutOfSyncWithClock =
     scheduleMode === "clock" && !cronToClock(settings.scraper_cron);
 
@@ -130,14 +119,7 @@ export function ScheduleSettings({
             SCHEDULE
           </h2>
         </div>
-        <Button
-          variant="inverted"
-          onClick={handleRunNow}
-          disabled={isRunning}
-          shortcut="RUN"
-        >
-          {isRunning ? "RUNNING…" : "RUN SCRAPE NOW"}
-        </Button>
+
       </div>
 
       <Rule />

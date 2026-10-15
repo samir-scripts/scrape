@@ -781,7 +781,7 @@ const apiImplementation = {
   }) => {
     if (!isTauri()) {
       const newSource: Source = {
-        id: `source-${Date.now()}`,
+        id: `source-${crypto.randomUUID()}`,
         kind: input.kind as any,
         name: input.name,
         identifier: input.identifier,
@@ -877,9 +877,14 @@ const apiImplementation = {
   runScrapeNow: async (): Promise<ScrapeRun> => {
     if (!isTauri()) {
       const enabled = devSources.filter((s) => s.enabled);
-      const target = enabled[0] || devSources[0];
-      if (target) {
-        return api.runSourceNow(target.id);
+      if (enabled.length) {
+        const runs: ScrapeRun[] = [];
+        for (const source of enabled) runs.push(await api.runSourceNow(source.id));
+        const failed = runs.filter(run => run.status !== "success");
+        return { ...runs[runs.length - 1], trigger: "manual", source_id: null,
+          status: failed.length ? "failed" : "success", error: failed.length ? failed.map(run => run.error || "Fixture run failed").join("; ") : null,
+          jobs_found: runs.reduce((sum, run) => sum + run.jobs_found, 0n),
+          jobs_new: runs.reduce((sum, run) => sum + run.jobs_new, 0n) };
       }
       return Promise.resolve({
         id: `mock-run-${Date.now()}`,
@@ -901,7 +906,7 @@ const apiImplementation = {
   runSourceNow: async (id: string): Promise<ScrapeRun> => {
     if (!isTauri()) {
       const target = devSources.find((s) => s.id === id);
-      const runId = `mock-run-${Date.now()}`;
+      const runId = `mock-run-${crypto.randomUUID()}`;
       const startedAt = new Date().toISOString();
       const delayMs = executionDelayStep();
 
@@ -1403,7 +1408,7 @@ export const api: typeof apiImplementation = new Proxy(apiImplementation, {
   get(target, key: keyof typeof apiImplementation) {
     const method = target[key];
     return (...args: unknown[]) => {
-      if (isRecordedMode() && ["runSourceNow", "runScrapeNow", "previewWorkflow", "dryRunSource", "detectSource", "previewSource"].includes(String(key))) return Promise.reject(new Error("Recorded examples cannot execute a scrape. Open the desktop application to test a live source."));
+      if (isRecordedMode() && ["runSourceNow", "runScrapeNow", "previewWorkflow", "dryRunSource", "detectSource", "previewSource", "testSource", "testSourceTransient"].includes(String(key))) return Promise.reject(new Error("Recorded examples cannot execute a scrape. Open the desktop application to test a live source."));
       if (needsDesktop()) return Promise.reject(new Error(
         "This action requires the desktop application. Open ?demo=1 for recorded provider examples."
       ));
