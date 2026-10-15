@@ -194,9 +194,8 @@
 .kanban-stage-picker { display: none; }
 @media (max-width: 767px) {
   .kanban-stage-picker { display: block; }
-  .kanban-columns { width: 100%; }
-  .kanban-column { display: none; width: 100%; }
-  .kanban-column.kanban-active { display: block; }
+  .kanban-columns { min-width: 100%; }
+  .kanban-column { width: min(300px, calc(100vw - 48px)); }
 }
 
 /* Shared targets do not depend on the selected font or the SVG's size. */

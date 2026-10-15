@@ -259,8 +259,8 @@ describe("Job Deletion & Confirmation Dialog Engine", () => {
           draggingJobId: null,
           onSelectJob: () => {},
           onDropJob: () => {},
-          onDragStartJob: () => {},
-          onDragEndJob: () => {},
+          dropTarget: null,
+          handleProps: () => ({}),
           onDelete: () => {},
         })
       );

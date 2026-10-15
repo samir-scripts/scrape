@@ -1,3 +1,4 @@
+import { checkNativeKanban } from "./native-kanban.mjs";
 import { checkNativeJobLayout } from "./native-job-layout.mjs";
 import { runNativeDev } from "./tauri-dev-test.mjs";
 import { checkNativeAppearance } from "./native-appearance.mjs";
@@ -45,10 +46,11 @@ for (const mode of modes) {
     try {
       const invoke = window.__TAURI_INTERNALS__.invoke;
       const jobs = await invoke("list_jobs", {filter:{}});
-      ${mode === "fresh" ? "" : "const saved = await invoke('get_job', {id:'saved'}); if (saved.notes !== 'Fixture saved note' || !saved.favorited || saved.status !== 'applied') throw new Error('Saved state changed');"}
+      ${mode === "fresh" ? "" : "const saved = await invoke('get_job', {id:'saved'}); if (saved.notes !== 'Fixture saved note' || !saved.favorited || saved.status !== (sessionStorage.getItem('kanban-reloaded') ? 'offer' : 'applied')) throw new Error('Saved state changed');"}
       const appearance = ${process.env.SCRAPE_NATIVE_APPEARANCE === "1" ? `await (${checkNativeAppearance.toString()})()` : "null"};
+      const kanban = ${process.env.SCRAPE_NATIVE_KANBAN === "1" ? `await (${checkNativeKanban.toString()})()` : "null"};
       const layout = ${process.env.SCRAPE_NATIVE_LAYOUT === "1" ? `await (${checkNativeJobLayout.toString()})()` : "null"};
-      await invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:true,appearance,layout,steps:["actual Tauri dev readiness: ${mode}"]}});
+      await invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:true,appearance,layout,kanban,steps:["actual Tauri dev readiness: ${mode}"]}});
     } catch(error) {
       await window.__TAURI_INTERNALS__.invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:false,error:String(error)}});
     }

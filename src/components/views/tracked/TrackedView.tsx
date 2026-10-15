@@ -20,6 +20,7 @@ interface TrackedViewProps {
   onUpdateStatus: (jobId: string, status: JobStatus) => void;
   onUpdateNotes: (jobId: string, notes: string) => void | Promise<unknown>;
   onOpenUrl: (url: string) => void;
+  pendingIds?: ReadonlySet<string>;
   onUndo: () => void;
   onToggleFavorite?: (jobId: string) => void;
   onRequestDelete?: (job: Job) => void;
@@ -31,6 +32,7 @@ export function TrackedView({
   onUpdateNotes,
   onOpenUrl,
   onUndo,
+  pendingIds,
   onToggleFavorite,
   onRequestDelete,
 }: TrackedViewProps) {
@@ -173,6 +175,7 @@ export function TrackedView({
       <div ref={contentRef} onScrollCapture={event => { const element = event.target as HTMLElement; if (element.classList.contains("tracked-scroll")) scrollPositions.current[trackedViewMode] = {top:element.scrollTop,left:element.scrollLeft}; }} className="flex-1 min-w-0 min-h-0 flex flex-col">
       {trackedViewMode === "kanban" ? (
         <KanbanBoard
+          pendingIds={pendingIds}
           jobs={filteredJobs}
           selectedJobId={selectedJobId}
           onSelectJob={handleSelectJob}

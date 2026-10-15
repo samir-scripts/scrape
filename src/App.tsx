@@ -1,3 +1,4 @@
+import { useJobStatusChange } from "./hooks/useJobStatusChange";
 import { pagination } from "./lib/pagination";
 import { JobPaginator } from "./components/jobs/JobPaginator";
 import { openPostingUrl } from "./lib/postingUrl";
@@ -154,19 +155,9 @@ export default function App() {
 
   const allJobs = useMemo(() => jobsPage?.items || [], [jobsPage]);
 
-  const updateStatusMutation = useMutation({
-    mutationFn: ({ jobId, status }: { jobId: string; status: JobStatus }) => api.updateJobStatus(jobId, status),
-    onSuccess: (_job, { jobId, status }) => {
-      const previous = allJobs.find((job) => job.id === jobId);
-      if (previous) pushUndo({ jobId, previousStatus: previous.status });
-      if (status === "applied" && view === "discovered") useToastStore.getState().addToast({type:"success",message:"Application added to Tracked.",action:{label:"View in Tracked",run:()=>useUIStore.getState().setView("tracked")}});
-    },
-    onError: (error) => notifyError(String(error), "STATUS UPDATE FAILED"),
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["jobs"] });
-      queryClient.invalidateQueries({ queryKey: ["job_counts"] });
-      queryClient.invalidateQueries({ queryKey: ["job_status_events"] });
-    },
+  const { changeStatus, pendingIds } = useJobStatusChange(allJobs, (previous, next, recordUndo) => {
+    if (recordUndo) pushUndo({ jobId: next.id, previousStatus: previous.status });
+    if (next.status === "applied" && view === "discovered") useToastStore.getState().addToast({type:"success",message:"Application added to Tracked.",action:{label:"View in Tracked",run:()=>useUIStore.getState().setView("tracked")}});
   });
 
   // 5. Notes mutation
@@ -253,13 +244,8 @@ export default function App() {
   const handleUndo = async () => {
     const item = popUndo();
     if (!item) return;
-    try {
-      await api.updateJobStatus(item.jobId, item.previousStatus);
-      queryClient.invalidateQueries({ queryKey: ["jobs"] });
-      queryClient.invalidateQueries({ queryKey: ["job_counts"] });
-    } catch (e) {
-      notifyError(String(e), "UNDO FAILED");
-    }
+    const restored = await changeStatus(item.jobId, item.previousStatus, false);
+    if (!restored) pushUndo(item);
   };
 
   // 8. Open URL helper (Tauri native opener with resilient browser fallback)
@@ -396,7 +382,7 @@ export default function App() {
         <DiscoveredView
           jobs={discoveredJobs}
           onUpdateStatus={(jobId, status) =>
-            updateStatusMutation.mutate({ jobId, status })
+            void changeStatus(jobId, status)
           }
           onUpdateNotes={(jobId, notes) =>
             updateNotesMutation.mutateAsync({ jobId, notes })
@@ -410,9 +396,10 @@ export default function App() {
 
       {view === "tracked" && !jobsLoading && !jobsError && (
         <TrackedView
+          pendingIds={pendingIds}
           jobs={trackedJobs}
           onUpdateStatus={(jobId, status) =>
-            updateStatusMutation.mutate({ jobId, status })
+            void changeStatus(jobId, status)
           }
           onUpdateNotes={(jobId, notes) =>
             updateNotesMutation.mutateAsync({ jobId, notes })

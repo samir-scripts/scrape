@@ -1,3 +1,4 @@
+import { moveByPointer } from "./kanbanPointer";
 import { contrastFailures } from "./contrast";
 import { test, expect } from "./fixtures";
 import { discoverFixtures } from "./jobFixtures";
@@ -79,8 +80,7 @@ for (const theme of ["paper", "obsidian"])
           .getByRole("button", { name: `View ${title} at Demo Company` }),
       ).toBeVisible();
       if (width === 1440 && theme === "paper") {
-        const moving = page.getByRole("region", {name:"INTERVIEWING stage"}).locator("article");
-        await moving.dragTo(page.getByRole("region", {name:"OFFER stage"}));
+        await moveByPointer(page, title, "offer");
         const moved = page.getByRole("region", {name:"OFFER stage"}).locator("article");
         await expect(moved).toBeVisible(); await expect(moved).not.toHaveClass(/border-dashed/);
       }
