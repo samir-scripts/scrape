@@ -30,6 +30,69 @@ pub struct SchedulerStatus {
     pub enabled: bool,
     pub next_run_at: Option<String>,
     pub running: bool,
+    pub enabled_workflows: u32,
+    pub schedules: Vec<ScheduledWorkflow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ScheduledWorkflow {
+    pub id: String,
+    pub name: String,
+    pub timezone: String,
+    pub next_run_at: Option<String>,
+}
+
+// Read the same instants used by dispatch. No calendar calculation belongs in status.
+fn status_for_sources(
+    sources: &[Source],
+    global: Option<DateTime<Utc>>,
+    timezone: &str,
+    enabled: bool,
+    running: bool,
+) -> SchedulerStatus {
+    use scrape_core::SourceCadence;
+    let mut schedules: Vec<_> = sources
+        .iter()
+        .filter(|s| s.enabled && s.cadence != SourceCadence::Manual)
+        .map(|s| {
+            let next = if s.cadence == SourceCadence::Global {
+                global
+            } else {
+                s.next_run_at
+                    .as_deref()
+                    .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
+                    .map(|v| v.with_timezone(&Utc))
+            };
+            ScheduledWorkflow {
+                id: s.id.clone(),
+                name: s.name.clone(),
+                timezone: if s.cadence == SourceCadence::Global {
+                    timezone.to_owned()
+                } else {
+                    s.config
+                        .pointer("/__schedule/timezone")
+                        .or_else(|| s.config.get("__cron_timezone"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(timezone)
+                        .to_owned()
+                },
+                next_run_at: next.map(|v| v.to_rfc3339_opts(SecondsFormat::Millis, true)),
+            }
+        })
+        .collect();
+    schedules.sort_by(|a, b| a.next_run_at.cmp(&b.next_run_at).then(a.id.cmp(&b.id)));
+    SchedulerStatus {
+        enabled,
+        running,
+        enabled_workflows: sources.iter().filter(|s| s.enabled).count() as u32,
+        next_run_at: if enabled {
+            schedules.iter().filter_map(|s| s.next_run_at.clone()).min()
+        } else {
+            None
+        },
+        schedules,
+    }
 }
 
 #[derive(Default)]
@@ -232,34 +295,17 @@ impl SchedulerService {
         Ok(())
     }
     pub async fn get_status(&self) -> Result<SchedulerStatus> {
-        let enabled = !self.is_paused.load(Ordering::SeqCst);
-        let mut candidates = Vec::new();
-        if enabled {
-            if let Some(global) = *self.next_global.lock().await {
-                candidates.push(global);
-            }
-            for source in SourcesRepo::list(&self.pool)
-                .await?
-                .into_iter()
-                .filter(|s| s.enabled && s.cadence != scrape_core::SourceCadence::Manual)
-            {
-                if let Some(next) = source
-                    .next_run_at
-                    .as_deref()
-                    .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
-                {
-                    candidates.push(next.with_timezone(&Utc));
-                }
-            }
-        }
-        Ok(SchedulerStatus {
-            enabled,
-            running: self.runner.is_running(),
-            next_run_at: candidates
-                .into_iter()
-                .min()
-                .map(|dt| dt.to_rfc3339_opts(SecondsFormat::Millis, true)),
-        })
+        let sources = SourcesRepo::list(&self.pool).await?;
+        let timezone: String = SettingsRepo::get_value(&self.pool, "system.timezone")
+            .await?
+            .unwrap_or_else(|| "UTC".into());
+        Ok(status_for_sources(
+            &sources,
+            *self.next_global.lock().await,
+            &timezone,
+            !self.is_paused.load(Ordering::SeqCst),
+            self.runner.is_running(),
+        ))
     }
 }
 
@@ -485,6 +531,65 @@ mod tests {
         source.cadence = SourceCadence::Cron;
         source.cadence_cron = Some("0 30 9 * * *".to_string());
         assert!(calculate_next_run_for_source(&source, "UTC").is_some());
+    }
+
+    #[tokio::test]
+    async fn status_uses_dispatch_instants_and_never_invents_automatic_work() {
+        let pool = crate::db::init_memory_db().await.unwrap();
+        let clock = DateTime::parse_from_rfc3339("2026-10-15T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        assert!(status_for_sources(&[], Some(clock), "UTC", true, false)
+            .next_run_at
+            .is_none());
+        for (id, cadence, enabled, next) in [
+            ("manual", "manual", true, "2020-01-01T00:00:00Z"),
+            ("disabled", "daily", false, "2020-01-01T00:00:00Z"),
+            ("global", "global", true, "2020-01-01T00:00:00Z"),
+            ("daily", "daily", true, "2026-10-15T08:00:00-04:00"),
+        ] {
+            sqlx::query("INSERT INTO sources (id, kind, name, identifier, created_at, cadence, enabled, next_run_at) VALUES (?1, 'greenhouse', ?1, ?1, '2020-01-01', ?2, ?3, ?4)")
+                .bind(id).bind(cadence).bind(enabled).bind(next).execute(&pool).await.unwrap();
+        }
+        let mut sources = SourcesRepo::list(&pool).await.unwrap();
+        let status = status_for_sources(&sources, Some(clock), "UTC", true, false);
+        assert_eq!(status.enabled_workflows, 3);
+        assert_eq!(status.schedules.len(), 2);
+        assert_eq!(
+            status.next_run_at.as_deref(),
+            Some("2026-10-15T12:00:00.000Z")
+        );
+        assert!(status
+            .schedules
+            .iter()
+            .all(|s| s.next_run_at == status.next_run_at));
+        let daily = sources.iter_mut().find(|s| s.id == "daily").unwrap();
+        daily.config = serde_json::json!({"__schedule": {"timezone": "America/New_York"}});
+        assert!(is_due(daily, clock));
+        assert!(!is_due(daily, clock - chrono::Duration::milliseconds(1)));
+        let paused = status_for_sources(&sources, Some(clock), "UTC", false, true);
+        assert!(paused.running && !paused.enabled);
+        assert!(paused.next_run_at.is_none());
+        assert_eq!(
+            paused
+                .schedules
+                .iter()
+                .find(|s| s.id == "daily")
+                .unwrap()
+                .timezone,
+            "America/New_York"
+        );
+        sources.retain(|s| s.id == "manual");
+        assert!(
+            status_for_sources(&sources, Some(clock), "UTC", true, false)
+                .schedules
+                .is_empty()
+        );
+        sources[0].cadence = scrape_core::SourceCadence::Daily;
+        sources[0].next_run_at = Some("bad timestamp".into());
+        let invalid = status_for_sources(&sources, None, "UTC", true, false);
+        assert_eq!(invalid.schedules.len(), 1);
+        assert!(invalid.schedules[0].next_run_at.is_none());
     }
 
     #[tokio::test]

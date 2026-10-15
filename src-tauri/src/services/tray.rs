@@ -95,6 +95,8 @@ pub fn setup_tray(app: &AppHandle, pool: &SqlitePool) -> Result<()> {
                             enabled: false,
                             next_run_at: None,
                             running: false,
+                            enabled_workflows: 0,
+                            schedules: vec![],
                         },
                     );
                     let new_enabled = !status.enabled;
