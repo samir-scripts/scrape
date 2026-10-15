@@ -1,5 +1,12 @@
 The latest proposed desktop repair is [Desktop usability and extraction](08-desktop-usability-and-extraction.md). It documents the screenshot-reported regressions, replaces conflicting plan 07 layout decisions, and requires actual native interaction verification before completion.
 
+Current UI refinement and independent workflow configuration is specified in
+[plan 10](10-ui-workflow-refinement.md). It supersedes conflicting global
+workflow settings and Scraper Settings decisions in plans 06–08, while
+preserving data-protection and domain contracts.
+
+| [`10-ui-workflow-refinement.md`](10-ui-workflow-refinement.md) | Themed accessible menus, independent workflow settings, automatic retention, Kanban movement, and consolidated sorting. |
+
 # Plan status
 
 [Interface simplification and real-source verification](07-interface-simplification.md)

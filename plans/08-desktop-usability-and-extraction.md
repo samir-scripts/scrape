@@ -1,5 +1,10 @@
 # Desktop usability and extraction repair
 
+Status: historical UI proposal. Workflow and settings decisions are superseded
+by [UI refinement and independent workflow settings](10-ui-workflow-refinement.md).
+Its extraction, data-safety, and native acceptance requirements remain relevant
+where they do not conflict with plan 10.
+
 Priority addition: implement [bounded ingestion, location targeting, and data management](09-bounded-ingestion-and-data-management.md), one section at a time, before final Section 8 handoff.
 
 Status: Sections 1–7 are implemented and documented. Automated browser, isolated native startup/migration, sidecar, and WKWebView integration checks pass. Real native pointer/visual verification and the native workflow file chooser remain open; exact Cloudflare source fields are now captured and regression-tested. See [Section 8 integration evidence](08-implementation-evidence.md#section-8--final-integration-and-handoff). Section 8 is not complete until the remaining native limitations are explicitly accepted or verified.

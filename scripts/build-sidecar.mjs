@@ -2,6 +2,7 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { resolveCargoTargetDirectory } from './cargo-target-dir.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -45,7 +46,12 @@ execSync(`cargo build -p scrape-worker --release --target ${target}`, {
   env,
 });
 
-const srcBin = path.join(rootDir, 'target', target, 'release', `scrape-worker${exeExt}`);
+const metadata = JSON.parse(execSync('cargo metadata --no-deps --format-version 1', {
+  cwd: rootDir,
+  encoding: 'utf8',
+  env,
+}));
+const srcBin = path.join(resolveCargoTargetDirectory(metadata), target, 'release', `scrape-worker${exeExt}`);
 const destDir = path.join(rootDir, 'src-tauri', 'binaries');
 const destBin = path.join(destDir, `scrape-worker-${target}${exeExt}`);
 
