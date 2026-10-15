@@ -110,6 +110,8 @@ async fn preview_single_global_identity_and_native_pay_survive_persistence_and_b
         let mut pages = 0;
         while pages < 3 && Instant::now() < deadline {
             if let Ok((mut stream, _)) = listener.accept() {
+                // Accepted sockets may inherit nonblocking mode on macOS.
+                stream.set_nonblocking(false).unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(2)))
                     .unwrap();
@@ -458,6 +460,8 @@ async fn remote_us_eligibility_survives_greenhouse_worker_persistence_and_restar
         let mut requests = 0;
         while requests < 3 && Instant::now() < deadline {
             if let Ok((mut stream, _)) = listener.accept() {
+                // Accepted sockets may inherit nonblocking mode on macOS.
+                stream.set_nonblocking(false).unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(2)))
                     .unwrap();

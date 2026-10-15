@@ -36,6 +36,8 @@ fn cli_url_survives_http_extraction_and_ndjson() {
         while Instant::now() < deadline {
             match listener.accept() {
                 Ok((mut stream, _)) => {
+                    // Poll accept without making the subsequent HTTP read race.
+                    stream.set_nonblocking(false).unwrap();
                     stream
                         .set_read_timeout(Some(Duration::from_secs(2)))
                         .unwrap();
