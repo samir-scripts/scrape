@@ -27,12 +27,23 @@ pub fn install(app: &mut tauri::App) -> bool {
     let Some(directory) = directory() else {
         return false;
     };
-    use tauri::Listener;
+    use tauri::{Listener, Manager};
     let control_directory = directory.clone();
+    let control_handle = app.handle().clone();
     app.listen("native-smoke-control", move |event| {
         let payload: serde_json::Value = serde_json::from_str(event.payload()).unwrap_or_default();
         let mode = payload["mode"].as_str().unwrap_or("");
-        if mode == "restore-real-worker" {
+        if mode == "resize-window" {
+            let width = payload["width"].as_u64().unwrap_or(0);
+            let height = payload["height"].as_u64().unwrap_or(0);
+            if (400..=1600).contains(&width) && (480..=1000).contains(&height) {
+                if let Some(window) = control_handle.get_webview_window("main") {
+                    window
+                        .set_size(tauri::LogicalSize::new(width as f64, height as f64))
+                        .expect("Resize isolated test window");
+                }
+            }
+        } else if mode == "restore-real-worker" {
             let _ = std::fs::remove_file(control_directory.join("worker-fixture"));
             let _ = std::fs::remove_file(control_directory.join("timeout-seconds"));
         } else if [

@@ -21,7 +21,7 @@ for (const theme of ["paper", "obsidian"])
         .getByRole("button", { name: `View ${title} at Demo Company` })
         .click();
       const inspector =
-        width < 1100
+        width < 812
           ? page.getByRole("dialog", { name: "Job details" })
           : page.getByRole("complementary", { name: "Job details" });
       await expect(

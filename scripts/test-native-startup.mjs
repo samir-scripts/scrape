@@ -1,3 +1,4 @@
+import { checkNativeJobLayout } from "./native-job-layout.mjs";
 import { runNativeDev } from "./tauri-dev-test.mjs";
 import { checkNativeAppearance } from "./native-appearance.mjs";
 import { execFileSync } from "node:child_process";
@@ -24,6 +25,10 @@ for migration in sorted((root/'src-tauri/migrations').glob('*.sql')):
 c.execute("INSERT INTO sources(id,kind,name,identifier,created_at,enabled,cadence) VALUES ('fixture','greenhouse','Fixture Co','fixture','2026-01-01',0,'manual')")
 c.execute("INSERT INTO jobs(id,dedupe_key,source_id,external_id,title,company,role_type,url,date_added,last_seen_at,status,status_changed_at,notes,favorited) VALUES ('saved','fixture:42','fixture','42','Fixture engineer','Fixture Co','full_time','https://example.com/42','2026-01-01','2026-01-01','applied','2026-01-01','Fixture saved note',1)")
 c.execute("INSERT INTO app_settings VALUES ('scraper.enabled','false','2026-01-01')")
+if sys.argv[4]=='layout':
+ for i in range(105):
+  identity=f'layout-{i:03d}'
+  c.execute("INSERT INTO jobs(id,dedupe_key,source_id,external_id,title,company,role_type,url,date_added,last_seen_at,status,status_changed_at,description_text) VALUES (?,?, 'fixture',?,?,'Fixture Co','full_time',?,'2026-01-02','2026-01-02','viewed','2026-01-02',?)",(identity,identity,str(i),f'Layout fixture {i:03d}',f'https://fixture.example.test/jobs/{i}', 'Authored native layout fixture.\n\n'*150))
 c.commit();c.close()
 `;
 
@@ -34,15 +39,16 @@ if (modes.some(mode => !supportedModes.includes(mode))) throw new Error("Unsuppo
 for (const mode of modes) {
   const directory = await mkdtemp(join(tmpdir(), "scrape-native-smoke-"));
   const database = join(directory, "scrape_data.db");
-  if (mode !== "fresh") execFileSync("python3", ["-c", fixture, resolve("."), database, mode]);
+  if (mode !== "fresh") execFileSync("python3", ["-c", fixture, resolve("."), database, mode, process.env.SCRAPE_NATIVE_LAYOUT === "1" ? "layout" : "normal"]);
   const before = mode.startsWith("unknown") ? hash(await readFile(database)) : null;
   await writeFile(join(directory, "smoke.js"), `(async () => {
     try {
       const invoke = window.__TAURI_INTERNALS__.invoke;
       const jobs = await invoke("list_jobs", {filter:{}});
-      ${mode === "fresh" ? "" : "if (jobs.items[0]?.notes !== 'Fixture saved note' || !jobs.items[0]?.favorited || jobs.items[0]?.status !== 'applied') throw new Error('Saved state changed');"}
+      ${mode === "fresh" ? "" : "const saved = await invoke('get_job', {id:'saved'}); if (saved.notes !== 'Fixture saved note' || !saved.favorited || saved.status !== 'applied') throw new Error('Saved state changed');"}
       const appearance = ${process.env.SCRAPE_NATIVE_APPEARANCE === "1" ? `await (${checkNativeAppearance.toString()})()` : "null"};
-      await invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:true,appearance,steps:["actual Tauri dev readiness: ${mode}"]}});
+      const layout = ${process.env.SCRAPE_NATIVE_LAYOUT === "1" ? `await (${checkNativeJobLayout.toString()})()` : "null"};
+      await invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:true,appearance,layout,steps:["actual Tauri dev readiness: ${mode}"]}});
     } catch(error) {
       await window.__TAURI_INTERNALS__.invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:false,error:String(error)}});
     }

@@ -1,3 +1,4 @@
+import { ResizableSplitPane } from "../../layout/ResizableSplitPane";
 import { useMemo, useEffect, useLayoutEffect, useRef } from "react";
 import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
@@ -168,10 +169,7 @@ export function TrackedView({
     if (coords) preferredRowRef.current = coords.rowIdx;
   };
 
-  return (
-    <div
-      className="flex-1 min-h-0 min-w-0 relative overflow-hidden flex bg-[var(--color-paper)]"
-    >
+  return <ResizableSplitPane primary={
       <div ref={contentRef} onScrollCapture={event => { const element = event.target as HTMLElement; if (element.classList.contains("tracked-scroll")) scrollPositions.current[trackedViewMode] = {top:element.scrollTop,left:element.scrollLeft}; }} className="flex-1 min-w-0 min-h-0 flex flex-col">
       {trackedViewMode === "kanban" ? (
         <KanbanBoard
@@ -195,9 +193,12 @@ export function TrackedView({
       )}
 
       </div>
-      {/* Shared job inspector */}
+
+  } secondary={drawerJob ? ({ inline, reset }) => (
       <JobDetailDrawer
         job={drawerJob}
+        mode={inline ? "inline" : "modal"}
+        onResetPane={reset}
         isOpen={drawerJobId !== null}
         onClose={() => setDrawerJobId(null)}
         onUpdateStatus={onUpdateStatus}
@@ -206,6 +207,5 @@ export function TrackedView({
         onToggleFavorite={onToggleFavorite}
         onDelete={onRequestDelete}
       />
-    </div>
-  );
+  ) : undefined} />;
 }

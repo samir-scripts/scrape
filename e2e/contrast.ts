@@ -16,7 +16,7 @@ export async function contrastFailures(page: Page) {
     const blend = (fg: number[], bg: number[]) => fg.slice(0, 3).map((c, i) => c * fg[3] + bg[i] * (1 - fg[3]));
     const luminance = (color: number[]) => color.map(value => value / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4).reduce((sum, value, i) => sum + value * [.2126, .7152, .0722][i], 0);
     const result: { text: string; contrast: number; foreground: string; background: number[] }[] = [];
-    const modal = document.querySelector("dialog[open]");
+    const modal = document.querySelector('dialog[open]:not([data-inline-dialog="true"])');
     for (const element of document.querySelectorAll<HTMLElement>("body *")) {
       if (modal && !modal.contains(element)) continue;
       if (!Array.from(element.childNodes).some(node => node.nodeType === Node.TEXT_NODE && node.textContent?.trim())) continue;

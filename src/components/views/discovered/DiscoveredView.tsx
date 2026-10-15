@@ -1,3 +1,4 @@
+import { ResizableSplitPane, type SplitLayout } from "../../layout/ResizableSplitPane";
 import { countActiveFilters } from "../../../lib/filter";
 import { useEffect, useMemo } from "react";
 import type { Job } from "../../../bindings/Job";
@@ -139,9 +140,11 @@ export function DiscoveredView({
       </div>
     );
 
-  const rightContent = selectedJob ? (
+  const rightContent = selectedJob ? ({ inline, reset }: SplitLayout) => (
     <JobDetail
       job={selectedJob}
+      mode={inline ? "inline" : "modal"}
+      onResetPane={reset}
       onClose={() => setSelectedJobId(null)}
       onUpdateStatus={onUpdateStatus}
       onUpdateNotes={onUpdateNotes}
@@ -149,7 +152,7 @@ export function DiscoveredView({
       onToggleFavorite={onToggleFavorite}
       onDelete={onRequestDelete}
     />
-  ) : null;
+  ) : undefined;
 
-  return <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden"><div className="flex-1 min-w-0 overflow-y-auto"><div className="max-w-[1000px] mx-auto">{leftContent}</div></div>{rightContent}</div>;
+  return <ResizableSplitPane primary={<div className="flex-1 min-w-0 overflow-y-auto"><div className="max-w-[1000px] mx-auto">{leftContent}</div></div>} secondary={rightContent} />;
 }

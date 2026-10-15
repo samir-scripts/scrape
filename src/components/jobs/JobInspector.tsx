@@ -22,6 +22,8 @@ import { formatJobLocation } from "../../lib/jobLocationLabel";
 export interface JobInspectorProps {
   job: Job | null;
   onClose?: () => void;
+  mode?: "inline" | "modal";
+  onResetPane?: () => void;
   onUpdateStatus: (id: string, status: JobStatus) => void;
   onUpdateNotes: (id: string, notes: string) => void | Promise<unknown>;
   onOpenUrl: (url: string) => void;
@@ -30,61 +32,11 @@ export interface JobInspectorProps {
 }
 const date = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleString() : "Unknown";
-export function JobInspectorPanel(props: JobInspectorProps) {
-  const [narrow, setNarrow] = useState(
-    () =>
-      typeof matchMedia !== "undefined" &&
-      matchMedia("(max-width: 1099px)").matches,
-  );
-  const priorFocus = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    if (typeof matchMedia === "undefined") return;
-    const query = matchMedia("(max-width: 1099px)");
-    const change = () => setNarrow(query.matches);
-    query.addEventListener("change", change);
-    return () => query.removeEventListener("change", change);
-  }, []);
-  useEffect(() => {
-    priorFocus.current = document.activeElement as HTMLElement;
-    return () => {
-      if (priorFocus.current?.isConnected) priorFocus.current.focus();
-    };
-  }, []);
-  useEffect(() => {
-    const active = document.activeElement as HTMLElement | null;
-    if (active && !active.closest('[aria-label="Job details"]')) priorFocus.current = active;
-  }, [props.job?.id]);
-  useEffect(() => {
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !document.querySelector("dialog[open]")) {
-        event.preventDefault();
-        props.onClose?.();
-      }
-    };
-    window.addEventListener("keydown", escape);
-    return () => window.removeEventListener("keydown", escape);
-  }, [props.onClose]);
+export function JobInspectorPanel({ mode = "inline", ...props }: JobInspectorProps) {
   if (!props.job) return null;
-  const content = (
-    <JobInspectorContent key={props.job.id} {...props} job={props.job} />
-  );
-  return narrow ? (
-    <Modal
-      isOpen
-      title="Job details"
-      width="max-w-[640px]"
-      onClose={() => props.onClose?.()}
-    >
-      {content}
-    </Modal>
-  ) : (
-    <aside
-      aria-label="Job details"
-      className="w-[480px] max-w-[45vw] shrink-0 border-l overflow-y-auto bg-[var(--color-paper)] p-4"
-    >
-      {content}
-    </aside>
-  );
+  return <Modal isOpen title="Job details" inline={mode === "inline"} width="max-w-[640px]" onClose={() => props.onClose?.()}>
+    <JobInspectorContent key={props.job.id} {...props} job={props.job} onClose={mode === "inline" ? props.onClose : undefined} />
+  </Modal>;
 }
 export function JobInspectorContent({
   job,
@@ -94,6 +46,7 @@ export function JobInspectorContent({
   onOpenUrl,
   onToggleFavorite,
   onDelete,
+  onResetPane,
 }: JobInspectorProps & { job: Job }) {
   const [notes, setNotes] = useState(job.notes || "");
   const [noteState, setNoteState] = useState("Saved");
@@ -190,6 +143,7 @@ export function JobInspectorContent({
               onClick={() => onDelete(job)}
             />
           )}
+          {onClose && onResetPane && <IconButton label="Reset pane width" onClick={onResetPane}><Icon name="refresh" /></IconButton>}
           {onClose && (
             <IconButton label="Close job details" onClick={onClose}>
               <Icon name="close" />
