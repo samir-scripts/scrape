@@ -20,6 +20,14 @@ pub struct RunLockGuard {
     flag: Arc<AtomicBool>,
 }
 
+impl RunLockGuard {
+    // Status readers responding to completion must observe the released run lock.
+    fn finish(self, notify: impl FnOnce()) {
+        drop(self);
+        notify();
+    }
+}
+
 impl Drop for RunLockGuard {
     fn drop(&mut self) {
         self.flag.store(false, Ordering::SeqCst);
@@ -203,7 +211,9 @@ impl ScrapeRunner {
                 Some("No enabled sources"),
             )
             .await?;
-            let _ = app.emit("scrape://finished", &finished);
+            _guard.finish(|| {
+                let _ = app.emit("scrape://finished", &finished);
+            });
 
             let tz_name: String = SettingsRepo::get_value(&self.pool, "system.timezone")
                 .await
@@ -308,7 +318,9 @@ impl ScrapeRunner {
                     .await;
                 }
 
-                let _ = app.emit("scrape://finished", &finished);
+                _guard.finish(|| {
+                    let _ = app.emit("scrape://finished", &finished);
+                });
                 let _ = app.emit("jobs://changed", ());
 
                 // Send desktop notification if enabled
@@ -347,7 +359,9 @@ impl ScrapeRunner {
                 let finished =
                     RunsRepo::finish(&self.pool, &run.id, RunStatus::Failed, 0, 0, Some(&err_str))
                         .await?;
-                let _ = app.emit("scrape://finished", &finished);
+                _guard.finish(|| {
+                    let _ = app.emit("scrape://finished", &finished);
+                });
                 Err(err)
             }
         }
@@ -498,7 +512,9 @@ impl ScrapeRunner {
                     .await;
                 }
 
-                let _ = app.emit("scrape://finished", &finished);
+                _guard.finish(|| {
+                    let _ = app.emit("scrape://finished", &finished);
+                });
                 let _ = app.emit(
                     "scrape://source_finished",
                     serde_json::json!({
@@ -552,7 +568,9 @@ impl ScrapeRunner {
                 let finished =
                     RunsRepo::finish(&self.pool, &run.id, RunStatus::Failed, 0, 0, Some(&err_str))
                         .await?;
-                let _ = app.emit("scrape://finished", &finished);
+                _guard.finish(|| {
+                    let _ = app.emit("scrape://finished", &finished);
+                });
                 let _ = app.emit("sources://changed", ());
                 Err(err)
             }
@@ -919,6 +937,16 @@ impl ScrapeRunner {
 mod tests {
     use super::*;
     use scrape_core::{RoleType, TriState};
+
+    #[tokio::test]
+    async fn completion_notification_observes_released_worker() {
+        let pool = crate::db::init_memory_db().await.unwrap();
+        let runner = ScrapeRunner::new(pool);
+        let guard = runner.try_acquire_lock().unwrap();
+        assert!(runner.is_running());
+        guard.finish(|| assert!(!runner.is_running()));
+        assert!(runner.try_acquire_lock().is_ok());
+    }
 
     #[tokio::test]
     async fn test_overlap_guard() {
