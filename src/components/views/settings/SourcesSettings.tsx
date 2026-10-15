@@ -172,8 +172,8 @@ export function SourcesSettings({ settings, onOpenSettings }: SourcesSettingsPro
   const handleRunAll = async () => {
     if (isRecordedMode() || activeRun) return;
     setRunningAll(true);
-    try { const run = await api.runScrapeNow(); if (["failed", "incomplete"].includes(run.status)) throw new Error(run.error || "Run all did not complete."); }
-    catch (error) { notifyError(String(error), "RUN ALL FAILED"); }
+    try { const run = await api.runScrapeNow(); if (["failed", "partial"].includes(run.status)) throw new Error(run.error || "Run all did not complete."); }
+    catch (error) { notifyError(String(error), "RUN ALL DID NOT COMPLETE"); }
     finally { setRunningAll(false); refreshAfterRun(); }
   };
   const handleRunSourceNow = async (source: Source) => {
@@ -184,7 +184,7 @@ export function SourcesSettings({ settings, onOpenSettings }: SourcesSettingsPro
       const runPromise = api.runSourceNow(source.id);
       await refreshInspectedRunsAndLogs(source.id);
       const run = await runPromise;
-      if (["failed", "incomplete"].includes(run.status)) throw new Error(run.error || "Workflow run did not complete.");
+      if (["failed", "partial"].includes(run.status)) throw new Error(run.error || "Workflow run did not complete.");
     } catch (e) {
       notifyError(String(e), "WORKFLOW RUN FAILED");
     } finally {

@@ -59,12 +59,12 @@ filters: {include_keywords: [], exclude_keywords: [], locations: []}
   await expect(dialog.getByRole("alert")).toContainText("Unsupported workflow version");
   await expect(dialog.getByLabel("Workflow name")).toHaveValue("Unsaved revision");
   const replacement = { name: "replacement.yaml", mimeType: "text/yaml", buffer: Buffer.from("version: 3\nmetadata: {name: Replacement fixture}\nextractor: {kind: greenhouse, url: https://boards.greenhouse.io/replacement}\nschedule: {cadence: manual, timezone: UTC}\n") };
-  const dismissal = new Promise<void>(resolve => page.once("dialog", async prompt => { await prompt.dismiss(); resolve(); }));
   const cancelled = page.waitForEvent("filechooser"); await dialog.getByRole("button", { name: "Import workflow YAML" }).click(); await (await cancelled).setFiles(replacement);
-  await dismissal;
+  await dialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(dialog.getByRole("button", { name: "Import workflow YAML" })).toBeFocused();
   await expect(dialog.getByLabel("Workflow name")).toHaveValue("Unsaved revision");
-  page.once("dialog", prompt => prompt.accept());
   const replaced = page.waitForEvent("filechooser"); await dialog.getByRole("button", { name: "Import workflow YAML" }).click(); await (await replaced).setFiles(replacement);
+  await dialog.getByRole("button", { name: "Replace draft" }).click();
   await expect(dialog.getByLabel("Workflow name")).toHaveValue("Replacement fixture");
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page.getByText("Uploaded fixture", { exact: true })).toHaveCount(0);

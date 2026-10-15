@@ -23,6 +23,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   const [preview, setPreview] = useState<WorkflowPreview | null>(null), [previewRevision, setPreviewRevision] = useState<number | null>(null);
   const [error, setError] = useState(""), [errorStep, setErrorStep] = useState<WorkflowStep>("Source");
   const [operation, setOperation] = useState<"detect" | "preview" | "validate" | "save" | "run" | null>(null);
+  const [pendingImport, setPendingImport] = useState<WorkflowSpec | null>(null);
   const [saved, setSaved] = useState<Source | null>(null), [dirty, setDirty] = useState(false);
   const content = useRef<HTMLDivElement>(null), revision = useRef(0), request = useRef<string | null>(null);
   const draftRef = useRef(draft); draftRef.current = draft;
@@ -35,7 +36,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     if (isOpen) {
       invalidate(); setDraft(initialSpec || (initialSource ? sourceToWorkflowSpec(initialSource) : newDraft()));
       setDetected(initialSpec?.extractor.url || initialSource?.identifier || "");
-      setStep("Source"); setVisited(0); setAdvanced(false); setYamlState(null); setError(""); setSaved(null); setDirty(false);
+      setStep("Source"); setVisited(0); setAdvanced(false); setYamlState(null); setError(""); setSaved(null); setPendingImport(null); setDirty(false);
     }
     return () => {
       if (request.current) void api.cancelWorkflowPreview(request.current).catch(() => {});
@@ -69,10 +70,12 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     setErrorStep((invalid.closest("[data-workflow-step]") as HTMLElement)?.dataset.workflowStep as WorkflowStep || step);
     setError("Fix the highlighted inputs before continuing."); return true;
   };
-  const replaceImport = (spec: WorkflowSpec) => {
-    if (dirty && !window.confirm("Replace unsaved workflow changes with this validated YAML draft?")) return;
-    change(spec); setDetected(spec.extractor.url); setYamlState(null); setStep("Source"); setVisited(0);
+  const applyImport = (spec: WorkflowSpec) => {
+    change(spec); setDetected(spec.extractor.url); setYamlState(null); setStep("Source"); setVisited(0); setPendingImport(null);
   };
+  const replaceImport = (spec: WorkflowSpec) => { if (dirty) setPendingImport(spec); else applyImport(spec); };
+  const confirmImport = () => { if (pendingImport) applyImport(pendingImport); };
+  const cancelImport = () => setPendingImport(null);
   const applyYaml = async () => {
     const current = ++revision.current; setOperation("validate");
     try {
@@ -112,7 +115,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     } catch (error) { if (revision.current === current) report(error); }
     finally { if (revision.current === current) { request.current = null; setOperation(null); } }
   };
-  const canSave = !!preview && previewRevision === revision.current && !preview.errors.length && yaml == null && !operation;
+  const canSave = !!preview && previewRevision === revision.current && !preview.errors.length && yaml == null && !operation && !pendingImport;
   const save = async () => {
     if (!canSave) return;
     const current = revision.current; setOperation("save"); setError("");
@@ -125,9 +128,9 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   const runSaved = async () => {
     if (!saved) return false;
     setOperation("run"); setError("");
-    try { const run = await api.runSourceNow(saved.id); if (["failed", "incomplete"].includes(run.status)) throw new Error(run.error || "Workflow run failed."); return true; }
+    try { const run = await api.runSourceNow(saved.id); if (["failed", "partial"].includes(run.status)) throw new Error(run.error || "Workflow run failed."); return true; }
     catch (error) { report(error); return false; }
     finally { setOperation(null); }
   };
-  return { draft, change, step, visited, navigate, next, advanced, setAdvanced, yaml, setYaml, detected, preview, error, errorStep, setError, operation, busy: !!operation, saved, content, cancel, detect, applyYaml, runPreview, save, canSave, replaceImport, runSaved };
+  return { draft, change, step, visited, navigate, next, advanced, setAdvanced, yaml, setYaml, detected, preview, error, errorStep, setError, operation, busy: !!operation, saved, content, cancel, detect, applyYaml, runPreview, save, canSave, replaceImport, pendingImport, confirmImport, cancelImport, runSaved };
 }
