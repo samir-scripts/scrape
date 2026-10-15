@@ -18,6 +18,7 @@ This ledger records checks actually run for [plan 10](10-ui-workflow-refinement.
 - `npm test`: **425 passed across 70 files**, including Vite startup smoke. `npm run build`: passed; Vite reports the existing large-chunk advisory, with the generated JS bundle at 937 kB. `node scripts/check-style.mjs`: passed. `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers SCRAPE_BROWSER_PORT=1451 npx playwright test e2e/themed-selects.pw.ts --workers=1`: **4 passed** across both themes and 480/1280 widths, including the 240px viewport check.
 - `npm install` reported 3 dependency audit findings (1 moderate, 2 critical). `npm audit` could not reach the npm advisory service because network DNS is unavailable; affected package details were not verified. No force-upgrade was run.
 - Visual/browser checks used the deterministic `?demo=1&fixtures=1` fixture UI and the local Chromium cache. Actual macOS Tauri dropdown/pointer QA, clean-checkout screenshot verification, and browser download-independent dependency installation remain unperformed.
+- Section commit: `ed34010` (`Standardize themed menus and date controls`).
 
 ## Section 2 — Independent workflow settings
 
@@ -29,6 +30,7 @@ This ledger records checks actually run for [plan 10](10-ui-workflow-refinement.
 - `npm test`: **425 passed across 70 files**, plus Vite startup smoke. `npm run build`: passed; Vite reports its large-chunk advisory (JS bundle about 905 kB). `node scripts/check-style.mjs`, `node scripts/test-cargo-target-dir.mjs`, and `git diff --check`: passed.
 - No live application database was opened. The forward-upgrade and restart checks used a populated temporary SQLite database. Actual native Tauri UI acceptance and live timer behavior remain unperformed; Section 3 and final native QA still remain.
 - Cargo storage procedure used the isolated `/private/tmp/scrape-section2-target`: `du` measured 7.4 GB allocated and `df` showed 141 GB available before cleanup. `pgrep` was unavailable because `sysmond` is missing, while `lsof +D` found no open files in this task-owned target. `cargo clean --dry-run --target-dir /private/tmp/scrape-section2-target` reported 21,876 files / 9.8 GiB; `cargo clean --target-dir /private/tmp/scrape-section2-target` removed them. The directory was removed and available space rose to 148 GB. The project `target/` directory was untouched.
+- Section commit: `74a72c3` (`Make workflow settings independent`).
 
 ## Section 3 — Workflow registry and actions
 
@@ -38,6 +40,7 @@ This ledger records checks actually run for [plan 10](10-ui-workflow-refinement.
 - `npm test`: **427 passed across 70 files**, plus the Vite startup smoke. `npm run build`: passed; Vite reports the existing large-chunk advisory (JS bundle 904 kB). `node scripts/check-style.mjs` and `git diff --check`: passed.
 - `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers SCRAPE_BROWSER_PORT=1452 npx playwright test e2e/workflows.pw.ts --workers=1`: **3 passed** using fixture data. The first sandbox attempt was denied loopback; scoped local-server permission allowed the same run to pass. Captured and reviewed populated one-workflow registry/open-menu screenshots in Paper and Obsidian at 1280×900: [Paper](assets/10-ui-review/workflow-registry-paper.png), [Obsidian](assets/10-ui-review/workflow-registry-obsidian.png). These are deterministic browser fixture captures, not native Tauri screenshots.
 - No Rust contracts or Cargo artifacts changed in this section; the cleaned Section 2 isolated target was not recreated, and the repository `target/` remains untouched. Actual native Tauri acceptance remains outstanding.
+- Section commit: `b92c2ae` (`Simplify workflow registry actions`).
 
 ## Section 4 — Automatic retention
 
@@ -48,6 +51,7 @@ This ledger records checks actually run for [plan 10](10-ui-workflow-refinement.
 - `npm test`: **429 passed across 70 files**, plus Vite startup smoke. `npm run build`, `node scripts/check-style.mjs`, and `git diff --check`: passed. `CARGO_TARGET_DIR=/private/tmp/scrape-section4-target ... npm run test:native`: passed on the isolated native app; the startup retention assertion passed with scraping paused and seeded workflows disabled, and the existing native journey reached its external fixture destination.
 - The native acceptance exercises startup catch-up, but the 24-hour interval was not observed in real time. A full 24-hour soak, native visual menu/click inspection, reduced-motion pointer acceptance, and clean-checkout screenshot verification remain outstanding. Tests used temporary databases; no user application data was opened.
 - Cargo storage procedure used the isolated `/private/tmp/scrape-section4-target`: before cleanup it occupied 2.9 GB (Cargo dry-run: 8,210 files / 2.8 GiB); free space was 145 GB. `lsof +D` found no open files in the task-owned target. `cargo clean --dry-run --target-dir /private/tmp/scrape-section4-target` and `cargo clean --target-dir /private/tmp/scrape-section4-target` both completed; Cargo reported 8,210 files / 2.8 GiB removed. The target directory was removed and free space increased to 148 GB. The project `target/` remains untouched.
+- Section commit: `d6077bf` (`Add automatic retention housekeeping`).
 
 ## Section 5 — Kanban color and movement feedback
 
@@ -56,6 +60,7 @@ This ledger records checks actually run for [plan 10](10-ui-workflow-refinement.
 - Updated the browser journey to use the themed Listbox and capture pending-state boards in both themes: [Paper](assets/10-ui-review/kanban-paper.png), [Obsidian](assets/10-ui-review/kanban-obsidian.png). The screenshots show the destination highlight and readable floating card while the source remains as a placeholder.
 - Added a DOM-level test that checks preview coordinates/width, accessibility and placeholder state, plus delayed-save coverage for target placement. Existing status-queue tests continue to cover serialized writes and failed IPC. `npm test`: **431 passed across 70 files**, plus Vite startup smoke. `npm run build`, `npx tsc --noEmit`, `node scripts/check-style.mjs`, and `git diff --check`: passed. `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers SCRAPE_BROWSER_PORT=1454 npx playwright test e2e/kanban.pw.ts --workers=1`: **2 passed** in Chromium across Paper and Obsidian, including pointer movement, cancellation, keyboard movement, stage selection, restart persistence, narrow horizontal edge-scroll, and contrast assertions.
 - The screenshot capture is fixture-browser evidence, not native app evidence. Actual macOS pointer acceptance, assistive-technology review, and native reduced-motion acceptance remain outstanding. This section changes no Rust code or Cargo artifacts; the Section 4 isolated target is already cleaned and the project `target/` remains untouched.
+- Section commit: `536570e` (`Improve Kanban stage color and drag feedback`).
 
 ## Section 6 — Sorting inside Filters & sort
 
@@ -63,3 +68,11 @@ This ledger records checks actually run for [plan 10](10-ui-workflow-refinement.
 - Sort changes update the existing persisted query state, which changes the query key and resets pagination/selection through App's existing page lifecycle. The pending note journey remains covered through page changes. Search remains a repository query applied before pagination.
 - Added an App interaction journey that changes order from page two, confirms a page-one query, clears matching criteria while retaining sort, and resets to the Discovered default. Store tests cover sort preservation; existing pagination tests cover stale responses, page reset, and pending notes. `npm test`: **433 passed across 71 files**, plus Vite startup smoke. `npm run build`, TypeScript, `node scripts/check-style.mjs`, and `git diff --check`: passed. `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers SCRAPE_BROWSER_PORT=1457 npx playwright test e2e/job-layout.pw.ts --workers=1`: **5 passed** in Chromium, covering sort moved into the panel and reset, pagination, search, pending notes, narrow layouts, and both themes. Open sort-option captures: [Paper](assets/10-ui-review/sort-options-paper.png), [Obsidian](assets/10-ui-review/sort-options-obsidian.png).
 - This section changed no Rust contracts or Cargo artifacts. Actual native dropdown acceptance remains part of final verification; the project `target/` remains untouched.
+- Section commit: `b58da25` (`Move job sorting into filter panel`).
+
+## Final verification and remaining native acceptance
+
+- Section commits, in order: `3347e84`, `2fdb2eb`, `ed34010`, `74a72c3`, `b92c2ae`, `d6077bf`, `536570e`, `b58da25`. The final UI code passed `npm test` (**433 across 71 files** plus Vite startup smoke), `npm run build` (with the existing large-chunk advisory), `npx tsc --noEmit`, `node scripts/check-style.mjs`, and `git diff --check`. Kanban Chromium journey: **2 passed** for both themes. Sorting/layout Chromium journey: **5 passed**, including open sort menus in both themes.
+- Rust workspace tests, Clippy, formatting and binding export passed during Section 4; Sections 5–6 contain no Rust or generated-contract changes. Isolated `npm run test:native` passed the startup-retention, read-only preview, worker persistence and native font journeys. The final CUA attempt could not bind the unbundled debug process: the native app inventory did not list it, and `getApp` rejected the app name, bundle identifier and binary path. The task-owned process was stopped.
+- Actual native macOS drag, dropdown, file chooser and visual inspection therefore remain unverified, as does a 24-hour retention soak. Browser fixture journeys and the native smoke are not substitutes for these checks. No live user database was opened.
+- Final isolated Cargo storage check used `/private/tmp/scrape-final-target`: `lsof +D` found no open files; it occupied 2.2 GB, `cargo clean --dry-run` reported 5,660 files / 2.1 GiB, and `cargo clean` removed 5,660 files / 2.1 GiB. Free space increased from 146 GB to 148 GB. The project `target/` was not cleaned.
