@@ -41,4 +41,52 @@ No native pointer/visual QA or live database testing was performed for this sect
 
 The four prior edits in `IconButton.tsx`, `RemoveJobButton.tsx`, discovered `JobCard.tsx`, and `job_card_interaction.test.tsx` remain unchanged and unstaged; their diff matches `/tmp/scrape-pre-section7.patch`. No merge into develop was performed.
 
-Commits: `412d51d` approved priority plan; `7afd5ff` runtime/contracts/worker/repository tests; `0efb8e6` editor/preview/import/review controls and interactions. Next implementation section is geography/workplace targeting; confirmed data management follows it. Neither section has been implemented by this change, and the user's existing jobs have not been deleted.
+Section 2 handoff (historical): commits `412d51d` approved priority plan; `7afd5ff` runtime/contracts/worker/repository tests; `0efb8e6` editor/preview/import/review controls and interactions. Geography and Settings data management had not yet been implemented, and the user's existing jobs had not been deleted at that point. Subsequent cleanup and Section 3 delivery are recorded below.
+
+## Authorized desktop cleanup before Section 3 (2026-10-15)
+
+The user explicitly requested all saved jobs/favorites be cleared, without a recovery backup, before continuing development. This superseded the proposed backup for this one-off operation. It was a requested desktop data operation, not a test against the live database.
+
+The identified desktop process was closed; no scrape worker was active. With foreign keys enabled, a single SQLite transaction deleted every jobs row and cascaded to locations/history. Favorites are columns on jobs; there is no separate favorites table. No backup was created.
+
+| Data | Before | After |
+|---|---:|---:|
+| Jobs | 437 | 0 |
+| Job locations | 445 | 0 |
+| Job status events | 467 | 0 |
+| Favorited jobs | 0 | 0 |
+
+Workflow count (1), settings (24), runs (15), logs (32), notifications (1), suppression tables, and all 20 migration records remained unchanged. Migration rows/checksums were compared before commit; foreign-key validation passed. No schema, migration, or unrelated application table was truncated.
+
+## Section 3 — Geography and workplace targeting
+
+Implemented and verified. Section 4 Settings data-management controls remain pending.
+
+- Country/state search and workplace selection are available in Simple Matching. Country changes clear incompatible states. Search drafts invalidate previews; invalid values prevent continuing. Multiple workplaces use OR; geography and workplace use AND. Unknown location is opt-in. Additional free-text location and raw-code controls remain in Advanced.
+- Rust owns 249-country metadata via pinned isocountry 0.3.2, a consolidated 92-subdivision catalog, and generated frontend types/catalog values. Supported subdivision coverage is documented in `crates/scrape-core/data/README.md`; this is not a universal geocoder. Legacy/multiple-country rules survive editing and YAML round trips.
+- Source aliases use bounded words, punctuation/case normalization, and common Latin accent folding. Explicit codes precede ambiguous region names (including the Washington/DC regression). Bare Remote does not imply geography; ambiguous CA/Georgia remain unknown without context. Structured address fields are normalized before text inference.
+- JSON-LD keeps multiple locations/nested country values and applies explicit remote applicant eligibility before office geography. Labeled eligibility sections remain scoped; ordinary company prose is not evidence.
+- Worker/SQL parity now includes unknown-only Remote rows, partial legacy rows with qualified subdivisions, known contradictory geography, same-entry country/state matching, and qualified state compatibility. Invalid/impossible geography filters fail explicitly.
+- UI interactions cover search, state addition/removal, country changes, workplace OR, unknown inclusion, invalid drafts, imported multi-country preservation, and YAML/source round trips. Browser workflow creation/editing exercises saved geography. Native workflow coverage uses actual WKWebView controls, local HTTP extraction and the sidecar, with geographic rules verified on the persisted workflow and no jobs written by preview/save.
+
+### Section 3 verification
+
+| Boundary/check | Result |
+|---|---|
+| Rust workspace | 298 tests passed, including five packaged-worker → NDJSON → mapper → temporary SQLite integration tests. |
+| Worker/repository geography parity | Ten filter combinations over twelve local Ashby postings, including partial historical country rows, Remote+US, qualified subdivisions, workplace OR, same-entry matching, unknown inclusion, and known contradictions. |
+| JSON-LD normalization | Tests preserve all address-array entries, nested Country fields, ambiguous country/state codes using named address fields (including CA/NL), and remote applicant eligibility over a UK office address. |
+| Native wizard | `SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_WORKFLOW=1 npm run test:native-startup` passed. Actual isolated WKWebView selected US/Texas/Remote, extracted one eligible local posting through the sidecar, and persisted the reviewed rules without writing jobs or creating a run. Final artifacts: `scrape-native-smoke-QaUU2j` in the OS temp directory. |
+| Frontend | `npm test`: 412 tests across 66 files passed plus Vite startup smoke. Shared worktree includes the untouched pre-existing user test. |
+| Browser workflow | Two Playwright workflow/import checks passed; geography controls were selected, saved and verified after reopening. No screenshot baselines were regenerated. |
+| Build/style | TypeScript/production build and `node scripts/check-style.mjs` passed. Existing Vite bundle-size advisory remains. |
+| Rust checks | Clippy with `-D warnings` and formatting check passed. After Clippy's equivalent-branch consolidation, all nine workplace classifier tests passed again. |
+| Binding generation | Normal Rust binding-export tests generated CountryOption, RegionOption and the static geography catalog; frontend hand-maintained metadata/types were replaced with generated consumers. |
+| Recorded provider replay | 2026-10-15T16:28:04Z: Lever 8/8 and Ashby 31/31, zero errors; recorded fixtures, not live-provider verification. |
+| Desktop cleanup follow-up | Read-only verification still reports jobs/locations/status-history/favorites at zero; workflow 1, settings 24, migrations 20. No regression test used this live database. |
+
+The broader adapter suite caught Washington/DC being misclassified as Washington state; explicit abbreviation/code priority now fixes it, with a regression entry. An initial native repeat timed out at unbounded animation-frame waits. Test-only frame waits were replaced with event-loop yields; existing 20/60-second deadlines and all assertions remain intact. The final native run passed. Inactive WKWebView frame scheduling is a suspected cause, not a proven production defect.
+
+Section 8's prior no-update screenshot/zoom failures and manual native visual/pointer/file-chooser gates remain open. This section adds actual native programmatic workflow evidence; it does not establish manual pointer/visual QA or Windows/Linux behavior. No remote CI run or clean dependency install is claimed. All four pre-existing user edits remain unchanged and unstaged, verified against `/tmp/scrape-pre-section7.patch`.
+
+Section 3 commits: `06c86c3` shared catalog/extraction/matching parity; `f1640eb` searchable workflow controls plus browser/native interactions. A post-commit binding export and `git diff --exit-code HEAD -- src/bindings` passed with no drift. The next section is confirmed Settings data management; the one-off jobs cleanup above does not substitute for that feature.
