@@ -29,10 +29,10 @@ type FilterTab = "all" | "ats" | "custom" | "errors";
 
 interface SourcesSettingsProps {
   settings?: Settings;
-  onOpenSettings?: () => void;
+  onUpdateSetting?: (key: string, value: unknown) => void;
 }
 
-export function SourcesSettings({ settings, onOpenSettings }: SourcesSettingsProps = {}) {
+export function SourcesSettings({ settings, onUpdateSetting }: SourcesSettingsProps = {}) {
   const queryClient = useQueryClient();
   const [sources, setSources] = useState<Source[]>([]);
   const [sourceLoadError, setSourceLoadError] = useState("");
@@ -311,9 +311,9 @@ export function SourcesSettings({ settings, onOpenSettings }: SourcesSettingsPro
           <p className="text-xs text-[var(--color-ink-mute)]">Sources, schedules and recent results</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {onOpenSettings && <Button onClick={onOpenSettings}>Scraper settings</Button>}
+          {settings && onUpdateSetting && <Toggle label="Automatic scraping enabled" checked={settings.scraper_enabled} onChange={(enabled) => onUpdateSetting("scraper.enabled", enabled)} />}
           <WorkflowImportButton disabled={isRecordedMode() || isAddModalOpen} onImport={spec => { setEditingSource(null); setImportedSpec(spec); setIsAddModalOpen(true); }} />
-          <Button variant="default" disabled={isRecordedMode() || activeRun || !sources.some(source => source.enabled)} onClick={() => void handleRunAll()}>Run all</Button>
+          <Button variant="default" disabled={isRecordedMode() || activeRun || !sources.some(source => source.enabled && !source.needs_review)} onClick={() => void handleRunAll()}>Run all</Button>
           {activeRun && <Button variant="danger" onClick={() => api.cancelScrape().then(cancelled => notifyInfo(cancelled ? "Cancellation requested; committed results remain saved." : "No active run to cancel.")).catch(error => notifyError(String(error)))}>Cancel active run</Button>}
           <IconButton label="Workflow maintenance" onClick={() => setShowMaintenance(value => !value)}><Icon name="settings" /></IconButton>
           <Tooltip content="Configure a careers source and review its matches before saving">
@@ -454,7 +454,9 @@ export function SourcesSettings({ settings, onOpenSettings }: SourcesSettingsPro
               const isRunning = runningSourceId === s.id || runningSourceIds.includes(s.id);
               const isTesting = testingSourceId === s.id;
               const isInspected = inspectedSource?.id === s.id;
-              const statusVisual = getWorkflowStatus(s, isRunning);
+              const statusVisual = s.needs_review
+                ? { label: "NEEDS REVIEW", colorClass: "text-[var(--color-warning)]", bulletClass: "text-[var(--color-warning)]", bulletGlyph: "●" }
+                : getWorkflowStatus(s, isRunning);
 
               return (
                 <TableRow
@@ -464,6 +466,7 @@ export function SourcesSettings({ settings, onOpenSettings }: SourcesSettingsPro
                   <TableCell>
                     <Toggle
                       checked={s.enabled}
+                      disabled={s.needs_review}
                       onChange={(checked) => handleToggleSource(s, checked)}
                     />
                   </TableCell>
@@ -511,7 +514,7 @@ export function SourcesSettings({ settings, onOpenSettings }: SourcesSettingsPro
                       <Tooltip content="Run this workflow immediately into database">
                         <button
                           onClick={() => handleRunSourceNow(s)}
-                          disabled={isRecordedMode() || activeRun}
+                          disabled={isRecordedMode() || activeRun || s.needs_review}
                           className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-80 text-xs font-mono uppercase cursor-pointer disabled:opacity-50"
                         >
                           {isRunning ? "RUNNING…" : "RUN"}
@@ -521,7 +524,7 @@ export function SourcesSettings({ settings, onOpenSettings }: SourcesSettingsPro
                       <Tooltip content="Dry run extraction without writing to database">
                         <button
                           onClick={() => handleTestSource(s.id)}
-                          disabled={isRecordedMode() || isTesting || activeRun}
+                          disabled={isRecordedMode() || isTesting || activeRun || s.needs_review}
                           className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-xs font-mono uppercase cursor-pointer"
                         >
                           {isTesting ? "…" : "TEST"}
@@ -827,7 +830,6 @@ export function SourcesSettings({ settings, onOpenSettings }: SourcesSettingsPro
         }}
         onSourceSaved={fetchSources}
         initialSource={editingSource}
-        settings={settings}
         initialSpec={importedSpec}
       />
     </div>

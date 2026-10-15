@@ -79,7 +79,7 @@ pub struct WorkflowExtractor {
     #[ts(optional = nullable)]
     pub exclude_url_patterns: Option<Vec<String>>,
 }
-optional_fields!(WorkflowSchedule { cadence: SourceCadence, time: String, cron: String, timezone: String, weekdays: Vec<u8> });
+optional_fields!(WorkflowSchedule { cadence: SourceCadence, time: String, cron: String, timezone: String, weekdays: Vec<u8>, run_on_startup: bool });
 optional_fields!(WorkflowFilters { role_types: Vec<RoleType>, include_keywords: Vec<String>, exclude_keywords: Vec<String>, locations: Vec<String>, query: String, policy: Value, compensation: CompensationFilter, matching: PostingRules, experience_min: u32, experience_max: u32 });
 optional_fields!(WorkflowRetention {
     days: u32,
@@ -172,6 +172,7 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
             .as_u64()
             .ok_or_else(|| AppError::Validation("version: expected an integer".into()))?,
     };
+    let submitted_version = version;
     if version == 1 {
         if let Some(cadence) = value.pointer_mut("/cadence/type") {
             match cadence.as_str() {
@@ -243,17 +244,25 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
             }
         }
         value = serde_json::json!({"version":3,"metadata":{"name":value.get("company"),"company":value.get("company")},"extractor":extractor,"schedule":{"cadence":value.pointer("/cadence/type").cloned().unwrap_or(Value::String("global".into())),"cron":value.pointer("/cadence/cron")}});
-    } else if matches!(version, 2 | 3) {
-        value["version"] = Value::from(3);
+    } else if matches!(version, 2..=4) {
+        value["version"] = Value::from(4);
     } else {
         return Err(AppError::Validation(format!(
-            "version: unsupported workflow version {version}; supported versions are 1, 2, 3"
+            "version: unsupported workflow version {version}; supported versions are 1, 2, 3, 4"
         )));
     }
     let text = serde_json::to_string(&value)?;
     let mut deserializer = serde_json::Deserializer::from_str(&text);
     let mut spec: WorkflowSpec = serde_path_to_error::deserialize(&mut deserializer)
         .map_err(|e| AppError::Validation(format!("{}: {}", e.path(), e.inner())))?;
+    if submitted_version == 4
+        && spec.schedule.as_ref().and_then(|schedule| schedule.cadence)
+            == Some(SourceCadence::Global)
+    {
+        return Err(AppError::Validation(
+            "schedule.cadence: version 4 must use an explicit workflow schedule".into(),
+        ));
+    }
     spec.max_jobs_per_run = Some(
         scrape_core::protocol::validate_job_limit(
             spec.max_jobs_per_run
@@ -261,6 +270,32 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
         )
         .map_err(AppError::Validation)?,
     );
+    // Version 4 is fully explicit. These defaults apply only to fields omitted
+    // by the submitted document; stored/imported v1-v3 values are resolved by
+    // the compatibility entry point before they reach this normalizer.
+    if spec.version == 4 {
+        let schedule = spec.schedule.get_or_insert_with(WorkflowSchedule::default);
+        schedule.cadence.get_or_insert(SourceCadence::Daily);
+        schedule.time.get_or_insert_with(|| "09:00".into());
+        schedule
+            .timezone
+            .get_or_insert_with(|| default_timezone.into());
+        schedule.run_on_startup.get_or_insert(false);
+        let filters = spec.filters.get_or_insert_with(WorkflowFilters::default);
+        filters.role_types.get_or_insert_with(Vec::new);
+        filters.include_keywords.get_or_insert_with(Vec::new);
+        filters.exclude_keywords.get_or_insert_with(Vec::new);
+        filters.locations.get_or_insert_with(Vec::new);
+        let retention = spec
+            .retention
+            .get_or_insert_with(WorkflowRetention::default);
+        retention.days.get_or_insert(30);
+        retention
+            .policy
+            .get_or_insert_with(|| "untracked_only".into());
+    }
+    spec.version = 4;
+    spec.metadata.enabled.get_or_insert(true);
     spec.metadata.name = spec.metadata.name.trim().into();
     if spec.metadata.name.is_empty() {
         return Err(AppError::Validation(
@@ -278,6 +313,74 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
         }
         spec.filters = Some(filters);
     }
+    let input = source_input(&spec, default_timezone)?;
+    crate::services::runner::resolve_worker_filters(
+        input.filters.as_ref().unwrap_or(&Value::Null),
+        WorkerFilters::default(),
+    )?;
+    Ok(spec)
+}
+
+/// Resolve legacy inheritance once at the import boundary. Version 4 never
+/// consults application matching or calendar settings after this conversion.
+pub fn validate_legacy_import(
+    value: Value,
+    default_timezone: &str,
+    global_cron: &str,
+    global_filters: &WorkerFilters,
+    global_run_on_startup: bool,
+) -> Result<WorkflowSpec> {
+    let version = value
+        .get("version")
+        .and_then(Value::as_u64)
+        .unwrap_or_else(|| if value.get("engine").is_some() { 1 } else { 2 });
+    let legacy_filter_values = value
+        .get("filters")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let legacy_cadence = if version == 1 {
+        value.pointer("/cadence/type")
+    } else {
+        value.pointer("/schedule/cadence")
+    };
+    let inherited_schedule =
+        legacy_cadence.is_none_or(|cadence| cadence.is_null() || cadence == "global");
+    let mut spec = validate(value, default_timezone)?;
+    if version < 4 {
+        let schedule = spec.schedule.get_or_insert_with(WorkflowSchedule::default);
+        if inherited_schedule {
+            schedule.cadence = Some(SourceCadence::Cron);
+            schedule.cron = Some(global_cron.to_owned());
+            schedule.timezone = Some(default_timezone.to_owned());
+            schedule.run_on_startup = Some(global_run_on_startup);
+        }
+        let filters = spec.filters.get_or_insert_with(WorkflowFilters::default);
+        let mut merged = serde_json::to_value(&*filters)?
+            .as_object()
+            .cloned()
+            .ok_or_else(|| AppError::Validation("workflow.filters: expected mapping".into()))?;
+        let defaults = serde_json::to_value(global_filters)?;
+        for key in [
+            "include_keywords",
+            "exclude_keywords",
+            "locations",
+            "role_types",
+        ] {
+            if legacy_filter_values
+                .get(key)
+                .is_none_or(|value| value.is_null())
+            {
+                if let Some(value) = defaults.get(key) {
+                    merged.insert(key.into(), value.clone());
+                }
+            }
+        }
+        *filters = serde_json::from_value(Value::Object(merged))
+            .map_err(|e| AppError::Validation(format!("workflow.filters: {e}")))?;
+    }
+    spec.version = 4;
+    let spec = validate(serde_json::to_value(spec)?, default_timezone)?;
     let input = source_input(&spec, default_timezone)?;
     crate::services::runner::resolve_worker_filters(
         input.filters.as_ref().unwrap_or(&Value::Null),
@@ -370,7 +473,7 @@ pub fn source_input(spec: &WorkflowSpec, timezone: &str) -> Result<CreateSourceI
         .parse::<chrono_tz::Tz>()
         .map_err(|_| AppError::Validation("schedule.timezone: expected an IANA timezone".into()))?;
     config["__cron_timezone"] = Value::String(schedule_timezone.into());
-    let cadence = schedule.cadence.unwrap_or(SourceCadence::Global);
+    let cadence = schedule.cadence.unwrap_or(SourceCadence::Daily);
     if matches!(cadence, SourceCadence::Daily | SourceCadence::Weekly) {
         let calendar = super::calendar::CalendarSchedule {
             time: schedule.time.unwrap_or_else(|| "09:00".into()),
@@ -407,6 +510,7 @@ pub fn source_input(spec: &WorkflowSpec, timezone: &str) -> Result<CreateSourceI
         ));
     }
     config["__workflow_spec"] = serde_json::to_value(spec)?;
+    config["__run_on_startup"] = Value::Bool(schedule.run_on_startup.unwrap_or(false));
     if let Some(company) = &spec.metadata.company {
         config["__company"] = Value::String(company.clone());
     }
@@ -419,7 +523,12 @@ pub fn source_input(spec: &WorkflowSpec, timezone: &str) -> Result<CreateSourceI
         cadence: Some(cadence),
         cadence_cron: schedule.cron,
         retention_days: Some(i64::from(retention.days.unwrap_or(30))),
-        retention_policy: Some("untracked_only".into()),
+        retention_policy: Some(
+            retention
+                .policy
+                .clone()
+                .unwrap_or_else(|| "untracked_only".into()),
+        ),
         filters: Some(serde_json::to_value(
             spec.filters.clone().unwrap_or_default(),
         )?),
@@ -445,13 +554,16 @@ pub fn normalize_source_config(config: &Value) -> Result<Value> {
     Ok(config)
 }
 pub fn validated_stored_config(kind: SourceKind, config: &Value) -> Result<Value> {
-    let normalized = normalize_source_config(config)?;
+    let mut normalized = normalize_source_config(config)?;
     let mut public = normalized.clone();
     for key in [
         "__workflow_spec",
         "__schedule",
         "__cron_timezone",
         "__company",
+        "__run_on_startup",
+        "__invalid_original_config",
+        "__invalid_original_filters",
     ] {
         public.as_object_mut().unwrap().remove(key);
     }
@@ -469,7 +581,8 @@ pub fn validated_stored_config(kind: SourceKind, config: &Value) -> Result<Value
             .and_then(Value::as_str)
             .or_else(|| normalized.get("__cron_timezone").and_then(Value::as_str))
             .unwrap_or("UTC");
-        validate(spec.clone(), timezone)?;
+        let spec = validate(spec.clone(), timezone)?;
+        normalized["__workflow_spec"] = serde_json::to_value(spec)?;
     }
     Ok(normalized)
 }
@@ -677,7 +790,7 @@ mod tests {
     fn versions_unknown_paths_queries_and_empty_overrides_are_validated() {
         let base = serde_json::json!({"version":2,"metadata":{"name":"Acme"},"extractor":{"kind":"greenhouse","url":"https://boards.greenhouse.io/acme"},"filters":{"include_keywords":[]},"schedule":{"cadence":"daily","time":"09:00","timezone":"America/New_York","weekdays":[1,3,5]}});
         let spec = validate(base.clone(), "UTC").unwrap();
-        assert_eq!(spec.version, 3);
+        assert_eq!(spec.version, 4);
         assert_eq!(
             spec.filters.as_ref().unwrap().include_keywords,
             Some(vec![])
@@ -717,5 +830,99 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("extractor"));
+    }
+
+    #[test]
+    fn legacy_inheritance_is_resolved_once_and_v4_rejects_global_cadence() {
+        let legacy = serde_json::json!({
+            "version": 3,
+            "metadata": {"name":"Legacy"},
+            "extractor": {"kind":"greenhouse", "url":"acme"},
+            "filters": {"include_keywords": []}
+        });
+        let globals = WorkerFilters {
+            include_keywords: vec!["ignored by explicit empty".into()],
+            exclude_keywords: vec!["sales".into()],
+            ..WorkerFilters::default()
+        };
+        let resolved =
+            validate_legacy_import(legacy, "America/New_York", "0 0 6 * * *", &globals, true)
+                .unwrap();
+        assert_eq!(resolved.version, 4);
+        let schedule = resolved.schedule.unwrap();
+        assert_eq!(schedule.cadence, Some(SourceCadence::Cron));
+        assert_eq!(schedule.cron.as_deref(), Some("0 0 6 * * *"));
+        assert_eq!(schedule.timezone.as_deref(), Some("America/New_York"));
+        assert_eq!(schedule.run_on_startup, Some(true));
+        let filters = resolved.filters.unwrap();
+        assert_eq!(filters.include_keywords, Some(vec![]));
+        assert_eq!(filters.exclude_keywords, Some(vec!["sales".into()]));
+
+        let invalid_v4 = serde_json::json!({
+            "version":4,
+            "metadata":{"name":"No inheritance"},
+            "extractor":{"kind":"greenhouse", "url":"acme"},
+            "schedule":{"cadence":"global"}
+        });
+        assert!(validate(invalid_v4, "UTC")
+            .unwrap_err()
+            .to_string()
+            .contains("explicit workflow schedule"));
+    }
+
+    #[test]
+    fn version_one_cadence_and_global_matching_are_converted_without_overriding_explicit_schedule()
+    {
+        let legacy_v1 = serde_json::json!({
+            "version":1,
+            "company":"Legacy ATS",
+            "url":"acme",
+            "cadence":{"type":"every_1h"},
+            "engine":{"kind":"greenhouse"}
+        });
+        let globals = WorkerFilters {
+            include_keywords: vec!["engineer".into()],
+            ..WorkerFilters::default()
+        };
+        let converted =
+            validate_legacy_import(legacy_v1, "UTC", "0 0 9 * * *", &globals, true).unwrap();
+        assert_eq!(converted.version, 4);
+        assert_eq!(
+            converted.schedule.as_ref().unwrap().cadence,
+            Some(SourceCadence::Hourly)
+        );
+        assert_eq!(
+            converted.filters.as_ref().unwrap().include_keywords,
+            Some(vec!["engineer".into()])
+        );
+        assert_eq!(
+            converted.schedule.as_ref().unwrap().run_on_startup,
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn version_four_uses_explicit_independent_defaults() {
+        let value = serde_json::json!({
+            "version":4,
+            "metadata":{"name":"New workflow"},
+            "extractor":{"kind":"greenhouse", "url":"acme"}
+        });
+        let spec = validate(value, "America/New_York").unwrap();
+        assert_eq!(spec.max_jobs_per_run, Some(20));
+        assert_eq!(spec.metadata.enabled, Some(true));
+        let schedule = spec.schedule.unwrap();
+        assert_eq!(schedule.cadence, Some(SourceCadence::Daily));
+        assert_eq!(schedule.time.as_deref(), Some("09:00"));
+        assert_eq!(schedule.timezone.as_deref(), Some("America/New_York"));
+        assert_eq!(schedule.run_on_startup, Some(false));
+        let filters = spec.filters.unwrap();
+        assert_eq!(filters.include_keywords, Some(vec![]));
+        assert_eq!(filters.exclude_keywords, Some(vec![]));
+        assert_eq!(filters.locations, Some(vec![]));
+        assert_eq!(filters.role_types, Some(vec![]));
+        let retention = spec.retention.unwrap();
+        assert_eq!(retention.days, Some(30));
+        assert_eq!(retention.policy.as_deref(), Some("untracked_only"));
     }
 }

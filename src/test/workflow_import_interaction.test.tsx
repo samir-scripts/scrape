@@ -31,7 +31,11 @@ it('registry upload opens an unsaved draft and Run all remains available while a
  vi.spyOn(api, 'listSources').mockResolvedValue([SAMPLE_SWE_SOURCE]);
  const run = vi.spyOn(api, 'runScrapeNow').mockRejectedValueOnce(new Error('worker failed')).mockResolvedValue({ status: 'partial', error: 'One workflow failed' } as never);
  const save = vi.spyOn(api, 'saveWorkflow'); const queryClient = new QueryClient();
- render(<QueryClientProvider client={queryClient}><SourcesSettings settings={{ ...DEFAULT_SETTINGS, scraper_enabled: false }} /></QueryClientProvider>);
+ const updateSetting = vi.fn();
+ render(<QueryClientProvider client={queryClient}><SourcesSettings settings={{ ...DEFAULT_SETTINGS, scraper_enabled: false }} onUpdateSetting={updateSetting} /></QueryClientProvider>);
+ const pause = await screen.findByRole('switch', { name: 'Automatic scraping enabled' });
+ await userEvent.setup().click(pause);
+ expect(updateSetting).toHaveBeenCalledWith('scraper.enabled', true);
  const user = userEvent.setup(); await user.click(await screen.findByRole('button', { name: 'Run all' }));
  await waitFor(() => expect(useToastStore.getState().toasts.some(toast => toast.title === 'RUN ALL DID NOT COMPLETE')).toBe(true));
  await user.click(screen.getByRole('button', { name: 'Run all' })); await waitFor(() => expect(run).toHaveBeenCalledTimes(2));
@@ -40,7 +44,8 @@ it('registry upload opens an unsaved draft and Run all remains available while a
  await screen.findByRole('dialog', { name: 'Create workflow' });
  expect((screen.getByLabelText('Workflow name') as HTMLInputElement).value).toBe('Imported board'); expect(save).not.toHaveBeenCalled();
  await user.click(screen.getByRole('button', { name: 'Continue to Matching' }));
- expect(screen.getAllByText(/No restriction \(explicit override\)/).length).toBeGreaterThan(0);
+ expect(screen.getByLabelText("Title keywords (any)")).toBeTruthy();
+ expect(screen.queryByText(/Global keyword defaults/)).toBeNull();
 });
 it('confirms against edits made while file validation is in flight and ignores an empty file selection', async () => {
  let finish!: (value: typeof spec) => void;

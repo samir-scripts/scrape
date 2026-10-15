@@ -54,7 +54,7 @@ fn status_for_sources(
     use scrape_core::SourceCadence;
     let mut schedules: Vec<_> = sources
         .iter()
-        .filter(|s| s.enabled && s.cadence != SourceCadence::Manual)
+        .filter(|s| s.enabled && !s.needs_review && s.cadence != SourceCadence::Manual)
         .map(|s| {
             let next = if s.cadence == SourceCadence::Global {
                 global
@@ -106,6 +106,7 @@ impl DispatchQueue {
             self.entries.push_back((id, trigger));
         }
     }
+    #[cfg(test)]
     fn enqueue_due(&mut self, sources: &[Source], now: DateTime<Utc>, paused: bool) {
         if paused {
             return;
@@ -124,6 +125,7 @@ impl DispatchQueue {
 }
 fn is_due(source: &Source, now: DateTime<Utc>) -> bool {
     source.enabled
+        && !source.needs_review
         && !matches!(
             source.cadence,
             scrape_core::SourceCadence::Manual | scrape_core::SourceCadence::Global
@@ -175,9 +177,17 @@ impl SchedulerService {
             pool: pool.clone(),
             runner: runner.clone(),
         }));
-        let startup: bool = SettingsRepo::get_value(&pool, "scraper.run_on_startup")
+        let legacy_startup: bool = SettingsRepo::get_value(&pool, "scraper.run_on_startup")
             .await?
             .unwrap_or(false);
+        let startup = legacy_startup
+            || SourcesRepo::list(&pool).await?.iter().any(|source| {
+                source
+                    .config
+                    .get("__run_on_startup")
+                    .and_then(serde_json::Value::as_bool)
+                    == Some(true)
+            });
         tokio::spawn(async move {
             let mut startup_at =
                 (startup && enabled).then(|| Utc::now() + chrono::Duration::seconds(10));
@@ -203,25 +213,17 @@ impl SchedulerService {
                         continue;
                     }
                 };
-                queue.enqueue_due(&sources, now, false);
                 let mut global = next_global.lock().await;
                 let global_due = global.is_some_and(|next| next <= now);
                 let startup_due = startup_at.is_some_and(|at| at <= now);
-                if global_due || startup_due {
-                    for source in sources
-                        .iter()
-                        .filter(|s| s.enabled && s.cadence == scrape_core::SourceCadence::Global)
-                    {
-                        queue.add(
-                            source.id.clone(),
-                            if startup_due {
-                                TriggerType::Startup
-                            } else {
-                                TriggerType::Schedule
-                            },
-                        );
+                if global_due {
+                    for source in sources.iter().filter(|s| {
+                        s.enabled
+                            && !s.needs_review
+                            && s.cadence == scrape_core::SourceCadence::Global
+                    }) {
+                        queue.add(source.id.clone(), TriggerType::Schedule);
                     }
-                    startup_at = None;
                     let cron: String = SettingsRepo::get_value(&pool, "scraper.cron")
                         .await
                         .ok()
@@ -244,6 +246,33 @@ impl SchedulerService {
                     )
                     .await;
                 }
+                if startup_due {
+                    for source in sources.iter().filter(|s| {
+                        s.enabled
+                            && !s.needs_review
+                            && s.config
+                                .get("__run_on_startup")
+                                .and_then(serde_json::Value::as_bool)
+                                == Some(true)
+                    }) {
+                        queue.add(source.id.clone(), TriggerType::Startup);
+                    }
+                    startup_at = None;
+                }
+                for source in &sources {
+                    if !is_due(source, now) {
+                        continue;
+                    }
+                    let awaits_startup = startup_at.is_some()
+                        && source
+                            .config
+                            .get("__run_on_startup")
+                            .and_then(serde_json::Value::as_bool)
+                            == Some(true);
+                    if !awaits_startup {
+                        queue.add(source.id.clone(), TriggerType::Schedule);
+                    }
+                }
                 drop(global);
                 // One worker at a time. Failed overlap acquisition retains this
                 // distinct pending trigger for the next dispatcher tick.
@@ -255,7 +284,10 @@ impl SchedulerService {
                         Ok(source) => source,
                         Err(_) => continue,
                     };
-                    if !source.enabled || source.cadence == scrape_core::SourceCadence::Manual {
+                    if !source.enabled
+                        || source.needs_review
+                        || source.cadence == scrape_core::SourceCadence::Manual
+                    {
                         continue;
                     }
                     if source.cadence != scrape_core::SourceCadence::Global
@@ -560,6 +592,7 @@ mod tests {
             retention_days: 30,
             retention_policy: "untracked_only".to_string(),
             filters: serde_json::json!({}),
+            needs_review: false,
         };
 
         // Global cadence has no independent next run

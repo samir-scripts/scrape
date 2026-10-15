@@ -10,8 +10,8 @@ import { sourceToWorkflowSpec, canonicalizeAtsUrl } from "../lib/yamlWorkflow";
 export const WORKFLOW_STEPS = ["Source", "Matching", "Schedule", "Review"] as const;
 export type WorkflowStep = typeof WORKFLOW_STEPS[number];
 const newDraft = (): WorkflowSpec => ({
-  version: 3, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true }, extractor: { kind: "jsonld", url: "" },
-  schedule: { cadence: "daily", time: "09:00", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+  version: 4, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true }, extractor: { kind: "jsonld", url: "" },
+  schedule: { cadence: "daily", time: "09:00", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, run_on_startup: false },
   filters: {}, retention: { days: 30, policy: "untracked_only" },
 });
 export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceSaved }: {

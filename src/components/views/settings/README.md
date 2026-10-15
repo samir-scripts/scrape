@@ -1,12 +1,13 @@
 # Settings and workflow configuration
 
-Settings provides Appearance, System, Removed & blocked jobs, and Data management. Scraper
-provides source workflows, automatic scheduling and global matching defaults.
+Settings provides Appearance, System, Removed & blocked jobs, and Data management.
+Scraper provides workflow configuration and the application-wide automatic-scraping pause.
 
 `AddSourceModal` and `WorkflowSections` share one draft across Simple, Advanced and
 YAML. Simple creation is URL → actual preview → schedule/save, with an explicit
 Run now afterward. Advanced settings remain intact and are summarized in Simple
-mode. Source configuration and YAML use the canonical desktop v3 validator.
+mode. Source configuration and YAML use the canonical desktop v4 validator, with
+v1–v3 compatibility conversion at import.
 
 Matching includes Maximum matching jobs per run: default 20, positive whole numbers up to 10,000, preserved through YAML/edit/reopen. Changing any limit draft invalidates preview; invalid text prevents continuing or previewing. Review explains the run/preview caps. `JobLimitInput` and other consumers use constants generated from Rust by `export_bindings_ingestion_limits`. Preview accepts at most 10 (or the lower configured limit) and labels partial coverage. Existing records refreshed by a run count toward the limit; saved jobs are not removed by changing it.
 
@@ -16,13 +17,13 @@ Matching includes Maximum matching jobs per run: default 20, positive whole numb
 restores saved state and clears suppression atomically; Unblock permits later
 rediscovery. Job removal always offers the initially unchecked block option.
 
-`ScheduleSettings` controls automatic pause and global calendar expressions;
-per-workflow schedules expose time, weekdays and IANA timezone. `FiltersSettings`
-defines inherited defaults. Explicit empty workflow arrays remove restrictions.
-See [workflow specification](../../../../plans/workflow-v3.md).
+Workflow schedules, matching, limits and retention are explicit per workflow.
+Explicit empty arrays remove restrictions. Legacy application-level values are
+retained only to convert older workflows and imports. See
+[workflow refinement plan](../../../../plans/10-ui-workflow-refinement.md).
 
 
-## Workflow editor and Scraper defaults
+## Workflow editor
 
 The workflow editor uses `useWorkflowDraft` as its only draft/request controller.
 Source → Matching → Schedule → Review is an ordered step navigation, with completed
@@ -39,13 +40,13 @@ so the same file can be selected again. Closed/disabled importers reject stale
 validation completions.
 
 The Scraper registry owns Run all, cancellation/progress, upload, Add workflow and
-secondary maintenance. Truly global settings live in the explicit Scraper settings
-dialog. Per-workflow schedule/matching values remain in the wizard. Opening a view
-or dialog does not write defaults. Recorded examples disable execution and imports;
+secondary maintenance. Only the automatic-scraping pause is application-wide;
+schedule, startup, matching, ingestion limit and retention belong to each workflow.
+Recorded examples disable execution and imports;
 Test and transient-test APIs cannot manufacture scrape results in recorded mode.
 
-See [workflow field ownership](../../../../plans/08-workflow-fields.md) for controls,
-YAML-only expert fields and inheritance. Native file-chooser gestures remain an
+See [workflow refinement](../../../../plans/10-ui-workflow-refinement.md) for controls,
+YAML-only expert fields and legacy conversion. Native file-chooser gestures remain an
 acceptance gate even though browser file-chooser and native local-worker wizard
 checks are automated. Workflow deletion uses a named SVG trash action and reports
 persistence failures through the shared accessible toast.

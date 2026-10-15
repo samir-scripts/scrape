@@ -113,18 +113,19 @@ describe("one workflow draft", () => {
   });
 
 });
-it('keeps an inherited schedule explicit and unique without writing global defaults during navigation', async () => {
+it('keeps each workflow schedule explicit without writing application defaults during navigation', async () => {
  const save = vi.spyOn(api, 'saveWorkflow'); const settings = vi.spyOn(api, 'updateSetting');
  render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, cadence: 'global' }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
  const user = userEvent.setup();
  await user.click(screen.getByRole('button', { name: 'Continue to Matching' }));
  await user.click(screen.getByRole('button', { name: 'Continue to Schedule' }));
- expect(screen.getByRole('button', { name: 'Schedule', expanded: false }).textContent).toContain('Inherit global schedule');
+ expect(screen.getByRole('button', { name: 'Schedule', expanded: false }).textContent).toContain('daily');
  await user.click(screen.getByRole('button', { name: 'Schedule', expanded: false }));
- expect(screen.getAllByRole('option', { name: 'Inherit global schedule' })).toHaveLength(1);
+ expect(screen.queryByRole('option', { name: 'global' })).toBeNull();
+ expect(screen.getByRole('checkbox', { name: 'Run this workflow when the app starts' })).toBeTruthy();
  await user.keyboard('{Escape}');
  await user.click(screen.getByRole('button', { name: 'Back' }));
  await user.click(screen.getByRole('button', { name: 'Continue to Schedule' }));
- expect(screen.getByRole('button', { name: 'Schedule', expanded: false }).textContent).toContain('Inherit global schedule');
+ expect(screen.getByRole('button', { name: 'Schedule', expanded: false }).textContent).toContain('daily');
  expect(settings).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled();
 });

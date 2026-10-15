@@ -25,6 +25,7 @@ pub struct Source {
     pub retention_days: i64,
     pub retention_policy: String,
     pub filters: serde_json::Value,
+    pub needs_review: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -60,14 +61,24 @@ pub struct UpdateSourceInput {
 pub struct SourcesRepo;
 
 impl SourcesRepo {
+    pub async fn mark_reviewed(pool: &SqlitePool, id: &str) -> Result<Source> {
+        sqlx::query("UPDATE sources SET needs_review=0 WHERE id=?")
+            .bind(id)
+            .execute(pool)
+            .await?;
+        Self::get(pool, id).await
+    }
+
     fn row_to_source(r: &sqlx::sqlite::SqliteRow) -> Result<Source> {
         use sqlx::Row;
         let kind_str: String = r.get("kind");
         let config_str: String = r.get("config");
         let kind: SourceKind = serde_json::from_value(serde_json::Value::String(kind_str))?;
-        let config = crate::services::workflow::normalize_source_config(&serde_json::from_str::<
-            serde_json::Value,
-        >(&config_str)?)?;
+        let parsed_config = serde_json::from_str::<serde_json::Value>(&config_str);
+        let mut config = parsed_config
+            .ok()
+            .and_then(|config| crate::services::workflow::normalize_source_config(&config).ok())
+            .unwrap_or_else(|| serde_json::json!({"__invalid_original_config": config_str}));
         let enabled_int: i64 = r.get("enabled");
         let cadence_str: Option<String> = r.get("cadence");
         let cadence: SourceCadence = match cadence_str {
@@ -77,12 +88,16 @@ impl SourcesRepo {
         let retention_days: i64 = r.try_get("retention_days")?;
         let retention_policy: String = r.try_get("retention_policy")?;
         let filters_str: String = r.try_get("filters")?;
-        let filters: serde_json::Value = serde_json::from_str(&filters_str).map_err(|error| {
-            AppError::Validation(format!(
-                "Workflow {} filters: invalid stored JSON: {error}",
-                r.get::<String, _>("id")
-            ))
-        })?;
+        let (filters, invalid_filters) = match serde_json::from_str(&filters_str) {
+            Ok(filters) => (filters, false),
+            Err(_) => {
+                config["__invalid_original_filters"] = serde_json::Value::String(filters_str);
+                (serde_json::json!({}), true)
+            }
+        };
+        let needs_review = r.get::<i64, _>("needs_review") == 1
+            || invalid_filters
+            || config.get("__invalid_original_config").is_some();
 
         Ok(Source {
             id: r.get("id"),
@@ -102,6 +117,7 @@ impl SourcesRepo {
             retention_days,
             retention_policy,
             filters,
+            needs_review,
         })
     }
 
@@ -109,7 +125,7 @@ impl SourcesRepo {
         let rows = sqlx::query(
             r#"
             SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_error, created_at,
-                   cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters
+                   cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters, needs_review
             FROM sources
             ORDER BY created_at DESC
             "#
@@ -129,7 +145,7 @@ impl SourcesRepo {
         let r = sqlx::query(
             r#"
             SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_error, created_at,
-                   cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters
+                   cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters, needs_review
             FROM sources
             WHERE id = ?
             "#
@@ -362,7 +378,7 @@ impl SourcesRepo {
         let rows = sqlx::query(
             r#"
             SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_error, created_at,
-                   cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters
+                   cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters, needs_review
             FROM sources
             WHERE enabled = 1
               AND cadence != 'global'
@@ -459,11 +475,13 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
-        let error = SourcesRepo::get(&pool, &source.id)
-            .await
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains(&source.id) && error.contains("invalid stored JSON"));
+        let retained_source = SourcesRepo::get(&pool, &source.id).await.unwrap();
+        assert!(retained_source.needs_review);
+        assert_eq!(retained_source.filters, serde_json::json!({}));
+        assert_eq!(
+            retained_source.config["__invalid_original_filters"],
+            "{invalid JSON"
+        );
         let retained: String = sqlx::query_scalar("SELECT filters FROM sources WHERE id=?")
             .bind(&source.id)
             .fetch_one(&pool)

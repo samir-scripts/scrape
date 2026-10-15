@@ -2,7 +2,6 @@ import { INGESTION_LIMITS } from "../../../bindings/ingestionLimits";
 import { useLayoutEffect, useRef } from "react";
 import { api } from "../../../lib/api";
 import type { Source } from "../../../bindings/Source";
-import type { Settings } from "../../../bindings/Settings";
 import type { WorkflowSpec } from "../../../bindings/WorkflowSpec";
 import { useWorkflowDraft, WORKFLOW_STEPS } from "../../../hooks/useWorkflowDraft";
 import { workflowSpecToYaml } from "../../../lib/yamlWorkflow";
@@ -15,9 +14,9 @@ import { WorkflowPreviewResults } from "./WorkflowPreviewResults";
 
 interface AddSourceModalProps {
   isOpen: boolean; onClose: () => void; onSourceSaved: () => void;
-  initialSource?: Source | null; initialSpec?: WorkflowSpec | null; settings?: Settings;
+  initialSource?: Source | null; initialSpec?: WorkflowSpec | null;
 }
-export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, initialSpec, settings }: AddSourceModalProps) {
+export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, initialSpec }: AddSourceModalProps) {
   const model = useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceSaved });
   const { draft, change, step, advanced, setAdvanced, yaml, setYaml, detected, preview, error, setError, busy, saved } = model;
   const persisting = model.operation === "save" || model.operation === "run";
@@ -72,8 +71,6 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
       ? "custom retention"
       : null,
   ].filter(Boolean);
-  const inherited = (value: string[] | null | undefined, defaults?: string[]) => value == null
-    ? `Inherited: ${defaults?.join(", ") || "no restriction"}` : value.length ? value.join(", ") : "No restriction (explicit override)";
   return <Modal isOpen={isOpen} onClose={close} title={initialSource ? "Edit workflow" : "Create workflow"} width="max-w-[800px]"
     footer={!saved && <div className="flex flex-wrap items-center justify-between gap-3">
       <Button onClick={close} disabled={locked}>Cancel</Button>
@@ -112,18 +109,17 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
         <fieldset disabled={locked} className={yaml != null ? "hidden" : "min-w-0 grid gap-4"}>
           {(["Source", "Matching", "Schedule"] as const).map(section => <section key={section} data-workflow-step={section} hidden={step !== section} className={step === section ? "grid gap-3" : "hidden"}>
             <h3 className="text-base font-bold normal-case">{section === "Matching" ? "Matching (optional)" : section}</h3>
-            <WorkflowSections draft={draft} change={change} advanced={advanced} section={section} settings={settings} />
+            <WorkflowSections draft={draft} change={change} advanced={advanced} section={section} />
             {section === "Source" && <p aria-live="polite" className="text-[var(--color-ink-mute)]">{model.operation === "detect" ? "Detecting source…" : detected ? `Source: ${draft.extractor.kind} · ${draft.metadata.company || draft.metadata.name}` : "Paste a careers URL. Continue to detect its source, or configure an adapter in Advanced settings."}</p>}
-            {section === "Matching" && <div className="text-[var(--color-ink-mute)]"><p>Global keyword defaults: {inherited(draft.filters?.include_keywords, settings?.filters_include_keywords)}. Exclusions: {inherited(draft.filters?.exclude_keywords, settings?.filters_exclude_keywords)}.</p><p>Locations: {inherited(draft.filters?.locations, settings?.filters_locations)}. Roles: {inherited(draft.filters?.role_types, settings?.filters_role_types)}. Absent values inherit; an explicit empty list removes that restriction.</p></div>}
-            {section === "Schedule" && <details><summary className="cursor-pointer min-h-9">Retention</summary><WorkflowSections draft={draft} change={change} advanced section="Retention" settings={settings} /></details>}
+            {section === "Schedule" && <details><summary className="cursor-pointer min-h-9">Retention</summary><WorkflowSections draft={draft} change={change} advanced section="Retention" /></details>}
           </section>)}
         </fieldset>
         {step === "Review" && yaml == null && <section data-workflow-step="Review" className="grid gap-3">
           <h3 className="font-bold text-base">Review {draft.metadata.name}</h3>
           <p>Maximum {draft.max_jobs_per_run ?? INGESTION_LIMITS.default} matching jobs per run; preview accepts at most {Math.min(draft.max_jobs_per_run ?? INGESTION_LIMITS.default, INGESTION_LIMITS.preview)}.</p>
           <p className="break-words">{draft.extractor.kind} · {draft.extractor.url}</p>
-          <p>{draft.metadata.enabled === false ? "Disabled" : "Enabled"} · {draft.schedule?.cadence || "Inherited global schedule"} {draft.schedule?.time || ""} · {draft.schedule?.timezone || settings?.system_timezone || "Global timezone"}</p>
-          <p>Retention: {draft.retention?.days ?? "inherited"} days. Tracked jobs, notes and favorites are protected.</p>
+          <p>{draft.metadata.enabled === false ? "Disabled" : "Enabled"} · {draft.schedule?.cadence || "daily"} {draft.schedule?.time || ""} · {draft.schedule?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}</p>
+          <p>Retention: {draft.retention?.days ?? 30} days. Tracked jobs, notes and favorites are protected.</p>
           <details><summary className="cursor-pointer min-h-9">All configured rules</summary><pre className="font-code whitespace-pre-wrap break-words text-xs">{workflowSpecToYaml(draft)}</pre></details>
           <p>Saving creates or updates the workflow. It does not run a scrape.</p>
         </section>}

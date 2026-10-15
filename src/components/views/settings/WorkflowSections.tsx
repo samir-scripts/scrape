@@ -1,6 +1,5 @@
 import { GeographyMatching } from "./GeographyMatching";
 import { INGESTION_LIMITS } from "../../../bindings/ingestionLimits";
-import type { Settings } from "../../../bindings/Settings";
 import { SalaryRangeFilter } from "../../filters/SalaryRangeFilter";
 import type { WorkflowSpec } from "../../../bindings/WorkflowSpec";
 import type { PostingRules } from "../../../bindings/PostingRules";
@@ -36,10 +35,8 @@ export function WorkflowSections({
   advanced,
   section,
   onSourceBlur,
-  settings,
 }: {
   onSourceBlur?: () => void;
-  settings?: Settings;
   draft: WorkflowSpec;
   change: (next: WorkflowSpec) => void;
   advanced: boolean;
@@ -478,13 +475,12 @@ export function WorkflowSections({
           Schedule
           <Select
             aria-label="Schedule"
-            value={schedule.cadence || "global"}
+            value={schedule.cadence || "daily"}
             options={(advanced
               ? [
                   "daily",
                   "weekly",
                   "manual",
-                  "global",
                   "hourly",
                   "every_6h",
                   "every_12h",
@@ -493,15 +489,14 @@ export function WorkflowSections({
               : [
                   "daily",
                   "manual",
-                  "global",
                   ...(schedule.cadence &&
-                  !["daily", "manual", "global"].includes(schedule.cadence)
+                  !["daily", "manual"].includes(schedule.cadence)
                     ? [schedule.cadence]
                     : []),
                 ]
             ).map((value) => ({
               value,
-              label: value === "global" ? "Inherit global schedule" : value,
+              label: value,
             }))}
             onChange={(cadence) =>
               setSchedule({
@@ -556,7 +551,7 @@ export function WorkflowSections({
           )}
         {field(
           "IANA timezone",
-          schedule.timezone || settings?.system_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+          schedule.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
           (timezone) => {
             const next = { ...draft, schedule: { ...schedule, timezone } };
             if (rules.posting_date)
@@ -570,6 +565,15 @@ export function WorkflowSections({
             change(next);
           },
         )}
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            aria-label="Run this workflow when the app starts"
+            checked={schedule.run_on_startup ?? false}
+            onChange={(event) => setSchedule({ run_on_startup: event.target.checked })}
+          />
+          Run this workflow when the app starts
+        </label>
         <label>
           <input
             type="checkbox"

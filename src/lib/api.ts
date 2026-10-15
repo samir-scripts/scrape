@@ -121,6 +121,7 @@ export const SAMPLE_SWE_SOURCE: Source = {
     exclude_keywords: ["MBA", "Sales", "Marketing"],
     locations: ["Remote", "San Francisco, CA", "Austin, TX"],
   },
+  needs_review: false,
 };
 
 let devSources: Source[] = (() => {
@@ -801,13 +802,14 @@ const apiImplementation = {
         last_status: null,
         last_error: null,
         created_at: new Date().toISOString(),
-        cadence: input.cadence || "global",
+        cadence: input.cadence || "daily",
         cadence_cron: input.cadence_cron || null,
         next_run_at: null,
         last_run_duration_ms: null,
         retention_days: BigInt(input.retention_days ?? 30),
         retention_policy: input.retention_policy || "untracked_only",
         filters: (input.filters || {}) as any,
+        needs_review: false,
       };
       devSources.push(newSource);
       saveDevSources();
@@ -817,7 +819,7 @@ const apiImplementation = {
       input: {
         config: null,
         enabled: true,
-        cadence: "global",
+        cadence: "daily",
         cadence_cron: null,
         retention_days: 30,
         retention_policy: "untracked_only",
@@ -1146,13 +1148,13 @@ const apiImplementation = {
     if (!result.isValid) throw new Error(result.errors.map(e => e.message).join("; "));
     // Demonstration validates the form shape; expert syntax requires the desktop validator.
     if (result.parsedSpec?.filters?.query || result.parsedSpec?.filters?.policy) throw new Error("Expert queries and policies require desktop validation.");
-    return { ...result.parsedSpec!, version: 3, max_jobs_per_run: result.parsedSpec!.max_jobs_per_run ?? INGESTION_LIMITS.default };
+    return { ...result.parsedSpec!, version: 4, max_jobs_per_run: result.parsedSpec!.max_jobs_per_run ?? INGESTION_LIMITS.default };
   },
   saveWorkflow: async (spec: WorkflowSpec, id?: string): Promise<Source> => {
     if (isTauri()) return invoke("save_workflow", { spec, id: id ?? null });
     const validated = await api.validateWorkflow(spec);
     const input = workflowSpecToCreateInput(validated);
-    return id ? api.updateSource({ ...input, id }) : api.createSource({ ...input, enabled: input.enabled ?? true, cadence: input.cadence ?? "global" });
+    return id ? api.updateSource({ ...input, id }) : api.createSource({ ...input, enabled: input.enabled ?? true, cadence: input.cadence ?? "daily" });
   },
   cancelWorkflowPreview: (requestId: string): Promise<boolean> => isTauri() ? invoke("cancel_workflow_preview", { requestId }) : Promise.resolve(true),
   previewWorkflow: async (spec: WorkflowSpec, requestId: string): Promise<WorkflowPreview> => {

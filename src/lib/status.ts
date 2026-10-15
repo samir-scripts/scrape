@@ -5,7 +5,8 @@ export type WorkflowDisplayStatus =
   | "DISABLED"
   | "FAILED"
   | "SUCCESS"
-  | "UNTESTED";
+  | "UNTESTED"
+  | "NEEDS REVIEW";
 
 export interface WorkflowStatusVisual {
   label: WorkflowDisplayStatus;

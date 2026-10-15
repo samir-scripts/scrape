@@ -1,13 +1,13 @@
 # Scraper view
 
-`ScraperView` hosts the workflow registry and an explicit Scraper settings dialog.
+`ScraperView` hosts the workflow registry.
 The registry header provides YAML upload, Run all, Add workflow, cancellation while
 active, and secondary maintenance. Run all uses each enabled workflow's existing
 backend rules and remains available while automatic scheduling is paused.
 
-Global schedule and matching defaults live in Scraper settings. Opening the dialog
-performs reads; changing a control is an explicit global edit. Per-workflow values
-and inheritance stay in the Source → Matching → Schedule → Review wizard.
+Each workflow owns its matching, schedule, ingestion limit and retention values.
+The registry exposes only the application-wide automatic-scraping pause; workflow
+settings stay in the Source → Matching → Schedule → Review editor.
 
 Source/run logs are loaded for the selected workflow/run and refreshed on execution
 completion. Error and cancellation messages remain visible; partial results are

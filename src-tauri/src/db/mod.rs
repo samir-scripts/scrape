@@ -151,8 +151,166 @@ async fn checked_manifest(pool: &SqlitePool) -> Result<(sqlx::migrate::Migrator,
 pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     let (manifest, _) = checked_manifest(pool).await?;
     manifest.run(pool).await?;
+    upgrade_workflow_settings_v4(pool).await?;
     postings::backfill(pool).await?;
     compensation::backfill(pool).await?;
+    Ok(())
+}
+
+type WorkflowUpgradeRow = (
+    String,
+    String,
+    String,
+    String,
+    Option<String>,
+    String,
+    i64,
+    String,
+    bool,
+);
+type WorkflowUpgradeResult = (String, String, Option<String>, String, Option<String>);
+
+async fn upgrade_workflow_settings_v4(pool: &SqlitePool) -> Result<()> {
+    use scrape_core::{RoleType, WorkerFilters};
+    use serde_json::Value;
+
+    let done: Option<bool> =
+        crate::db::settings::SettingsRepo::get_value(pool, "migration.workflow_settings_v4")
+            .await?;
+    if done.is_some() {
+        return Ok(());
+    }
+    let cron: String = crate::db::settings::SettingsRepo::get_value(pool, "scraper.cron")
+        .await?
+        .unwrap_or_else(|| "0 0 */6 * * *".into());
+    let timezone: String = crate::db::settings::SettingsRepo::get_value(pool, "system.timezone")
+        .await?
+        .unwrap_or_else(|| "UTC".into());
+    let startup: bool =
+        crate::db::settings::SettingsRepo::get_value(pool, "scraper.run_on_startup")
+            .await?
+            .unwrap_or(false);
+    let saved_global_next: Option<String> =
+        crate::db::settings::SettingsRepo::get_value(pool, "scraper.next_run_at")
+            .await?
+            .flatten();
+    let migration_now = chrono::Utc::now();
+    let global_next = saved_global_next
+        .filter(|value| chrono::DateTime::parse_from_rfc3339(value).is_ok())
+        .or_else(|| {
+            crate::services::scheduler::calculate_next_run_at(&cron, &timezone, migration_now)
+        });
+    let global = WorkerFilters {
+        include_keywords: crate::db::settings::SettingsRepo::get_value(
+            pool,
+            "filters.include_keywords",
+        )
+        .await?
+        .unwrap_or_default(),
+        exclude_keywords: crate::db::settings::SettingsRepo::get_value(
+            pool,
+            "filters.exclude_keywords",
+        )
+        .await?
+        .unwrap_or_default(),
+        locations: crate::db::settings::SettingsRepo::get_value(pool, "filters.locations")
+            .await?
+            .unwrap_or_default(),
+        role_types: crate::db::settings::SettingsRepo::get_value::<Vec<RoleType>>(
+            pool,
+            "filters.role_types",
+        )
+        .await?
+        .unwrap_or_default(),
+        ..WorkerFilters::default()
+    };
+    let mut tx = pool.begin().await?;
+    let rows: Vec<WorkflowUpgradeRow> = sqlx::query_as(
+        "SELECT id, kind, config, filters, cadence_cron, cadence, retention_days, retention_policy, enabled FROM sources ORDER BY id",
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+    for (
+        id,
+        kind,
+        config_text,
+        filters_text,
+        cadence_cron,
+        cadence,
+        retention_days,
+        retention_policy,
+        enabled,
+    ) in rows
+    {
+        let converted = (|| -> Result<WorkflowUpgradeResult> {
+            let mut config: Value = serde_json::from_str(&config_text)?;
+            let source_filters: Value = serde_json::from_str(&filters_text)?;
+            let resolved =
+                crate::services::runner::resolve_worker_filters(&source_filters, global.clone())?;
+            let filters = serde_json::to_string(&resolved)?;
+            let mut cron_value = cadence_cron;
+            let mut effective_cadence = cadence.clone();
+            let mut next_run_at = None;
+            if cadence == "global" {
+                cron_value = Some(cron.clone());
+                effective_cadence = "cron".into();
+                next_run_at = if enabled { global_next.clone() } else { None };
+                config["__cron_timezone"] = Value::String(timezone.clone());
+                config["__run_on_startup"] = Value::Bool(startup);
+            }
+            if let Some(spec) = config.get_mut("__workflow_spec") {
+                let spec_version = spec.get("version").and_then(Value::as_u64).unwrap_or(3);
+                if spec_version < 4 {
+                    spec["version"] = Value::from(4);
+                    if !spec.get("schedule").is_some_and(Value::is_object) {
+                        spec["schedule"] = serde_json::json!({});
+                    }
+                    if let Some(schedule) = spec["schedule"].as_object_mut() {
+                        schedule.insert("cadence".into(), Value::String(effective_cadence.clone()));
+                        if cadence == "global" {
+                            schedule.insert("cron".into(), Value::String(cron.clone()));
+                            schedule.insert("timezone".into(), Value::String(timezone.clone()));
+                            schedule.insert("run_on_startup".into(), Value::Bool(startup));
+                        } else if let Some(saved) = cron_value.as_ref() {
+                            schedule.insert("cron".into(), Value::String(saved.clone()));
+                        }
+                    }
+                    spec["filters"] = serde_json::to_value(&resolved)?;
+                    spec["retention"] = serde_json::json!({
+                        "days": retention_days.max(0),
+                        "policy": retention_policy,
+                    });
+                }
+            }
+            crate::services::workflow::validated_stored_config(
+                serde_json::from_value(Value::String(kind.clone()))?,
+                &config,
+            )?;
+            Ok((
+                serde_json::to_string(&config)?,
+                filters,
+                cron_value,
+                effective_cadence,
+                next_run_at,
+            ))
+        })();
+        match converted {
+            Ok((config, filters, cron, cadence, next_run_at)) => {
+                sqlx::query("UPDATE sources SET config=?, filters=?, cadence=?, cadence_cron=?, next_run_at=?, needs_review=0 WHERE id=?")
+                    .bind(config).bind(filters).bind(cadence).bind(cron).bind(next_run_at).bind(id).execute(&mut *tx).await?;
+            }
+            Err(error) => {
+                tracing::warn!(source_id=%id, %error, "Workflow requires review after settings upgrade");
+                sqlx::query("UPDATE sources SET needs_review=1 WHERE id=?")
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
+    }
+    sqlx::query("INSERT INTO app_settings(key,value,updated_at) VALUES('migration.workflow_settings_v4','true',datetime('now')) ON CONFLICT(key) DO UPDATE SET value='true', updated_at=datetime('now')")
+        .execute(&mut *tx).await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -175,7 +333,189 @@ pub async fn init_memory_db() -> Result<SqlitePool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
     use sqlx::Row;
+
+    #[tokio::test]
+    async fn workflow_settings_upgrade_materializes_inheritance_and_isolates_invalid_rows() {
+        let pool = init_memory_db().await.unwrap();
+        sqlx::query("DELETE FROM app_settings WHERE key='migration.workflow_settings_v4'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        crate::db::settings::SettingsRepo::set_value(
+            &pool,
+            "scraper.cron",
+            serde_json::json!("0 15 9 * * *"),
+        )
+        .await
+        .unwrap();
+        crate::db::settings::SettingsRepo::set_value(
+            &pool,
+            "system.timezone",
+            serde_json::json!("America/New_York"),
+        )
+        .await
+        .unwrap();
+        crate::db::settings::SettingsRepo::set_value(
+            &pool,
+            "scraper.run_on_startup",
+            serde_json::json!(true),
+        )
+        .await
+        .unwrap();
+        crate::db::settings::SettingsRepo::set_value(
+            &pool,
+            "scraper.next_run_at",
+            serde_json::json!("2026-10-14T08:00:00Z"),
+        )
+        .await
+        .unwrap();
+        crate::db::settings::SettingsRepo::set_value(
+            &pool,
+            "filters.include_keywords",
+            serde_json::json!(["engineer"]),
+        )
+        .await
+        .unwrap();
+        let legacy = serde_json::json!({"__workflow_spec": {
+            "version": 3,
+            "metadata": {"name":"Saved workflow"},
+            "extractor": {"kind":"greenhouse", "url":"https://boards.greenhouse.io/acme"},
+            "schedule": {"cadence":"global"}
+        }, "url":"https://boards.greenhouse.io/acme"});
+        sqlx::query("INSERT INTO sources (id,kind,name,identifier,config,enabled,created_at,cadence,cadence_cron,next_run_at,retention_days,retention_policy,filters,needs_review) VALUES ('legacy','greenhouse','Legacy','acme',?,1,'2026-01-01T00:00:00Z','global',NULL,NULL,45,'untracked_only','{\"include_keywords\":[]}',0)")
+            .bind(legacy.to_string()).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO sources (id,kind,name,identifier,config,enabled,created_at,cadence,cadence_cron,next_run_at,retention_days,retention_policy,filters,needs_review) VALUES ('invalid','greenhouse','Invalid','bad',?,1,'2026-01-01T00:00:00Z','global',NULL,NULL,30,'untracked_only','not-json',0)")
+            .bind(serde_json::json!({"url":"https://boards.greenhouse.io/bad"}).to_string()).execute(&pool).await.unwrap();
+
+        upgrade_workflow_settings_v4(&pool).await.unwrap();
+        let converted: (String, Option<String>, String, String, i64, Option<String>) = sqlx::query_as("SELECT cadence,cadence_cron,config,filters,needs_review,next_run_at FROM sources WHERE id='legacy'").fetch_one(&pool).await.unwrap();
+        assert_eq!(converted.0, "cron");
+        assert_eq!(converted.1.as_deref(), Some("0 15 9 * * *"));
+        assert_eq!(converted.4, 0);
+        assert_eq!(converted.5.as_deref(), Some("2026-10-14T08:00:00Z"));
+        let filters: Value = serde_json::from_str(&converted.3).unwrap();
+        assert_eq!(filters["include_keywords"], serde_json::json!([]));
+        assert_eq!(filters["exclude_keywords"], serde_json::json!([]));
+        let config: Value = serde_json::from_str(&converted.2).unwrap();
+        assert_eq!(config["__run_on_startup"], true);
+        assert_eq!(config["__cron_timezone"], "America/New_York");
+        let spec = &config["__workflow_spec"];
+        assert_eq!(spec["version"], 4);
+        assert_eq!(spec["retention"]["days"], 45);
+        let invalid: i64 =
+            sqlx::query_scalar("SELECT needs_review FROM sources WHERE id='invalid'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(invalid, 1);
+        let visible = crate::db::sources::SourcesRepo::list(&pool).await.unwrap();
+        assert!(
+            visible
+                .iter()
+                .find(|source| source.id == "invalid")
+                .unwrap()
+                .needs_review
+        );
+    }
+
+    #[tokio::test]
+    async fn version_twenty_upgrade_runs_v21_conversion_with_backup_and_restart_idempotence() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("workflow-upgrade.db");
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(&path)
+                    .create_if_missing(true)
+                    .journal_mode(SqliteJournalMode::Wal),
+            )
+            .await
+            .unwrap();
+        let mut historical = history::manifest(&[]);
+        historical.migrations = historical
+            .iter()
+            .take(20)
+            .cloned()
+            .collect::<Vec<_>>()
+            .into();
+        historical.run(&pool).await.unwrap();
+        crate::db::settings::SettingsRepo::set_value(
+            &pool,
+            "scraper.cron",
+            serde_json::json!("0 15 9 * * *"),
+        )
+        .await
+        .unwrap();
+        crate::db::settings::SettingsRepo::set_value(
+            &pool,
+            "system.timezone",
+            serde_json::json!("America/New_York"),
+        )
+        .await
+        .unwrap();
+        let legacy_config = serde_json::json!({
+            "url":"https://boards.greenhouse.io/acme",
+            "__workflow_spec": {
+                "version":3,
+                "metadata":{"name":"Historical workflow"},
+                "extractor":{"kind":"greenhouse", "url":"https://boards.greenhouse.io/acme"},
+                "schedule":{"cadence":"global"}
+            }
+        });
+        sqlx::query("INSERT INTO sources (id,kind,name,identifier,config,enabled,created_at,cadence,retention_days,retention_policy,filters) VALUES ('historical','greenhouse','Historical','acme',?,1,'2026-01-01T00:00:00Z','global',60,'untracked_only','{}')")
+            .bind(legacy_config.to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+
+        let upgraded = init_db(&path).await.unwrap();
+        let (cadence, config, needs_review): (String, String, i64) =
+            sqlx::query_as("SELECT cadence,config,needs_review FROM sources WHERE id='historical'")
+                .fetch_one(&upgraded)
+                .await
+                .unwrap();
+        assert_eq!(cadence, "cron");
+        assert_eq!(needs_review, 0);
+        let config: Value = serde_json::from_str(&config).unwrap();
+        assert_eq!(config["__workflow_spec"]["version"], 4);
+        assert_eq!(config["__workflow_spec"]["retention"]["days"], 60);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT max(version) FROM _sqlx_migrations")
+                .fetch_one(&upgraded)
+                .await
+                .unwrap(),
+            21
+        );
+        let backup_count = std::fs::read_dir(directory.path())
+            .unwrap()
+            .flatten()
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .contains("pre-migration")
+            })
+            .count();
+        assert_eq!(backup_count, 1);
+        upgraded.close().await;
+        let restarted = init_db(&path).await.unwrap();
+        assert_eq!(
+            std::fs::read_dir(directory.path())
+                .unwrap()
+                .flatten()
+                .filter(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .contains("pre-migration"))
+                .count(),
+            1
+        );
+        restarted.close().await;
+    }
 
     #[tokio::test]
     async fn migration_nineteen_histories_preserve_saved_state_and_metadata() {
@@ -405,7 +745,7 @@ mod tests {
                 .fetch_one(&restarted)
                 .await
                 .unwrap(),
-            20
+            21
         );
         assert_eq!(
             sqlx::query_scalar::<_, Vec<u8>>(
@@ -486,7 +826,7 @@ mod tests {
                     .fetch_one(&upgraded)
                     .await
                     .unwrap(),
-                20
+                21
             );
             let states: Vec<(String, bool, String, Option<String>, String)> = sqlx::query_as("SELECT notes,favorited,status,removed_at,source_name_snapshot FROM jobs ORDER BY id").fetch_all(&upgraded).await.unwrap();
             assert_eq!(states.len(), 4);

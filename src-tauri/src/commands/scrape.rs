@@ -252,7 +252,7 @@ pub async fn test_source_transient(
     let _guard = state.runner.try_acquire_lock()?;
     let filters = crate::services::runner::resolve_worker_filters(
         &input.filters.unwrap_or(serde_json::Value::Null),
-        crate::services::runner::load_global_filters(&state.db).await?,
+        scrape_core::WorkerFilters::default(),
     )?;
     let worker_source = WorkerSource {
         id: "transient-test".to_string(),
@@ -280,9 +280,14 @@ pub async fn test_source(
 ) -> Result<Vec<WorkerEvent>> {
     let _guard = state.runner.try_acquire_lock()?;
     let source = SourcesRepo::get(&state.db, &id).await?;
+    if source.needs_review {
+        return Err(AppError::Validation(
+            "Workflow needs review before it can run.".into(),
+        ));
+    }
     let filters = crate::services::runner::resolve_worker_filters(
         &source.filters,
-        crate::services::runner::load_global_filters(&state.db).await?,
+        scrape_core::WorkerFilters::default(),
     )?;
     let worker_source = WorkerSource {
         id: source.id,
@@ -312,10 +317,32 @@ pub async fn validate_workflow(
     state: State<'_, AppState>,
     spec: serde_json::Value,
 ) -> Result<crate::services::workflow::WorkflowSpec> {
-    let timezone: String = SettingsRepo::get_value(&state.db, "system.timezone")
+    validate_workflow_spec(&state.db, spec).await
+}
+
+async fn validate_workflow_spec(
+    pool: &sqlx::SqlitePool,
+    spec: serde_json::Value,
+) -> Result<crate::services::workflow::WorkflowSpec> {
+    let timezone: String = SettingsRepo::get_value(pool, "system.timezone")
         .await?
         .unwrap_or_else(|| "UTC".into());
-    crate::services::workflow::validate(spec, &timezone)
+    if let Some(version) = spec.get("version") {
+        let version = version
+            .as_u64()
+            .ok_or_else(|| AppError::Validation("version: expected an integer".into()))?;
+        if version >= 4 {
+            return crate::services::workflow::validate(spec, &timezone);
+        }
+    }
+    let cron: String = SettingsRepo::get_value(pool, "scraper.cron")
+        .await?
+        .unwrap_or_else(|| "0 0 */6 * * *".into());
+    let startup: bool = SettingsRepo::get_value(pool, "scraper.run_on_startup")
+        .await?
+        .unwrap_or(false);
+    let filters = crate::services::runner::load_global_filters(pool).await?;
+    crate::services::workflow::validate_legacy_import(spec, &timezone, &cron, &filters, startup)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -361,11 +388,11 @@ pub async fn preview_workflow(
     let timezone: String = SettingsRepo::get_value(&state.db, "system.timezone")
         .await?
         .unwrap_or_else(|| "UTC".into());
-    let spec = crate::services::workflow::validate(spec, &timezone)?;
+    let spec = validate_workflow_spec(&state.db, spec).await?;
     let source = crate::services::workflow::source_input(&spec, &timezone)?;
     let filters = crate::services::runner::resolve_worker_filters(
         source.filters.as_ref().unwrap_or(&serde_json::Value::Null),
-        crate::services::runner::load_global_filters(&state.db).await?,
+        scrape_core::WorkerFilters::default(),
     )?;
 
     let events = execute_dry_run_worker(
@@ -477,7 +504,7 @@ pub async fn save_workflow(
     let timezone: String = SettingsRepo::get_value(&state.db, "system.timezone")
         .await?
         .unwrap_or_else(|| "UTC".into());
-    let spec = crate::services::workflow::validate(spec, &timezone)?;
+    let spec = validate_workflow_spec(&state.db, spec).await?;
     let input = crate::services::workflow::source_input(&spec, &timezone)?;
     let source = if let Some(id) = id {
         let old = SourcesRepo::get(&state.db, &id).await?;
@@ -489,7 +516,7 @@ pub async fn save_workflow(
         SourcesRepo::update(
             &state.db,
             crate::db::sources::UpdateSourceInput {
-                id,
+                id: id.clone(),
                 name: Some(input.name),
                 identifier: Some(input.identifier),
                 config: input.config,
@@ -501,7 +528,8 @@ pub async fn save_workflow(
                 filters: input.filters,
             },
         )
-        .await?
+        .await?;
+        SourcesRepo::mark_reviewed(&state.db, &id).await?
     } else {
         SourcesRepo::create(&state.db, input).await?
     };

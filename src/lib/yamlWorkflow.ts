@@ -14,7 +14,7 @@ export type { WorkflowSchedule } from "../bindings/WorkflowSchedule";
 export type { WorkflowFilters } from "../bindings/WorkflowFilters";
 export type { WorkflowRetention } from "../bindings/WorkflowRetention";
 
-export const SAMPLE_SWE_INTERNSHIP_YAML = `version: 2
+export const SAMPLE_SWE_INTERNSHIP_YAML = `version: 4
 metadata:
   name: "Cloudflare — Software Engineering Internships"
   company: "Cloudflare"
@@ -37,7 +37,7 @@ retention:
 `;
 
 export const SAMPLE_SWE_INTERNSHIP_SPEC: WorkflowSpec = {
-  version: 2,
+  version: 4,
   metadata: {
     name: "Cloudflare — Software Engineering Internships",
     company: "Cloudflare",
@@ -146,9 +146,9 @@ export function validateWorkflowYaml(
   }
 
   // Version check
-  if (json.version !== undefined && ![2, 3].includes(json.version)) {
+  if (json.version !== undefined && ![1, 2, 3, 4].includes(json.version)) {
     errors.push({
-      message: `Unsupported workflow version ${json.version}. Expected supported version: 2 or 3`,
+      message: `Unsupported workflow version ${json.version}. Expected supported versions: 1–4`,
     });
   }
 
@@ -340,7 +340,9 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
       ? source.config
       : {}
   ) as Record<string, unknown>;
-  const snapshot = config.__workflow_spec as WorkflowSpec | undefined;
+  const snapshot = source.needs_review
+    ? undefined
+    : (config.__workflow_spec as WorkflowSpec | undefined);
   const sourceConfig = Object.fromEntries(
     Object.entries(config).filter(([key]) => !key.startsWith("__")),
   );
@@ -369,9 +371,10 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
   const filters = (source.filters || {}) as WorkflowSpec["filters"];
   const calendar = config.__schedule as
     { time?: string; weekdays?: number[]; timezone?: string } | undefined;
+  const runOnStartup = config.__run_on_startup;
   return {
     ...snapshot,
-    version: 3,
+    version: 4,
     max_jobs_per_run: snapshot?.max_jobs_per_run ?? INGESTION_LIMITS.default,
     metadata: {
       ...snapshot?.metadata,
@@ -390,9 +393,10 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
       ...(typeof config.__cron_timezone === "string"
         ? { timezone: config.__cron_timezone }
         : {}),
-      cadence: source.cadence,
+      cadence: source.cadence === "global" ? "daily" : source.cadence,
       cron: source.cadence_cron ?? undefined,
       ...calendar,
+      run_on_startup: snapshot?.schedule?.run_on_startup ?? (typeof runOnStartup === "boolean" ? runOnStartup : false),
     },
     filters,
     retention: {
@@ -436,7 +440,7 @@ export function workflowSpecToCreateInput(
     const value = spec.extractor[field as keyof typeof mapping];
     if (value != null) config[key] = value;
   }
-  const cadence = spec.schedule?.cadence || "global";
+  const cadence = spec.schedule?.cadence || "daily";
   if (["daily", "weekly"].includes(cadence))
     config.__schedule = {
       time: spec.schedule?.time || "09:00",

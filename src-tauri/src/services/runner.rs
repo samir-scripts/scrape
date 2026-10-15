@@ -220,6 +220,7 @@ impl ScrapeRunner {
             .into_iter()
             .filter(|s| {
                 s.enabled
+                    && !s.needs_review
                     && (trigger == TriggerType::Manual
                         || s.cadence == scrape_core::SourceCadence::Global)
             })
@@ -227,13 +228,12 @@ impl ScrapeRunner {
         for source in &sources {
             super::workflow::validated_stored_config(source.kind, &source.config)?;
         }
-        let globals = load_global_filters(&self.pool).await?;
         let filters_by_source = sources
             .iter()
             .map(|s| {
                 Ok((
                     s.id.clone(),
-                    resolve_worker_filters(&s.filters, globals.clone())?,
+                    resolve_worker_filters(&s.filters, scrape_core::WorkerFilters::default())?,
                 ))
             })
             .collect::<Result<HashMap<_, _>>>()?;
@@ -289,7 +289,7 @@ impl ScrapeRunner {
             version: PROTOCOL_VERSION,
             run_started_at: Some(run.started_at.clone()),
             sources: enabled_sources,
-            filters: globals,
+            filters: scrape_core::WorkerFilters::default(),
             filters_by_source,
             limits: WorkerLimits::default(),
             blocked_postings: crate::db::postings::suppression_snapshot(&self.pool).await?,
@@ -443,9 +443,14 @@ impl ScrapeRunner {
         let _guard = self.try_acquire_lock()?;
 
         let source = SourcesRepo::get(&self.pool, source_id).await?;
+        if source.needs_review {
+            return Err(AppError::Validation(
+                "Workflow needs review before it can run. Open its configuration and save a valid specification.".into(),
+            ));
+        }
         super::workflow::validated_stored_config(source.kind, &source.config)?;
         let filters =
-            resolve_worker_filters(&source.filters, load_global_filters(&self.pool).await?)?;
+            resolve_worker_filters(&source.filters, scrape_core::WorkerFilters::default())?;
         let run = RunsRepo::start_with_source(&self.pool, trigger, Some(source_id)).await?;
         let _ = app.emit(
             "scrape://started",

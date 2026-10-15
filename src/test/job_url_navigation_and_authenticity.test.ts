@@ -133,6 +133,7 @@ describe("Job URL Navigation & Authenticity Engine", () => {
         retention_days: BigInt(30),
         retention_policy: "untracked_only",
         filters: null,
+        needs_review: false,
       };
 
       const jobs = generateScrapedJobsForSource(source);
@@ -192,6 +193,7 @@ describe("Job URL Navigation & Authenticity Engine", () => {
         filters: {
           exclude_keywords: ["Marketing", "Sales"],
         },
+        needs_review: false,
       };
 
       const filteredJobs = generateScrapedJobsForSource(sourceWithExclusions);
