@@ -117,3 +117,6 @@ jobs:
 
       - name: Native scheduling summary and dispatcher status
         run: SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_SCHEDULE=1 npm run test:native-startup
+
+      - name: Native confirmed cleanup and active worker cancellation
+        run: SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_DATA_MANAGEMENT=1 npm run test:native-startup

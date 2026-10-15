@@ -1,6 +1,6 @@
 # Bounded ingestion, location targeting, and data management
 
-Status: Sections 2 (bounded ingestion) and 3 (geography/workplace controls) are implemented and verified; see [implementation evidence](09-implementation-evidence.md). Section 4 (confirmed Settings data management) is next. The separately authorized one-off desktop jobs cleanup was completed without a backup, per the user's explicit instruction. Execute one section at a time before finishing Section 8 of [desktop usability](08-desktop-usability-and-extraction.md).
+Status: Sections 2 (bounded ingestion), 3 (geography/workplace controls), and 4 (confirmed Settings data management) are implemented and verified; see [implementation evidence](09-implementation-evidence.md). Section 8 desktop integration acceptance gates remain open. The separately authorized one-off desktop jobs cleanup was completed without a backup, per the user's explicit instruction. Execute one section at a time before finishing Section 8 of [desktop usability](08-desktop-usability-and-extraction.md).
 
 ## 1. Decisions and priority
 

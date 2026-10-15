@@ -90,3 +90,85 @@ The broader adapter suite caught Washington/DC being misclassified as Washington
 Section 8's prior no-update screenshot/zoom failures and manual native visual/pointer/file-chooser gates remain open. This section adds actual native programmatic workflow evidence; it does not establish manual pointer/visual QA or Windows/Linux behavior. No remote CI run or clean dependency install is claimed. All four pre-existing user edits remain unchanged and unstaged, verified against `/tmp/scrape-pre-section7.patch`.
 
 Section 3 commits: `06c86c3` shared catalog/extraction/matching parity; `f1640eb` searchable workflow controls plus browser/native interactions. A post-commit binding export and `git diff --exit-code HEAD -- src/bindings` passed with no drift. The next section is confirmed Settings data management; the one-off jobs cleanup above does not substitute for that feature.
+
+## Section 4 — Confirmed bulk cleanup (2026-10-15)
+
+Implemented Settings → Data management, using generated Rust request/preview/result
+contracts. Delete all jobs, keep favorites, keep tracked applications and full
+reset use the same identity selection for preview and transactional deletion.
+Qualifying copies protect their whole posting identity, including soft-removed
+copies and their notes/history/locations. Legacy unresolved identities remain
+separate. Suppression is unchanged by jobs-only cleanup; full reset clears it.
+
+Each operation requires a consistent `VACUUM INTO` snapshot before deletion. A
+changed confirmation, backup failure or transaction failure deletes nothing.
+Database schema/migration metadata and existing recovery files remain untouched.
+The success receipt includes the backup path and expandable recovery instructions.
+See [recovery procedure](database-recovery.md). Full reset retains only runtime
+pause/calendar/reset metadata, then defaults initialize normally on restart;
+the reset marker prevents silently recreating a sample workflow. Automatic
+scraping stays paused. Runtime calendar state also resets, and the desktop command
+attempts to disable OS launch at login and remove the diagnostic log, reporting
+any external cleanup failures as warnings.
+
+Maintenance rejects new mutations/runs, requests cancellation through the shared
+runner flag, waits for existing worker/command permits, and holds exclusive access
+through snapshot, deletion and scheduler synchronization. Preview/Test workers
+also share this cancellation/run guard. SQLite deletes run in one immediate
+transaction with FK cascades; there is no SQL TRUNCATE, sequence reset or VACUUM
+inside that transaction.
+
+Confirmation defaults to Cancel focus and a checked pause option; reset additionally
+requires exact `RESET`. Controls reject duplicate submissions, ignore cancelled
+preview responses and show actionable failures without optimistic deletion. One
+shared response/event boundary resets stale lists, totals, metrics, pagination,
+selection and Undo. Full reset clears scoped `scrape:` interface storage. Browser
+examples explain that desktop cleanup is unavailable and cannot simulate success.
+
+### Verification
+
+- `cargo test --workspace`: **307 passed**, including populated temporary-file
+  databases for all modes, whole-identity preservation, removed copies, all tracked
+  stages, notes/history/locations, legacy suppression, backups, stale confirmations,
+  rollback after dependent deletion, restart, pause and exclusive maintenance.
+- `cargo clippy --workspace --all-targets -- -D warnings` and
+  `cargo fmt --all --check`: passed.
+- `npm test`: **421 passed across 67 files**, including 9 new cleanup interaction
+  cases, plus Vite startup/HTML transformation smoke. Tests include the four
+  pre-existing user-edited files in this shared worktree.
+- TypeScript and production build passed; the existing Vite >500 kB bundle advisory
+  remains. Production style guard passed. Binding export tests generate all four
+  cleanup contracts; generated bindings are not hand-edited.
+  A fresh tracked-file archive of commit `866142d` also passed TypeScript/production
+  build, using the installed dependency tree via symlink. This excludes all four
+  unrelated working-tree edits; it is not a fresh dependency installation.
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers SCRAPE_BROWSER_PORT=1441
+  npx playwright test e2e/data-management.pw.ts --workers=1`: **4 passed**, both
+  themes at 480/1280 widths, keyboard navigation, explicit desktop-only availability,
+  contrast and horizontal overflow. Narrow Paper and wide Obsidian screenshots were
+  inspected. These are review artifacts, not replacement screenshot baselines.
+- `SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_DATA_MANAGEMENT=1 npm run
+  test:native-startup`: **passed in the actual Tauri WKWebView**. Final isolated
+  profile: `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-97DAX0`.
+  Real local HTTP → actual worker cancellation, actual confirmation/Cancel/RESET
+  controls, all four modes, favorite/tracked saved state, jobs-only workflow
+  preservation, empty final lists and paused reset were verified. Independently
+  checked all four recovery snapshots and final database: integrity `ok`, zero
+  FK failures, migration histories/checksums identical. Final database has 20
+  migration records, three pause/calendar/reset settings and zero rows in every
+  other app table.
+
+Native testing first exposed stale harness clicks after reopening confirmation;
+the harness now waits for the new enabled control. It then caught a real receipt
+regression: resetting the settings query to undefined unmounted Settings through
+App's startup gate. Settings now refreshes while retaining its snapshot, with a
+QueryObserver regression test and successful native rerun. Neither failure was
+reported as passing. The browser status selector was scoped to distinguish the
+fixture banner from the availability message.
+
+No user database was opened or changed in this section. Native fixtures skip OS
+login changes, and their diagnostic logs are now isolated too; real OS login-item
+removal remains unperformed manual QA. Existing Section 8 screenshot/zoom and
+manual-native acceptance gates remain unresolved, and no clean dependency install,
+remote CI or live-provider verification is claimed. The native cleanup check was
+added to macOS CI. Four pre-existing user edits remain unchanged and unstaged.

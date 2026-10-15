@@ -1,3 +1,4 @@
+import { checkNativeDataManagement } from "./native-data-management.mjs";
 import { checkNativeSchedule } from "./native-schedule.mjs";
 import { checkNativeWorkflow } from "./native-workflow.mjs";
 import { createServer } from "node:http";
@@ -42,8 +43,12 @@ const modes = process.env.SCRAPE_STARTUP_MODES?.split(",") ?? supportedModes;
 if (modes.some(mode => !supportedModes.includes(mode))) throw new Error("Unsupported startup fixture mode");
 let workflowServer;
 let workflowOrigin = "";
-if (process.env.SCRAPE_NATIVE_WORKFLOW === "1") {
+let slowSeen = false;
+if (process.env.SCRAPE_NATIVE_WORKFLOW === "1" || process.env.SCRAPE_NATIVE_DATA_MANAGEMENT === "1") {
   workflowServer = createServer((request, response) => {
+    response.setHeader("Access-Control-Allow-Origin", "*");
+    if (request.url === "/seen-slow") { response.end(JSON.stringify({ seen: slowSeen })); return; }
+    if (request.url === "/slow") { slowSeen = true; request.on("close", () => response.destroy()); return; }
     if (request.url === "/robots.txt") { response.end("User-agent: *\nAllow: /"); return; }
     response.end(`<script type="application/ld+json">${JSON.stringify([
       { "@type": "JobPosting", identifier: "wizard-1", title: "Native workflow engineer", url: "/jobs/wizard-1", hiringOrganization: { name: "Fixture Co" }, jobLocationType: "TELECOMMUTE", applicantLocationRequirements: { "@type": "AdministrativeArea", name: "US-TX" }, jobLocation: { "@type": "Place", address: { addressLocality: "Austin", addressRegion: "TX", addressCountry: "US" } } },
@@ -69,7 +74,8 @@ for (const mode of modes) {
       const workflow = ${process.env.SCRAPE_NATIVE_WORKFLOW === "1" ? `await (${checkNativeWorkflow.toString()})(${JSON.stringify(workflowOrigin)})` : "null"};
       const kanban = ${process.env.SCRAPE_NATIVE_KANBAN === "1" ? `await (${checkNativeKanban.toString()})()` : "null"};
       const layout = ${process.env.SCRAPE_NATIVE_LAYOUT === "1" ? `await (${checkNativeJobLayout.toString()})()` : "null"};
-      await invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:true,schedule,appearance,layout,kanban,workflow,steps:["actual Tauri dev readiness: ${mode}"]}});
+      const dataManagement = ${process.env.SCRAPE_NATIVE_DATA_MANAGEMENT === "1" ? `await (${checkNativeDataManagement.toString()})(${JSON.stringify(workflowOrigin)})` : "null"};
+      await invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:true,schedule,appearance,layout,kanban,workflow,dataManagement,steps:["actual Tauri dev readiness: ${mode}"]}});
     } catch(error) {
       await window.__TAURI_INTERNALS__.invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:false,error:String(error)}});
     }
@@ -87,6 +93,25 @@ for (const mode of modes) {
   } else if (invalid || code !== 0 || !output.includes('"ok":true')) {
     throw new Error(`Native startup failed for ${mode}: ${directory}\n${output}`);
   }
+  if (process.env.SCRAPE_NATIVE_DATA_MANAGEMENT === "1") execFileSync("python3", ["-c", String.raw`
+import pathlib,sqlite3,sys
+root=pathlib.Path(sys.argv[1])
+def audit(path):
+ c=sqlite3.connect(path)
+ assert c.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
+ assert not c.execute('PRAGMA foreign_key_check').fetchall()
+ history=c.execute('SELECT version,description,success,hex(checksum) FROM _sqlx_migrations ORDER BY version').fetchall()
+ counts={name:c.execute('SELECT COUNT(*) FROM '+name).fetchone()[0] for (name,) in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchall()}
+ c.close(); return history,counts
+history,counts=audit(root/'scrape_data.db')
+assert len(history)==20
+assert all(n==0 for table,n in counts.items() if table not in ('_sqlx_migrations','app_settings'))
+backups=list((root/'backups').glob('*.db')); assert len(backups)==4
+saved=[]
+for path in backups:
+ previous,n=audit(path); assert previous==history; saved.append(n['jobs'])
+assert sorted(saved)==[0,1,1,1]
+`, directory]);
   console.log(`PASS actual Tauri dev startup ${mode}; artifacts ${directory}`);
 }
 
