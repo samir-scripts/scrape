@@ -10,11 +10,19 @@ test("both themes remain operable at actual 200% browser zoom", async () => {
   });
   try {
     await context.route("**/*", route => new URL(route.request().url()).hostname === "127.0.0.1" ? route.continue() : route.abort());
+    const worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
     const page = await context.newPage();
     const baseURL = String(test.info().project.use.baseURL);
     await page.goto(`${baseURL}/?demo=1&fixtures=1`);
+    // Set zoom explicitly after navigation so the test does not depend on the
+    // extension's onUpdated event racing with the page load.
+    await worker.evaluate(async baseURL => {
+      const tabs = await (globalThis as any).chrome.tabs.query({});
+      const tab = tabs.find((tab: {url?:string}) => tab.url?.startsWith(baseURL));
+      if (!tab) throw new Error("Zoom test tab was not found");
+      await (globalThis as any).chrome.tabs.setZoom(tab.id, 2);
+    }, baseURL);
     await expect.poll(() => page.evaluate(() => innerWidth)).toBeLessThanOrEqual(640);
-    const worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
     const zoom = await worker.evaluate(async baseURL => {
       const tabs = await (globalThis as any).chrome.tabs.query({});
       const tab = tabs.find((tab: {url?:string}) => tab.url?.startsWith(baseURL));
