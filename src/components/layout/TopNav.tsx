@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Icon } from "../ui/Icon";
 import { IconButton } from "../ui/IconButton";
 import { useUIStore } from "../../lib/store";
@@ -9,7 +10,7 @@ import { api } from "../../lib/api";
 interface TopNavProps {
   discoveredCount?: number;
   trackedCount?: number;
-  nextRunText?: string;
+  scheduleControl?: ReactNode;
 }
 
 const TAB_TOOLTIPS: Record<NavTabId, string> = {
@@ -23,9 +24,9 @@ const TAB_TOOLTIPS: Record<NavTabId, string> = {
 export function TopNav({
   discoveredCount = 0,
   trackedCount = 0,
-  nextRunText,
+  scheduleControl,
 }: TopNavProps) {
-  const { view, setView, isScanning, scanStatusText } = useUIStore();
+  const { view, setView } = useUIStore();
 
   return (
     <header className="flex flex-col w-full bg-[var(--color-paper)] shrink-0 select-none">
@@ -62,17 +63,7 @@ export function TopNav({
 
         {/* Right: Status Indicator / Next Run / Scanning & Notification Bell */}
         <div className="flex items-center justify-end gap-3 pb-1 sm:pb-0 font-mono text-xs text-[var(--color-ink)] shrink-0">
-          {isScanning ? (
-            <div className="flex items-center gap-2 bg-[var(--color-signal)] text-white px-2.5 py-1 text-xs font-bold">
-              <span className="animate-pulse">●</span>
-              <span>{scanStatusText || "SCRAPING IN PROGRESS…"}</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-[var(--color-ink-mute)] text-xs">
-              <span className={nextRunText === "PAUSED" ? "text-[var(--color-ink-mute)]" : "text-[var(--color-success)]"}>{nextRunText === "PAUSED" ? "□" : "●"}</span>
-              <span>{nextRunText || "IDLE"}</span>
-            </div>
-          )}
+          {scheduleControl}
 
           <div className="h-4 w-px bg-[var(--color-ink-mute)]/30" />
 

@@ -10,7 +10,7 @@ import { ToastContainer } from "../ui/Toast";
 interface ShellProps {
   discoveredCount?: number;
   trackedCount?: number;
-  nextRunText?: string;
+  scheduleControl?: ReactNode;
   footerStatus?: string;
   jobSort?: JobSort;
   onJobSortChange?: (sort: JobSort) => void;
@@ -20,7 +20,7 @@ interface ShellProps {
 export function Shell({
   discoveredCount,
   trackedCount,
-  nextRunText,
+  scheduleControl,
   footerStatus,
   jobSort,
   onJobSortChange,
@@ -34,7 +34,7 @@ export function Shell({
       <TopNav
         discoveredCount={discoveredCount}
         trackedCount={trackedCount}
-        nextRunText={nextRunText}
+        scheduleControl={scheduleControl}
       />
       <SubNav sort={jobSort} onSortChange={onJobSortChange} />
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</div>

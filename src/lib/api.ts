@@ -1111,6 +1111,8 @@ const apiImplementation = {
         enabled: devSettings.scraper_enabled,
         next_run_at: null,
         running: false,
+        enabled_workflows: 0,
+        schedules: [],
       });
     }
     return invoke<SchedulerStatus>("get_scheduler_status");

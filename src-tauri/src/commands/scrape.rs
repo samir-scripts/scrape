@@ -66,8 +66,15 @@ pub async fn get_scheduler_status(state: State<'_, AppState>) -> Result<Schedule
 }
 
 #[tauri::command]
-pub async fn set_scheduler_paused(state: State<'_, AppState>, paused: bool) -> Result<()> {
-    state.scheduler.lock().await.set_paused(paused).await
+pub async fn set_scheduler_paused(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    paused: bool,
+) -> Result<()> {
+    state.scheduler.lock().await.set_paused(paused).await?;
+    use tauri::Emitter;
+    let _ = app.emit("settings://changed", ());
+    Ok(())
 }
 
 #[tauri::command]

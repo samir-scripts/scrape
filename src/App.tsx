@@ -1,3 +1,4 @@
+import { ScheduleControl } from "./components/layout/ScheduleControl";
 import { useJobStatusChange } from "./hooks/useJobStatusChange";
 import { pagination } from "./lib/pagination";
 import { JobPaginator } from "./components/jobs/JobPaginator";
@@ -96,11 +97,6 @@ export default function App() {
   } = useQuery({
     queryKey: ["settings"],
     queryFn: api.getSettings,
-  });
-
-  const { data: schedulerStatus } = useQuery({
-    queryKey: ["scheduler_status"],
-    queryFn: api.getSchedulerStatus,
   });
 
   // 3. Sync UI theme, motion, tooltips, and font with settings
@@ -261,21 +257,6 @@ export default function App() {
     if (clamped !== page) setPageState({ key: pageKey, page: clamped });
   }, [jobsPage, isPlaceholderData, page, pageKey]);
 
-  const nextRunText = useMemo(() => {
-    if (!schedulerStatus?.enabled) return "PAUSED";
-    if (!schedulerStatus?.next_run_at) return "SCHEDULED";
-    try {
-      const d = new Date(schedulerStatus.next_run_at);
-      return `NEXT ${d.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      })}`;
-    } catch {
-      return "SCHEDULED";
-    }
-  }, [schedulerStatus]);
-
   // 10. Subsystem readiness gate
   const isInitializing = settingsLoading;
   const initError = settingsError;
@@ -370,7 +351,7 @@ export default function App() {
     <Shell
       discoveredCount={counts?.discovered ?? 0}
       trackedCount={counts?.tracked ?? 0}
-      nextRunText={nextRunText}
+      scheduleControl={<ScheduleControl />}
       jobSort={effectiveFilter.sort ?? undefined}
       onJobSortChange={sort => setFilterSpec({ sort })}
     >

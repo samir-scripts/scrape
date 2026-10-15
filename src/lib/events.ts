@@ -32,11 +32,15 @@ export async function setupAppEventListeners(
   const unlistenJobs = await listen("jobs://changed", () => {
     queryClient.invalidateQueries({ queryKey: ["jobs"] });
     queryClient.invalidateQueries({ queryKey: ["job_counts"] });
-    queryClient.invalidateQueries({ queryKey: ["job_counts"] });
     queryClient.invalidateQueries({ queryKey: ["job_status_events"] });
     queryClient.invalidateQueries({ queryKey: ["metrics"] });
   });
   unlisteners.push(unlistenJobs);
+
+  unlisteners.push(await listen("sources://changed", () => {
+    queryClient.invalidateQueries({ queryKey: ["sources"] });
+    queryClient.invalidateQueries({ queryKey: ["scheduler_status"] });
+  }));
 
   const unlistenSettings = await listen("settings://changed", () => {
     queryClient.invalidateQueries({ queryKey: ["settings"] });
@@ -84,8 +88,8 @@ export async function setupAppEventListeners(
       queryClient.invalidateQueries({ queryKey: ["sources"] });
       queryClient.invalidateQueries({ queryKey: ["scrape_runs"] });
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
-    queryClient.invalidateQueries({ queryKey: ["job_counts"] });
       queryClient.invalidateQueries({ queryKey: ["job_counts"] });
+      queryClient.invalidateQueries({ queryKey: ["scheduler_status"] });
       queryClient.invalidateQueries({ queryKey: ["metrics"] });
     }
   );
