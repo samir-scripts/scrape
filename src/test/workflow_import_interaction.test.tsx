@@ -66,22 +66,57 @@ it('shows cancellation while Run all is pending and refreshes after controlled c
  const cancel = vi.spyOn(api, 'cancelScrape').mockResolvedValue(true);
  render(<QueryClientProvider client={new QueryClient()}><SourcesSettings settings={DEFAULT_SETTINGS} /></QueryClientProvider>);
  const user = userEvent.setup(); await user.click(await screen.findByRole('button', { name: 'Run all' }));
- await user.click(await screen.findByRole('button', { name: 'Cancel active run' })); expect(cancel).toHaveBeenCalledTimes(1);
+ await user.click(await screen.findByRole('button', { name: 'Cancel run' })); expect(cancel).toHaveBeenCalledTimes(1);
  finish({ id: 'cancelled-fixture', status: 'partial', trigger: 'manual', started_at: '2026-10-15', finished_at: '2026-10-15', jobs_found: 1n, jobs_new: 1n, error: 'Cancelled after partial fixture result', source_id: null });
- await waitFor(() => expect(screen.queryByRole('button', { name: 'Cancel active run' })).toBeNull());
+ await waitFor(() => expect(screen.queryByRole('button', { name: 'Cancel run' })).toBeNull());
 });
 
-it('offers a named SVG trash action for each workflow and reports delete failure', async () => {
+it('consolidates contextual actions and reports delete failure from the menu', async () => {
  vi.spyOn(api, 'listSources').mockResolvedValue([SAMPLE_SWE_SOURCE]);
  const remove = vi.spyOn(api, 'deleteSource').mockRejectedValue(new Error('database unavailable'));
  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
  const queryClient = new QueryClient();
  render(<QueryClientProvider client={queryClient}><SourcesSettings settings={DEFAULT_SETTINGS} /><ToastContainer /></QueryClientProvider>);
  const user = userEvent.setup();
- const deleteButton = await screen.findByRole('button', { name: `Delete workflow ${SAMPLE_SWE_SOURCE.name}` });
- expect(deleteButton.querySelector('svg')).toBeTruthy();
- await user.click(deleteButton);
+ const menu = await screen.findByRole('button', { name: `More actions for ${SAMPLE_SWE_SOURCE.name}` });
+ expect(menu.querySelector('svg')).toBeTruthy();
+ await user.click(menu);
+ const labels = await screen.findAllByRole('menuitem');
+ expect(labels.findIndex(button => button.textContent === 'Edit workflow')).toBeLessThan(labels.findIndex(button => button.textContent === 'Preview matches'));
+ expect(screen.getByRole('menuitem', { name: 'View run history' })).toBeTruthy();
+ await user.click(screen.getByRole('menuitem', { name: 'Delete workflow' }));
  await waitFor(() => expect(remove).toHaveBeenCalledWith(SAMPLE_SWE_SOURCE.id));
  expect(confirm).toHaveBeenCalledWith(`DELETE WORKFLOW ${SAMPLE_SWE_SOURCE.name.toUpperCase()}?`);
  expect((await screen.findByRole("alert")).textContent).toContain("database unavailable");
+});
+
+it('opens workflow configuration from its name and exposes preview and run history in More actions', async () => {
+ vi.spyOn(api, 'listSources').mockResolvedValue([SAMPLE_SWE_SOURCE]);
+ const preview = vi.spyOn(api, 'testSource').mockResolvedValue([]);
+ render(<QueryClientProvider client={new QueryClient()}><SourcesSettings settings={DEFAULT_SETTINGS} /></QueryClientProvider>);
+ const user = userEvent.setup();
+ await user.click(await screen.findByRole('button', { name: `Edit workflow ${SAMPLE_SWE_SOURCE.name}` }));
+ expect(await screen.findByRole('dialog', { name: 'Edit workflow' })).toBeTruthy();
+ cleanup();
+ render(<QueryClientProvider client={new QueryClient()}><SourcesSettings settings={DEFAULT_SETTINGS} /></QueryClientProvider>);
+ await user.click(await screen.findByRole('button', { name: `More actions for ${SAMPLE_SWE_SOURCE.name}` }));
+ await user.click(screen.getByRole('menuitem', { name: 'Preview matches' }));
+ await waitFor(() => expect(preview).toHaveBeenCalledWith(SAMPLE_SWE_SOURCE.id));
+ await user.click(screen.getByRole('button', { name: `More actions for ${SAMPLE_SWE_SOURCE.name}` }));
+ await user.click(screen.getByRole('menuitem', { name: 'View run history' }));
+ expect(await screen.findByText(/WORKFLOW OBSERVABILITY & EXECUTION LOGS/)).toBeTruthy();
+});
+
+it('opens the latest run details from a failed workflow status', async () => {
+ const failedSource = { ...SAMPLE_SWE_SOURCE, last_status: 'error' };
+ vi.spyOn(api, 'listSources').mockResolvedValue([failedSource]);
+ const listRuns = vi.spyOn(api, 'listSourceRuns').mockResolvedValue([{
+  id: 'failed-run', trigger: 'manual', status: 'failed', started_at: '2026-10-15T10:00:00Z',
+  finished_at: '2026-10-15T10:01:00Z', jobs_found: 0n, jobs_new: 0n, error: 'Fixture failure', source_id: failedSource.id,
+ }]);
+ vi.spyOn(api, 'getScrapeLogs').mockResolvedValue([]);
+ render(<QueryClientProvider client={new QueryClient()}><SourcesSettings settings={DEFAULT_SETTINGS} /></QueryClientProvider>);
+ await userEvent.setup().click(await screen.findByRole('button', { name: `View failed run for ${failedSource.name}` }));
+ expect(await screen.findByText(/RUN failed-r/)).toBeTruthy();
+ expect(listRuns).toHaveBeenCalledWith(failedSource.id, 10);
 });

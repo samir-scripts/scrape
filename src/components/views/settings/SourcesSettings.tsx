@@ -24,8 +24,16 @@ import { Select } from "../../ui/Select";
 import { AddSourceModal } from "./AddSourceModal";
 import { notifyError, notifySuccess, notifyInfo } from "../../../lib/toast";
 import { getWorkflowStatus } from "../../../lib/status";
+import { ActionMenu } from "../../ui/ActionMenu";
 
 type FilterTab = "all" | "ats" | "custom" | "errors";
+
+function workflowTimezone(source: Source, settings?: Settings): string {
+  const config = source.config && typeof source.config === "object" && !Array.isArray(source.config) ? source.config : {};
+  const schedule = config.__schedule && typeof config.__schedule === "object" && !Array.isArray(config.__schedule) ? config.__schedule : {};
+  const timezone = typeof config.__cron_timezone === "string" ? config.__cron_timezone : schedule.timezone;
+  return typeof timezone === "string" && timezone || settings?.system_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
 
 interface SourcesSettingsProps {
   settings?: Settings;
@@ -43,7 +51,6 @@ export function SourcesSettings({ settings, onUpdateSetting }: SourcesSettingsPr
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [importedSpec, setImportedSpec] = useState<WorkflowSpec | null>(null);
   const [runningAll, setRunningAll] = useState(false);
-  const [showMaintenance, setShowMaintenance] = useState(false);
   const [editingSource, setEditingSource] = useState<Source | null>(null);
 
   // Per-job execution state
@@ -213,16 +220,6 @@ export function SourcesSettings({ settings, onUpdateSetting }: SourcesSettingsPr
     }
   };
 
-  const handlePruneExpired = async () => {
-    try {
-      const pruned = await api.cleanupExpiredJobs();
-      notifySuccess(`Pruned ${pruned} expired postings according to TTL policies.`, "TTL PRUNE COMPLETE");
-      fetchSources();
-    } catch (error) {
-      notifyError(String(error), "RETENTION CLEANUP FAILED");
-    }
-  };
-
   const handleSeedSampleWorkflow = async () => {
     try {
       await api.seedSampleWorkflow();
@@ -311,11 +308,6 @@ export function SourcesSettings({ settings, onUpdateSetting }: SourcesSettingsPr
           <p className="text-xs text-[var(--color-ink-mute)]">Sources, schedules and recent results</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {settings && onUpdateSetting && <Toggle label="Automatic scraping enabled" checked={settings.scraper_enabled} onChange={(enabled) => onUpdateSetting("scraper.enabled", enabled)} />}
-          <WorkflowImportButton disabled={isRecordedMode() || isAddModalOpen} onImport={spec => { setEditingSource(null); setImportedSpec(spec); setIsAddModalOpen(true); }} />
-          <Button variant="default" disabled={isRecordedMode() || activeRun || !sources.some(source => source.enabled && !source.needs_review)} onClick={() => void handleRunAll()}>Run all</Button>
-          {activeRun && <Button variant="danger" onClick={() => api.cancelScrape().then(cancelled => notifyInfo(cancelled ? "Cancellation requested; committed results remain saved." : "No active run to cancel.")).catch(error => notifyError(String(error)))}>Cancel active run</Button>}
-          <IconButton label="Workflow maintenance" onClick={() => setShowMaintenance(value => !value)}><Icon name="settings" /></IconButton>
           <Tooltip content="Configure a careers source and review its matches before saving">
             <Button
               variant="inverted"
@@ -325,17 +317,22 @@ export function SourcesSettings({ settings, onUpdateSetting }: SourcesSettingsPr
                 setImportedSpec(null);
                 setIsAddModalOpen(true);
               }}
-              shortcut="+ ADD"
+              aria-label="Add workflow"
             >
+              <Icon name="plus" />
               ADD WORKFLOW
             </Button>
           </Tooltip>
+          {activeRun ? <>
+            <span role="status" className="max-w-48 truncate text-xs">{scanStatusText || "Running workflows…"}</span>
+            <Button variant="danger" onClick={() => api.cancelScrape().then(cancelled => notifyInfo(cancelled ? "Cancellation requested; committed results remain saved." : "No active run to cancel.")).catch(error => notifyError(String(error)))}>Cancel run</Button>
+          </> : <Button variant="default" disabled={isRecordedMode() || !sources.some(source => source.enabled && !source.needs_review)} onClick={() => void handleRunAll()}>Run all</Button>}
+          <WorkflowImportButton disabled={isRecordedMode() || isAddModalOpen} onImport={spec => { setEditingSource(null); setImportedSpec(spec); setIsAddModalOpen(true); }} />
+          {settings && onUpdateSetting && <Toggle label="Automatic scraping enabled" checked={settings.scraper_enabled} onChange={(enabled) => onUpdateSetting("scraper.enabled", enabled)} />}
         </div>
       </div>
 
       {isRecordedMode() && <p className="text-sm text-[var(--color-ink-mute)]">Recorded examples cannot run, test or import workflows. Open the desktop application to use live sources.</p>}
-      {activeRun && <p role="status" className="text-sm">{scanStatusText || "Running workflows…"}</p>}
-      {showMaintenance && <div className="border p-3"><Button onClick={handlePruneExpired}>Cleanup expired discoveries</Button><p className="text-xs">Tracked jobs, notes and favorites are protected.</p></div>}
       {/* Sub-Filter Segmented Row + Search */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap gap-1">
@@ -426,21 +423,13 @@ export function SourcesSettings({ settings, onUpdateSetting }: SourcesSettingsPr
                 </Tooltip>
               </TableHeader>
               <TableHeader>WORKFLOW / COMPANY</TableHeader>
-              <TableHeader>
-                <Tooltip content="Target extraction adapter: Greenhouse, Lever, Ashby, JSON-LD, or Custom Selector">
-                  <span>EXTRACTOR</span>
-                </Tooltip>
-              </TableHeader>
+          <TableHeader>EXTRACTOR</TableHeader>
               <TableHeader>
                 <Tooltip content="Dedicated execution frequency for this workflow">
                   <span>CADENCE</span>
                 </Tooltip>
               </TableHeader>
-              <TableHeader>
-                <Tooltip content="Data retention lifespan and untracked pruning policy">
-                  <span>RETENTION</span>
-                </Tooltip>
-              </TableHeader>
+          <TableHeader>RETENTION</TableHeader>
               <TableHeader>
                 <Tooltip content="Status of the most recent execution run">
                   <span>STATUS</span>
@@ -471,42 +460,39 @@ export function SourcesSettings({ settings, onUpdateSetting }: SourcesSettingsPr
                     />
                   </TableCell>
                   <TableCell>
-                    <div
-                      onClick={() => setInspectedSource(isInspected ? null : s)}
-                      className="flex flex-col cursor-pointer group"
-                    >
-                      <span className="font-bold tracking-tight text-[var(--color-ink)] group-hover:underline">
+                    <div className="flex flex-col items-start">
+                      <button type="button" aria-label={`Edit workflow ${s.name}`}
+                        onClick={() => { setImportedSpec(null); setEditingSource(s); setIsAddModalOpen(true); }}
+                        className="font-bold tracking-tight text-left text-[var(--color-ink)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-signal)]">
                         {s.name}
-                      </span>
+                      </button>
                       <span className="text-xs text-[var(--color-ink-mute)] truncate max-w-[240px]">
                         {s.identifier}
                       </span>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className="px-1.5 py-0.5 text-xs font-mono uppercase border border-[var(--color-ink)] bg-[var(--color-paper-2)]">
-                      {s.kind}
-                    </span>
+                    <span className="text-xs">{s.kind}</span>
                   </TableCell>
                   <TableCell>
-                    <span className="px-1.5 py-0.5 text-xs font-mono uppercase font-bold border border-[var(--color-ink)]">
-                      {s.cadence === "manual" ? "Manual" : s.cadence.replace("_", " ")}
-                    </span>
-                    {s.next_run_at && <p className="text-xs mt-1">Next: {formatDateTime(s.next_run_at, settings)}</p>}
+                    <span className="text-xs">{s.cadence === "manual" ? "Manual only" : `${s.cadence.replaceAll("_", " ")} · ${workflowTimezone(s, settings)}`}</span>
+                    {s.next_run_at && <p className="text-xs mt-1 text-[var(--color-ink-mute)]">Next {formatDateTime(s.next_run_at, settings)}</p>}
                   </TableCell>
                   <TableCell className="text-xs font-mono whitespace-nowrap">
                     {Number(s.retention_days) === 0
-                      ? "FOREVER"
-                      : `${s.retention_days}D (${s.retention_policy === "untracked_only" ? "SAFE" : "ALL"})`}
+                      ? "Forever"
+                      : `${s.retention_days} days · ${s.retention_policy === "untracked_only" ? "untracked" : "all"}`}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5" data-testid={`status-${s.id}`}>
                       <span className={`text-xs ${statusVisual.bulletClass}`}>
                         {statusVisual.bulletGlyph}
                       </span>
-                      <span className={`text-xs font-mono uppercase font-bold ${statusVisual.colorClass}`}>
+                      {s.last_status === "error" && !s.needs_review ? <button type="button"
+                        aria-label={`View failed run for ${s.name}`} onClick={() => setInspectedSource(s)}
+                        className={`text-xs font-mono uppercase font-bold underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-signal)] ${statusVisual.colorClass}`}>
                         {statusVisual.label}
-                      </span>
+                      </button> : <span className={`text-xs font-mono uppercase font-bold ${statusVisual.colorClass}`}>{statusVisual.label}</span>}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -521,51 +507,12 @@ export function SourcesSettings({ settings, onUpdateSetting }: SourcesSettingsPr
                         </button>
                       </Tooltip>
 
-                      <Tooltip content="Dry run extraction without writing to database">
-                        <button
-                          onClick={() => handleTestSource(s.id)}
-                          disabled={isRecordedMode() || isTesting || activeRun || s.needs_review}
-                          className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-xs font-mono uppercase cursor-pointer"
-                        >
-                          {isTesting ? "…" : "TEST"}
-                        </button>
-                      </Tooltip>
-
-                      <Tooltip content="View run history, duration telemetry, and live execution logs">
-                        <button
-                          onClick={() => setInspectedSource(isInspected ? null : s)}
-                          className={`px-2 py-0.5 border text-xs font-mono uppercase cursor-pointer ${
-                            isInspected
-                              ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] font-bold"
-                              : "border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)]"
-                          }`}
-                        >
-                          {isInspected ? "HIDE" : "LOGS"}
-                        </button>
-                      </Tooltip>
-
-                      <Tooltip content="Edit workflow target, cadence, or filters">
-                        <button
-                          onClick={() => {
-                            setImportedSpec(null); setEditingSource(s);
-                            setIsAddModalOpen(true);
-                          }}
-                          className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-xs font-mono uppercase cursor-pointer"
-                        >
-                          EDIT
-                        </button>
-                      </Tooltip>
-
-                      <Tooltip content={`Delete workflow ${s.name}`}>
-                        <IconButton
-                          label={`Delete workflow ${s.name}`}
-                          variant="danger"
-                          onClick={() => void handleDeleteSource(s)}
-                          className="min-h-8 min-w-8"
-                        >
-                          <Icon name="trash" />
-                        </IconButton>
-                      </Tooltip>
+                      <ActionMenu label={`More actions for ${s.name}`} items={[
+                        { label: "Edit workflow", onSelect: () => { setImportedSpec(null); setEditingSource(s); setIsAddModalOpen(true); } },
+                        { label: isTesting ? "Previewing matches…" : "Preview matches", disabled: isRecordedMode() || isTesting || activeRun || s.needs_review, onSelect: () => void handleTestSource(s.id) },
+                        { label: "View run history", onSelect: () => setInspectedSource(s) },
+                        { label: "Delete workflow", danger: true, dividerBefore: true, onSelect: () => void handleDeleteSource(s) },
+                      ]} />
                     </div>
                   </TableCell>
                 </TableRow>

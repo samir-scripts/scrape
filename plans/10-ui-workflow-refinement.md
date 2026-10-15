@@ -1,6 +1,6 @@
 # UI refinement and independent workflow settings
 
-Status: proposed implementation checklist. Implement one numbered section at a time, with observable tests, reviewable commits, and evidence. This plan supersedes conflicting global-workflow-settings and Scraper Settings decisions in plans 06–08. Domain safety in [Trustworthy scraping](06-trustworthy-scraping.md), the data contracts in [Bounded ingestion and data management](09-bounded-ingestion-and-data-management.md), and the visual references in [NieR](assets/ref-nier-menu.png), [dither](assets/ref-dither.png), and [palette](assets/ref-palette.png) remain authoritative.
+Status: in progress. Sections 0–3 are implemented and recorded in [implementation evidence](10-implementation-evidence.md); Sections 4–6 and final native acceptance remain. Implement one numbered section at a time, with observable tests, reviewable commits, and evidence. This plan supersedes conflicting global-workflow-settings and Scraper Settings decisions in plans 06–08. Domain safety in [Trustworthy scraping](06-trustworthy-scraping.md), the data contracts in [Bounded ingestion and data management](09-bounded-ingestion-and-data-management.md), and the visual references in [NieR](assets/ref-nier-menu.png), [dither](assets/ref-dither.png), and [palette](assets/ref-palette.png) remain authoritative.
 
 ## Product decisions
 

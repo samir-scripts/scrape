@@ -38,7 +38,7 @@ test("create a workflow through actual controls without an implicit scrape", asy
   await expect(
     page.getByText("fixture-board", { exact: true }).first(),
   ).toBeVisible();
-  await page.getByRole("row").filter({ hasText: "fixture-board" }).getByRole("button", { name: "EDIT", exact: true }).click();
+  await page.getByRole("row").filter({ hasText: "fixture-board" }).getByRole("button", { name: "Edit workflow fixture-board" }).click();
   const edit = page.getByRole("dialog", { name: "Edit workflow" });
   await expect(edit.getByLabel("Workflow name")).toHaveValue("fixture-board");
   await edit.getByRole("button", { name: "Continue to Matching" }).click();
@@ -80,6 +80,25 @@ filters: {include_keywords: [], exclude_keywords: [], locations: []}
   await expect(dialog.getByLabel("Workflow name")).toHaveValue("Replacement fixture");
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page.getByText("Uploaded fixture", { exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Scraper settings", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Scraper settings" })).toBeVisible();
+  await expect(page.getByText("fixture-board", { exact: true })).toHaveCount(0);
+});
+
+test("workflow registry consolidates actions while keeping execution and import visible", async ({ page }) => {
+  await page.goto("/?demo=1&fixtures=1");
+  await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+  const row = page.getByRole("row").filter({ hasText: "Cloudflare — Software Engineering Internships" });
+  await expect(page.getByRole("button", { name: "Add workflow" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run all" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Import workflow YAML" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "RUN", exact: true })).toBeVisible();
+  await row.getByRole("button", { name: /More actions for/ }).click();
+  const menu = page.getByRole("menu");
+  await expect(menu.getByRole("menuitem")).toHaveText([
+    "Edit workflow", "Preview matches", "View run history", "Delete workflow",
+  ]);
+  await menu.getByRole("menuitem", { name: "View run history" }).click();
+  await expect(page.getByText(/WORKFLOW OBSERVABILITY & EXECUTION LOGS/)).toBeVisible();
+  await row.getByRole("button", { name: /More actions for/ }).click();
+  await page.getByRole("menuitem", { name: "Preview matches" }).click();
+  await expect(page.getByText("DRY-RUN EXTRACTION PREVIEW (FIRST 10 JOBS)")).toBeVisible();
 });
