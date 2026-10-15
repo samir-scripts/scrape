@@ -1,6 +1,8 @@
+import { pagination } from "./lib/pagination";
+import { JobPaginator } from "./components/jobs/JobPaginator";
 import { openPostingUrl } from "./lib/postingUrl";
 import { notifyError, useToastStore } from "./lib/toast";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useLayoutEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "./lib/api";
 import { useUIStore } from "./lib/store";
@@ -48,9 +50,14 @@ export default function App() {
   }, [queryClient]);
 
   const pageKey = JSON.stringify({ view, filterSpec });
-  const [pageState, setPageState] = useState({ key: pageKey, offset: 0 });
-  const offset = pageState.key === pageKey ? pageState.offset : 0;
+  const [pageState, setPageState] = useState({ key: pageKey, page: 1 });
+  const page = pageState.key === pageKey ? pageState.page : 1;
+  if (pageState.key !== pageKey) setPageState({ key: pageKey, page: 1 });
   const pageSize = 50;
+  const offset = pagination(undefined, page, pageSize).offset;
+  useLayoutEffect(() => {
+    useUIStore.setState({ selectedJobId: null, drawerJobId: null, selectedJobIds: [] });
+  }, [pageKey, page]);
   const pageStatuses: JobStatus[] = view === "tracked" ? ["applied", "interviewing", "offer", "rejected"] : ["scraped", "viewed"];
   const effectiveFilter: Partial<JobFilter> = { ...filterSpec, sort: filterSpec.sort || (view === "tracked" ? "status_changed_at_desc" : "date_added_desc"), statuses: filterSpec.statuses?.length ? pageStatuses.filter((status) => filterSpec.statuses!.includes(status)) : pageStatuses, limit: pageSize, offset };
   const { data: counts } = useQuery({
@@ -63,14 +70,22 @@ export default function App() {
   // 2. Query application data
   const {
     data: jobsPage,
-    isLoading: jobsLoading,
+    isPending: jobsPending,
+    isFetching: jobsFetching,
+    isPlaceholderData,
     error: jobsError,
     refetch: refetchJobs,
   } = useQuery<Page<Job>>({
     queryKey: ["jobs", pageKey, offset],
+    placeholderData: (previous, previousQuery) => previousQuery?.queryKey[1] === pageKey && previous ? { ...previous, items: [] } : undefined,
     queryFn: () => effectiveFilter.statuses?.length === 0 ? Promise.resolve({ items: [], total: 0n, limit: BigInt(pageSize), offset: BigInt(offset) }) : api.listJobs(effectiveFilter),
     enabled: view === "discovered" || view === "tracked",
   });
+
+  const jobsLoading = jobsPending || isPlaceholderData;
+  const knownTotal = useRef<{ key: string; total: number } | null>(null);
+  if (jobsPage && !isPlaceholderData) knownTotal.current = { key: pageKey, total: Number(jobsPage.total) };
+  const total = jobsPage ? Number(jobsPage.total) : knownTotal.current?.key === pageKey ? knownTotal.current.total : undefined;
 
   const {
     data: settings,
@@ -156,7 +171,8 @@ export default function App() {
 
   // 5. Notes mutation
   const updateNotesMutation = useMutation({
-    onError: (error) => notifyError(String(error), "NOTES SAVE FAILED"),
+    onError: (error, variables) => useToastStore.getState().addToast({ type: "error", title: "NOTES SAVE FAILED", message: String(error),
+      action: { label: "Retry saving notes", run: () => updateNotesMutation.mutate(variables) } }),
     mutationFn: ({ jobId, notes }: { jobId: string; notes: string }) =>
       api.updateJobNotes(jobId, notes),
     onSettled: () => {
@@ -254,9 +270,10 @@ export default function App() {
   const discoveredJobs = view === "discovered" ? allJobs : [];
   const trackedJobs = view === "tracked" ? allJobs : [];
   useEffect(() => {
-    const total = Number(jobsPage?.total || 0);
-    if (offset > 0 && jobsPage && offset >= total) setPageState({ key: pageKey, offset: Math.max(0, Math.floor((total - 1) / pageSize) * pageSize) });
-  }, [jobsPage, offset, pageKey]);
+    if (!jobsPage || isPlaceholderData) return;
+    const clamped = pagination(Number(jobsPage.total), page, pageSize).page;
+    if (clamped !== page) setPageState({ key: pageKey, page: clamped });
+  }, [jobsPage, isPlaceholderData, page, pageKey]);
 
   const nextRunText = useMemo(() => {
     if (!schedulerStatus?.enabled) return "PAUSED";
@@ -368,17 +385,14 @@ export default function App() {
       discoveredCount={counts?.discovered ?? 0}
       trackedCount={counts?.tracked ?? 0}
       nextRunText={nextRunText}
+      jobSort={effectiveFilter.sort ?? undefined}
+      onJobSortChange={sort => setFilterSpec({ sort })}
     >
-      {(view === "discovered" || view === "tracked") && <div className="flex flex-wrap items-center gap-3 border-b px-4 py-2 text-sm">
-        <button type="button" disabled={offset === 0 || jobsLoading} onClick={() => setPageState({ key: pageKey, offset: Math.max(0, offset - pageSize) })} className="border px-3 py-1">Previous page</button>
-        <span role="status">{jobsLoading ? "Loading jobs…" : `${Number(jobsPage?.total || 0) === 0 ? 0 : offset + 1}–${Math.min(offset + pageSize, Number(jobsPage?.total || 0))} of ${jobsPage?.total ?? 0}`}</span>
-        <button type="button" disabled={jobsLoading || offset + pageSize >= Number(jobsPage?.total || 0)} onClick={() => setPageState({ key: pageKey, offset: offset + pageSize })} className="border px-3 py-1">Next page</button>
-        <label>Sort <select aria-label="Sort jobs" value={filterSpec.sort || (view === "tracked" ? "status_changed_at_desc" : "date_added_desc")} onChange={(event) => setFilterSpec({ sort: event.target.value as JobFilter["sort"] })} className="border bg-[var(--color-paper)] p-1">
-          <option value="status_changed_at_desc">Recent stage activity</option><option value="date_added_desc">Newest discoveries</option><option value="date_added_asc">Oldest discoveries</option><option value="date_posted_desc">Newest postings</option><option value="company_asc">Company</option><option value="title_asc">Title</option><option value="salary_desc">Derived annual pay</option><option value="favorited_desc">Favorites first</option>
-        </select></label>
-        {jobsError && <p role="alert">Could not load this page: {String(jobsError)} <button onClick={() => refetchJobs()}>Retry</button></p>}
-      </div>}
-      {view === "discovered" && !jobsLoading && (
+      {(view === "discovered" || view === "tracked") && <>
+        {jobsError && <div role="alert" className="p-4 text-sm">Could not load this page: {String(jobsError)} <button className="border px-3 py-1" onClick={() => refetchJobs()}>Retry loading page</button></div>}
+        {jobsLoading && <div className="flex-1 grid place-items-center" aria-busy="true">Loading jobs…</div>}
+      </>}
+      {view === "discovered" && !jobsLoading && !jobsError && (
         <DiscoveredView
           jobs={discoveredJobs}
           onUpdateStatus={(jobId, status) =>
@@ -394,7 +408,7 @@ export default function App() {
         />
       )}
 
-      {view === "tracked" && !jobsLoading && (
+      {view === "tracked" && !jobsLoading && !jobsError && (
         <TrackedView
           jobs={trackedJobs}
           onUpdateStatus={(jobId, status) =>
@@ -409,6 +423,8 @@ export default function App() {
           onRequestDelete={handleRequestDelete}
         />
       )}
+
+      {(view === "discovered" || view === "tracked") && <JobPaginator page={page} pageSize={pageSize} total={total} busy={jobsFetching} onPageChange={requested => setPageState({ key: pageKey, page: requested })} />}
 
       {view === "metrics" && <MetricsView />}
 

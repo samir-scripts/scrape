@@ -1,3 +1,4 @@
+import type { JobSort } from "../../bindings/JobSort";
 import { Icon } from "../ui/Icon";
 import { IconButton } from "../ui/IconButton";
 import { useUIStore } from "../../lib/store";
@@ -6,13 +7,11 @@ import { FilterChips } from "../filters/FilterChips";
 import { countActiveFilters } from "../../lib/filter";
 import { Tooltip } from "../ui/Tooltip";
 
-export function SubNav() {
+export function SubNav({ sort, onSortChange }: { sort?: JobSort; onSortChange?: (sort: JobSort) => void }) {
   const {
     view,
     trackedViewMode,
     setTrackedViewMode,
-    selectedJobId,
-    setSelectedJobId,
     filterSpec,
     setFilterSpec,
     resetFilterSpec,
@@ -27,27 +26,9 @@ export function SubNav() {
 
   return (
     <div className="flex flex-col w-full shrink-0 select-none">
-      <div className="flex flex-wrap gap-2 items-center justify-between min-h-9 py-1 px-3 border-b border-[var(--color-ink)] bg-[var(--color-paper-2)]/40">
+      <div role="toolbar" aria-label="Job controls" className="flex flex-wrap gap-2 items-center justify-between min-h-9 py-1 px-3 border-b border-[var(--color-ink)] bg-[var(--color-paper-2)]/40">
         {/* Left: View-specific sub-categories & consolidated Filters button */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs font-mono">
-          {view === "discovered" && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-mono uppercase tracking-wider text-[var(--color-ink-mute)]">
-                DISCOVERED
-              </span>
-              {selectedJobId && (
-                <button
-                  onClick={() => setSelectedJobId(null)}
-                  className="flex items-center gap-1 px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-xs font-mono uppercase font-bold text-[var(--color-ink)] cursor-pointer"
-                  title="Close active job window [Esc]"
-                >
-                  <Icon name="close" /><span>CLOSE WINDOW</span>
-                  <KeyHint keys="ESC" className="text-[9px]" />
-                </button>
-              )}
-            </div>
-          )}
-
           {view === "tracked" && (
             <div className="flex items-center gap-1">
               <Tooltip content="Switch to pipeline Kanban board view" position="bottom">
@@ -127,11 +108,12 @@ export function SubNav() {
 
         {/* Right: Quick Search input */}
         {showFilters && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex items-center">
               <input
                 id="global-search-input"
                 type="text"
+                aria-label="Search jobs"
                 placeholder="SEARCH (TITLE, CO, LOC)..."
                 value={filterSpec.search || ""}
                 onChange={(e) =>
@@ -152,6 +134,11 @@ export function SubNav() {
                 />
               )}
             </div>
+            {sort && onSortChange && <label className="flex items-center gap-2 text-xs">Sort
+              <select aria-label="Sort jobs" value={sort} onChange={event => onSortChange(event.target.value as JobSort)} className="border bg-[var(--color-paper)] p-1">
+                <option value="status_changed_at_desc">Recent stage activity</option><option value="date_added_desc">Newest discoveries</option><option value="date_added_asc">Oldest discoveries</option><option value="date_posted_desc">Newest postings</option><option value="company_asc">Company</option><option value="title_asc">Title</option><option value="salary_desc">Derived annual pay</option><option value="favorited_desc">Favorites first</option>
+              </select>
+            </label>}
           </div>
         )}
       </div>

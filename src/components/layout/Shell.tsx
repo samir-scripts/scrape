@@ -1,3 +1,4 @@
+import type { JobSort } from "../../bindings/JobSort";
 import { recordedProvenance } from "../../lib/recordedJobs";
 import { isDemoMode, isFixtureMode } from "../../lib/runtime";
 import type { ReactNode } from "react";
@@ -11,6 +12,8 @@ interface ShellProps {
   trackedCount?: number;
   nextRunText?: string;
   footerStatus?: string;
+  jobSort?: JobSort;
+  onJobSortChange?: (sort: JobSort) => void;
   children: ReactNode;
 }
 
@@ -19,6 +22,8 @@ export function Shell({
   trackedCount,
   nextRunText,
   footerStatus,
+  jobSort,
+  onJobSortChange,
   children,
 }: ShellProps) {
   return (
@@ -31,8 +36,8 @@ export function Shell({
         trackedCount={trackedCount}
         nextRunText={nextRunText}
       />
-      <SubNav />
-      <div className="flex-1 overflow-hidden flex flex-col">{children}</div>
+      <SubNav sort={jobSort} onSortChange={onJobSortChange} />
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</div>
       <Footer statusMessage={footerStatus} />
       <ToastContainer />
     </div>
