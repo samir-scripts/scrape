@@ -1,5 +1,6 @@
-import { applyDataCleanup } from "./dataCleanup";
+import { applyAutomaticRetention, applyDataCleanup } from "./dataCleanup";
 import type { CleanupResult } from "../bindings/CleanupResult";
+import type { RetentionStatus } from "../bindings/RetentionStatus";
 import { isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { QueryClient } from "@tanstack/react-query";
@@ -31,6 +32,10 @@ export async function setupAppEventListeners(
   }
   const unlisteners: UnlistenFn[] = [];
   unlisteners.push(await listen<CleanupResult>("data://cleaned", event => { void applyDataCleanup(queryClient, event.payload); }));
+  unlisteners.push(await listen<RetentionStatus>("retention://updated", event => {
+    void applyAutomaticRetention(queryClient, event.payload);
+    queryClient.invalidateQueries({ queryKey: ["retention_status"] });
+  }));
 
   const unlistenJobs = await listen("jobs://changed", () => {
     queryClient.invalidateQueries({ queryKey: ["jobs"] });

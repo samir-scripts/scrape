@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CleanupMode } from "../../../bindings/CleanupMode";
 import type { CleanupPreview } from "../../../bindings/CleanupPreview";
 import type { CleanupResult } from "../../../bindings/CleanupResult";
@@ -9,6 +9,7 @@ import { errorMessage } from "../../../lib/errors";
 import { applyDataCleanup } from "../../../lib/dataCleanup";
 import { Modal } from "../../ui/Modal";
 import { Button } from "../../ui/Button";
+import { formatDateTime } from "../../../lib/formatters";
 
 const OPERATIONS: { mode: CleanupMode; title: string; description: string }[] = [
   { mode: "all_jobs", title: "Delete all jobs", description: "Clear active and removed jobs, including favorites, notes and application history." },
@@ -27,6 +28,12 @@ export function DataManagementSettings() {
   const cancel = useRef<HTMLButtonElement>(null), generation = useRef(0);
   const operation = OPERATIONS.find(item => item.mode === mode);
   const desktop = isTauri();
+  const retentionStatus = useQuery({
+    queryKey: ["retention_status"],
+    queryFn: api.getRetentionStatus,
+    enabled: desktop,
+    retry: false,
+  }).data;
   useEffect(() => { if (mode) cancel.current?.focus(); }, [mode]);
   useEffect(() => () => { generation.current++; }, []);
   const close = () => { if (!busy) { generation.current++; setMode(null); } };
@@ -51,6 +58,15 @@ export function DataManagementSettings() {
   return <section className="max-w-3xl space-y-5">
     <div><h1 className="text-xl font-bold">Data management</h1>
       <p className="mt-2 text-sm">Permanently clear saved data. Each cleanup creates a consistent database recovery backup first.</p></div>
+    {desktop && retentionStatus?.last_attempt_at && <div className="border p-3 text-sm space-y-1" aria-label="Automatic retention status">
+      <p>Last automatic cleanup: {formatDateTime(retentionStatus.last_attempt_at)} · {retentionStatus.last_deleted_records} records removed.</p>
+      {retentionStatus.last_error && <p className="text-[var(--color-danger)]">Cleanup error: {retentionStatus.last_error}</p>}
+    </div>}
+    {desktop && retentionStatus && !retentionStatus.last_attempt_at && <p role="status" className="border p-3 text-sm">Automatic retention has not completed its first startup sweep yet.</p>}
+    {desktop && retentionStatus && retentionStatus.consecutive_failures >= 3 && <div role="alert" className="border border-[var(--color-danger)] p-3 text-sm text-[var(--color-danger)]">
+      <p className="font-bold">Automatic retention has failed {retentionStatus.consecutive_failures} consecutive times.</p>
+      <p>Check that the database is writable and enough disk space is available. Cleanup retries automatically after the next 24-hour interval.</p>
+    </div>}
     {!desktop && <p role="status" className="border p-3 text-sm">Available in the desktop app only. Browser previews cannot clear the desktop database.</p>}
     {result && <div role="status" className="border p-4 text-sm space-y-2 select-text">
       <p>{result.counts.deleted_records} saved records deleted; {result.counts.preserved_records} preserved. Automatic scraping {result.scheduling_paused ? "is paused" : "keeps its existing setting"}.</p>

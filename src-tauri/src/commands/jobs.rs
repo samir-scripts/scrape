@@ -1,7 +1,7 @@
 use crate::db::jobs::{
     FilterImpactPreview, Job, JobFilter, JobStatusEvent, JobsRepo, LocationOptions, Page,
 };
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use crate::state::AppState;
 use scrape_core::enrich::ParsedLocation;
 use scrape_core::JobStatus;
@@ -118,22 +118,46 @@ pub async fn set_job_favorite(
 
 #[tauri::command]
 pub async fn cleanup_expired_jobs(
+    app: AppHandle,
     state: State<'_, AppState>,
     source_id: Option<String>,
 ) -> Result<u64> {
-    let _permit = state.runner.write_permit()?;
-    if let Some(src_id) = source_id {
-        use crate::db::sources::SourcesRepo;
-        let source = SourcesRepo::get(&state.db, &src_id).await?;
-        JobsRepo::prune_expired_by_source(
+    let _permit = state.runner.try_retention_permit().ok_or_else(|| {
+        AppError::Validation(
+            "Retention was deferred because another write is active. Try again shortly.".into(),
+        )
+    })?;
+    let now = chrono::Utc::now();
+    let outcome = if let Some(source_id) = source_id {
+        crate::services::retention::RetentionService::prune_source_ids(
             &state.db,
-            &source.id,
-            source.retention_days,
-            &source.retention_policy,
+            std::iter::once(source_id),
+            now,
         )
         .await
     } else {
-        JobsRepo::prune_all_expired(&state.db).await
+        crate::services::retention::RetentionService::sweep(&state.db, now).await
+    };
+    let deleted = outcome.deleted_records;
+    let status = crate::services::retention::RetentionService::record(&state.db, &outcome).await;
+    drop(_permit);
+    match status {
+        Ok(status) => crate::services::retention::RetentionService::notify_for_command(
+            &app, &status, &outcome,
+        ),
+        Err(error) => {
+            return Err(AppError::Validation(format!(
+            "Retention removed {deleted} records, but its outcome could not be recorded: {error}"
+        )))
+        }
+    }
+    if outcome.failures.is_empty() {
+        Ok(deleted)
+    } else {
+        Err(AppError::Validation(format!(
+            "Retention completed with errors: {}",
+            outcome.failures.join("; ")
+        )))
     }
 }
 

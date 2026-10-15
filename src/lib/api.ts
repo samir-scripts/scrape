@@ -32,6 +32,7 @@ import type { AppNotification } from "../bindings/AppNotification";
 import type { CreateNotificationInput } from "../bindings/CreateNotificationInput";
 import type { UpdateCheckResult } from "../bindings/UpdateCheckResult";
 import type { WorkplaceType } from "../bindings/WorkplaceType";
+import type { RetentionStatus } from "../bindings/RetentionStatus";
 
 export interface DetectResult {
   kind: string;
@@ -668,6 +669,11 @@ const apiImplementation = {
       return Promise.resolve(pruned);
     }
     return invoke<number>("cleanup_expired_jobs", { sourceId: sourceId || null });
+  },
+
+  getRetentionStatus: (): Promise<RetentionStatus | null> => {
+    if (!isTauri()) return Promise.resolve(null);
+    return invoke<RetentionStatus>("get_retention_status");
   },
 
   deleteJob: (id: string): Promise<boolean> => {

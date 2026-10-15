@@ -12,6 +12,7 @@ The `src-tauri/src/commands` directory defines the backend functions exposed to 
 |---|---|---|---|
 | [`mod.rs`](mod.rs) | Module root | Re-exports | Consolidates command handlers for registration in `src-tauri/src/lib.rs`. |
 | [`jobs.rs`](jobs.rs) | Job Management | `get_jobs`, `get_job`, `update_job_status`, `toggle_favorite`, `delete_job`, `get_filter_options` | Provides querying, filtering, full-text searching, pagination, stage updates (Discovered, Applied, Interviewing, Offer, Rejected), favoriting, and tombstone deletion. |
+| [`retention.rs`](retention.rs) | Retention Status | `get_retention_status` | Returns the last automatic cleanup result and consecutive failure status for Data management. |
 | [`sources.rs`](sources.rs) | Source Configuration | `get_sources`, `create_source`, `update_source`, `delete_source`, `test_source`, `detect_source_ats` | Manages target job boards, custom cadence configurations, live dry-run scrape tests, and ATS auto-detection probes. |
 | [`scrape.rs`](scrape.rs) | Scrape Execution | `start_scrape`, `stop_scrape`, `get_active_runs`, `get_scrape_runs`, `get_scrape_run_details` | Triggers manual scrapes across all sources or individual targets, monitors running sidecar jobs, aborts runs, and retrieves run log histories. |
 | [`metrics.rs`](metrics.rs) | Application Analytics | `get_metrics`, `get_application_funnel`, `get_salary_distribution`, `get_velocity_series` | Aggregates application metrics, conversion funnels, salary percentiles, and application velocity for the Metrics view. |

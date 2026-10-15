@@ -39,8 +39,9 @@ draft intact; replacing edited input requires confirmation. The file input reset
 so the same file can be selected again. Closed/disabled importers reject stale
 validation completions.
 
-The Scraper registry owns Run all, cancellation/progress, upload, Add workflow and
-secondary maintenance. Only the automatic-scraping pause is application-wide;
+The Scraper registry owns Run all, cancellation/progress, upload and Add workflow.
+Routine retention runs automatically at startup and every 24 elapsed hours,
+including while scraping is paused or a workflow is disabled. Only the automatic-scraping pause is application-wide;
 schedule, startup, matching, ingestion limit and retention belong to each workflow.
 Recorded examples disable execution and imports;
 Test and transient-test APIs cannot manufacture scrape results in recorded mode.
@@ -72,3 +73,6 @@ stale selection/Undo, resets pagination and query caches, and clears only `scrap
 frontend preferences on full reset. Errors preserve caches and require fresh counts
 before another destructive submission. Preview requests cannot repopulate a closed
 dialog. Native checks use temporary profiles and never the user's active database.
+The page also reports the last automatic retention outcome. Three consecutive
+failures show an actionable warning; routine cleanup records failures and defers
+while another coordinated write is active.

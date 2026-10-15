@@ -155,6 +155,19 @@ impl ScrapeRunner {
         })
     }
 
+    /// Routine housekeeping never cancels a scrape or waits behind explicit
+    /// maintenance. `None` means another coordinated write currently owns the window.
+    pub fn try_retention_permit(&self) -> Option<tokio::sync::OwnedRwLockWriteGuard<()>> {
+        if self.maintenance.load(Ordering::SeqCst) {
+            return None;
+        }
+        let permit = self.writes.clone().try_write_owned().ok()?;
+        if self.maintenance.load(Ordering::SeqCst) {
+            return None;
+        }
+        Some(permit)
+    }
+
     pub fn begin_maintenance(&self) -> Result<MaintenanceGuard> {
         self.maintenance
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -986,31 +999,26 @@ impl ScrapeRunner {
         )
         .await;
 
-        // Task 5 in DAG: Post-run retention pruning for participating sources
-        for src_id in source_statuses.keys() {
-            if let Ok(source) = SourcesRepo::get(&self.pool, src_id).await {
-                if source.retention_days > 0 {
-                    if let Ok(pruned) = JobsRepo::prune_expired_by_source(
-                        &self.pool,
-                        &source.id,
-                        source.retention_days,
-                        &source.retention_policy,
-                    )
-                    .await
-                    {
-                        counts.retention_removed += pruned as i64;
-                        if pruned > 0 {
-                            tracing::info!(
-                                "Retention pruned {} expired jobs for workflow '{}' ({})",
-                                pruned,
-                                source.name,
-                                source.id
-                            );
-                        }
-                    }
-                }
-            }
+        // Post-run retention shares the same eligibility and fixed-clock service as
+        // independent housekeeping. Report errors to both run logs and Data management.
+        let retention = super::retention::RetentionService::prune_source_ids(
+            &self.pool,
+            source_statuses.keys().cloned(),
+            chrono::Utc::now(),
+        )
+        .await;
+        counts.retention_removed += i64::try_from(retention.deleted_records).unwrap_or(i64::MAX);
+        for failure in &retention.failures {
+            self.log_event(
+                app,
+                run_id,
+                LogLevel::Warn,
+                None,
+                &format!("Automatic retention cleanup failed: {failure}"),
+            )
+            .await;
         }
+        super::retention::RetentionService::publish(&self.pool, app, &retention).await;
 
         RunsRepo::record_counts(&self.pool, run_id, &counts).await?;
         Ok((total_found, total_new, source_statuses))
@@ -1030,6 +1038,18 @@ mod tests {
         assert!(runner.is_running());
         guard.finish(|| assert!(!runner.is_running()));
         assert!(runner.try_acquire_lock().is_ok());
+    }
+
+    #[tokio::test]
+    async fn retention_defers_during_a_scrape_without_cancelling_it() {
+        let pool = crate::db::init_memory_db().await.unwrap();
+        let runner = ScrapeRunner::new(pool);
+        let guard = runner.try_acquire_lock().unwrap();
+        assert!(runner.try_retention_permit().is_none());
+        assert!(runner.is_running());
+        assert!(!runner.cancellation_flag().load(Ordering::SeqCst));
+        drop(guard);
+        assert!(runner.try_retention_permit().is_some());
     }
 
     #[tokio::test]

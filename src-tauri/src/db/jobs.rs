@@ -1,4 +1,5 @@
 use crate::error::{AppError, Result};
+use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use scrape_core::enrich::{ParsedLocation, ENRICHMENT_VERSION};
 use scrape_core::{
     now_iso, ClearanceLevel, JobStatus, RoleType, SalaryInterval, SalarySource, TriState,
@@ -876,11 +877,28 @@ impl JobsRepo {
         retention_days: i64,
         policy: &str,
     ) -> Result<u64> {
+        Self::prune_expired_by_source_at(pool, source_id, retention_days, policy, Utc::now()).await
+    }
+
+    pub async fn prune_expired_by_source_at(
+        pool: &SqlitePool,
+        source_id: &str,
+        retention_days: i64,
+        policy: &str,
+        now: DateTime<Utc>,
+    ) -> Result<u64> {
         if retention_days <= 0 {
             return Ok(0); // 0 = keep forever
         }
-
-        let cutoff = format!("-{} days", retention_days);
+        let age = Duration::try_days(retention_days).ok_or_else(|| {
+            AppError::Validation("Retention days exceed the supported date range.".into())
+        })?;
+        let cutoff = now
+            .checked_sub_signed(age)
+            .ok_or_else(|| {
+                AppError::Validation("Retention cutoff exceeds the supported date range.".into())
+            })?
+            .to_rfc3339_opts(SecondsFormat::Millis, true);
 
         // Legacy "all" is intentionally as safe as "untracked_only".
         // Unknown policies fail closed instead of deleting anything.
@@ -896,7 +914,7 @@ impl JobsRepo {
               AND status IN ('scraped', 'viewed', 'ignored')
               AND favorited = 0
               AND (notes IS NULL OR trim(notes, char(9) || char(10) || char(13) || ' ') = '')
-              AND julianday(date_added) <= julianday('now', ?2)
+              AND julianday(date_added) <= julianday(?2)
             "#;
 
         let result = sqlx::query(query_str)
@@ -906,24 +924,6 @@ impl JobsRepo {
             .await?;
 
         Ok(result.rows_affected())
-    }
-
-    pub async fn prune_all_expired(pool: &SqlitePool) -> Result<u64> {
-        use crate::db::sources::SourcesRepo;
-        let sources = SourcesRepo::list(pool).await?;
-        let mut total = 0;
-        for source in sources {
-            if source.retention_days > 0 {
-                total += Self::prune_expired_by_source(
-                    pool,
-                    &source.id,
-                    source.retention_days,
-                    &source.retention_policy,
-                )
-                .await?;
-            }
-        }
-        Ok(total)
     }
 
     pub async fn get_status_events(pool: &SqlitePool, job_id: &str) -> Result<Vec<JobStatusEvent>> {
@@ -2800,6 +2800,127 @@ mod tests {
             JobsRepo::get(&pool, "j4").await.is_ok(),
             "Job 4 (applied) must be preserved"
         );
+    }
+
+    #[tokio::test]
+    async fn retention_uses_one_fixed_discovery_age_boundary_and_preserves_protected_rows() {
+        use crate::db::sources::{CreateSourceInput, SourcesRepo};
+        use chrono::{TimeZone, Utc};
+        use scrape_core::SourceKind;
+
+        let pool = init_memory_db().await.unwrap();
+        let source = SourcesRepo::create(
+            &pool,
+            CreateSourceInput {
+                kind: SourceKind::Greenhouse,
+                name: "Fixed clock retention".into(),
+                identifier: "fixed-clock".into(),
+                config: None,
+                enabled: Some(false),
+                cadence: None,
+                cadence_cron: None,
+                retention_days: Some(1),
+                retention_policy: Some("untracked_only".into()),
+                filters: None,
+            },
+        )
+        .await
+        .unwrap();
+        let now = Utc.with_ymd_and_hms(2026, 10, 15, 12, 0, 0).unwrap();
+        let at_boundary = "2026-10-14T12:00:00.000Z";
+        for (id, added, seen, status, notes, favorite, removed) in [
+            (
+                "old",
+                "2026-10-14T11:59:59.000Z",
+                "2026-10-15T12:00:00Z",
+                "scraped",
+                None,
+                0,
+                None,
+            ),
+            (
+                "boundary",
+                at_boundary,
+                at_boundary,
+                "viewed",
+                None,
+                0,
+                None,
+            ),
+            (
+                "fresh",
+                "2026-10-14T12:00:01.000Z",
+                at_boundary,
+                "scraped",
+                None,
+                0,
+                None,
+            ),
+            (
+                "noted",
+                at_boundary,
+                at_boundary,
+                "scraped",
+                Some("keep"),
+                0,
+                None,
+            ),
+            (
+                "favorite",
+                at_boundary,
+                at_boundary,
+                "viewed",
+                None,
+                1,
+                None,
+            ),
+            (
+                "tracked",
+                at_boundary,
+                at_boundary,
+                "applied",
+                None,
+                0,
+                None,
+            ),
+            (
+                "removed",
+                at_boundary,
+                at_boundary,
+                "scraped",
+                None,
+                0,
+                Some("2026-10-15T11:00:00Z"),
+            ),
+        ] {
+            sqlx::query("INSERT INTO jobs (id,dedupe_key,source_id,title,company,url,date_added,last_seen_at,status,status_changed_at,notes,favorited,removed_at) VALUES (?1,?1,?2,'Role','Org','https://example.test/job',?3,?4,?5,?4,?6,?7,?8)")
+                .bind(id).bind(&source.id).bind(added).bind(seen).bind(status).bind(notes).bind(favorite).bind(removed)
+                .execute(&pool).await.unwrap();
+        }
+        sqlx::query("INSERT INTO deleted_jobs (dedupe_key, deleted_at) VALUES ('blocked-identity', '2026-10-14T12:00:00Z')")
+            .execute(&pool).await.unwrap();
+
+        let deleted =
+            JobsRepo::prune_expired_by_source_at(&pool, &source.id, 1, "untracked_only", now)
+                .await
+                .unwrap();
+        assert_eq!(
+            deleted, 2,
+            "expired date_added rows include the exact cutoff despite recent last_seen"
+        );
+        let remaining: Vec<String> = sqlx::query_scalar("SELECT id FROM jobs ORDER BY id")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            remaining,
+            ["favorite", "fresh", "noted", "removed", "tracked"]
+        );
+        let blocks: i64 = sqlx::query_scalar("SELECT count(*) FROM deleted_jobs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(blocks, 1);
     }
 
     #[tokio::test]

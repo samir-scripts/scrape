@@ -16,6 +16,28 @@ pub async fn bootstrap_database_and_services(
     db::jobs::JobsRepo::reclassify_jobs(&pool).await?;
     services::system::SystemService::initialize_system_defaults(&pool).await?;
     let _ = db::sources::SourcesRepo::seed_default_sample_if_empty(&pool).await;
+    if services::native_smoke::directory().is_some() {
+        db::settings::SettingsRepo::set_value(&pool, "scraper.enabled", serde_json::json!(false))
+            .await?;
+        for source in db::sources::SourcesRepo::list(&pool).await? {
+            db::sources::SourcesRepo::update(
+                &pool,
+                db::sources::UpdateSourceInput {
+                    id: source.id,
+                    name: None,
+                    identifier: None,
+                    config: None,
+                    enabled: Some(false),
+                    cadence: None,
+                    cadence_cron: None,
+                    retention_days: None,
+                    retention_policy: None,
+                    filters: None,
+                },
+            )
+            .await?;
+        }
+    }
     let runner = services::runner::ScrapeRunner::new(pool.clone());
     Ok((pool, runner))
 }
@@ -89,9 +111,15 @@ pub fn run() {
 
             app.manage(state::AppState {
                 db: pool.clone(),
-                runner,
+                runner: runner.clone(),
                 scheduler,
             });
+
+            services::retention::RetentionService::start(
+                pool.clone(),
+                runner,
+                app.handle().clone(),
+            );
 
             if services::native_smoke::install(app) {
                 return Ok(());
@@ -141,6 +169,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::cleanup::preview_data_cleanup,
             commands::cleanup::execute_data_cleanup,
+            commands::retention::get_retention_status,
             commands::jobs::list_jobs,
             commands::jobs::get_job,
             commands::jobs::get_job_locations,
@@ -264,6 +293,7 @@ mod bindings_test {
         commands::notifications::UpdateCheckResult::export().unwrap();
         services::scheduler::CronValidationResult::export().unwrap();
         services::scheduler::SchedulerStatus::export().unwrap();
+        services::retention::RetentionStatus::export().unwrap();
         commands::scrape::TransientSourceInput::export().unwrap();
     }
 

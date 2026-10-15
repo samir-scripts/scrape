@@ -12,6 +12,7 @@ import { DEFAULT_FILTER_SPEC, useUIStore } from "../lib/store";
 import type { CleanupMode } from "../bindings/CleanupMode";
 import type { CleanupPreview } from "../bindings/CleanupPreview";
 import type { CleanupResult } from "../bindings/CleanupResult";
+import type { RetentionStatus } from "../bindings/RetentionStatus";
 
 beforeAll(() => {
   const storage = Object.create({
@@ -28,7 +29,8 @@ beforeAll(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); native.enabled = true; localStorage.clear(); });
 const counts = (mode: CleanupMode): CleanupPreview => ({ mode, revision: "revision", deleted_records: 7, deleted_postings: 5, preserved_records: 2, preserved_postings: 1, deleted_notes: 3, deleted_history: 8, workflows: 2, blocks: 4 });
 const result = (mode: CleanupMode): CleanupResult => ({ counts: counts(mode), backup_path: `/temporary/${mode}.db`, scheduling_paused: true, warnings: [] });
-function renderSettings() {
+function renderSettings(retention: RetentionStatus | null = null) {
+  vi.spyOn(api, "getRetentionStatus").mockResolvedValue(retention);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   render(<QueryClientProvider client={client}><DataManagementSettings /></QueryClientProvider>);
   return client;
@@ -40,6 +42,22 @@ async function open(user: ReturnType<typeof userEvent.setup>, name = "Review all
   return screen.getByRole("dialog");
 }
 describe("confirmed bulk cleanup", () => {
+  it("shows automatic retention outcome and repeated failures with an actionable warning", async () => {
+    const status: RetentionStatus = {
+      last_attempt_at: "2026-10-15T12:00:00.000Z",
+      last_success_at: "2026-10-12T12:00:00.000Z",
+      last_deleted_records: 4,
+      consecutive_failures: 3,
+      last_error: "database is read-only",
+    };
+    renderSettings(status);
+    const panel = await screen.findByLabelText("Automatic retention status");
+    expect(panel.textContent).toContain("4 records removed");
+    expect(panel.textContent).toContain("database is read-only");
+    expect((await screen.findByRole("alert")).textContent).toContain("3 consecutive times");
+    expect(screen.getByRole("alert").textContent).toContain("database is writable");
+  });
+
   it("requires desktop and never fabricates a successful browser cleanup", async () => {
     native.enabled = false; renderSettings();
     expect(screen.getByRole("status").textContent).toContain("cannot clear the desktop database");

@@ -10,5 +10,6 @@ pub mod ingestion;
 pub mod process;
 
 pub mod native_smoke;
+pub mod retention;
 
 pub mod startup;

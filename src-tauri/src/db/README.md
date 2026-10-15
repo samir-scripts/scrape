@@ -21,8 +21,10 @@ The `src-tauri/src/db` directory encapsulates all data access logic, repository 
 Migration startup now refuses checksum mismatches instead of rewriting history;
 pending disk upgrades receive a consistent SQLite snapshot. See
 [database recovery](../../../plans/database-recovery.md). Both retention policies
-protect tracked jobs, favorites, and nonblank notes. Currency filters use bound
-parameters and require a known matching currency even if unknown pay is allowed.
+share one parameterized cutoff and eligibility predicate, based on discovery age;
+tracked jobs, favorites, nonblank notes and removed records are protected. Currency
+filters use bound parameters and require a known matching currency even if unknown
+pay is allowed.
 
 Saved-job lists now filter, sort, count and paginate in the repository. All values
 in text, eligibility, experience and geographic predicates are bound parameters;

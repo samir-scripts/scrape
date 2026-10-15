@@ -55,7 +55,18 @@ await writeFile(join(directory, "smoke.js"), `
     await invoke("set_scheduler_paused", { paused: true });
     await invoke("update_setting", { key: "app.auto_update", value: false });
     await invoke("update_setting", { key: "notifications.enabled", value: false });
-    for (const source of await invoke("list_sources")) await invoke("update_source", { input: { id: source.id, enabled: false } });
+    const startupSettings = await invoke("get_settings");
+    const startupSources = await invoke("list_sources");
+    assert(!startupSettings.scraper_enabled && startupSources.every(source => !source.enabled), "Isolated startup must begin paused with workflows disabled");
+    let retentionStatus;
+    const retentionDeadline = Date.now() + 10000;
+    while (Date.now() < retentionDeadline) {
+      retentionStatus = await invoke("get_retention_status");
+      if (retentionStatus.last_attempt_at) break;
+      await pause(100);
+    }
+    assert(retentionStatus?.last_attempt_at && retentionStatus.consecutive_failures === 0, "Startup retention did not complete while paused with disabled workflows");
+    steps.push("isolated startup retention while automatic scraping is paused and all workflows are disabled");
     const spec = ${JSON.stringify(spec)};
     const before = await invoke("list_jobs", { filter: {} });
     const preview = await invoke("preview_workflow", { spec, requestId: "native-preview" });
@@ -81,8 +92,15 @@ await writeFile(join(directory, "smoke.js"), `
       const faces = await document.fonts.load('14px "' + family + '"', "Software Engineer 45.25");
       assert(faces.length > 0 && faces.every(face => face.status === "loaded"), "Native bundled font did not load: " + family);
     }
-    picker.value = "jetbrains"; picker.dispatchEvent(new Event("change", { bubbles: true }));
-    await pause(500);
+    picker.click();
+    let jetbrainsOption;
+    const optionDeadline = Date.now() + 5000;
+    while (Date.now() < optionDeadline && !jetbrainsOption) {
+      jetbrainsOption = [...document.querySelectorAll('[role="option"]')].find(option => option.textContent.toLocaleLowerCase().includes("jetbrains mono"));
+      if (!jetbrainsOption) await pause(50);
+    }
+    assert(jetbrainsOption, "Native themed font options did not open"); jetbrainsOption.click();
+    await pause(750);
     assert(document.documentElement.getAttribute("data-font") === "jetbrains", "Native font selection was not applied");
     assert(getComputedStyle(settingsButton).fontFamily.includes("JetBrains Mono Variable"), "Native navigation retained another family");
     steps.push("bundled native WebView fonts and global interface selection");
