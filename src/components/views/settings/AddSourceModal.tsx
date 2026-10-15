@@ -46,9 +46,9 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
     (rules?.new_grad && rules.new_grad !== "any")
       ? "additional matching rules"
       : null,
-    rules?.keywords?.all.length ||
-    rules?.keywords?.exclude.length ||
-    rules?.keywords?.fields.some((field) => field !== "title")
+    rules?.keywords?.all?.length ||
+    rules?.keywords?.exclude?.length ||
+    rules?.keywords?.fields?.some((field) => field !== "title")
       ? "additional keyword rules"
       : null,
     draft.extractor.kind === "selector" ||

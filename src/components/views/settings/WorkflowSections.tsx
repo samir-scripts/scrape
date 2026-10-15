@@ -171,7 +171,7 @@ export function WorkflowSections({
           (rule) =>
             field(
               rule === "any" ? "Title keywords (any)" : `Keywords (${rule})`,
-              rules.keywords?.[rule as "any" | "all" | "exclude"].join(", ") ||
+              rules.keywords?.[rule as "any" | "all" | "exclude"]?.join(", ") ||
                 "",
               (value) =>
                 setRules({
