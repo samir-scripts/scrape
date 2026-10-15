@@ -73,7 +73,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Browser interaction regressions
-        run: npx playwright test e2e/workflows.pw.ts e2e/jobs.pw.ts e2e/fonts.pw.ts e2e/controls.pw.ts e2e/job-layout.pw.ts e2e/kanban.pw.ts
+        run: npx playwright test e2e/workflows.pw.ts e2e/jobs.pw.ts e2e/fonts.pw.ts e2e/controls.pw.ts e2e/job-layout.pw.ts e2e/kanban.pw.ts e2e/schedule.pw.ts
 
   native-and-visual:
     name: Native and visual verification
@@ -114,3 +114,6 @@ jobs:
 
       - name: Native workflow wizard and real local preview
         run: SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_WORKFLOW=1 npm run test:native-startup
+
+      - name: Native scheduling summary and dispatcher status
+        run: SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_SCHEDULE=1 npm run test:native-startup

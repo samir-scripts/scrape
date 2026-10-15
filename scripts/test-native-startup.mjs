@@ -1,3 +1,4 @@
+import { checkNativeSchedule } from "./native-schedule.mjs";
 import { checkNativeWorkflow } from "./native-workflow.mjs";
 import { createServer } from "node:http";
 import { checkNativeKanban } from "./native-kanban.mjs";
@@ -63,11 +64,12 @@ for (const mode of modes) {
       const invoke = window.__TAURI_INTERNALS__.invoke;
       const jobs = await invoke("list_jobs", {filter:{}});
       ${mode === "fresh" ? "" : "const saved = await invoke('get_job', {id:'saved'}); if (saved.notes !== 'Fixture saved note' || !saved.favorited || saved.status !== (sessionStorage.getItem('kanban-reloaded') ? 'offer' : 'applied')) throw new Error('Saved state changed');"}
+      const schedule = ${process.env.SCRAPE_NATIVE_SCHEDULE === "1" ? `await (${checkNativeSchedule.toString()})()` : "null"};
       const appearance = ${process.env.SCRAPE_NATIVE_APPEARANCE === "1" ? `await (${checkNativeAppearance.toString()})()` : "null"};
       const workflow = ${process.env.SCRAPE_NATIVE_WORKFLOW === "1" ? `await (${checkNativeWorkflow.toString()})(${JSON.stringify(workflowOrigin)})` : "null"};
       const kanban = ${process.env.SCRAPE_NATIVE_KANBAN === "1" ? `await (${checkNativeKanban.toString()})()` : "null"};
       const layout = ${process.env.SCRAPE_NATIVE_LAYOUT === "1" ? `await (${checkNativeJobLayout.toString()})()` : "null"};
-      await invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:true,appearance,layout,kanban,workflow,steps:["actual Tauri dev readiness: ${mode}"]}});
+      await invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:true,schedule,appearance,layout,kanban,workflow,steps:["actual Tauri dev readiness: ${mode}"]}});
     } catch(error) {
       await window.__TAURI_INTERNALS__.invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:false,error:String(error)}});
     }

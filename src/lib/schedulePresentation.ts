@@ -27,5 +27,5 @@ export function schedulePresentation(status?: SchedulerStatus, error?: unknown, 
       label = "Schedule needs attention"; detail = "An automatic workflow has no valid next run or timezone. Refresh status or edit its schedule in Scraper.";
     } else { label = `Next ${formatted}`; detail = `Next: ${status.schedules.filter(s => s.next_run_at === status.next_run_at).map(s => s.name).join(", ")} · ${next!.timezone}. Due work waits for any active run to finish.`; }
   }
-  return { label: active ? `${active}${label === "Paused" ? "" : ` · ${label}`}` : label, detail };
+  return { label: active || label, detail };
 }

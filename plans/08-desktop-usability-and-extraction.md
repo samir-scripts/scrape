@@ -294,6 +294,8 @@ No implementation tests were run while preparing this plan. Findings above come 
 
 ### Step 7 — Truthful scheduling control
 
+Implemented on 2026-10-15. State priorities: [scheduling contract](section7-scheduling-states.md). Verification and limitations: [implementation evidence](08-implementation-evidence.md#section-7--truthful-scheduling-control). Section 8 remains separate.
+
 **Research**
 
 1. Trace scheduler status from `services/scheduler.rs` through IPC/query cache to `App.tsx` and `TopNav.tsx`. Determine whether the existing response distinguishes manual-only, no enabled schedules, errors, and pending initialization. Extend the Rust response and generate bindings only where required.

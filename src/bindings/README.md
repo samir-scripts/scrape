@@ -43,7 +43,8 @@ The `src/bindings` directory contains TypeScript type definitions and interfaces
 | [`SalaryDistributionBucket.ts`](SalaryDistributionBucket.ts) | `SalaryDistributionBucket` | Histogram bucket for compensation visualization. |
 | [`SalaryInterval.ts`](SalaryInterval.ts) | `SalaryInterval` | Pay period enum (`hourly`, `monthly`, `yearly`). |
 | [`SalarySource.ts`](SalarySource.ts) | `SalarySource` | Origin of salary data (`structured`, `parsed_title`, `parsed_body`). |
-| [`SchedulerStatus.ts`](SchedulerStatus.ts) | `SchedulerStatus` | Background scheduler state and next run timestamps. |
+| [`SchedulerStatus.ts`](SchedulerStatus.ts) | `SchedulerStatus` | Scheduling pause/run state, enabled workflow count and actual dispatch candidates. |
+| [`ScheduledWorkflow.ts`](ScheduledWorkflow.ts) | `ScheduledWorkflow` | Scheduled workflow name, IANA timezone and normalized dispatcher instant. |
 | [`ScrapeLogEntry.ts`](ScrapeLogEntry.ts) | `ScrapeLogEntry` | Individual log entry from a crawl execution. |
 | [`ScrapeRun.ts`](ScrapeRun.ts) | `ScrapeRun` | Database record of a scrape execution pass. |
 | [`ScrapedJob.ts`](ScrapedJob.ts) | `ScrapedJob` | Transport model of an incoming job listing from the worker. |

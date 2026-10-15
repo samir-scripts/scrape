@@ -99,3 +99,11 @@ rule, manual schedule, preview counts, persisted spec, unchanged jobs and no ext
 run on Save. The temporary HTTP server and test process are closed by their owners.
 This check does not automate the native file chooser; browser chooser coverage
 uses `e2e/workflows.pw.ts` and native chooser/visual acceptance remains manual.
+
+Section 7 scheduling summary regression (isolated current migration-19 fixture):
+
+```sh
+SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_SCHEDULE=1 npm run test:native-startup
+```
+
+Exercises actual WKWebView schedule controls and backend IPC: create/update/toggle/delete, manual-only/no enabled workflows, timezone/dispatcher instant agreement, pause/resume, focus restoration, and no implicit scrape. `npm run test:native` additionally verifies running while paused, completion, cancellation and recovery using the actual local sidecar. Do not edit files or generate bindings while a native dev check is running: Vite reload interrupts its page-injected script. The harness checks DOM/IPC; it does not prove native pointer gestures or screenshot appearance.

@@ -19,6 +19,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.mocked(isTauri).mockReturn
 function mount() { const client = new QueryClient({defaultOptions:{queries:{retry:false,gcTime:0}}}); render(<QueryClientProvider client={client}><ScheduleControl /></QueryClientProvider>); return client; }
 it("formats one canonical status with date rollover, ties, unknown instants and both running/paused facts", () => {
  expect(scheduleTime(scheduled.next_run_at, "America/New_York")).toMatch(/Dec 31, 2026/);
+ expect(schedulePresentation({...scheduled,running:true}).label).toBe("Running");
  expect(schedulePresentation(scheduled).detail).toContain("Acme, Beta");
  expect(schedulePresentation({...scheduled,enabled:false,running:true}).label).toBe("Running · Paused");
  expect(schedulePresentation({...scheduled,enabled_workflows:0,schedules:[],next_run_at:null}).label).toBe("No enabled workflows");

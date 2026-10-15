@@ -88,6 +88,7 @@ await writeFile(join(directory, "smoke.js"), `
     steps.push("bundled native WebView fonts and global interface selection");
 
     const run = await invoke("run_source_now", { id: source.id });
+    assert(!(await invoke("get_scheduler_status")).running, "Completed run still reported active");
     assert(run.status === "success" && run.counts.inserted === 1 && run.counts.rejected === 1, "Native sidecar run/audit failed: " + JSON.stringify(run));
     let job = (await invoke("list_jobs", { filter: {} })).items[0];
     assert(job.url === "${origin}/detail?gh_jid=42" && job.compensation[0].min_minor === 4525 && !job.compensation[0].derived, "Provider destination/native cents changed");
@@ -108,8 +109,11 @@ await writeFile(join(directory, "smoke.js"), `
     steps.push("blocking across recreation and stateful restoration");
     const slow = await invoke("save_workflow", { spec: { ...spec, metadata: { name: "Cancellation fixture" }, extractor: { kind: "jsonld", url: "${origin}/slow" } }, id: null });
     const pending = invoke("run_source_now", { id: slow.id }); await pause(500);
+    const activeStatus = await invoke("get_scheduler_status");
+    assert(activeStatus.running && !activeStatus.enabled, "Active manual run lost paused automatic state");
     assert(await invoke("cancel_scrape"), "Run cancellation was not accepted");
     const cancelled = await pending;
+    assert(!(await invoke("get_scheduler_status")).running, "Cancellation left scheduler status running");
     assert(cancelled.status === "failed" && cancelled.error?.includes("cancelled"), "Cancelled worker was reported as success");
     const pendingPreview = invoke("preview_workflow", { spec: { ...spec, extractor: { kind: "jsonld", url: "${origin}/slow" } }, requestId: "cancelled-preview" }).then(() => false, error => (error?.message || String(error)).includes("cancelled"));
     await pause(500); await invoke("cancel_workflow_preview", { requestId: "cancelled-preview" });
