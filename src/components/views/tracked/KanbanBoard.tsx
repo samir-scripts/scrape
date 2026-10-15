@@ -4,6 +4,7 @@ import type { JobStatus } from "../../../bindings/JobStatus";
 import { TRACKED_STAGES } from "../../../lib/constants";
 import { useKanbanDrag } from "./useKanbanDrag";
 import { KanbanColumn } from "./KanbanColumn";
+import { Select } from "../../ui/Select";
 
 interface KanbanBoardProps {
   jobs: Job[];
@@ -44,18 +45,9 @@ export function KanbanBoard({
         </p>
         <label className="kanban-stage-picker text-sm">
           Stage{" "}
-          <select
-            aria-label="Board stage"
-            value={stage}
-            onChange={(e) => { setStage(e.target.value as JobStatus); document.getElementById(`kanban-stage-${e.target.value}`)?.scrollIntoView({ block: "nearest", inline: "start" }); }}
-            className="border p-2 bg-[var(--color-paper)]"
-          >
-            {TRACKED_STAGES.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
+          <Select aria-label="Board stage" value={stage}
+            onChange={(value) => { setStage(value as JobStatus); document.getElementById(`kanban-stage-${value}`)?.scrollIntoView({ block: "nearest", inline: "start" }); }}
+            options={TRACKED_STAGES.map((value) => ({ value, label: value }))} />
         </label>
       </div>
       <div ref={scroll} className="tracked-scroll flex-1 min-h-0 overflow-x-auto overflow-y-hidden">

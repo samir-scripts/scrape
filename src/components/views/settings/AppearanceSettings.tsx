@@ -3,6 +3,7 @@ import { Toggle } from "../../ui/Toggle";
 import { Rule } from "../../ui/Rule";
 import { useUIStore } from "../../../lib/store";
 import { FONT_OPTIONS, type FontFamilyId } from "../../../lib/constants";
+import { Select } from "../../ui/Select";
 
 interface AppearanceSettingsProps {
   settings: Settings;
@@ -137,9 +138,8 @@ export function AppearanceSettings({
       <section className="grid gap-4" aria-label="Typography">
         <label className="grid gap-2 text-sm">
           Interface font
-          <select aria-label="Interface font" className="min-h-9 border p-2 bg-[var(--color-paper)]" value={currentFont} onChange={e => handleSelectFont(e.target.value as FontFamilyId)}>
-            {FONT_OPTIONS.map(font => <option key={font.id} value={font.id}>{font.name}</option>)}
-          </select>
+          <Select aria-label="Interface font" value={currentFont} onChange={font => handleSelectFont(font as FontFamilyId)}
+            options={FONT_OPTIONS.map(font => ({ value: font.id, label: font.name }))} />
         </label>
         <p className="text-sm text-[var(--color-ink-mute)]">Applies throughout the application. YAML and code use a fixed-width font. All fonts are available offline.</p>
         <div aria-label="Font preview" className="border p-4 grid gap-2">

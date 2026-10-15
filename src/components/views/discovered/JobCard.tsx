@@ -70,7 +70,9 @@ export function JobCard({
         <h2 className="text-base font-bold text-[var(--color-ink)] group-hover:underline leading-snug line-clamp-2">
           <button type="button" onClick={onClick} className="normal-case text-left cursor-pointer" aria-label={`View ${job.title} at ${job.company}`}>
             {job.status === "scraped" && (
-              <span className="inline-block w-2 h-2 mr-2 bg-[var(--color-signal)] shrink-0 align-middle" title="New discovery" aria-label="New discovery" />
+              <span className="inline-flex w-3 mr-1 items-center justify-center align-middle text-[var(--color-unread)]" title="New discovery" aria-label="New discovery">
+                <svg aria-hidden="true" focusable="false" width="6" height="6" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" fill="currentColor" /></svg>
+              </span>
             )}
             {job.title}
           </button>

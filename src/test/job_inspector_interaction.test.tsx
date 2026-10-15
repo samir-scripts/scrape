@@ -99,10 +99,8 @@ describe("shared job inspector", () => {
     );
     await user.click(screen.getByRole("button", { name: "Open posting" }));
     expect(open).toHaveBeenCalledWith(job.url);
-    await user.selectOptions(
-      screen.getByLabelText("Application stage"),
-      "interviewing",
-    );
+    await user.click(screen.getByRole("button", { name: "Application stage" }));
+    await user.click(await screen.findByRole("option", { name: "interviewing" }));
     expect(status).toHaveBeenCalledWith(job.id, "interviewing");
     const trigger = screen.getByRole("button", {
       name: `Remove ${job.title} at ${job.company}`,

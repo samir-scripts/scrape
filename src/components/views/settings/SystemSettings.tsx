@@ -8,6 +8,8 @@ import { Button } from "../../ui/Button";
 import { Rule } from "../../ui/Rule";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { isTauri } from "@tauri-apps/api/core";
+import { Select } from "../../ui/Select";
+import { formatDate } from "../../../lib/formatters";
 
 interface SystemSettingsProps {
   settings: Settings;
@@ -168,58 +170,30 @@ export function SystemSettings({
           </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 pt-1">
-          <div>
-            <span className="text-xs text-[var(--color-ink-mute)] block mb-1">
-              TIME FORMAT
-            </span>
-            <div className="flex border border-[var(--color-ink)]">
-              <button
-                type="button"
-                onClick={() => onUpdateSetting("system.time_format", "12h")}
-                className={`flex-1 py-1 text-center font-bold text-xs cursor-pointer ${
-                  settings.system_time_format === "12h"
-                    ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
-                    : "hover:bg-[var(--color-paper-2)]"
-                }`}
-              >
-                12-HOUR (AM/PM)
-              </button>
-              <button
-                type="button"
-                onClick={() => onUpdateSetting("system.time_format", "24h")}
-                className={`flex-1 py-1 text-center font-bold text-xs cursor-pointer ${
-                  settings.system_time_format === "24h"
-                    ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
-                    : "hover:bg-[var(--color-paper-2)]"
-                }`}
-              >
-                24-HOUR
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <span className="text-xs text-[var(--color-ink-mute)] block mb-1">
-              DATE FORMAT
-            </span>
-            <div className="flex border border-[var(--color-ink)]">
-              {(["MM/DD/YY", "DD/MM/YY", "MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"] as const).map((fmt) => (
-                <button
-                  key={fmt}
-                  type="button"
-                  onClick={() => onUpdateSetting("system.date_format", fmt)}
-                  className={`flex-1 py-1 text-center font-bold text-xs cursor-pointer ${
-                    settings.system_date_format === fmt
-                      ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
-                      : "hover:bg-[var(--color-paper-2)]"
-                  }`}
-                >
-                  {fmt}
-                </button>
+        <div className="grid grid-cols-1 gap-4 pt-1 sm:grid-cols-2">
+          <fieldset className="grid gap-2">
+            <legend className="text-xs text-[var(--color-ink-mute)]">TIME FORMAT</legend>
+            <div role="radiogroup" aria-label="Time format" className="flex flex-wrap gap-4">
+              {([["12h", "12-hour (AM/PM)"], ["24h", "24-hour"]] as const).map(([value, label]) => (
+                <label key={value} className="inline-flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="time-format" value={value}
+                    checked={settings.system_time_format === value}
+                    onChange={() => onUpdateSetting("system.time_format", value)} />
+                  <span>{label}</span>
+                </label>
               ))}
             </div>
-          </div>
+          </fieldset>
+
+          <label className="grid gap-2 text-xs text-[var(--color-ink-mute)]">
+            DATE FORMAT
+            <Select aria-label="Date format" value={settings.system_date_format}
+              options={(["MM/DD/YY", "DD/MM/YY", "MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"] as const).map((fmt) => ({
+                value: fmt,
+                label: `${fmt} · ${formatDate(new Date(2031, 10, 23), fmt)}`,
+              }))}
+              onChange={(fmt) => onUpdateSetting("system.date_format", fmt)} />
+          </label>
         </div>
       </div>
 

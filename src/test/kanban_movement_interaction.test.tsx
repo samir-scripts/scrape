@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "../components/views/tracked/KanbanBoard";
 import { recordedJobs } from "../lib/recordedJobs";
@@ -10,10 +10,10 @@ const job = { ...recordedJobs()[0], status: "applied" as const, id: "moving" };
 it("offers a named stage control without opening details and ignores a same-stage choice", async () => {
  const move = vi.fn(), open = vi.fn();
  render(<KanbanBoard jobs={[job]} selectedJobId={job.id} onSelectJob={open} onDropJob={move} />);
- const control = screen.getByRole("combobox", { name: `Move ${job.title} to` });
- await userEvent.selectOptions(control, "interviewing");
+ const control = screen.getByRole("button", { name: `Move ${job.title} to` });
+ await userEvent.click(control); await userEvent.click(await screen.findByRole("option", { name: "interviewing" }));
  expect(move).toHaveBeenCalledWith(job.id, "interviewing"); expect(open).not.toHaveBeenCalled();
- fireEvent.change(control, { target: { value: "applied" } }); expect(move).toHaveBeenCalledTimes(1);
+ await userEvent.click(control); await userEvent.click(await screen.findByRole("option", { name: "applied" })); expect(move).toHaveBeenCalledTimes(1);
  expect(screen.getByRole("button", { name: `Drag ${job.title} to another stage` }).closest("article")?.draggable).toBe(false);
 });
 it("moves from the focused handle using keyboard and cancels without changing stage", async () => {
@@ -36,7 +36,7 @@ it("keeps the card in its saved column after failed IPC and retries through the 
  vi.spyOn(api, 'updateJobStatus').mockRejectedValueOnce(new Error('fixture disk full')).mockImplementation(async (_, status) => { saved = { ...saved, status } as typeof saved; return saved; });
  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
  render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
- const user = userEvent.setup(); await user.selectOptions(await screen.findByRole('combobox', { name: `Move ${job.title} to` }), 'interviewing');
+ const user = userEvent.setup(); await user.click(await screen.findByRole('button', { name: `Move ${job.title} to` })); await user.click(await screen.findByRole('option', { name: 'interviewing' }));
  const retry = await screen.findByRole('button', { name: 'Retry stage change' });
  expect(screen.getByRole('region', { name: 'APPLIED stage' }).querySelector('article')).toBeTruthy();
  expect(screen.getByRole('region', { name: 'INTERVIEWING stage' }).querySelector('article')).toBeNull();

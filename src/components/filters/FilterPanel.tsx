@@ -98,6 +98,7 @@ export function FilterPanel({
     const handlePointerDown = (e: MouseEvent | PointerEvent) => {
       const target = e.target as Node | null;
       if (!target) return;
+      if (target instanceof Element && target.closest("[data-select-popup]")) return;
 
       // Clicked inside the dropdown panel
       if (panelRef.current && panelRef.current.contains(target)) {

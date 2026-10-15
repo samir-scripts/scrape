@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { openPostingUrl } from "../../../lib/postingUrl";
 import { api } from "../../../lib/api";
 import { notifyError } from "../../../lib/toast";
+import { Select } from "../../ui/Select";
 
 export function RemovedJobsSettings() {
   const queryClient = useQueryClient();
@@ -33,9 +34,9 @@ export function RemovedJobsSettings() {
         <input value={search} onChange={(event) => { setSearch(event.target.value); setOffset(0); }} className="border bg-[var(--color-paper)] p-2" />
       </label>
       <label className="flex flex-col gap-1 text-sm">View
-        <select value={view} onChange={(event) => { setView(event.target.value); setOffset(0); }} className="border bg-[var(--color-paper)] p-2">
-          <option value="all">All</option><option value="removed">Removed</option><option value="blocked">Blocked</option>
-        </select>
+        <Select aria-label="View" value={view} onChange={(value) => { setView(value); setOffset(0); }} options={[
+          { value: "all", label: "All" }, { value: "removed", label: "Removed" }, { value: "blocked", label: "Blocked" },
+        ]} />
       </label>
     </div>
     {isPending && <p role="status">Loading removed jobs…</p>}

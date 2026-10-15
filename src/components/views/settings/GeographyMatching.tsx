@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import type { PostingRules } from "../../../bindings/PostingRules";
 import { COUNTRIES, REGIONS_BY_COUNTRY } from "../../../lib/locationData";
-import { Input } from "../../ui/Input";
+import { SearchCombobox } from "../../ui/Select";
 import { Icon } from "../../ui/Icon";
 
 type Choice = { code: string; name: string };
@@ -28,11 +28,13 @@ function SearchChoice({ label, value, choices, disabled, placeholder, resetAfter
   };
   return <div className="grid gap-1 min-w-0">
     <label htmlFor={id}>{label}</label>
-    <Input id={id} aria-label={label} list={`${id}-choices`} autoComplete="off" value={text} disabled={disabled} placeholder={placeholder}
-      aria-invalid={invalid} aria-describedby={invalid ? `${id}-error` : undefined}
-      onChange={event => { setText(event.target.value); onDraftChange(); }} onBlur={commit}
+    <SearchCombobox id={id} aria-label={label} value={find(value)?.code || ""} query={text} disabled={disabled} placeholder={placeholder} invalid={invalid}
+      options={choices.map(choice => ({ value: choice.code, label: `${choice.name} (${choice.code})` }))}
+      onQueryChange={query => { setText(query); onDraftChange(); }}
+      onChange={code => { const choice = choices.find(item => item.code === code); if (choice) { onSelect(code); setText(resetAfterSelect ? "" : choice.name); } }}
+      onBlur={commit}
+      describedBy={invalid ? `${id}-error` : undefined}
       onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); commit(); } if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setText(value); } }} />
-    <datalist id={`${id}-choices`}>{choices.map(choice => <option key={choice.code} value={choice.name}>{choice.code}</option>)}</datalist>
     {invalid && <p id={`${id}-error`} className="text-[var(--color-danger)]">Choose a listed {label.toLowerCase()} by name or code.</p>}
   </div>;
 }

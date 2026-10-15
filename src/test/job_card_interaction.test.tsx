@@ -55,7 +55,9 @@ describe("independent card keyboard controls", () => {
   it("renders an unread pip for newly scraped jobs, clears it when viewed, and avoids noisy header badges", () => {
     const baseJob = generateScrapedJobsForSource(SAMPLE_SWE_SOURCE)[0];
     const { rerender } = render(<JobCard job={{ ...baseJob, status: "scraped" }} />);
-    expect(screen.getByTitle("New discovery")).toBeTruthy();
+    const unread = screen.getByTitle("New discovery");
+    expect(unread.querySelector('svg circle')?.getAttribute('r')).toBe('3');
+    expect(unread.className).toContain("--color-unread");
     expect(screen.queryByText("SCRAPED")).toBeNull();
 
     rerender(<JobCard job={{ ...baseJob, status: "viewed" }} />);

@@ -58,7 +58,8 @@ describe("one workflow draft", () => {
     await screen.findByText(/3 fetched/);
     // Schedule editing invalidates the old preview.
     await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
-    await user.selectOptions(screen.getByRole("combobox", { name: "Schedule" }), "manual");
+    await user.click(screen.getByRole("button", { name: "Schedule", expanded: false }));
+    await user.click(await screen.findByRole("option", { name: "manual" }));
     await user.click(screen.getByRole("button", { name: "Review workflow" }));
     expect((screen.getByRole("button", { name: "Save workflow" }) as HTMLButtonElement).disabled).toBe(true);
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
@@ -118,10 +119,12 @@ it('keeps an inherited schedule explicit and unique without writing global defau
  const user = userEvent.setup();
  await user.click(screen.getByRole('button', { name: 'Continue to Matching' }));
  await user.click(screen.getByRole('button', { name: 'Continue to Schedule' }));
- expect((screen.getByRole('combobox', { name: 'Schedule' }) as HTMLSelectElement).value).toBe('global');
+ expect(screen.getByRole('button', { name: 'Schedule', expanded: false }).textContent).toContain('Inherit global schedule');
+ await user.click(screen.getByRole('button', { name: 'Schedule', expanded: false }));
  expect(screen.getAllByRole('option', { name: 'Inherit global schedule' })).toHaveLength(1);
+ await user.keyboard('{Escape}');
  await user.click(screen.getByRole('button', { name: 'Back' }));
  await user.click(screen.getByRole('button', { name: 'Continue to Schedule' }));
- expect((screen.getByRole('combobox', { name: 'Schedule' }) as HTMLSelectElement).value).toBe('global');
+ expect(screen.getByRole('button', { name: 'Schedule', expanded: false }).textContent).toContain('Inherit global schedule');
  expect(settings).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled();
 });

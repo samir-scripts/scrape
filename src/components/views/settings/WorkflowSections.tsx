@@ -107,12 +107,12 @@ export function WorkflowSections({
                   "jsonld",
                   "selector",
                 ].map((value) => ({ value, label: value }))}
-                onChange={(e) =>
+                onChange={(kind) =>
                   change({
                     ...draft,
                     extractor: {
                       ...draft.extractor,
-                      kind: e.target.value as WorkflowSpec["extractor"]["kind"],
+                      kind: kind as WorkflowSpec["extractor"]["kind"],
                     },
                   })
                 }
@@ -335,7 +335,7 @@ export function WorkflowSections({
                   value,
                   label: value,
                 }))}
-                onChange={(e) => setRules({ new_grad: e.target.value })}
+                onChange={(new_grad) => setRules({ new_grad })}
               />
             </label>
             {(["sponsorship", "clearance", "work_auth"] as const).map((key) => (
@@ -378,13 +378,13 @@ export function WorkflowSections({
                   { value: "age", label: "Last N hours" },
                   { value: "range", label: "Date range" },
                 ]}
-                onChange={(e) =>
+                onChange={(range) =>
                   setRules({
                     posting_date:
-                      e.target.value === "none"
+                      range === "none"
                         ? null
                         : {
-                            last_hours: e.target.value === "age" ? 24 : null,
+                            last_hours: range === "age" ? 24 : null,
                             from: null,
                             through: null,
                             timezone:
@@ -503,9 +503,9 @@ export function WorkflowSections({
               value,
               label: value === "global" ? "Inherit global schedule" : value,
             }))}
-            onChange={(e) =>
+            onChange={(cadence) =>
               setSchedule({
-                cadence: e.target.value as NonNullable<
+                cadence: cadence as NonNullable<
                   WorkflowSpec["schedule"]
                 >["cadence"],
               })

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { LocationFilter } from "../components/filters/LocationFilter";
 import { api } from "../lib/api";
@@ -39,7 +40,9 @@ describe("workplace and eligible geography controls", () => {
 
     render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: "REMOTE ONLY" }));
-    fireEvent.change(screen.getAllByRole("combobox")[0], { target: { value: "US" } });
+    const user = userEvent.setup();
+    await user.type(screen.getByRole("combobox", { name: "Country" }), "US");
+    await user.click(await screen.findByRole("option", { name: /United States \(US\)/i }));
 
     expect(JSON.parse(screen.getByTestId("active-filter").textContent || "{}")).toEqual({
       countries: ["US"],

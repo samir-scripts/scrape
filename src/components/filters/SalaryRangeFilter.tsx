@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { SalaryInterval } from "../../bindings/SalaryInterval";
 import { parseSalaryInput, parseHourlyInput } from "../../lib/salary";
+import { Select } from "../ui/Select";
 export { parseSalaryInput, parseHourlyInput };
 
 export interface SalaryRangeFilterProps {
@@ -43,10 +44,9 @@ export function SalaryRangeFilter({ salaryMin, salaryMax, currency, interval = n
       </label>
     </div>
     {error && <p id="salary-filter-error" role="alert" className="text-[var(--color-danger)]">{error}</p>}
-    <label className="flex gap-3 items-center">Currency
-      <select value={currency || ""} onChange={(event) => onChange({ salaryMin, salaryMax, interval, currency: event.target.value || null, includeUnknown })} className="border bg-[var(--color-paper)] p-2">
-        <option value="">Any currency</option>{["USD", "CAD", "EUR", "GBP"].map((code) => <option key={code}>{code}</option>)}
-      </select>
+    <label className="grid gap-1">Currency
+      <Select aria-label="Currency" value={currency || ""} onChange={(value) => onChange({ salaryMin, salaryMax, interval, currency: value || null, includeUnknown })}
+        options={[{ value: "", label: "Any currency" }, ...["USD", "CAD", "EUR", "GBP"].map((code) => ({ value: code, label: code }))]} />
     </label>
     <label className="flex gap-3 items-start"><input type="checkbox" checked={includeUnknown} onChange={(event) => onChange({ salaryMin, salaryMax, currency, interval, includeUnknown: event.target.checked })} />Include unknown pay bounds (a selected unit and currency must still be known)</label>
     <button type="button" className="border px-3 py-2 self-start" onClick={() => { setMinText(""); setMaxText(""); setError(""); onChange({ salaryMin: null, salaryMax: null, currency: null, interval: null, includeUnknown: false }); }}>Clear compensation filter</button>

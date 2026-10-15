@@ -7,6 +7,7 @@ import {
   getRegionsForCountry,
   detectUserLocation,
 } from "../../lib/locationData";
+import { SearchCombobox, Select } from "../ui/Select";
 
 export interface LocationFilterProps {
   countries: string[] | null;
@@ -36,6 +37,7 @@ export function LocationFilter({
   onChange,
 }: LocationFilterProps) {
   const [dynamicCountries, setDynamicCountries] = useState<string[]>([]);
+  const [countryQuery, setCountryQuery] = useState<string | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectStatus, setDetectStatus] = useState<string | null>(null);
 
@@ -242,23 +244,15 @@ export function LocationFilter({
             </button>
           )}
         </div>
-        <select
-          value={selectedCountryCode}
-          onChange={(e) => handleCountryChange(e.target.value)}
-          className="w-full px-2 py-1 border border-[var(--color-ink)] bg-[var(--color-paper)] text-xs uppercase font-mono font-bold focus:outline-none cursor-pointer"
-        >
-          <option value="ALL">ALL COUNTRIES / ANY REGION</option>
-          {COUNTRIES.map((c) => (
-            <option key={c.code} value={c.code}>
-              {c.name.toUpperCase()} ({c.code})
-            </option>
-          ))}
-          {dynamicCountries.map((c) => (
-            <option key={c} value={c}>
-              {c.toUpperCase()}
-            </option>
-          ))}
-        </select>
+        <SearchCombobox aria-label="Country" value={selectedCountryCode}
+          query={countryQuery ?? (selectedCountryCode === "ALL" ? "" : COUNTRIES.find(country => country.code === selectedCountryCode)?.name || selectedCountryCode)}
+          onFocus={() => setCountryQuery("")} onBlur={() => setCountryQuery(null)} onQueryChange={setCountryQuery}
+          onChange={code => { handleCountryChange(code); setCountryQuery(null); }}
+          options={[
+            { value: "ALL", label: "All countries / any region" },
+            ...COUNTRIES.map((country) => ({ value: country.code, label: `${country.name} (${country.code})` })),
+            ...dynamicCountries.map((country) => ({ value: country, label: country.toUpperCase() })),
+          ]} />
       </div>
 
       {/* Cascading States & Provinces Dropdown */}
@@ -279,28 +273,11 @@ export function LocationFilter({
           )}
         </div>
 
-        <select
-          value=""
-          onChange={(e) => {
-            handleAddRegion(e.target.value);
-            e.target.value = "";
-          }}
-          className="w-full px-2 py-1 border border-[var(--color-ink)] bg-[var(--color-paper)] text-xs uppercase font-mono font-bold focus:outline-none cursor-pointer"
-        >
-          <option value="">+ ADD STATE / PROVINCE...</option>
-          {cascadingRegions.map((r) => {
-            const alreadySelected = selectedRegions.includes(r.code);
-            return (
-              <option
-                key={r.code}
-                value={r.code}
-                disabled={alreadySelected}
-              >
-                {r.name.toUpperCase()} ({r.code}) {alreadySelected ? "✓" : ""}
-              </option>
-            );
-          })}
-        </select>
+        <Select aria-label="Add state/province" value="" onChange={handleAddRegion}
+          options={[{ value: "", label: "+ ADD STATE / PROVINCE..." }, ...cascadingRegions.map((region) => {
+            const alreadySelected = selectedRegions.includes(region.code);
+            return { value: region.code, label: `${region.name.toUpperCase()} (${region.code}) ${alreadySelected ? "✓" : ""}`, disabled: alreadySelected };
+          })]} />
 
         {/* Selected State Tags / Chips */}
         {selectedRegions.length > 0 && (

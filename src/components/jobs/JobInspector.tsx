@@ -17,6 +17,8 @@ import { Icon } from "../ui/Icon";
 import { IconButton } from "../ui/IconButton";
 import { Modal } from "../ui/Modal";
 import { JobDescriptionView } from "./JobDescriptionView";
+import { Select } from "../ui/Select";
+import { ActionMenu } from "../ui/ActionMenu";
 import { formatJobLocation } from "../../lib/jobLocationLabel";
 
 export interface JobInspectorProps {
@@ -162,20 +164,9 @@ export function JobInspectorContent({
           {tracked ? (
             <label className="text-sm">
               Stage{" "}
-              <select
-                aria-label="Application stage"
-                className="border min-h-9 p-2 bg-[var(--color-paper)]"
-                value={job.status}
-                onChange={(e) =>
-                  onUpdateStatus(job.id, e.target.value as JobStatus)
-                }
-              >
-                {TRACKED_STAGES.map((stage) => (
-                  <option key={stage} value={stage}>
-                    {stage}
-                  </option>
-                ))}
-              </select>
+              <Select aria-label="Application stage" value={job.status}
+                onChange={(value) => onUpdateStatus(job.id, value as JobStatus)}
+                options={TRACKED_STAGES.map((stage) => ({ value: stage, label: stage }))} />
             </label>
           ) : (
             <>
@@ -192,15 +183,10 @@ export function JobInspectorContent({
           )}
         </div>
         {!tracked && job.status === "scraped" && (
-          <details>
-            <summary className="text-sm cursor-pointer">More actions</summary>
-            <Button
-              variant="ghost"
-              onClick={() => onUpdateStatus(job.id, "viewed")}
-            >
-              Mark viewed
-            </Button>
-          </details>
+          <ActionMenu label="More actions" items={[{
+            label: "Mark viewed",
+            onSelect: () => onUpdateStatus(job.id, "viewed"),
+          }]} />
         )}
       </header>
       <section className="grid gap-2">

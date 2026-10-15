@@ -6,6 +6,7 @@ import { KeyHint } from "../ui/KeyHint";
 import { FilterChips } from "../filters/FilterChips";
 import { countActiveFilters } from "../../lib/filter";
 import { Tooltip } from "../ui/Tooltip";
+import { Select } from "../ui/Select";
 
 export function SubNav({ sort, onSortChange }: { sort?: JobSort; onSortChange?: (sort: JobSort) => void }) {
   const {
@@ -135,9 +136,9 @@ export function SubNav({ sort, onSortChange }: { sort?: JobSort; onSortChange?: 
               )}
             </div>
             {sort && onSortChange && <label className="flex items-center gap-2 text-xs">Sort
-              <select aria-label="Sort jobs" value={sort} onChange={event => onSortChange(event.target.value as JobSort)} className="border bg-[var(--color-paper)] p-1">
-                <option value="status_changed_at_desc">Recent stage activity</option><option value="date_added_desc">Newest discoveries</option><option value="date_added_asc">Oldest discoveries</option><option value="date_posted_desc">Newest postings</option><option value="company_asc">Company</option><option value="title_asc">Title</option><option value="salary_desc">Derived annual pay</option><option value="favorited_desc">Favorites first</option>
-              </select>
+              <Select aria-label="Sort jobs" value={sort} onChange={value => onSortChange(value as JobSort)} options={[
+                { value: "status_changed_at_desc", label: "Recent stage activity" }, { value: "date_added_desc", label: "Newest discoveries" }, { value: "date_added_asc", label: "Oldest discoveries" }, { value: "date_posted_desc", label: "Newest postings" }, { value: "company_asc", label: "Company" }, { value: "title_asc", label: "Title" }, { value: "salary_desc", label: "Derived annual pay" }, { value: "favorited_desc", label: "Favorites first" },
+              ]} />
             </label>}
           </div>
         )}

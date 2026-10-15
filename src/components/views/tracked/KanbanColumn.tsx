@@ -7,6 +7,7 @@ import type { JobStatus } from "../../../bindings/JobStatus";
 import { STATUS_CONFIG, TRACKED_STAGES } from "../../../lib/constants";
 import { formatSalary } from "../../../lib/filter";
 import { formatJobLocation } from "../../../lib/jobLocationLabel";
+import { Select } from "../../ui/Select";
 
 interface KanbanColumnProps {
   status: JobStatus;
@@ -90,11 +91,9 @@ export function KanbanColumn({
               </p>
               <p className="text-sm">{formatSalary(job)}</p>
               <label className="flex items-center gap-2 text-xs">Move to
-                <select aria-label={`Move ${job.title} to`} value={job.status} disabled={pendingIds?.has(job.id)}
-                  className="border p-1 bg-[var(--color-paper)] min-w-0 flex-1"
-                  onChange={event => { if (event.target.value !== job.status) onDropJob(job.id, event.target.value as JobStatus); }}>
-                  {TRACKED_STAGES.map(stage => <option key={stage} value={stage}>{stage}</option>)}
-                </select>
+                <Select aria-label={`Move ${job.title} to`} value={job.status} disabled={pendingIds?.has(job.id)}
+                  className="min-w-0 flex-1" onChange={value => { if (value !== job.status) onDropJob(job.id, value as JobStatus); }}
+                  options={TRACKED_STAGES.map(stage => ({ value: stage, label: stage }))} />
               </label>
               {pendingIds?.has(job.id) && <p role="status" className="text-xs">Saving stage…</p>}
               <div className="flex items-center justify-between gap-2">

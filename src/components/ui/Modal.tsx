@@ -43,6 +43,9 @@ export function Modal({ isOpen, onClose, title, children, width = "max-w-lg", fo
     if (!isOpen) return;
     const escape = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.key !== "Escape") return;
+      // The shared Listbox owns the first Escape while its options are open.
+      const dialog = dialogRef.current;
+      if (dialog?.contains(document.activeElement) && dialog.querySelector('[aria-haspopup="listbox"][aria-expanded="true"], [aria-haspopup="menu"][aria-expanded="true"], [role="combobox"][aria-expanded="true"]')) return;
       if (inline && document.querySelector('dialog[open]:not([data-inline-dialog="true"])')) return;
       event.preventDefault(); event.stopPropagation(); onClose();
     };
@@ -52,7 +55,11 @@ export function Modal({ isOpen, onClose, title, children, width = "max-w-lg", fo
   const backdrop = (event: MouseEvent<HTMLDialogElement>) => { if (!inline && event.target === event.currentTarget) onClose(); };
   return <dialog ref={dialogRef} role={inline ? "complementary" : undefined}
     aria-label={title} data-inline-dialog={inline ? "true" : undefined} onClick={backdrop}
-    onCancel={event => { event.preventDefault(); onClose(); }}
+    onCancel={event => {
+      event.preventDefault();
+      if (dialogRef.current?.querySelector('[aria-haspopup="listbox"][aria-expanded="true"], [aria-haspopup="menu"][aria-expanded="true"], [role="combobox"][aria-expanded="true"]')) return;
+      onClose();
+    }}
     className={`${inline ? "relative m-0 w-full h-full min-w-0" : "fixed inset-0 m-auto max-w-[calc(100vw-32px)] max-h-[calc(100dvh-32px)] backdrop:bg-black/50"} p-0 border-0 bg-transparent ${isOpen ? "block" : "hidden"}`}>
     <div className={`${inline ? "w-full h-full min-h-0" : `w-full ${width} border-2 border-[var(--color-ink)] max-h-[calc(100dvh-32px)]`} bg-[var(--color-paper)] text-[var(--color-ink)] flex flex-col`}>
       <div className={`${inline ? "hidden" : "flex"} bg-[var(--color-ink)] text-[var(--color-paper)] px-4 py-3 shrink-0 items-center justify-between select-none`}>

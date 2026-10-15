@@ -10,6 +10,7 @@
   --palette-lime: #D6DC82;
   --palette-cherry: #D86072;
   --palette-signal: #1F1FE0;
+  --color-unread: #7566BA;
 }
 
 @theme {
@@ -63,6 +64,7 @@
   --color-success: #C4DA92;
   --color-warning: #F0CB80;
   --color-information: #B8B5FA;
+  --color-unread: #C6C2F2;
 }
 
 /* One selected family throughout the interface. Code remains fixed-width. */

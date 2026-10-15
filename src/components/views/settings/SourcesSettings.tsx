@@ -20,6 +20,7 @@ import { Table, TableHead, TableHeader, TableBody, TableRow, TableCell } from ".
 import { Toggle } from "../../ui/Toggle";
 import { Rule } from "../../ui/Rule";
 import { Tooltip } from "../../ui/Tooltip";
+import { Select } from "../../ui/Select";
 import { AddSourceModal } from "./AddSourceModal";
 import { notifyError, notifySuccess, notifyInfo } from "../../../lib/toast";
 import { getWorkflowStatus } from "../../../lib/status";
@@ -717,16 +718,13 @@ export function SourcesSettings({ settings, onOpenSettings }: SourcesSettingsPro
                   <span className="text-xs text-[var(--color-ink-mute)] font-mono uppercase">
                     FILTER:
                   </span>
-                  <select
-                    value={logFilter}
-                    onChange={(e) => setLogFilter(e.target.value as "all" | "successes" | "errors")}
-                    aria-label="Filter execution logs"
-                    className="px-2 py-0.5 text-xs font-mono uppercase font-bold border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] focus:outline-none cursor-pointer"
-                  >
-                    <option value="all">ALL LOGS ({logCounts.all})</option>
-                    <option value="successes">SUCCESSES ({logCounts.successes})</option>
-                    <option value="errors">ERRORS ({logCounts.errors})</option>
-                  </select>
+                  <Select aria-label="Filter execution logs" value={logFilter}
+                    onChange={value => setLogFilter(value as "all" | "successes" | "errors")}
+                    options={[
+                      { value: "all", label: `ALL LOGS (${logCounts.all})` },
+                      { value: "successes", label: `SUCCESSES (${logCounts.successes})` },
+                      { value: "errors", label: `ERRORS (${logCounts.errors})` },
+                    ]} />
                 </div>
               </div>
 
