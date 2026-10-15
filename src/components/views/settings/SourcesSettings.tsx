@@ -601,7 +601,7 @@ export function SourcesSettings({ settings, onOpenSettings }: SourcesSettingsPro
               >
                 <span>VIEW JOBS IN INBOX</span><Icon name="right" />
               </button>
-              <IconButton label={`Close workflow logs for ${inspectedSource.name}`} onClick={() => setInspectedSource(null)} variant="ghost-danger">
+              <IconButton label={`Close workflow logs for ${inspectedSource.name}`} onClick={() => setInspectedSource(null)} variant="danger">
                 <Icon name="close" />
               </IconButton>
             </div>
