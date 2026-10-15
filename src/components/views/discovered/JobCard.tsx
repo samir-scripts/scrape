@@ -65,21 +65,26 @@ export function JobCard({
           : "bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)]/40"
       } ${className}`}
     >
-      {/* Top Line: Title + Status + Favorite */}
+      {/* Top Line: Title + Actions */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h2 className="text-base font-bold text-[var(--color-ink)] group-hover:underline leading-snug line-clamp-2">
           <button type="button" onClick={onClick} className="normal-case text-left cursor-pointer" aria-label={`View ${job.title} at ${job.company}`}>
+            {job.status === "scraped" && (
+              <span className="inline-block w-2 h-2 mr-2 bg-[var(--color-signal)] shrink-0 align-middle" title="New discovery" aria-label="New discovery" />
+            )}
             {job.title}
           </button>
         </h2>
 
-        <div className="flex items-center gap-2 shrink-0 pt-0.5">
-          <Tag status={job.status} />
+        <div className="flex items-center gap-1 shrink-0 pt-0.5">
+          {job.status !== "scraped" && job.status !== "viewed" && (
+            <Tag status={job.status} />
+          )}
           {onOpenUrl && (
             <IconButton
               label={`Open ${job.title} at ${job.company} in browser`}
               onClick={(e: MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onOpenUrl(job.url); }}
-              variant="outlined"
+              variant="default"
             ><Icon name="external" /></IconButton>
           )}
           {onToggleFavorite && (
@@ -92,7 +97,14 @@ export function JobCard({
               size="sm"
             />
           )}
-          {onDelete && <RemoveJobButton title={job.title} company={job.company} onClick={e => { e.stopPropagation(); onDelete(job); }} />}
+          {onDelete && (
+            <RemoveJobButton
+              title={job.title}
+              company={job.company}
+              variant="ghost-danger"
+              onClick={e => { e.stopPropagation(); onDelete(job); }}
+            />
+          )}
         </div>
       </div>
 

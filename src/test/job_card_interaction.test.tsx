@@ -51,4 +51,19 @@ describe("independent card keyboard controls", () => {
     expect(globalOpen).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: /^Remove / }).querySelector("svg")).not.toBeNull();
   });
+
+  it("renders an unread pip for newly scraped jobs, clears it when viewed, and avoids noisy header badges", () => {
+    const baseJob = generateScrapedJobsForSource(SAMPLE_SWE_SOURCE)[0];
+    const { rerender } = render(<JobCard job={{ ...baseJob, status: "scraped" }} />);
+    expect(screen.getByTitle("New discovery")).toBeTruthy();
+    expect(screen.queryByText("SCRAPED")).toBeNull();
+
+    rerender(<JobCard job={{ ...baseJob, status: "viewed" }} />);
+    expect(screen.queryByTitle("New discovery")).toBeNull();
+    expect(screen.queryByText("VIEWED")).toBeNull();
+
+    rerender(<JobCard job={{ ...baseJob, status: "applied" }} />);
+    expect(screen.queryByTitle("New discovery")).toBeNull();
+    expect(screen.getByText("APPLIED")).toBeTruthy();
+  });
 });
