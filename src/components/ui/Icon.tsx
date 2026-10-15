@@ -6,6 +6,8 @@ const paths = {
   download: "M4 16v5h16v-5M12 3v14M6 11h3v3h3M18 11h-3v3h-3",
   left: "M20 12H4M10 6H7v3H4v6h3v3h3",
   right: "M4 12h16M14 6h3v3h3v6h-3v3h-3",
+  first: "M3 3v18M21 12H7M13 6h-3v3H7v6h3v3h3",
+  last: "M21 3v18M3 12h14M11 6h3v3h3v6h-3v3h-3",
   up: "M12 20V4M6 10V7h3V4h6v3h3v3",
   down: "M12 4v16M6 14v3h3v3h6v-3h3v-3",
   refresh: "M20 10V4h-6M20 4H7v3H4v10h3v3h10v-3h3v-3",
