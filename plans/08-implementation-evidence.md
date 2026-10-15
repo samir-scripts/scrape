@@ -286,3 +286,89 @@ external destination (`scrape-native-smoke-cJds7r`). Rust binding-export tests r
 with the workspace suite and left `src/bindings` unchanged. The native pointer and
 visual/manual gates above remain explicitly open. Clean-checkout CI was wired but
 was not executed remotely during this section.
+
+
+## Section 5 — Kanban movement (2026-10-14)
+
+Implementation is scoped to section 5. Sections 6–7 are untouched; the branch is
+unmerged. Four pre-existing card/icon/test modifications were preserved unchanged
+and excluded from commits. Their diff was checkpointed at
+`/tmp/scrape-pre-section5.patch`. Visual verification used a separate checkout to
+exclude those unrelated edits.
+
+Research traced whole-card HTML5 dragging, data-transfer drop handlers, the App
+mutation and the repository's atomic status/history transaction. An isolated
+historical fixture captured trusted `dragstart` and `dragend` events with no
+`dragenter`/`dragover`/`drop`; the posting remained applied. Diagnostic artifacts:
+`scrape-native-smoke-1JYBAr` in the OS temporary directory. This trace records no completed
+transition; it does not establish the exact gesture or underlying OS cause. Temporary instrumentation
+was not added to production.
+
+The [Tauri configuration reference](https://v2.tauri.app/reference/config/)
+documents HTML5 drag interception on Windows. No Tauri configuration or file import
+behavior was changed. The board instead uses one handle-only
+[pointer-capture implementation](https://developer.mozilla.org/en-US/docs/Web/API/Element/setPointerCapture),
+with coordinate hit testing, threshold, edge scrolling, Escape/capture-loss/blur
+cancellation and keyboard pick-up/arrow/confirm. The old HTML5 system was removed.
+Native delivery of the replacement still needs actual pointer acceptance.
+
+Visible column borders, shared SVG handles and Move to selects make the four
+stages explicit. Narrow layouts retain all drop zones in a horizontal scroller;
+the stage picker scrolls to a stage. Cards preserve selectable text and independent
+controls. Page-local stage counts remain labeled. Drag, select, inspector,
+shortcuts and Undo all reach one per-job transition queue. Cards stay in their
+confirmed stage until saving succeeds. Failure keeps that stage and offers retry;
+no stale optimistic snapshot can overwrite a newer move. Same-stage choices are
+no-ops. Queue snapshots expire when drained so refreshed repository state wins.
+
+Tests were first observed failing for the missing Move to control and handle.
+New interaction tests cover keyboard cancellation, independent controls, failed
+IPC placement and visible retry. Queue tests cover rapid requests, no-op history,
+failure followed by success/retry and refreshed state after a queue drains. A
+populated temporary SQLite test injects a real history-write failure and proves
+atomic rollback, no-op history, notes/favorite protection and reopen persistence.
+
+Native checks use `SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_KANBAN=1 npm run
+test:native-startup`. Actual WKWebView select and keyboard controls passed, including
+cancellation, two exact history events, notes/favorite preservation and reload to
+offer. Final artifacts: `scrape-native-smoke-uRh9wV`. These are not synthesized
+pointer tests and do not establish physical dragging.
+
+Native pointer/visual acceptance is still open. The UI automation surface rejected
+the standalone debug executable as an invalid app; macOS's
+`CGPreflightPostEventAccess()` returned false. No permission setting was changed.
+A successful alternative control does not close the pointer acceptance gate.
+
+Rust verification exposed a separate deterministic-fixture defect: nonblocking
+listeners accepted streams that could remain nonblocking on macOS, causing immediate
+`WouldBlock` HTTP reads. Sequential tests passed, while standard parallel runs
+failed at different reads. Fixture streams now explicitly select blocking mode
+before their existing bounded read timeout; no assertion or timeout was relaxed.
+See [Rust TCP stream modes](https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_nonblocking).
+
+Implementation commits: `a009274` stage queue/atomic history test, `1440a5e` refreshed
+queue state, `4265623` board controls and browser/native regressions.
+
+Final checks for this section:
+
+| Check | Observed result |
+|---|---|
+| Shared-workspace frontend suite | 394 tests in 60 files and Vite startup smoke passed, including the pre-existing added card test. |
+| TypeScript and production build | Passed; existing bundle-size advisory remains. |
+| Rust fmt / Clippy with warnings denied | Passed. |
+| Standard parallel Rust workspace tests | Passed after explicitly setting accepted fixture streams to blocking mode (`39fe3fe`). Prior failures and the sequential diagnostic run are described above. |
+| Complete browser suite, isolated checkout | 23 passed, including both-theme real pointer input, Escape cancellation, Move to, edge scrolling, reload, contrast/focus, reduced motion, fonts and 200% zoom. Six reviewed board baselines accepted (`dad9e09`); other screen baselines were unchanged. |
+| Native Kanban select/keyboard/restart | Passed, exact two persisted history events and saved notes/favorite state. |
+| Full native IPC/worker/persistence/cancellation/opener smoke | Passed; artifacts `scrape-native-smoke-gTcBaN`. |
+| Native physical pointer and screenshots | Still pending; no claim of native drag acceptance. |
+
+The initial isolated font test returned NetworkError with dependencies symlinked
+to the shared workspace. The final isolated run used copied local dependency assets and
+all font assertions passed. No font assertion was removed or weakened. Generated
+binding-export tests ran with the Rust workspace suite and left bindings unchanged.
+No remote CI run or merge was performed. The four pre-existing diffs were compared
+to the initial checkpoint and remained byte-for-byte unchanged.
+
+The isolated checkout also passed 393 frontend tests plus startup smoke (the shared
+workspace count includes one pre-existing added test), TypeScript, production build
+and style guard. Verification checkout: `/tmp/scrape-step5-verify`.

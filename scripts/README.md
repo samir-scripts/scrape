@@ -73,3 +73,16 @@ position survive. A reload checks pane preference and notes through actual IPC.
 `native-job-layout.mjs` owns these assertions. Debug-only resize controls accept
 bounded sizes and are installed only for an explicitly isolated smoke profile.
 This check uses keyboard resizing; real native pointer dragging remains manual QA.
+
+### Native Kanban controls
+
+```sh
+SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_KANBAN=1 npm run test:native-startup
+```
+
+`native-kanban.mjs` operates the saved-posting fixture through actual WKWebView
+select/keyboard controls and verifies SQLite status/history through IPC. It checks
+cancellation and restart, including notes/favorite preservation. It does not
+synthesize pointer events or claim to validate OS pointer delivery. Real native
+pointer dragging remains an acceptance gate; browser pointer tests live in
+`e2e/kanban.pw.ts` and share the pointer helper with the full job journey.
