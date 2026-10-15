@@ -19,14 +19,15 @@ describe("one workflow draft", () => {
     vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => preview(spec));
     render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
     await user.type(screen.getByRole("textbox", { name: "Source URL or board identifier" }), "https://boards.greenhouse.io/acme");
-    await user.tab();
-    await waitFor(() => expect(screen.getByRole("textbox", { name: "Workflow name" })).toHaveProperty("value", "acme"));
+    await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
     await screen.findByRole("textbox", { name: "Title keywords (any)" });
     await user.type(screen.getByRole("textbox", { name: "Title keywords (any)" }), "Engineer");
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
     await screen.findByText(/3 fetched/);
     // Schedule editing invalidates the old preview.
+    await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
     await user.selectOptions(screen.getByRole("combobox", { name: "Schedule" }), "manual");
+    await user.click(screen.getByRole("button", { name: "Review workflow" }));
     expect((screen.getByRole("button", { name: "Save workflow" }) as HTMLButtonElement).disabled).toBe(true);
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
     await screen.findByText(/No eligible postings/);
@@ -42,6 +43,7 @@ describe("one workflow draft", () => {
     const mock = vi.spyOn(api, "previewWorkflow").mockImplementation(spec => new Promise(resolve => { finish = resolve; expect(spec.filters?.matching?.compensation?.min_minor).toBe(5025); }));
     const cancel = vi.spyOn(api, "cancelWorkflowPreview").mockResolvedValue(true);
     render(<AddSourceModal isOpen initialSource={source} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
     await user.click(screen.getByRole("button", { name: "Advanced settings" }));
     await user.click(screen.getByRole("button", { name: "Edit YAML" }));
     expect((screen.getByRole("textbox", { name: "Workflow YAML" }) as HTMLTextAreaElement).value).toContain("5025");
@@ -49,6 +51,8 @@ describe("one workflow draft", () => {
     await screen.findByRole("textbox", { name: "Minimum per hour" });
     expect((screen.getByRole("textbox", { name: "Minimum per hour" }) as HTMLInputElement).value).toBe("50.25");
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
+    await user.click(screen.getByRole("button", { name: "Cancel preview" }));
+    await user.click(screen.getByRole("button", { name: "Back" }));
     await user.type(screen.getByRole("textbox", { name: "Workflow name" }), " revised");
     expect(cancel).toHaveBeenCalled();
     finish(preview(mock.mock.calls[0][0]));
@@ -61,7 +65,10 @@ describe("one workflow draft", () => {
     const extraction = vi.spyOn(api,"previewWorkflow").mockImplementation(async spec => preview(spec));
     render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
     await user.type(screen.getByRole("textbox",{name:"Source URL or board identifier"}),"https://boards.greenhouse.io/acme");
-    await user.click(screen.getByRole("textbox",{name:"Title keywords (any)"}));
+    await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
+    await user.clear(screen.getByRole("textbox", { name: "Source URL or board identifier" }));
+    await user.type(screen.getByRole("textbox", { name: "Source URL or board identifier" }), "https://boards.greenhouse.io/acme-new");
+    await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
     await user.type(screen.getByRole("textbox",{name:"Title keywords (any)"}),"Engineer");
     await user.click(screen.getByRole("button",{name:"Preview matches"}));
     await screen.findByText(/No eligible postings/);

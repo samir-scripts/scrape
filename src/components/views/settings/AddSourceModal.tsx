@@ -1,32 +1,26 @@
-import { useWorkflowDraft } from "../../../hooks/useWorkflowDraft";
-import { openPostingUrl } from "../../../lib/postingUrl";
-import { parseDocument } from "yaml";
+import { api } from "../../../lib/api";
 import type { Source } from "../../../bindings/Source";
 import type { Settings } from "../../../bindings/Settings";
-import { api } from "../../../lib/api";
-import {
-  workflowSpecToYaml,
-} from "../../../lib/yamlWorkflow";
-import { isDemoMode } from "../../../lib/runtime";
+import type { WorkflowSpec } from "../../../bindings/WorkflowSpec";
+import { useWorkflowDraft, WORKFLOW_STEPS } from "../../../hooks/useWorkflowDraft";
+import { workflowSpecToYaml } from "../../../lib/yamlWorkflow";
+import { isDemoMode, isRecordedMode } from "../../../lib/runtime";
 import { Modal } from "../../ui/Modal";
 import { Button } from "../../ui/Button";
 import { WorkflowSections } from "./WorkflowSections";
+import { WorkflowImportButton } from "./WorkflowImportButton";
+import { WorkflowPreviewResults } from "./WorkflowPreviewResults";
 
 interface AddSourceModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSourceSaved: () => void;
-  initialSource?: Source | null;
-  settings?: Settings;
+  isOpen: boolean; onClose: () => void; onSourceSaved: () => void;
+  initialSource?: Source | null; initialSpec?: WorkflowSpec | null; settings?: Settings;
 }
-export function AddSourceModal({
-  isOpen,
-  onClose,
-  onSourceSaved,
-  initialSource,
-}: AddSourceModalProps) {
-  const { draft, change, advanced, setAdvanced, yaml, setYaml, detected, preview, setPreview, error, setError, busy, setBusy, saved, fileInput, content, request, cancel, detect, applyYaml, runPreview, save } = useWorkflowDraft({ isOpen, initialSource, onSourceSaved });
-  const close = () => { cancel(); onClose(); };
+export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, initialSpec, settings }: AddSourceModalProps) {
+  const model = useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceSaved });
+  const { draft, change, step, advanced, setAdvanced, yaml, setYaml, detected, preview, error, setError, busy, saved } = model;
+  const locked = model.operation === "save" || model.operation === "run";
+  const close = () => { if (!locked) { model.cancel(); onClose(); } };
+  const index = WORKFLOW_STEPS.indexOf(step);
   const rules = draft.filters?.matching;
   const advancedSettings = [
     draft.filters?.query || draft.filters?.policy ? "expert rules" : null,
@@ -72,319 +66,63 @@ export function AddSourceModal({
       ? "custom retention"
       : null,
   ].filter(Boolean);
-  return (
-    <Modal
-      isOpen={isOpen}
-      onClose={close}
-      title={initialSource ? "Edit workflow" : "Create workflow"}
-      width="max-w-[800px]"
-      footer={
-        !saved && (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Button onClick={close}>Cancel</Button>
-            <div className="flex flex-wrap gap-2">
-              {busy && <Button onClick={cancel}>Cancel preview</Button>}
-              {yaml == null && (
-                <Button
-                  variant={preview ? "default" : "inverted"}
-                  disabled={busy || !draft.extractor.url}
-                  onClick={() => void runPreview()}
-                >
-                  {preview ? "Refresh preview" : "Preview matches"}
-                </Button>
-              )}
-              <Button
-                variant="inverted"
-                disabled={
-                  busy || !preview || !!preview.errors.length || yaml != null
-                }
-                onClick={() => void save()}
-              >
-                Save workflow
-              </Button>
-            </div>
-          </div>
-        )
-      }
-    >
-      <div ref={content} className="grid gap-6 text-sm">
-        {isDemoMode() && (
-          <p className="text-[var(--color-ink-mute)]">
-            Example mode. Open the desktop application to test a live source.
-          </p>
-        )}
-        {error && (
-          <p role="alert" className="text-[var(--color-danger)]">
-            {error}
-          </p>
-        )}
-        {saved ? (
-          <>
-            <p>Saved {saved.name}. Saving has not started a scrape.</p>
-            <p>
-              Next run:{" "}
-              {saved.next_run_at
-                ? new Date(saved.next_run_at).toLocaleString()
-                : saved.cadence === "manual"
-                  ? "Manual only"
-                  : "Calculated by the desktop scheduler"}
-              .
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="inverted"
-                disabled={busy}
-                onClick={() => {
-                  setBusy(true);
-                  api
-                    .runSourceNow(saved.id)
-                    .then(close)
-                    .catch((e) => setError(String(e)))
-                    .finally(() => setBusy(false));
-                }}
-              >
-                Run now
-              </Button>
-              <Button onClick={close}>Done</Button>
-            </div>
-          </>
-        ) : (
-          <>
-            {yaml != null ? (
-              <label className="grid gap-2">
-                Workflow YAML
-                <textarea
-                  aria-label="Workflow YAML"
-                  className="font-code border bg-[var(--color-paper)] p-3 min-h-80"
-                  value={yaml}
-                  onChange={(e) => {
-                    cancel();
-                    setPreview(null);
-                    setYaml(e.target.value);
-                  }}
-                />
-              </label>
-            ) : (
-              <>
-                {(["Source", "Matching", "Schedule"] as const).map(
-                  (section) => (
-                    <section className="grid gap-3" key={section}>
-                      <h3 className="text-base font-bold normal-case">
-                        {section === "Matching"
-                          ? "Matching (optional)"
-                          : section}
-                      </h3>
-                      <WorkflowSections
-                        draft={draft}
-                        change={change}
-                        advanced={advanced}
-                        section={section}
-                        onSourceBlur={() => {
-                          if (draft.extractor.url && !detected && !busy)
-                            void detect();
-                        }}
-                      />
-                      {section === "Source" && (
-                        <div
-                          className="text-sm text-[var(--color-ink-mute)]"
-                          aria-live="polite"
-                        >
-                          {busy && !request.current
-                            ? "Detecting source…"
-                            : detected
-                              ? `Source: ${draft.extractor.kind} · ${draft.metadata.company || draft.metadata.name}`
-                              : "Paste a careers URL, then leave the field to detect the source."}
-                          {error && !detected && (
-                            <Button
-                              size="sm"
-                              onClick={() => void detect()}
-                              disabled={busy}
-                            >
-                              Retry detection
-                            </Button>
-                          )}
-                        </div>
-                      )}
-                    </section>
-                  ),
-                )}
-                <p className="text-[var(--color-ink-mute)]">
-                  {draft.schedule?.cadence === "manual"
-                    ? "Runs only when you choose Run now."
-                    : `${draft.schedule?.cadence || "Inherited schedule"} ${draft.schedule?.time || ""} · ${draft.schedule?.timezone || "Global timezone"}`}
-                  . Retention: {draft.retention?.days ?? "inherited"} days;
-                  protected jobs are kept.
-                </p>
-              </>
-            )}
-            <section className="grid gap-3 border-t pt-4">
-              <button
-                type="button"
-                aria-expanded={advanced}
-                className="text-left underline cursor-pointer min-h-9"
-                onClick={() => setAdvanced(!advanced)}
-              >
-                {advanced ? "Hide advanced settings" : "Advanced settings"}
-              </button>
-              {advancedSettings.length > 0 && (
-                <p className="text-[var(--color-ink-mute)]">
-                  Active advanced settings: {advancedSettings.join(", ")}.
-                </p>
-              )}
-              {advanced && (
-                <>
-                  <p className="text-[var(--color-ink-mute)]">
-                    Absent fields inherit global defaults. Explicit empty values
-                    override them. YAML exposes every supported setting.
-                  </p>
-                  {yaml == null && (
-                    <WorkflowSections
-                      draft={draft}
-                      change={change}
-                      advanced
-                      section="Retention"
-                    />
-                  )}
-                  <input
-                    ref={fileInput}
-                    type="file"
-                    accept=".yaml,.yml"
-                    aria-label="Workflow YAML file"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      try {
-                        const doc = parseDocument(await file.text());
-                        if (doc.errors.length)
-                          throw new Error(
-                            doc.errors.map((e) => e.message).join("; "),
-                          );
-                        change(await api.validateWorkflow(doc.toJSON()));
-                        setYaml(null);
-                      } catch (e) {
-                        setError(String(e));
-                      } finally {
-                        if (fileInput.current) fileInput.current.value = "";
-                      }
-                    }}
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      aria-label="Import YAML"
-                      onClick={() => fileInput.current?.click()}
-                    >
-                      Import YAML
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        const url = URL.createObjectURL(
-                          new Blob([workflowSpecToYaml(draft)], {
-                            type: "text/yaml",
-                          }),
-                        );
-                        const link = document.createElement("a");
-                        link.href = url;
-                        link.download = "workflow.yaml";
-                        link.click();
-                        URL.revokeObjectURL(url);
-                      }}
-                    >
-                      Export YAML
-                    </Button>
-                    <Button
-                      onClick={() =>
-                        yaml == null
-                          ? setYaml(workflowSpecToYaml(draft))
-                          : void applyYaml()
-                      }
-                    >
-                      {yaml == null ? "Edit YAML" : "Apply YAML to form"}
-                    </Button>
-                  </div>
-                </>
-              )}
-            </section>
-            {preview ? (
-              <section
-                aria-label="Preview results"
-                className="grid gap-3 border-t pt-4"
-              >
-                <h3 className="text-base font-bold">
-                  {preview.matched - preview.blocked} eligible matches
-                </h3>
-                <details>
-                  <summary className="cursor-pointer min-h-8">
-                    Preview breakdown
-                  </summary>
-                  <p>
-                    {preview.fetched} fetched · {preview.matched} matched ·{" "}
-                    {preview.rejected} rejected · {preview.blocked} blocked ·{" "}
-                    {preview.invalid} invalid
-                  </p>
-                </details>
-                {preview.errors.map((e, i) => (
-                  <p
-                    role="alert"
-                    key={i}
-                    className="text-[var(--color-danger)]"
-                  >
-                    {e}
-                  </p>
-                ))}
-                {!preview.jobs.length && (
-                  <p>
-                    No eligible postings. The source may be empty, rules may
-                    exclude all postings, or postings may be blocked. You may
-                    save a successful preview with zero matches.
-                  </p>
-                )}
-                {preview.sampled && (
-                  <p>
-                    Showing a sample of {preview.jobs.length} eligible postings.
-                    Counts describe fetched postings; extraction errors may
-                    leave the board incomplete.
-                  </p>
-                )}
-                {preview.jobs.map(
-                  ({ identity, job }) =>
-                    job.type === "job" && (
-                      <article key={identity} className="border-b py-3">
-                        <a
-                          href={job.url}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            openPostingUrl(job.url).catch((e) =>
-                              setError(String(e)),
-                            );
-                          }}
-                          className="underline font-bold normal-case"
-                        >
-                          {job.title}
-                        </a>
-                        <p>
-                          {job.company} · {job.location || "Location unknown"}
-                        </p>
-                      </article>
-                    ),
-                )}
-                <p>
-                  Next run:{" "}
-                  {preview.next_run_at
-                    ? new Date(preview.next_run_at).toLocaleString()
-                    : "Manual or inherited schedule"}{" "}
-                  · {draft.schedule?.timezone || "Global timezone"}
-                </p>
-              </section>
-            ) : (
-              <p className="text-[var(--color-ink-mute)]">
-                Preview the current configuration before saving. Preview does
-                not save jobs.
-              </p>
-            )}
-          </>
-        )}
+  const inherited = (value: string[] | null | undefined, defaults?: string[]) => value == null
+    ? `Inherited: ${defaults?.join(", ") || "no restriction"}` : value.length ? value.join(", ") : "No restriction (explicit override)";
+  return <Modal isOpen={isOpen} onClose={close} title={initialSource ? "Edit workflow" : "Create workflow"} width="max-w-[800px]"
+    footer={!saved && <div className="flex flex-wrap items-center justify-between gap-3">
+      <Button onClick={close} disabled={locked}>Cancel</Button>
+      <div className="flex flex-wrap gap-2">
+        {model.operation === "preview" && <Button onClick={model.cancel}>Cancel preview</Button>}
+        {index > 0 && <Button disabled={busy} onClick={() => model.navigate(WORKFLOW_STEPS[index - 1])}>Back</Button>}
+        {yaml == null && (step === "Matching" || step === "Review") && <Button disabled={busy || isRecordedMode()} onClick={() => void model.runPreview()}>{preview ? "Refresh preview" : "Preview matches"}</Button>}
+        {step !== "Review" ? <Button variant="inverted" disabled={busy || yaml != null} onClick={() => void model.next()}>{step === "Schedule" ? "Review workflow" : `Continue to ${WORKFLOW_STEPS[index + 1]}`}</Button>
+          : <Button variant="inverted" disabled={!model.canSave} onClick={() => void model.save()}>Save workflow</Button>}
       </div>
-    </Modal>
-  );
+    </div>}>
+    <div ref={model.content} className="grid gap-5 text-sm">
+      {isDemoMode() && <p className="text-[var(--color-ink-mute)]">Example mode. Open the desktop application to test a live source.</p>}
+      {error && <div role="alert" className="text-[var(--color-danger)]"><p>{error}</p><button type="button" className="underline min-h-8" onClick={() => { model.navigate(model.errorStep); requestAnimationFrame(() => model.content.current?.querySelector<HTMLElement>(`[data-workflow-step="${model.errorStep}"] input`)?.focus()); }}>Go to {model.errorStep}</button></div>}
+      {saved ? <>
+        <p>Saved {saved.name}. Saving has not started a scrape.</p>
+        <p>Next run: {saved.next_run_at ? new Date(saved.next_run_at).toLocaleString() : saved.cadence === "manual" ? "Manual only" : "Calculated by the desktop scheduler"}.</p>
+        <div className="flex gap-2"><Button variant="inverted" disabled={busy || isRecordedMode()} onClick={async () => { if (await model.runSaved()) onClose(); }}>Run now</Button>{model.operation === "run" && <Button variant="danger" onClick={() => void api.cancelScrape().catch(error => setError(String(error)))}>Cancel run</Button>}<Button disabled={busy} onClick={close}>Done</Button></div>
+      </> : <>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <nav aria-label="Workflow steps"><ol className="flex flex-wrap items-center gap-2">
+            {WORKFLOW_STEPS.map((value, position) => <li key={value} className="flex items-center gap-2">
+              {position > 0 && <span aria-hidden="true">→</span>}
+              <button type="button" aria-current={step === value ? "step" : undefined} disabled={position > model.visited || busy}
+                className={`min-h-9 px-2 border ${step === value ? "bg-[var(--color-ink)] text-[var(--color-paper)]" : "border-transparent"}`}
+                onClick={() => model.navigate(value)}>{value}</button>
+            </li>)}
+          </ol></nav>
+          <WorkflowImportButton disabled={!isOpen || locked || isRecordedMode()} onImport={model.replaceImport} />
+        </div>
+        {yaml != null && <label className="grid gap-2">Workflow YAML<textarea aria-label="Workflow YAML" className="font-code border bg-[var(--color-paper)] p-3 min-h-80" value={yaml} onChange={event => setYaml(event.target.value)} /></label>}
+        <fieldset disabled={locked} className={yaml != null ? "hidden" : "min-w-0 grid gap-4"}>
+          {(["Source", "Matching", "Schedule"] as const).map(section => <section key={section} data-workflow-step={section} hidden={step !== section} className={step === section ? "grid gap-3" : "hidden"}>
+            <h3 className="text-base font-bold normal-case">{section === "Matching" ? "Matching (optional)" : section}</h3>
+            <WorkflowSections draft={draft} change={change} advanced={advanced} section={section} settings={settings} />
+            {section === "Source" && <p aria-live="polite" className="text-[var(--color-ink-mute)]">{model.operation === "detect" ? "Detecting source…" : detected ? `Source: ${draft.extractor.kind} · ${draft.metadata.company || draft.metadata.name}` : "Paste a careers URL. Continue to detect its source, or configure an adapter in Advanced settings."}</p>}
+            {section === "Matching" && <div className="text-[var(--color-ink-mute)]"><p>Global keyword defaults: {inherited(draft.filters?.include_keywords, settings?.filters_include_keywords)}. Exclusions: {inherited(draft.filters?.exclude_keywords, settings?.filters_exclude_keywords)}.</p><p>Locations: {inherited(draft.filters?.locations, settings?.filters_locations)}. Roles: {inherited(draft.filters?.role_types, settings?.filters_role_types)}. Absent values inherit; an explicit empty list removes that restriction.</p></div>}
+            {section === "Schedule" && <details><summary className="cursor-pointer min-h-9">Retention</summary><WorkflowSections draft={draft} change={change} advanced section="Retention" settings={settings} /></details>}
+          </section>)}
+        </fieldset>
+        {step === "Review" && yaml == null && <section data-workflow-step="Review" className="grid gap-3">
+          <h3 className="font-bold text-base">Review {draft.metadata.name}</h3>
+          <p className="break-words">{draft.extractor.kind} · {draft.extractor.url}</p>
+          <p>{draft.metadata.enabled === false ? "Disabled" : "Enabled"} · {draft.schedule?.cadence || "Inherited global schedule"} {draft.schedule?.time || ""} · {draft.schedule?.timezone || settings?.system_timezone || "Global timezone"}</p>
+          <p>Retention: {draft.retention?.days ?? "inherited"} days. Tracked jobs, notes and favorites are protected.</p>
+          <details><summary className="cursor-pointer min-h-9">All configured rules</summary><pre className="font-code whitespace-pre-wrap break-words text-xs">{workflowSpecToYaml(draft)}</pre></details>
+          <p>Saving creates or updates the workflow. It does not run a scrape.</p>
+        </section>}
+        <section className="grid gap-3 border-t pt-3">
+          <button type="button" aria-expanded={advanced} className="text-left underline cursor-pointer min-h-9" onClick={() => setAdvanced(!advanced)}>{advanced ? "Hide advanced settings" : "Advanced settings"}</button>
+          {advancedSettings.length > 0 && <p className="text-[var(--color-ink-mute)]">Active advanced settings: {advancedSettings.join(", ")}.</p>}
+          {advanced && <div className="flex flex-wrap gap-2"><Button disabled={locked} onClick={() => yaml == null ? setYaml(workflowSpecToYaml(draft)) : void model.applyYaml()}>{yaml == null ? "Edit YAML" : "Apply YAML to form"}</Button><Button disabled={yaml != null} onClick={() => { const url = URL.createObjectURL(new Blob([workflowSpecToYaml(draft)], { type: "text/yaml" })); const link = document.createElement("a"); link.href = url; link.download = "workflow.yaml"; link.click(); URL.revokeObjectURL(url); }}>Export YAML</Button></div>}
+        </section>
+        {(step === "Matching" || step === "Review") && <WorkflowPreviewResults preview={preview} draft={draft} setError={setError} />}
+      </>}
+    </div>
+  </Modal>;
 }

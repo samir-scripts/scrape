@@ -1,3 +1,4 @@
+import type { Settings } from "../../../bindings/Settings";
 import { SalaryRangeFilter } from "../../filters/SalaryRangeFilter";
 import type { WorkflowSpec } from "../../../bindings/WorkflowSpec";
 import type { PostingRules } from "../../../bindings/PostingRules";
@@ -32,8 +33,10 @@ export function WorkflowSections({
   advanced,
   section,
   onSourceBlur,
+  settings,
 }: {
   onSourceBlur?: () => void;
+  settings?: Settings;
   draft: WorkflowSpec;
   change: (next: WorkflowSpec) => void;
   advanced: boolean;
@@ -468,6 +471,8 @@ export function WorkflowSections({
                 </label>
               </>
             )}
+            {field("Eligible countries (ISO codes)", rules.countries.join(", "), value => setRules({ countries: words(value).map(code => code.toUpperCase()) }))}
+            {field("Eligible regions (ISO codes)", rules.regions.join(", "), value => setRules({ regions: words(value).map(code => code.toUpperCase()) }))}
             {field("Expert query", filters.query || "", (query) =>
               change({
                 ...draft,
@@ -500,6 +505,7 @@ export function WorkflowSections({
               : [
                   "daily",
                   "manual",
+                  "global",
                   ...(schedule.cadence &&
                   !["daily", "manual"].includes(schedule.cadence)
                     ? [schedule.cadence]
@@ -562,7 +568,7 @@ export function WorkflowSections({
           )}
         {field(
           "IANA timezone",
-          schedule.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+          schedule.timezone || settings?.system_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
           (timezone) => {
             const next = { ...draft, schedule: { ...schedule, timezone } };
             if (rules.posting_date)
