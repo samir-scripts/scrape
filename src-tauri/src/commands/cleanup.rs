@@ -19,14 +19,22 @@ pub async fn execute_data_cleanup(
     state: State<'_, AppState>,
     request: CleanupRequest,
 ) -> Result<CleanupResult> {
+    request.validate()?;
     let maintenance = state.runner.begin_maintenance()?;
-    super::scrape::cancel_all_previews();
     let _exclusive = maintenance.exclusive().await?;
     // Keep scheduler mutex until its in-memory pause state reflects the commit.
-    let scheduler = state.scheduler.lock().await;
+    let mut scheduler = state.scheduler.lock().await;
     let backup = cleanup::backup_path(&state.db).await?;
     let mut result = cleanup::execute(&state.db, &request, &backup).await?;
-    scheduler.sync_paused(result.scheduling_paused);
+    if let Err(error) = scheduler
+        .sync_after_cleanup(
+            result.scheduling_paused,
+            result.counts.mode == CleanupMode::ResetAll,
+        )
+        .await
+    {
+        result.warnings.push(format!("Data was cleared and scheduling paused, but its next-run calendar could not be refreshed: {error}. Restart Scrape before resuming automatic runs."));
+    }
     if result.counts.mode == CleanupMode::ResetAll {
         // Native harnesses must never change the user's OS login preference.
         if crate::services::native_smoke::directory().is_none() {

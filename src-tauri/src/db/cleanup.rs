@@ -48,6 +48,17 @@ pub struct CleanupRequest {
     pub confirmation: String,
 }
 
+impl CleanupRequest {
+    pub fn validate(&self) -> Result<()> {
+        if self.preview.mode == CleanupMode::ResetAll && self.confirmation != "RESET" {
+            return Err(AppError::Validation(
+                "Type RESET to confirm resetting all application data.".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Serialize, TS)]
 #[ts(export)]
 pub struct CleanupResult {
@@ -145,11 +156,7 @@ pub async fn execute(
     backup: &Path,
 ) -> Result<CleanupResult> {
     let reset = request.preview.mode == CleanupMode::ResetAll;
-    if reset && request.confirmation != "RESET" {
-        return Err(AppError::Validation(
-            "Type RESET to confirm resetting all application data.".into(),
-        ));
-    }
+    request.validate()?;
     crate::db::backup_to(pool, backup).await.map_err(|error| {
         AppError::Validation(format!(
             "Recovery backup failed. No data was deleted: {error}"

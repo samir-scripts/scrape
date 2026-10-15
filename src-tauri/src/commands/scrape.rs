@@ -519,9 +519,3 @@ pub fn cancel_workflow_preview(request_id: String) -> bool {
         false
     }
 }
-
-pub fn cancel_all_previews() {
-    for flag in PREVIEW_CANCEL.lock().unwrap().values() {
-        flag.store(true, Ordering::SeqCst);
-    }
-}

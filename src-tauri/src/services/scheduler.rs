@@ -298,8 +298,13 @@ impl SchedulerService {
         self.is_paused.store(paused, Ordering::SeqCst);
         Ok(())
     }
-    pub fn sync_paused(&self, paused: bool) {
+    pub async fn sync_after_cleanup(&mut self, paused: bool, reset: bool) -> Result<()> {
         self.is_paused.store(paused, Ordering::SeqCst);
+        if reset {
+            let settings = SettingsRepo::get_all(&self.pool).await?;
+            self.reschedule(&settings.scraper_cron).await?;
+        }
+        Ok(())
     }
     pub async fn get_status(&self) -> Result<SchedulerStatus> {
         let sources = SourcesRepo::list(&self.pool).await?;
@@ -396,6 +401,36 @@ pub fn calculate_next_run_for_source(
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn reset_cleanup_replaces_the_in_memory_global_calendar() {
+        use super::*;
+        let pool = crate::db::init_memory_db().await.unwrap();
+        SettingsRepo::set_value(&pool, "scraper.enabled", serde_json::json!(false))
+            .await
+            .unwrap();
+        let previous = Utc::now() - chrono::Duration::days(1);
+        let mut scheduler = SchedulerService {
+            is_paused: Arc::new(AtomicBool::new(false)),
+            next_global: Arc::new(Mutex::new(Some(previous))),
+            runner: ScrapeRunner::new(pool.clone()),
+            pool: pool.clone(),
+        };
+        scheduler.sync_after_cleanup(true, true).await.unwrap();
+        assert!(scheduler.is_paused.load(Ordering::SeqCst));
+        let next = scheduler.next_global.lock().await.unwrap();
+        assert!(next > Utc::now());
+        let persisted: String = SettingsRepo::get_value(&pool, "scraper.next_run_at")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            DateTime::parse_from_rfc3339(&persisted)
+                .unwrap()
+                .with_timezone(&Utc),
+            next
+        );
+    }
+
     use super::*;
 
     #[test]
