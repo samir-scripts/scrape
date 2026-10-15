@@ -5,12 +5,13 @@ import { TRACKED_STAGES } from "../../../lib/constants";
 import { useKanbanDrag } from "./useKanbanDrag";
 import { KanbanColumn } from "./KanbanColumn";
 import { Select } from "../../ui/Select";
+import { KanbanCardPreview } from "./KanbanCard";
 
 interface KanbanBoardProps {
   jobs: Job[];
   selectedJobId: string | null;
   onSelectJob: (job: Job) => void;
-  onDropJob: (jobId: string, targetStatus: JobStatus) => void;
+  onDropJob: (jobId: string, targetStatus: JobStatus) => void | Promise<unknown>;
   pendingIds?: ReadonlySet<string>;
   onDelete?: (job: Job) => void;
 }
@@ -51,6 +52,9 @@ export function KanbanBoard({
         </label>
       </div>
       <div ref={scroll} className="tracked-scroll flex-1 min-h-0 overflow-x-auto overflow-y-hidden">
+        {drag.current?.active && (drag.current.pointer !== undefined || drag.current.pending) && <div ref={drag.previewRef} data-pending={drag.current.pending || undefined} className="fixed left-0 top-0 z-[120] pointer-events-none data-[pending=true]:transition-transform data-[pending=true]:duration-200 motion-reduce:transition-none" data-kanban-drag-preview aria-hidden="true">
+          <KanbanCardPreview job={drag.current.job} />
+        </div>}
         <div className="kanban-columns flex h-full gap-4 p-4 w-max min-w-full">
           {TRACKED_STAGES.map((value, i) => (
             <div
@@ -64,6 +68,7 @@ export function KanbanBoard({
                 selectedJobId={selectedJobId}
                 draggingJobId={drag.current?.active ? drag.current.job.id : null}
                 dropTarget={drag.current?.active ? drag.current.target : null}
+                dropPending={drag.current?.pending || false}
                 handleProps={drag.handlers}
                 pendingIds={pendingIds}
                 onSelectJob={onSelectJob}

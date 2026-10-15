@@ -35,10 +35,14 @@ describe("Frontend Constants & Themes", () => {
   it("STATUS_CONFIG adheres to styling specifications", () => {
     expect(STATUS_CONFIG.scraped.bg).toBe("var(--color-lavender)");
     expect(STATUS_CONFIG.viewed.bg).toBe("var(--color-cream)");
-    expect(STATUS_CONFIG.applied.bg).toBe("var(--color-lime)");
-    expect(STATUS_CONFIG.interviewing.bg).toBe("var(--color-signal)");
-    expect(STATUS_CONFIG.offer.bg).toBe("var(--color-ink)");
-    expect(STATUS_CONFIG.rejected.bg).toBe("var(--color-danger)");
+    expect(STATUS_CONFIG.applied.bg).toBe("var(--color-stage-applied)");
+    expect(STATUS_CONFIG.interviewing.bg).toBe("var(--color-stage-interviewing)");
+    expect(STATUS_CONFIG.offer.bg).toBe("var(--color-stage-offer)");
+    expect(STATUS_CONFIG.rejected.bg).toBe("var(--color-stage-rejected)");
+    expect(TRACKED_STAGES.map(stage => STATUS_CONFIG[stage].stageAccent)).toEqual([
+      "var(--color-stage-applied)", "var(--color-stage-interviewing)",
+      "var(--color-stage-offer)", "var(--color-stage-rejected)",
+    ]);
     expect(STATUS_CONFIG.ignored.bg).toBe("transparent");
     expect(STATUS_CONFIG.ignored.dither).toBe("checker");
   });

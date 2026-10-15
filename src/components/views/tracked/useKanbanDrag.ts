@@ -3,12 +3,13 @@ import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
 import { TRACKED_STAGES } from "../../../lib/constants";
 
-type Drag = { job: Job; target: JobStatus | null; active: boolean; pointer?: number; x: number; y: number; startX: number; startY: number };
+type Drag = { job: Job; target: JobStatus | null; active: boolean; pending?: boolean; pointer?: number; x: number; y: number; startX: number; startY: number; offsetX: number; offsetY: number; width: number };
 // Only the dedicated handle captures pointers. Text, links, controls and OS file drops
 // keep their native behavior; no HTML5 drag system competes with this controller.
-export function useKanbanDrag(jobs: Job[], move: (id: string, status: JobStatus) => void, root: RefObject<HTMLDivElement | null>) {
+export function useKanbanDrag(jobs: Job[], move: (id: string, status: JobStatus) => void | Promise<unknown>, root: RefObject<HTMLDivElement | null>) {
  const drag = useRef<Drag | null>(null), [current, setCurrent] = useState<Drag | null>(null);
  const [announcement, announce] = useState("");
+ const previewRef = useRef<HTMLDivElement | null>(null);
  const restore = useRef<string | null>(null);
  const publish = () => setCurrent(drag.current ? { ...drag.current } : null);
  const finish = (commit = false) => {
@@ -26,11 +27,16 @@ export function useKanbanDrag(jobs: Job[], move: (id: string, status: JobStatus)
   if (next !== value.target) { value.target = next; publish(); }
  };
  useEffect(() => {
-  if (!current || current.pointer === undefined || !current.active) return;
+  if (!current || (current.pointer === undefined && !current.pending) || !current.active) return;
   let frame: number;
   const scroll = () => {
    const value = drag.current, board = root.current;
    if (!value || !board) return;
+   if (previewRef.current) {
+    previewRef.current.style.width = `${value.width}px`;
+    previewRef.current.style.transform = `translate3d(${value.x - value.offsetX}px, ${value.y - value.offsetY}px, 0)`;
+   }
+   if (value.pending) { frame = requestAnimationFrame(scroll); return; }
    const box = board.getBoundingClientRect();
    const edge = (position: number, min: number, max: number) => position < min + 40 ? -12 : position > max - 40 ? 12 : 0;
    if (value.y >= box.top && value.y <= box.bottom) board.scrollLeft += edge(value.x, box.left, box.right);
@@ -39,10 +45,10 @@ export function useKanbanDrag(jobs: Job[], move: (id: string, status: JobStatus)
    hit(); frame = requestAnimationFrame(scroll);
   };
   frame = requestAnimationFrame(scroll); return () => cancelAnimationFrame(frame);
- }, [current?.pointer, current?.active]);
+ }, [current?.pointer, current?.active, current?.pending]);
  useEffect(() => {
-  const cancel = () => finish();
-  const escape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape" && drag.current) { event.preventDefault(); event.stopImmediatePropagation(); finish(); } };
+  const cancel = () => { if (!drag.current?.pending) finish(); };
+  const escape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape" && drag.current && !drag.current.pending) { event.preventDefault(); event.stopImmediatePropagation(); finish(); } };
   window.addEventListener("blur", cancel); window.addEventListener("keydown", escape, true);
   return () => { window.removeEventListener("blur", cancel); window.removeEventListener("keydown", escape, true); };
  }, []);
@@ -57,7 +63,9 @@ export function useKanbanDrag(jobs: Job[], move: (id: string, status: JobStatus)
   onPointerDown: (event: PointerEvent<HTMLButtonElement>) => {
    if (event.button !== 0) return;
    event.preventDefault(); event.currentTarget.focus(); event.currentTarget.setPointerCapture(event.pointerId);
-   drag.current = { job, target: job.status, active: false, pointer: event.pointerId, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY }; publish();
+   const card = event.currentTarget.closest<HTMLElement>("article");
+   const bounds = card?.getBoundingClientRect();
+   drag.current = { job, target: job.status, active: false, pointer: event.pointerId, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, offsetX: bounds ? event.clientX - bounds.left : 0, offsetY: bounds ? event.clientY - bounds.top : 0, width: bounds?.width || 300 }; publish();
   },
   onPointerMove: (event: PointerEvent<HTMLButtonElement>) => {
    const value = drag.current; if (!value || value.pointer !== event.pointerId) return;
@@ -67,19 +75,33 @@ export function useKanbanDrag(jobs: Job[], move: (id: string, status: JobStatus)
   },
   onPointerUp: (event: PointerEvent<HTMLButtonElement>) => {
    if (drag.current?.pointer !== event.pointerId) return;
-   hit(); finish(true); event.currentTarget.releasePointerCapture(event.pointerId);
+   hit();
+   const value = drag.current;
+   if (value?.active && value.target && value.target !== value.job.status) {
+    const section = document.getElementById(`kanban-stage-${value.target}`)?.getBoundingClientRect();
+    value.pending = true; value.pointer = undefined;
+    if (section) { value.x = section.left + 16 + value.offsetX; value.y = section.top + 64 + value.offsetY; }
+    publish();
+    const save = move(value.job.id, value.target);
+    void Promise.resolve(save).then(async result => {
+     if (result === undefined || result === false) announce(`Could not move ${value.job.title}. The saved stage was kept.`);
+     else { announce(`Moved ${value.job.title} to ${value.target}.`); if (document.documentElement.getAttribute("data-reduce-motion") !== "true" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) await new Promise(resolve => setTimeout(resolve, 180)); }
+     if (drag.current === value) { restore.current = value.job.id; drag.current = null; publish(); }
+    });
+   } else finish(true);
+   event.currentTarget.releasePointerCapture(event.pointerId);
   },
   onPointerCancel: () => finish(), onLostPointerCapture: () => { if (drag.current?.pointer !== undefined) finish(); },
   onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => {
    if (![" ", "Enter", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
    event.preventDefault(); event.stopPropagation();
    if (!drag.current && (event.key === " " || event.key === "Enter")) {
-    drag.current = { job, active: true, target: job.status, x: 0, y: 0, startX: 0, startY: 0 }; publish();
+    drag.current = { job, active: true, target: job.status, x: 0, y: 0, startX: 0, startY: 0, offsetX: 0, offsetY: 0, width: 300 }; publish();
     announce(`Moving ${job.title}. Use left/right arrows, Enter to confirm or Escape to cancel.`);
    } else if (drag.current?.pointer === undefined && drag.current) {
     if (event.key === "Enter" || event.key === " ") finish(true);
     else { const index = TRACKED_STAGES.indexOf(drag.current.target || job.status); drag.current.target = TRACKED_STAGES[Math.max(0, Math.min(TRACKED_STAGES.length - 1, index + (event.key === "ArrowRight" ? 1 : -1)))]; publish(); document.getElementById(`kanban-stage-${drag.current.target}`)?.scrollIntoView({ block: "nearest", inline: "nearest" }); announce(`Target ${drag.current.target}`); }
    }
   },
- }) };
+ }), previewRef };
 }

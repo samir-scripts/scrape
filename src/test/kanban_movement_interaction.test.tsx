@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "../components/views/tracked/KanbanBoard";
 import { recordedJobs } from "../lib/recordedJobs";
 beforeEach(() => { Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() }); });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const job = { ...recordedJobs()[0], status: "applied" as const, id: "moving" };
 it("offers a named stage control without opening details and ignores a same-stage choice", async () => {
  const move = vi.fn(), open = vi.fn();
@@ -22,6 +22,54 @@ it("moves from the focused handle using keyboard and cancels without changing st
  handle.focus(); const user = userEvent.setup();
  await user.keyboard(" {ArrowRight}{Escape}"); expect(move).not.toHaveBeenCalled();
  await user.keyboard(" {ArrowRight}{Enter}"); expect(move).toHaveBeenCalledExactlyOnceWith(job.id, "interviewing");
+});
+it("keeps a same-size source placeholder and follows pointer coordinates with a hidden preview", () => {
+ let frame: FrameRequestCallback | undefined;
+ vi.spyOn(window, "requestAnimationFrame").mockImplementation(callback => { frame = callback; return 1; });
+ vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+ Object.defineProperty(HTMLElement.prototype, "setPointerCapture", { configurable: true, value: vi.fn() });
+ Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", { configurable: true, value: vi.fn() });
+ Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => null });
+ class TestPointerEvent extends MouseEvent { pointerId: number; constructor(type: string, init: MouseEventInit & { pointerId?: number }) { super(type, init); this.pointerId = init.pointerId || 1; } }
+ vi.stubGlobal("PointerEvent", TestPointerEvent);
+ const move = vi.fn(); render(<KanbanBoard jobs={[job]} selectedJobId={null} onSelectJob={vi.fn()} onDropJob={move} />);
+ const handle = screen.getByRole("button", { name: `Drag ${job.title} to another stage` });
+ const card = handle.closest("article")!;
+ vi.spyOn(card, "getBoundingClientRect").mockReturnValue({ x: 10, y: 20, left: 10, top: 20, right: 290, bottom: 320, width: 280, height: 300, toJSON: () => ({}) });
+ fireEvent.pointerDown(handle, { pointerId: 7, button: 0, clientX: 35, clientY: 45 });
+ fireEvent.pointerMove(handle, { pointerId: 7, clientX: 70, clientY: 95 });
+ const preview = document.querySelector<HTMLElement>("[data-kanban-drag-preview]");
+ expect(preview).toBeTruthy(); expect(preview?.getAttribute("aria-hidden")).toBe("true");
+ expect(card.className).toContain("opacity-25");
+ act(() => frame?.(performance.now()));
+ expect(preview?.style.width).toBe("280px");
+ expect(preview?.style.transform).toBe("translate3d(45px, 70px, 0)");
+ fireEvent.pointerCancel(handle);
+ expect(move).not.toHaveBeenCalled(); expect(document.querySelector("[data-kanban-drag-preview]")).toBeNull();
+});
+it("keeps a pending placement visible in the target until the serialized save succeeds", async () => {
+ Object.defineProperty(HTMLElement.prototype, "setPointerCapture", { configurable: true, value: vi.fn() });
+ Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", { configurable: true, value: vi.fn() });
+ Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => document.querySelector('[data-kanban-stage="interviewing"]') });
+ document.documentElement.setAttribute("data-reduce-motion", "true");
+ let complete!: (value: unknown) => void;
+ const move = vi.fn(() => new Promise<unknown>(resolve => { complete = resolve; }));
+ render(<KanbanBoard jobs={[job]} selectedJobId={null} onSelectJob={vi.fn()} onDropJob={move} />);
+ const handle = screen.getByRole("button", { name: `Drag ${job.title} to another stage` });
+ const card = handle.closest("article")!;
+ vi.spyOn(card, "getBoundingClientRect").mockReturnValue({ x: 10, y: 20, left: 10, top: 20, right: 290, bottom: 320, width: 280, height: 300, toJSON: () => ({}) });
+ const target = screen.getByRole("region", { name: "INTERVIEWING stage" });
+ vi.spyOn(target, "getBoundingClientRect").mockReturnValue({ x: 300, y: 20, left: 300, top: 20, right: 600, bottom: 700, width: 300, height: 680, toJSON: () => ({}) });
+ fireEvent.pointerDown(handle, { pointerId: 8, button: 0, clientX: 35, clientY: 45 });
+ fireEvent.pointerMove(handle, { pointerId: 8, clientX: 350, clientY: 120 });
+ fireEvent.pointerUp(handle, { pointerId: 8, clientX: 350, clientY: 120 });
+ expect(move).toHaveBeenCalledWith(job.id, "interviewing");
+ expect(document.querySelector("[data-kanban-drag-preview]")?.getAttribute("data-pending")).toBe("true");
+ expect(target.querySelector("header")?.textContent).toContain("Saving in interviewing");
+ expect(card.className).toContain("opacity-25");
+ await act(async () => { complete({ ...job, status: "interviewing" }); await Promise.resolve(); });
+ expect(document.querySelector("[data-kanban-drag-preview]")).toBeNull();
+ document.documentElement.removeAttribute("data-reduce-motion");
 });
 it("keeps the card in its saved column after failed IPC and retries through the visible action", async () => {
  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');

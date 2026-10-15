@@ -7,6 +7,7 @@ export interface StatusStyle {
   text: string;
   border: string;
   dither?: "checker" | "dots" | "lines";
+  stageAccent?: string;
 }
 
 export const STATUS_CONFIG: Record<JobStatus, StatusStyle> = {
@@ -24,27 +25,31 @@ export const STATUS_CONFIG: Record<JobStatus, StatusStyle> = {
   },
   applied: {
     label: "APPLIED",
-    bg: "var(--color-lime)",
-    text: "var(--color-accent-ink)",
+    bg: "var(--color-stage-applied)",
+    text: "var(--color-stage-label)",
     border: "var(--color-ink)",
+    stageAccent: "var(--color-stage-applied)",
   },
   interviewing: {
     label: "INTERVIEWING",
-    bg: "var(--color-signal)",
-    text: "#FFFFFF",
-    border: "var(--color-signal)",
+    bg: "var(--color-stage-interviewing)",
+    text: "var(--color-stage-label)",
+    border: "var(--color-ink)",
+    stageAccent: "var(--color-stage-interviewing)",
   },
   offer: {
     label: "OFFER",
-    bg: "var(--color-ink)",
-    text: "var(--color-paper)",
+    bg: "var(--color-stage-offer)",
+    text: "var(--color-stage-label)",
     border: "var(--color-ink)",
+    stageAccent: "var(--color-stage-offer)",
   },
   rejected: {
     label: "REJECTED",
-    bg: "var(--color-danger)",
-    text: "var(--color-paper)",
-    border: "var(--color-danger)",
+    bg: "var(--color-stage-rejected)",
+    text: "var(--color-stage-label)",
+    border: "var(--color-ink)",
+    stageAccent: "var(--color-stage-rejected)",
   },
   ignored: {
     label: "IGNORED",

@@ -12,6 +12,7 @@ for (const theme of ['paper', 'obsidian']) test(`${theme} handle pointer, cancel
  const handle = page.getByRole('button', { name: `Drag ${title} to another stage` });
  await expect(handle.locator('svg')).toBeVisible();
  await moveByPointer(page, title, 'interviewing');
+ await page.screenshot({ path: `plans/assets/10-ui-review/kanban-${theme}.png`, fullPage: true });
  await handle.focus(); await page.keyboard.press('Space'); await page.keyboard.press('ArrowRight'); await page.keyboard.press('Escape');
  await expect(page.getByRole('region', { name: 'INTERVIEWING stage' }).getByRole('article')).toHaveCount(1);
  const before = (await handle.boundingBox())!;
@@ -19,22 +20,22 @@ for (const theme of ['paper', 'obsidian']) test(`${theme} handle pointer, cancel
  const empty = (await page.getByRole('region', { name: 'REJECTED stage' }).boundingBox())!;
  await page.mouse.move(empty.x + 80, empty.y + 100, { steps: 8 }); await page.keyboard.press('Escape'); await page.mouse.up();
  await expect(page.getByRole('region', { name: 'INTERVIEWING stage' }).getByRole('article')).toHaveCount(1);
- await page.getByRole('combobox', { name: `Move ${title} to` }).selectOption('offer');
+ await page.getByRole('button', { name: `Move ${title} to` }).click(); await page.getByRole('option', { name: 'offer' }).click();
  await expect(page.getByRole('region', { name: 'OFFER stage' }).getByRole('article')).toHaveCount(1);
  expect(await contrastFailures(page)).toEqual([]);
- await page.reload(); await expect(page.getByRole('combobox', { name: `Move ${title} to` })).toHaveValue('offer');
+ await page.reload(); await expect(page.getByRole('button', { name: `Move ${title} to` })).toContainText('offer');
  // Narrow boards retain all drop zones in a horizontal scroller; edge movement
  // reveals an offscreen target without hiding stages behind a mutually exclusive view.
  await page.setViewportSize({ width: 480, height: 900 });
  await handle.scrollIntoViewIfNeeded(); const source = (await handle.boundingBox())!;
  const board = page.locator('.tracked-scroll'); await board.evaluate(node => { node.scrollLeft = 0; });
- await page.getByLabel('Board stage').selectOption('offer');
+ await page.getByRole('button', { name: 'Board stage' }).click(); await page.getByRole('option', { name: 'offer' }).click();
  const visible = (await handle.boundingBox())!;
  await page.mouse.move(visible.x + 4, visible.y + 4); await page.mouse.down();
  const offset = await board.evaluate(node => node.scrollLeft);
  await page.mouse.move(472, visible.y + 40, { steps: 10 });
  await expect.poll(() => board.evaluate(node => node.scrollLeft)).toBeGreaterThan(offset);
  await page.keyboard.press('Escape'); await page.mouse.up();
- await expect(page.getByRole('combobox', { name: `Move ${title} to` })).toHaveValue('offer');
+ await expect(page.getByRole('button', { name: `Move ${title} to` })).toContainText('offer');
  expect(source.width).toBeGreaterThan(0);
 });

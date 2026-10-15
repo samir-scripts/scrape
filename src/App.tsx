@@ -381,7 +381,7 @@ export default function App() {
           pendingIds={pendingIds}
           jobs={trackedJobs}
           onUpdateStatus={(jobId, status) =>
-            void changeStatus(jobId, status)
+            changeStatus(jobId, status)
           }
           onUpdateNotes={(jobId, notes) =>
             updateNotesMutation.mutateAsync({ jobId, notes })

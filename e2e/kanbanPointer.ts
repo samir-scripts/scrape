@@ -9,6 +9,6 @@ export async function moveByPointer(page: Page, title: string, targetStage: stri
  await target.scrollIntoViewIfNeeded();
  const end = (await target.boundingBox())!;
  await page.mouse.move(end.x + end.width / 2, end.y + 100, { steps: 12 });
- await expect(target).toContainText('Drop here'); await page.mouse.up();
+ await expect(target).toContainText(`Drop in ${targetStage}`); await page.mouse.up();
  await expect(target.getByRole('button', { name: `View ${title} at Demo Company` })).toBeVisible();
 }

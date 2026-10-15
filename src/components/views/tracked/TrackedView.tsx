@@ -17,7 +17,7 @@ import { useHotkeys } from "../../../hooks/useHotkeys";
 
 interface TrackedViewProps {
   jobs: Job[];
-  onUpdateStatus: (jobId: string, status: JobStatus) => void;
+  onUpdateStatus: (jobId: string, status: JobStatus) => void | Promise<unknown>;
   onUpdateNotes: (jobId: string, notes: string) => void | Promise<unknown>;
   onOpenUrl: (url: string) => void;
   pendingIds?: ReadonlySet<string>;

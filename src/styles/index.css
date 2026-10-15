@@ -11,6 +11,11 @@
   --palette-cherry: #D86072;
   --palette-signal: #1F1FE0;
   --color-unread: #7566BA;
+  --color-stage-applied: var(--palette-lavender);
+  --color-stage-interviewing: var(--palette-cream);
+  --color-stage-offer: var(--palette-lime);
+  --color-stage-rejected: var(--palette-cherry);
+  --color-stage-label: var(--palette-ink);
 }
 
 @theme {
@@ -65,6 +70,11 @@
   --color-warning: #F0CB80;
   --color-information: #B8B5FA;
   --color-unread: #C6C2F2;
+  --color-stage-applied: #9E95EA;
+  --color-stage-interviewing: #E4C891;
+  --color-stage-offer: #BBD05D;
+  --color-stage-rejected: #E87585;
+  --color-stage-label: #1A1A1A;
 }
 
 /* One selected family throughout the interface. Code remains fixed-width. */
