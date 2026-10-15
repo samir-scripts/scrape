@@ -59,3 +59,17 @@ Scrollbar preference arguments are scoped to the launched macOS test process;
 the scripts do not change global OS preferences. Appearance results include the
 actual WebView user agent and computed theme/scrollbar values in `result.json`.
 Computed-style checks do not replace a native screenshot or pointer/keyboard QA.
+
+### Native pagination and responsive inspector
+
+```sh
+SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_LAYOUT=1 npm run test:native-startup
+```
+
+This seeds 105 authored discoveries in a temporary SQLite profile, exercises the
+actual toolbar and direct-page controls, resizes the real window through its
+compact modal threshold, and verifies the same notes node, draft and scroll
+position survive. A reload checks pane preference and notes through actual IPC.
+`native-job-layout.mjs` owns these assertions. Debug-only resize controls accept
+bounded sizes and are installed only for an explicitly isolated smoke profile.
+This check uses keyboard resizing; real native pointer dragging remains manual QA.

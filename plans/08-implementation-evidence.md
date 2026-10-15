@@ -216,3 +216,73 @@ Implementation commits: `ea9c3dc` (migration-19 incident/repair), `3b229d8`
 and appearance checks), and `1ebede4` (screen migration, shared styles, adapted tests,
 reviewed baselines and CI wiring). Generated bindings have no drift. The branch
 remains unmerged because the later sections and native visual/manual gates are open.
+
+
+## Section 4 — Toolbar, pagination and adjustable details (2026-10-14)
+
+Scope is section 4 only. Sections 5–7 remain unimplemented and this branch remains
+unmerged. No live profile/database was opened or changed for these checks.
+
+Research traced App query keys, page offsets, SubNav, inspector drafts and cleanup.
+The historical layouts exist but are not a reusable adjustable split. The new
+shared primitive follows the [WAI window splitter pattern](https://www.w3.org/WAI/ARIA/apg/patterns/windowsplitter/)
+and [pointer capture](https://developer.mozilla.org/en-US/docs/Web/API/Element/setPointerCapture).
+Page state could revive an old offset after switching filters back; conditional
+inspector shells remounted pending drafts across the narrow breakpoint.
+
+One toolbar now contains filters, favorites, search and sorting. The controlled
+bottom paginator offers SVG first/previous/next/last controls and direct page entry.
+App alone owns fetching, stale-response isolation, total/clamp and selection reset.
+Filter/sort/page changes close the inspector and flush notes to the original job;
+failed saves expose retry. A transient page draft accepts blank typing, validates
+bounds, and restores on Escape. The existing 2,105-job repository regression checks
+search, notes and offsets beyond the former 2,000-row assumption.
+
+Discovered and both Tracked views share one measured split with minimum widths,
+pointer capture, cancel, keyboard bounds and a reset control. One versioned ratio
+persists only completed changes. Corrupt preferences use the default. Below 812px,
+the same inspector content becomes a native modal dialog and preserves its editor,
+draft and scroll; no hidden duplicate notes editor is mounted.
+
+Regressions were observed failing before implementation (missing direct-page
+control and separator). Native testing then found an additional WebKit issue:
+showModal's deferred focus scroll moved Notes into view even after synchronous
+scroll restoration. Dialog open state now has one imperative owner, with a bounded
+next-task scroll restoration after the native focus task. The same-node, exact
+scroll and persisted-note native assertions passed after this correction. Earlier
+native failures/deadlines were rejected; they are not acceptance evidence.
+
+Validation:
+
+- `npm test`: 387 tests across 58 files and the Vite HTML startup smoke passed.
+- `npm run build`, style guard, Rust formatting, Clippy with warnings denied, and
+  Rust workspace tests passed. The existing bundle-size advisory remains.
+- Three new real Chromium interaction tests cover actual pointer capture, completed
+  vs cancelled drags, keyboard limits/reset, reload, both themes, long content,
+  narrow/wide drafts, direct page jumps and pending-note persistence. Unit tests
+  additionally cover reversed responses, shrinking totals and save retry.
+- `SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_LAYOUT=1 npm run test:native-startup`
+  passed using a temporary 105-discovery fixture, actual WKWebView controls/window
+  resizing and IPC note retrieval. Result: ratio 58, page reset 1, notes persisted.
+  Artifacts: `scrape-native-smoke-eZ6kXf` under the OS temporary directory.
+- Browser screenshots reviewed in both themes at 480/1024/1280/1440 widths include
+  jobs, inspector, applied list, board, removal and workflow. Existing keyboard,
+  contrast, font, reduced-motion and 200% zoom assertions remain required.
+
+The native script uses keyboard separator input and programmatic native window
+resizing. Actual native pointer dragging and native visual screenshot review remain
+pending; Chromium pointer/screenshot checks do not close those gates. CI includes
+the new browser layout checks and isolated native layout command.
+
+Implementation: `1e64e25` controlled paginator, `d41f0fb` split primitive,
+`3ee6103` toolbar/query integration, `2cda158` responsive inspector and native tests.
+
+Final Section 4 verification: the complete browser suite passed **21/21** on stable
+source against 31 reviewed updated baselines (`9d89d82`). A blank intermediate
+board capture was rejected and independently recaptured/reviewed before acceptance;
+no screenshot tolerances were relaxed. The full `npm run test:native` smoke also
+passed, including worker, persistence, cancellation/failure handling and the
+external destination (`scrape-native-smoke-cJds7r`). Rust binding-export tests ran
+with the workspace suite and left `src/bindings` unchanged. The native pointer and
+visual/manual gates above remain explicitly open. Clean-checkout CI was wired but
+was not executed remotely during this section.

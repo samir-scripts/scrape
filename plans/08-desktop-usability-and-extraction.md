@@ -1,6 +1,6 @@
 # Desktop usability and extraction repair
 
-Status: Sections 1, 2A, 2B, and 3 are implemented with tests. Section 3 passes automated WKWebView appearance checks; native visual/manual acceptance remains pending. Sections 4–7 are not started.
+Status: Sections 1, 2A, 2B, and 3 are implemented with tests. Section 3 passes automated WKWebView appearance checks; native visual/manual acceptance remains pending. Section 4 is implemented with automated browser/native coverage; real native pointer acceptance remains pending. Sections 5–7 are not started.
 
 **Luna: execute the implementation workbook below in order.** Sections 1–8 specify behavior; the workbook specifies how to research, implement, test, and deliver it. Do not treat a passing unit suite or a completed visual change as completion of a phase whose native acceptance remains unverified.
 

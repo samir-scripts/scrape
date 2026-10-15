@@ -23,7 +23,7 @@ The `src/components/ui` directory contains atomic, reusable UI components implem
 | **Input** | [`Input.tsx`](Input.tsx) | Monospaced text input with 0px radius, 1px border, clear button, and optional prefix/suffix icons. |
 | **KeyHint** | [`KeyHint.tsx`](KeyHint.tsx) | Monospaced keyboard shortcut pill (e.g. `⌘K`, `J`, `K`, `ESC`) used throughout buttons, menus, and footer bars. |
 | **ListRow** | [`ListRow.tsx`](ListRow.tsx) | Standardized hoverable list item container with left/right slots and border separators. |
-| **Modal** | [`Modal.tsx`](Modal.tsx) | Accessible dialog backdrop and container. Manages focus trapping, `Escape` key listeners, and backdrop click dismissal. |
+| **Modal** | [`Modal.tsx`](Modal.tsx) | Shared modal/inline inspector shell. Modal presentation uses native dialog focus trapping; inline presentation retains content without remounting. Manages Escape, focus restoration and scroll across responsive transitions. |
 | **Panel** | [`Panel.tsx`](Panel.tsx) | Heavy-bordered content container with optional title header bar and collapsible body. |
 | **RangeSlider** | [`RangeSlider.tsx`](RangeSlider.tsx) | Dual-thumb brutalist range slider for bounded numeric ranges (salary minimum/maximum, years of experience). Supports step increments and thumb tooltips. |
 | **Rule** | [`Rule.tsx`](Rule.tsx) | Hairline 1px horizontal or vertical divider (`hr` / `div`) styled with `--color-border`. |
