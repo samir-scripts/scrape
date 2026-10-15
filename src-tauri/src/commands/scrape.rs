@@ -71,6 +71,7 @@ pub async fn set_scheduler_paused(
     state: State<'_, AppState>,
     paused: bool,
 ) -> Result<()> {
+    let _permit = state.runner.write_permit()?;
     state.scheduler.lock().await.set_paused(paused).await?;
     use tauri::Emitter;
     let _ = app.emit("settings://changed", ());
@@ -148,6 +149,7 @@ async fn execute_dry_run_worker(
     filters: WorkerFilters,
     blocked_postings: Vec<String>,
     cancel: Option<Arc<AtomicBool>>,
+    run_cancel: Arc<AtomicBool>,
 ) -> Result<Vec<WorkerEvent>> {
     let config = WorkerConfig {
         version: PROTOCOL_VERSION,
@@ -181,9 +183,10 @@ async fn execute_dry_run_worker(
     let deadline = tokio::time::Instant::now()
         + std::time::Duration::from_secs(crate::services::process::execution_seconds(60));
     loop {
-        if cancel
-            .as_ref()
-            .is_some_and(|flag| flag.load(Ordering::SeqCst))
+        if run_cancel.load(Ordering::SeqCst)
+            || cancel
+                .as_ref()
+                .is_some_and(|flag| flag.load(Ordering::SeqCst))
         {
             terminate_preview(child, &mut rx).await;
             return Err(AppError::Internal("Preview cancelled".into()));
@@ -246,6 +249,7 @@ pub async fn test_source_transient(
     state: State<'_, AppState>,
     input: TransientSourceInput,
 ) -> Result<Vec<WorkerEvent>> {
+    let _guard = state.runner.try_acquire_lock()?;
     let filters = crate::services::runner::resolve_worker_filters(
         &input.filters.unwrap_or(serde_json::Value::Null),
         crate::services::runner::load_global_filters(&state.db).await?,
@@ -263,6 +267,7 @@ pub async fn test_source_transient(
         filters,
         crate::db::postings::suppression_snapshot(&state.db).await?,
         None,
+        state.runner.cancellation_flag(),
     )
     .await
 }
@@ -273,6 +278,7 @@ pub async fn test_source(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<Vec<WorkerEvent>> {
+    let _guard = state.runner.try_acquire_lock()?;
     let source = SourcesRepo::get(&state.db, &id).await?;
     let filters = crate::services::runner::resolve_worker_filters(
         &source.filters,
@@ -291,6 +297,7 @@ pub async fn test_source(
         filters,
         crate::db::postings::suppression_snapshot(&state.db).await?,
         None,
+        state.runner.cancellation_flag(),
     )
     .await
 }
@@ -377,6 +384,7 @@ pub async fn preview_workflow(
         filters,
         crate::db::postings::suppression_snapshot(&state.db).await?,
         Some(cancel),
+        state.runner.cancellation_flag(),
     )
     .await?;
     let mut result = WorkflowPreview {
@@ -465,6 +473,7 @@ pub async fn save_workflow(
     spec: serde_json::Value,
     id: Option<String>,
 ) -> Result<crate::db::sources::Source> {
+    let _permit = state.runner.write_permit()?;
     let timezone: String = SettingsRepo::get_value(&state.db, "system.timezone")
         .await?
         .unwrap_or_else(|| "UTC".into());
@@ -508,5 +517,11 @@ pub fn cancel_workflow_preview(request_id: String) -> bool {
         true
     } else {
         false
+    }
+}
+
+pub fn cancel_all_previews() {
+    for flag in PREVIEW_CANCEL.lock().unwrap().values() {
+        flag.store(true, Ordering::SeqCst);
     }
 }

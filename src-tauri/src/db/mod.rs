@@ -4,6 +4,7 @@ use sqlx::SqlitePool;
 use std::path::Path;
 use std::time::Duration;
 
+pub mod cleanup;
 pub mod compensation;
 mod history;
 pub mod jobs;
@@ -65,7 +66,7 @@ pub async fn init_db(db_path: &Path) -> Result<SqlitePool> {
     Ok(pool)
 }
 
-async fn backup_to(pool: &SqlitePool, path: &Path) -> Result<()> {
+pub(crate) async fn backup_to(pool: &SqlitePool, path: &Path) -> Result<()> {
     sqlx::query("VACUUM INTO ?")
         .bind(path.to_string_lossy().as_ref())
         .execute(pool)

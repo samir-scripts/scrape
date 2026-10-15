@@ -47,10 +47,11 @@ impl SystemService {
 
     pub fn get_log_file_path(app: &tauri::AppHandle) -> std::path::PathBuf {
         use tauri::Manager;
-        let app_dir = app
-            .path()
-            .app_data_dir()
-            .unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let app_dir = crate::services::native_smoke::directory().unwrap_or_else(|| {
+            app.path()
+                .app_data_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
         let _ = std::fs::create_dir_all(&app_dir);
         app_dir.join("scrape.log")
     }
@@ -83,10 +84,11 @@ impl SystemService {
             let _ = std::fs::write(&log_path, b"");
         }
 
-        let app_dir = app
-            .path()
-            .app_data_dir()
-            .unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let app_dir = crate::services::native_smoke::directory().unwrap_or_else(|| {
+            app.path()
+                .app_data_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
         let script_path = app_dir.join("open_console.command");
 
         let log_path_str = log_path.to_string_lossy();

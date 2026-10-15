@@ -1,3 +1,4 @@
+pub mod cleanup;
 pub mod jobs;
 pub mod metrics;
 pub mod notifications;

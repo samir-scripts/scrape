@@ -18,6 +18,7 @@ use tokio::time::{timeout_at, Instant};
 
 pub struct RunLockGuard {
     flag: Arc<AtomicBool>,
+    _permit: tokio::sync::OwnedRwLockReadGuard<()>,
 }
 
 impl RunLockGuard {
@@ -29,6 +30,22 @@ impl RunLockGuard {
 }
 
 impl Drop for RunLockGuard {
+    fn drop(&mut self) {
+        self.flag.store(false, Ordering::SeqCst);
+    }
+}
+
+pub struct MaintenanceGuard {
+    flag: Arc<AtomicBool>,
+    writes: Arc<tokio::sync::RwLock<()>>,
+}
+impl MaintenanceGuard {
+    pub async fn exclusive(&self) -> Result<tokio::sync::OwnedRwLockWriteGuard<()>> {
+        tokio::time::timeout(Duration::from_secs(75), self.writes.clone().write_owned()).await
+            .map_err(|_| AppError::Validation("Cleanup could not stop active work within 75 seconds. No data was deleted. Try again once the run has stopped.".into()))
+    }
+}
+impl Drop for MaintenanceGuard {
     fn drop(&mut self) {
         self.flag.store(false, Ordering::SeqCst);
     }
@@ -98,6 +115,8 @@ pub struct ScrapeRunner {
     pool: SqlitePool,
     is_running: Arc<AtomicBool>,
     cancel_requested: Arc<AtomicBool>,
+    maintenance: Arc<AtomicBool>,
+    writes: Arc<tokio::sync::RwLock<()>>,
 }
 
 impl ScrapeRunner {
@@ -106,6 +125,8 @@ impl ScrapeRunner {
             pool,
             is_running: Arc::new(AtomicBool::new(false)),
             cancel_requested: Arc::new(AtomicBool::new(false)),
+            maintenance: Arc::new(AtomicBool::new(false)),
+            writes: Arc::new(tokio::sync::RwLock::new(())),
         }
     }
 
@@ -121,7 +142,38 @@ impl ScrapeRunner {
         true
     }
 
+    /// Every app mutation holds a permit; maintenance rejects new mutations
+    /// before waiting for existing workers/commands to finish.
+    pub fn write_permit(&self) -> Result<tokio::sync::OwnedRwLockReadGuard<()>> {
+        if self.maintenance.load(Ordering::SeqCst) {
+            return Err(AppError::Validation(
+                "Data cleanup is in progress. Try again after it finishes.".into(),
+            ));
+        }
+        self.writes.clone().try_read_owned().map_err(|_| {
+            AppError::Validation("Data cleanup is in progress. Try again after it finishes.".into())
+        })
+    }
+
+    pub fn begin_maintenance(&self) -> Result<MaintenanceGuard> {
+        self.maintenance
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .map_err(|_| {
+                AppError::Validation("Another data cleanup is already in progress.".into())
+            })?;
+        self.cancel_current();
+        Ok(MaintenanceGuard {
+            flag: self.maintenance.clone(),
+            writes: self.writes.clone(),
+        })
+    }
+
+    pub fn cancellation_flag(&self) -> Arc<AtomicBool> {
+        self.cancel_requested.clone()
+    }
+
     pub fn try_acquire_lock(&self) -> Result<RunLockGuard> {
+        let permit = self.write_permit()?;
         if self
             .is_running
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -131,8 +183,13 @@ impl ScrapeRunner {
             return Err(AppError::AlreadyRunning);
         }
         self.cancel_requested.store(false, Ordering::SeqCst);
+        if self.maintenance.load(Ordering::SeqCst) {
+            self.is_running.store(false, Ordering::SeqCst);
+            return Err(AppError::Validation("Data cleanup is in progress.".into()));
+        }
         Ok(RunLockGuard {
             flag: self.is_running.clone(),
+            _permit: permit,
         })
     }
 

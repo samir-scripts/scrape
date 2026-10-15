@@ -407,6 +407,12 @@ impl SourcesRepo {
     }
 
     pub async fn seed_default_sample_if_empty(pool: &SqlitePool) -> Result<Option<Source>> {
+        if crate::db::settings::SettingsRepo::get_value::<bool>(pool, "app.data_reset")
+            .await?
+            .unwrap_or(false)
+        {
+            return Ok(None);
+        }
         let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM sources")
             .fetch_one(pool)
             .await?;

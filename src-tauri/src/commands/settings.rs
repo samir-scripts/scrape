@@ -15,6 +15,7 @@ pub async fn update_setting(
     key: String,
     value: serde_json::Value,
 ) -> Result<Settings> {
+    let _permit = state.runner.write_permit()?;
     let settings = SettingsRepo::update_setting(&state.db, &key, value.clone()).await?;
 
     if key == "scraper.cron" {

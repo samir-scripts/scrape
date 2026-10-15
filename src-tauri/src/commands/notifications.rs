@@ -25,6 +25,7 @@ pub async fn create_notification(
     state: State<'_, AppState>,
     input: CreateNotificationInput,
 ) -> Result<AppNotification> {
+    let _permit = state.runner.write_permit()?;
     NotificationRepo::create(&state.db, input).await
 }
 
@@ -39,16 +40,19 @@ pub async fn list_notifications(
 
 #[tauri::command]
 pub async fn mark_notification_read(state: State<'_, AppState>, id: String) -> Result<()> {
+    let _permit = state.runner.write_permit()?;
     NotificationRepo::mark_as_read(&state.db, &id).await
 }
 
 #[tauri::command]
 pub async fn mark_all_notifications_read(state: State<'_, AppState>) -> Result<()> {
+    let _permit = state.runner.write_permit()?;
     NotificationRepo::mark_all_as_read(&state.db).await
 }
 
 #[tauri::command]
 pub async fn clear_all_notifications(state: State<'_, AppState>) -> Result<()> {
+    let _permit = state.runner.write_permit()?;
     NotificationRepo::clear_all(&state.db).await
 }
 
@@ -62,6 +66,7 @@ pub async fn check_app_update(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<UpdateCheckResult> {
+    let _permit = state.runner.write_permit()?;
     let current_version = app.package_info().version.to_string();
     let now = now_iso();
 

@@ -114,3 +114,34 @@ integrity was `ok`. Retain backup
 The same repair helper documented above is safe to run again: recognized migrated
 histories have no pending schema upgrade. Rebuild/relaunch the updated desktop
 application so its embedded migration manifest includes this repair.
+
+## Settings bulk cleanup recovery
+
+Settings → Data management offers explicit hard deletion, separate from reversible
+single-posting removal. Every bulk action first creates a consistent SQLite
+snapshot in `backups/pre-cleanup-<uuid>.db` beside the active database. The success
+message gives its absolute path. A backup failure aborts deletion. Backups can
+contain private notes and remain after full reset; reset does not delete recovery
+files or change migration history.
+
+To restore a cleanup backup:
+
+1. Quit Scrape completely, including its tray/menu-bar process. Do not restore
+   while a worker or another SQLite connection is open.
+2. Preserve the current database **and its `-wal`/`-shm` files** elsewhere if you
+   want to retain changes made since cleanup.
+3. Replace `scrape_data.db` with the selected complete `pre-cleanup-*.db` snapshot.
+   Move aside any old `scrape_data.db-wal` and `scrape_data.db-shm` together; never
+   combine a restored main database with WAL files from a different database.
+4. Start the compatible app version. Review automatic scheduling before resuming
+   work: the snapshot contains the settings from before cleanup.
+
+Restoration replaces current data; it is not a record-level Undo or merge. Jobs-only
+cleanup preserves workflows, notifications, run logs, settings (except the chosen
+pause), and all suppression entries. Favorite/tracked preservation keeps **all saved
+copies of each qualifying posting identity**, including removed copies and their
+notes/history/locations. Full reset clears app database tables and frontend
+preferences, disables launch at login, clears the diagnostic log, and leaves
+scraping paused. OS/log-cleanup failures are shown as warnings after database
+success. Schema, migration metadata and recovery backups remain. A reset marker
+prevents the sample workflow from being silently recreated on restart.

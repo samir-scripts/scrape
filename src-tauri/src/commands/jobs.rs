@@ -32,6 +32,7 @@ pub async fn update_job_status(
     id: String,
     status: JobStatus,
 ) -> Result<Job> {
+    let _permit = state.runner.write_permit()?;
     let job = JobsRepo::update_status(&state.db, &id, status).await?;
     let _ = app.emit("jobs://changed", &job);
     Ok(job)
@@ -44,6 +45,7 @@ pub async fn bulk_update_job_status(
     ids: Vec<String>,
     status: JobStatus,
 ) -> Result<u64> {
+    let _permit = state.runner.write_permit()?;
     let count = JobsRepo::bulk_update_status(&state.db, &ids, status).await?;
     let _ = app.emit("jobs://changed", ());
     Ok(count)
@@ -56,6 +58,7 @@ pub async fn update_job_notes(
     id: String,
     notes: Option<String>,
 ) -> Result<Job> {
+    let _permit = state.runner.write_permit()?;
     let job = JobsRepo::update_notes(&state.db, &id, notes.as_deref()).await?;
     let _ = app.emit("jobs://changed", &job);
     Ok(job)
@@ -71,6 +74,7 @@ pub async fn get_job_status_events(
 
 #[tauri::command]
 pub async fn reclassify_jobs(state: State<'_, AppState>) -> Result<i64> {
+    let _permit = state.runner.write_permit()?;
     JobsRepo::reclassify_jobs(&state.db).await
 }
 
@@ -93,6 +97,7 @@ pub async fn toggle_job_favorite(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<Job> {
+    let _permit = state.runner.write_permit()?;
     let job = JobsRepo::toggle_favorite(&state.db, &id).await?;
     let _ = app.emit("jobs://changed", &job);
     Ok(job)
@@ -105,6 +110,7 @@ pub async fn set_job_favorite(
     id: String,
     favorited: bool,
 ) -> Result<Job> {
+    let _permit = state.runner.write_permit()?;
     let job = JobsRepo::set_favorite(&state.db, &id, favorited).await?;
     let _ = app.emit("jobs://changed", &job);
     Ok(job)
@@ -115,6 +121,7 @@ pub async fn cleanup_expired_jobs(
     state: State<'_, AppState>,
     source_id: Option<String>,
 ) -> Result<u64> {
+    let _permit = state.runner.write_permit()?;
     if let Some(src_id) = source_id {
         use crate::db::sources::SourcesRepo;
         let source = SourcesRepo::get(&state.db, &src_id).await?;
@@ -132,6 +139,7 @@ pub async fn cleanup_expired_jobs(
 
 #[tauri::command]
 pub async fn delete_job(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<bool> {
+    let _permit = state.runner.write_permit()?;
     let deleted = JobsRepo::delete(&state.db, &id).await?;
     if deleted {
         let _ = app.emit("jobs://changed", ());
@@ -146,6 +154,7 @@ pub async fn remove_job(
     id: String,
     block: bool,
 ) -> Result<crate::db::postings::RemovalResult> {
+    let _permit = state.runner.write_permit()?;
     let result = crate::db::postings::remove(&state.db, &id, block).await?;
     let _ = app.emit("jobs://changed", ());
     Ok(result)
@@ -157,6 +166,7 @@ pub async fn restore_posting(
     state: State<'_, AppState>,
     identity: String,
 ) -> Result<()> {
+    let _permit = state.runner.write_permit()?;
     crate::db::postings::restore(&state.db, &identity).await?;
     let _ = app.emit("jobs://changed", ());
     Ok(())
@@ -169,6 +179,7 @@ pub async fn set_posting_blocked(
     identity: String,
     blocked: bool,
 ) -> Result<()> {
+    let _permit = state.runner.write_permit()?;
     crate::db::postings::set_blocked(&state.db, &identity, blocked).await?;
     let _ = app.emit("jobs://changed", ());
     Ok(())

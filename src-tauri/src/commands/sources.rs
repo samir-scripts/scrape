@@ -19,6 +19,7 @@ pub async fn create_source(
     state: State<'_, AppState>,
     input: CreateSourceInput,
 ) -> Result<Source> {
+    let _permit = state.runner.write_permit()?;
     let source = SourcesRepo::create(&state.db, input).await?;
     let _ = app.emit("sources://changed", &source);
     Ok(source)
@@ -30,6 +31,7 @@ pub async fn update_source(
     state: State<'_, AppState>,
     input: UpdateSourceInput,
 ) -> Result<Source> {
+    let _permit = state.runner.write_permit()?;
     let source = SourcesRepo::update(&state.db, input).await?;
     let _ = app.emit("sources://changed", &source);
     Ok(source)
@@ -37,6 +39,7 @@ pub async fn update_source(
 
 #[tauri::command]
 pub async fn delete_source(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<()> {
+    let _permit = state.runner.write_permit()?;
     SourcesRepo::delete(&state.db, &id).await?;
     let _ = app.emit("sources://changed", ());
     Ok(())
@@ -44,6 +47,7 @@ pub async fn delete_source(app: AppHandle, state: State<'_, AppState>, id: Strin
 
 #[tauri::command]
 pub async fn seed_sample_workflow(app: AppHandle, state: State<'_, AppState>) -> Result<Source> {
+    let _permit = state.runner.write_permit()?;
     let list = SourcesRepo::list(&state.db).await?;
     if let Some(existing) = list
         .into_iter()

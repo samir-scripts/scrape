@@ -139,6 +139,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::cleanup::preview_data_cleanup,
+            commands::cleanup::execute_data_cleanup,
             commands::jobs::list_jobs,
             commands::jobs::get_job,
             commands::jobs::get_job_locations,

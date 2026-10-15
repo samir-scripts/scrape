@@ -185,8 +185,12 @@ impl SchedulerService {
             let mut queue = DispatchQueue::default();
             loop {
                 interval.tick().await;
+                let Ok(_permit) = runner.write_permit() else {
+                    continue;
+                };
                 let now = Utc::now();
                 if paused.load(Ordering::SeqCst) {
+                    queue = DispatchQueue::default();
                     if startup_at.is_some_and(|at| at <= now) {
                         startup_at = None;
                     }
@@ -293,6 +297,9 @@ impl SchedulerService {
         SettingsRepo::set_value(&self.pool, "scraper.enabled", serde_json::json!(!paused)).await?;
         self.is_paused.store(paused, Ordering::SeqCst);
         Ok(())
+    }
+    pub fn sync_paused(&self, paused: bool) {
+        self.is_paused.store(paused, Ordering::SeqCst);
     }
     pub async fn get_status(&self) -> Result<SchedulerStatus> {
         let sources = SourcesRepo::list(&self.pool).await?;
