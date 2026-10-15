@@ -32,6 +32,7 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
   const rules = draft.filters?.matching;
   const advancedSettings = [
     draft.filters?.query || draft.filters?.policy ? "expert rules" : null,
+    draft.filters?.locations?.length ? "additional location text" : null,
     draft.filters?.include_keywords?.length ||
     draft.filters?.exclude_keywords?.length
       ? "imported keyword rules"
@@ -43,14 +44,11 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
       ? "native pay rules"
       : null,
     rules?.posting_date ? "posting dates" : null,
-    rules?.workplaces?.length ||
     rules?.experience_min != null ||
     rules?.experience_max != null ||
     rules?.sponsorship?.length ||
     rules?.work_auth?.length ||
     rules?.clearance?.length ||
-    rules?.countries?.length ||
-    rules?.regions?.length ||
     (rules?.new_grad && rules.new_grad !== "any")
       ? "additional matching rules"
       : null,

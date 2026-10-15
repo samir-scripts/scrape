@@ -1,3 +1,4 @@
+import { GeographyMatching } from "./GeographyMatching";
 import { INGESTION_LIMITS } from "../../../bindings/ingestionLimits";
 import type { Settings } from "../../../bindings/Settings";
 import { SalaryRangeFilter } from "../../filters/SalaryRangeFilter";
@@ -189,8 +190,9 @@ export function WorkflowSections({
                 }),
             ),
         )}
-        {field(
-          "Location matches",
+        <GeographyMatching rules={rules} onChange={setRules} onDraftChange={() => change({ ...draft })} />
+        {advanced && field(
+          "Location matches (additional text restriction)",
           filters.locations?.join(", ") || "",
           (value) =>
             change({
@@ -254,25 +256,6 @@ export function WorkflowSections({
                         role_types: e.target.checked
                           ? [...rules.role_types, value]
                           : rules.role_types.filter((v) => v !== value),
-                      })
-                    }
-                  />{" "}
-                  {value.replaceAll("_", " ")}
-                </label>
-              ))}
-            </fieldset>
-            <fieldset className="flex flex-wrap gap-3">
-              <legend>Workplace</legend>
-              {(["remote", "hybrid", "onsite"] as const).map((value) => (
-                <label key={value}>
-                  <input
-                    type="checkbox"
-                    checked={rules.workplaces.includes(value)}
-                    onChange={(e) =>
-                      setRules({
-                        workplaces: e.target.checked
-                          ? [...rules.workplaces, value]
-                          : rules.workplaces.filter((v) => v !== value),
                       })
                     }
                   />{" "}
@@ -474,8 +457,10 @@ export function WorkflowSections({
                 </label>
               </>
             )}
+            <details><summary className="cursor-pointer min-h-8">Expert geography codes</summary>
             {field("Eligible countries (ISO codes)", rules.countries.join(", "), value => setRules({ countries: words(value).map(code => code.toUpperCase()) }))}
             {field("Eligible regions (ISO codes)", rules.regions.join(", "), value => setRules({ regions: words(value).map(code => code.toUpperCase()) }))}
+            </details>
             {field("Expert query", filters.query || "", (query) =>
               change({
                 ...draft,

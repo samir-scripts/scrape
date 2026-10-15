@@ -46,7 +46,7 @@ if (process.env.SCRAPE_NATIVE_WORKFLOW === "1") {
   workflowServer = createServer((request, response) => {
     if (request.url === "/robots.txt") { response.end("User-agent: *\nAllow: /"); return; }
     response.end(`<script type="application/ld+json">${JSON.stringify([
-      { "@type": "JobPosting", identifier: "wizard-1", title: "Native workflow engineer", url: "/jobs/wizard-1", hiringOrganization: { name: "Fixture Co" } },
+      { "@type": "JobPosting", identifier: "wizard-1", title: "Native workflow engineer", url: "/jobs/wizard-1", hiringOrganization: { name: "Fixture Co" }, jobLocationType: "TELECOMMUTE", applicantLocationRequirements: { "@type": "AdministrativeArea", name: "US-TX" }, jobLocation: { "@type": "Place", address: { addressLocality: "Austin", addressRegion: "TX", addressCountry: "US" } } },
       { "@type": "JobPosting", identifier: "wizard-2", title: "Unrelated role", url: "/jobs/wizard-2", hiringOrganization: { name: "Fixture Co" } },
     ])}</script>`);
   });

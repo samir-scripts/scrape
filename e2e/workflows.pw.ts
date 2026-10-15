@@ -15,6 +15,11 @@ test("create a workflow through actual controls without an implicit scrape", asy
   const limit = dialog.getByRole("textbox", { name: "Maximum matching jobs per run" });
   await expect(limit).toHaveValue("20");
   await limit.fill("7");
+  await dialog.getByRole("combobox", { name: "Country", exact: true }).fill("US");
+  await page.keyboard.press("Tab");
+  await dialog.getByRole("combobox", { name: "State/province", exact: true }).fill("CA");
+  await page.keyboard.press("Enter");
+  await dialog.getByRole("checkbox", { name: "Remote", exact: true }).check();
   await dialog
     .getByRole("textbox", { name: "Title keywords (any)" })
     .fill("NoSuchRole");
@@ -38,6 +43,9 @@ test("create a workflow through actual controls without an implicit scrape", asy
   await expect(edit.getByLabel("Workflow name")).toHaveValue("fixture-board");
   await edit.getByRole("button", { name: "Continue to Matching" }).click();
   await expect(edit.getByRole("textbox", { name: "Maximum matching jobs per run" })).toHaveValue("7");
+  await expect(edit.getByRole("combobox", { name: "Country", exact: true })).toHaveValue("United States");
+  await expect(edit.getByRole("button", { name: "Remove California", exact: true })).toBeVisible();
+  await expect(edit.getByRole("checkbox", { name: "Remote", exact: true })).toBeChecked();
   await expect(edit.getByLabel("Title keywords (any)")).toHaveValue("NoSuchRole");
   await edit.getByRole("button", { name: "Back", exact: true }).click();
   await expect(edit.getByLabel("Workflow name")).toHaveValue("fixture-board");
