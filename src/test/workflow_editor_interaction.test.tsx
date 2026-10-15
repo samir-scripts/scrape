@@ -80,3 +80,16 @@ describe("one workflow draft", () => {
   });
 
 });
+it('keeps an inherited schedule explicit and unique without writing global defaults during navigation', async () => {
+ const save = vi.spyOn(api, 'saveWorkflow'); const settings = vi.spyOn(api, 'updateSetting');
+ render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, cadence: 'global' }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+ const user = userEvent.setup();
+ await user.click(screen.getByRole('button', { name: 'Continue to Matching' }));
+ await user.click(screen.getByRole('button', { name: 'Continue to Schedule' }));
+ expect((screen.getByRole('combobox', { name: 'Schedule' }) as HTMLSelectElement).value).toBe('global');
+ expect(screen.getAllByRole('option', { name: 'Inherit global schedule' })).toHaveLength(1);
+ await user.click(screen.getByRole('button', { name: 'Back' }));
+ await user.click(screen.getByRole('button', { name: 'Continue to Schedule' }));
+ expect((screen.getByRole('combobox', { name: 'Schedule' }) as HTMLSelectElement).value).toBe('global');
+ expect(settings).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled();
+});

@@ -507,7 +507,7 @@ export function WorkflowSections({
                   "manual",
                   "global",
                   ...(schedule.cadence &&
-                  !["daily", "manual"].includes(schedule.cadence)
+                  !["daily", "manual", "global"].includes(schedule.cadence)
                     ? [schedule.cadence]
                     : []),
                 ]
