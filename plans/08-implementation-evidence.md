@@ -1,6 +1,6 @@
 # Desktop usability repair: implementation evidence
 
-Status: Sections 1, 2A, 2B, and 3 are implemented with tests. Automated native startup/IPC and Section 3 appearance checks now pass after repairing the test launcher. Native screenshot/manual acceptance remains pending; Sections 4–7 have not started.
+Status: Sections 1–7 are implemented. Automated workspace, frontend, recorded-provider, browser, and isolated native IPC checks pass. Section 8 integration is in progress; native pointer/visual/file-chooser checks and exact historical Cloudflare capture evidence remain pending.
 
 This document records results for [the implementation plan](08-desktop-usability-and-extraction.md). Each new result must include the environment, command or interaction, expected behavior, observed outcome, and evidence. Do not upgrade a hypothesis to a confirmed cause without a reproduction.
 
@@ -13,7 +13,9 @@ This document records results for [the implementation plan](08-desktop-usability
 - Native Scrape window: not present in the computer-use app inventory at the start of this section. The existing `127.0.0.1:1420` Vite server was already listening; it was not stopped or reused for native regression testing. No live-profile database was opened.
 - Screenshot references supplied by the user are preserved in `plans/assets/08-desktop-review/01`–`09`. The screenshots show Obsidian for the desktop screens, 1280×800 for the main images, a 1552×78 toolbar strip, and an external Cloudflare job page. They do not identify the app commit, WebKit build, or database migration version.
 
-## Issue-to-test reproduction matrix
+## Original Section 1 issue-to-test triage (historical)
+
+The following matrix records the initial evidence and gaps at the start of Section 1. It is intentionally retained as history; the current acceptance reconciliation at the end of this file supersedes its “current” and “no test” statements.
 
 | ID | Report / expected observable result | Existing coverage and gaps | Section / test layer | Reproduction in Section 1 |
 |---|---|---|---|---|
@@ -475,3 +477,41 @@ The browser verification used isolated checkout `14faf06` plus the new schedulin
 Browser screenshots demonstrate browser fixture rendering, not live-provider verification or native visual QA. Native checks operate actual WebView controls and IPC programmatically; native visual/manual pointer gates from earlier sections remain open. No live database was tested, no remote CI run was claimed, and no merge into develop was performed. The four pre-existing user changes are byte-for-byte unchanged against `/tmp/scrape-pre-section7.patch`.
 
 Behavior commits: `440fd01` canonical dispatch-derived status; `240a7f4` completion ordering; `14faf06` summary/refresh wiring; `8d6500b` native/browser regressions and CI.
+
+
+## Section 8 — Final integration and handoff
+
+Section 8 is still in progress because it requires actual native pointer/visual/file-chooser evidence and the exact posting capture requested in the original report. The automated verification records below do not substitute for those manual/provider-specific gates.
+
+### Current issue-to-test reconciliation
+
+| Report | Current automated coverage | Remaining acceptance evidence |
+|---|---|---|
+| Encoded HTML descriptions | Rust structured normalization; actual worker/repository and inspector interaction cases. | Native visual review of the reported historical posting; preserve exact raw source capture if available. |
+| Remote + US | Authored Greenhouse fixture traverses actual worker, SQLite, restart, and shared geography filter. | Raw posting ID/detail evidence from the original screenshot was not supplied or recovered. |
+| Resizable Discovered panes | Keyboard/persistence component checks; browser pointer split tests; native resize/window reflow and notes persistence. | Real pointer gesture and visual inspection in native WKWebView. |
+| Kanban separation and movement | Outlined columns and visible Move to; browser pointer drag; native keyboard/select persistence, history and cancellation. | Real native pointer drag through macOS WebView, including populated and empty columns. |
+| Scraper workflow UI/import/run | URL→preview→save interactions; browser file chooser; actual native local HTTP→sidecar preview/save; recorded-mode execution guard. | Native OS file chooser operation and manual workflow visual inspection. |
+| Schedule control | Rust dispatch-derived status tests; frontend loading/error/paused/manual/invalid/active states; native pause/resume/create/update/toggle/timezone agreement; full native cancellation/completion. | Native screenshot review remains part of final visual gate. |
+| Pagination/search | Repository query returns 2,105 rows and searches beyond row 2,000; page jumps, stale responses, reset and native keyboard/window-reflow checks. | Native screen review at required widths and 200% zoom (browser zoom is covered separately). |
+| Theme/scrollbars/fonts | Automated WKWebView computed styles for Paper/Obsidian, all bundled fonts and Always/Automatic scrollbar configurations; browser contrast/focus/reduced-motion snapshots. | Human visual review in native WKWebView; no Windows/Linux evidence. |
+| SVG/action controls | Accessible icon interactions, keyboard coverage, named trash actions, visual browser baselines; workflow deletion failure feedback. | Review native icon/target appearance in both themes. |
+
+### Section 8 audit and targeted cleanup
+
+- Confirmed the Scraper workflow registry still displayed a text `DEL` control. Replaced it with the existing contextual, danger-colored SVG icon button and catches delete errors into the shared alert toast. The interaction test verifies the button's accessible name/SVG, confirmation text, persistence call, and visible failure message. Replaced the remaining production action arrows and square favorite indicator with shared SVGs; keyboard shortcut glyphs and decorative wizard separators remain text because they represent key names or hierarchy, not action icons.
+- Updated stale component/project status notes. The old 2,000-row setting is limited to browser demonstration fixture retrieval; production listing, filtering, count, sorting and paging use the repository contract. Actual SQLite coverage searches/counts 2,105 records.
+- CI already runs recorded provider replay, generated-binding drift, workspace and frontend checks, both-theme/browser interaction tests, and isolated native startup/workflow/Kanban/layout/schedule paths. This audit did not weaken or bypass CI checks.
+
+| Section 8 verification | Result |
+|---|---|
+| Recorded provider replay | Passed at 2026-10-15: Lever 8/8 and Ashby 31/31 verified, zero worker errors. These are timestamped captured responses, not live postings. |
+| Shared frontend suite | Passed on the shared worktree: 408 tests across 65 files, plus Vite startup smoke. The isolated committed checkout passed 407 tests across 65 files. |
+| Targeted workflow deletion/import and inspector interactions | Passed after SVG/error handling: 9 tests across 2 files; the broader tooltip/workflow suite also passed 23 tests before the final decorative/action-icon refinements. |
+| Playwright | Snapshot-update pass completed all 26 tests and refreshed three workflow screenshots for the new SVG action. The subsequent no-update verification passed 17 tests and failed 9: eight visual snapshots differed and the browser-extension 200% zoom test did not receive its expected narrowed viewport. Treat snapshot and zoom validation as unresolved; do not claim a clean browser pass. |
+| TypeScript, production build, style guard and Rust formatting | Passed in the isolated committed checkout after using the committed `danger` IconButton variant. Build retains its existing large-bundle advisory. |
+| Previously completed Section 7 checks | Rust workspace 279 tests; browser 26 tests; full sidecar native smoke and isolated actual Tauri schedule control check passed. Section 8 changes do not touch Rust/scheduling behavior. |
+
+`npm ci` and the complete CI sequence have not been repeated from a newly installed clean checkout in this section; the isolated worktree used copied, already installed dependencies. No remote CI run was performed. The clean browser recheck was not green and needs investigation before handoff. This work uses the macOS WKWebView test host; the recorded result does not establish behavior on other desktop platforms. Never use or mutate the live database to complete these gates.
+
+The four pre-existing user edits in `IconButton.tsx`, `RemoveJobButton.tsx`, discovered `JobCard.tsx`, and its interaction test remain uncommitted and unchanged by this section. Section 8 must remain in progress until the real native manual gates above are recorded or explicitly accepted as outstanding for handoff.

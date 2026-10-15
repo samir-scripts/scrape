@@ -1,8 +1,8 @@
 # Desktop usability and extraction repair
 
-Status: Sections 1, 2A, 2B, and 3 are implemented with tests. Section 3 passes automated WKWebView appearance checks; native visual/manual acceptance remains pending. Section 4 is implemented with automated browser/native coverage; real native pointer acceptance remains pending. Section 5 is implemented with browser pointer and native select/keyboard coverage; real native pointer acceptance remains open. Section 6 is implemented with automated wizard/import and native extraction coverage; native file-chooser acceptance remains pending. Section 7 is not started.
+Status: Sections 1–7 are implemented and documented. Automated browser and isolated native IPC checks pass. Native manual visual/pointer verification, the native workflow file chooser, and exact captured-provider evidence remain open; see [Section 8 integration evidence](08-implementation-evidence.md#section-8--final-integration-and-handoff). Section 8 is an integration/handoff gate and is not complete until limitations are recorded.
 
-**Luna: execute the implementation workbook below in order.** Sections 1–8 specify behavior; the workbook specifies how to research, implement, test, and deliver it. Do not treat a passing unit suite or a completed visual change as completion of a phase whose native acceptance remains unverified.
+**Implementation workbook.** Sections 1–8 specify behavior; the workbook specifies how to research, implement, test, and deliver it. Do not treat a passing unit suite or a completed visual change as completion of a phase whose native acceptance remains unverified.
 
 This follows the user's nine screenshots in [the review assets](assets/08-desktop-review/). It supersedes plan 07's continuous workflow form and fixed details-pane layout where they conflict with this request. Preserve plan 06's data protection, identity, matching, and scheduling contracts. Prior passing browser tests do not establish that these desktop interactions work.
 
