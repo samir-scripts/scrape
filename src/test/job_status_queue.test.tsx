@@ -12,7 +12,7 @@ const job = { ...recordedJobs()[0], id: "queue-job", status: "applied" as const 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); useToastStore.getState().clearAll(); });
 function mount() {
  const changed = vi.fn(), client = new QueryClient();
- const result = renderHook(() => useJobStatusChange([job], changed), { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+ const result = renderHook(({ jobs }: { jobs: Job[] }) => useJobStatusChange(jobs, changed), { initialProps: { jobs: [job] as Job[] }, wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
  return { ...result, changed };
 }
 it("serializes rapid per-job changes, ignores no-ops and records the confirmed previous stage", async () => {
@@ -30,11 +30,22 @@ it("serializes rapid per-job changes, ignores no-ops and records the confirmed p
 });
 it("keeps confirmed state on failure, permits a newer queued success, and retries against that newer state", async () => {
  const update = vi.spyOn(api, "updateJobStatus").mockRejectedValueOnce(new Error("disk full")).mockImplementation(async (_, status) => ({ ...job, status }));
- const { result, changed } = mount();
+ const { result, changed, rerender } = mount();
  await act(async () => { const failed = result.current.changeStatus(job.id, "interviewing"); const next = result.current.changeStatus(job.id, "offer"); await Promise.all([failed, next]); });
  expect(changed.mock.calls.map(call => [call[0].status, call[1].status])).toEqual([["applied", "offer"]]);
+ rerender({ jobs: [{ ...job, status: "offer" }] });
  const toast = useToastStore.getState().toasts[0]; expect(toast.message).toContain("saved stage was kept");
  await act(async () => { toast.action!.run(); await new Promise(resolve => setTimeout(resolve, 0)); });
  expect(update).toHaveBeenLastCalledWith(job.id, "interviewing");
  expect(changed.mock.calls.at(-1)?.[0].status).toBe("offer"); expect(result.current.pendingIds.size).toBe(0);
+});
+
+it("uses refreshed repository state after a queue drains", async () => {
+ const update = vi.spyOn(api, "updateJobStatus").mockImplementation(async (_, status) => ({ ...job, status }));
+ const client = new QueryClient();
+ const { result, rerender } = renderHook(({ jobs }: { jobs: Job[] }) => useJobStatusChange(jobs, vi.fn()), { initialProps: { jobs: [job] as Job[] }, wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+ await act(async () => { await result.current.changeStatus(job.id, "interviewing"); });
+ rerender({ jobs: [{ ...job, status: "offer" }] });
+ await act(async () => { await result.current.changeStatus(job.id, "interviewing"); });
+ expect(update).toHaveBeenCalledTimes(2);
 });

@@ -29,7 +29,7 @@ export function useJobStatusChange(jobs: Job[], onChanged: (previous: Job, next:
   }).finally(async () => {
    await Promise.all(["jobs", "job_counts", "job_status_events"].map(key => client.invalidateQueries({ queryKey: [key] })));
    const remaining = (counts.current.get(id) || 1) - 1;
-   if (remaining) counts.current.set(id, remaining); else { counts.current.delete(id); tails.current.delete(id); }
+   if (remaining) counts.current.set(id, remaining); else { counts.current.delete(id); tails.current.delete(id); confirmed.current.delete(id); }
    setPending(new Set(counts.current.keys()));
   });
   tails.current.set(id, task); return task;
