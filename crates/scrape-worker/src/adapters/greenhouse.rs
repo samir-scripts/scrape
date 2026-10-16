@@ -1,3 +1,4 @@
+use super::branding::CompanyBranding;
 use crate::client::{ClientError, HttpClient};
 use scrape_core::enrich::{
     classify_clearance, classify_sponsorship, classify_work_auth, classify_workplace,
@@ -85,6 +86,7 @@ async fn scrape_greenhouse_at_with(
         .await?;
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(45);
     let mut bound_reported = false;
+    let mut branding = None;
     for (index, mut job) in resp.jobs.into_iter().enumerate() {
         if !bound_reported && (index >= 100 || tokio::time::Instant::now() >= deadline) {
             if !sink(WorkerEvent::Error { source_id: source.id.clone(), message: "Greenhouse detail enrichment reached its bound; remaining posting dates and structured pay are unknown".into(), retryable: true, invalid_posting: Some(false) }) { return Ok(()); }
@@ -128,7 +130,19 @@ async fn scrape_greenhouse_at_with(
                 }
             }
         }
-        if !parse_greenhouse_jobs_with(vec![job], source, sink)? {
+        if branding.is_none() {
+            branding = Some(
+                CompanyBranding::fetch(
+                    client,
+                    &job.absolute_url,
+                    job.company_name.as_deref().unwrap_or(&source.name),
+                )
+                .await,
+            );
+        }
+        let branding = branding.as_ref().unwrap();
+        if !parse_greenhouse_jobs_with(vec![job], source, &mut |event| sink(branding.apply(event)))?
+        {
             break;
         }
     }
@@ -327,7 +341,7 @@ mod tests {
         let server = std::thread::spawn(move || {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
             let mut requests = 0;
-            while requests < 3 && std::time::Instant::now() < deadline {
+            while requests < 6 && std::time::Instant::now() < deadline {
                 if let Ok((mut stream, _)) = listener.accept() {
                     // macOS can inherit the listener's nonblocking mode.
                     stream.set_nonblocking(false).unwrap();
@@ -338,11 +352,15 @@ mod tests {
                     let count = stream.read(&mut buffer).unwrap();
                     let request = String::from_utf8_lossy(&buffer[..count]);
                     let body = if request
-                        .starts_with("GET /v1/boards/acme/jobs/42?pay_transparency=true ")
+                        .starts_with("GET /boards-api.greenhouse.io/v1/boards/acme/jobs/42?pay_transparency=true ")
                     {
                         r#"{"id":42,"title":"Actual Engineer","company_name":"Actual Company","absolute_url":"https://careers.example.com/apply?gh_jid=42","first_published":"2026-01-02T09:00:00Z","updated_at":"2026-10-12T15:00:00Z","pay_input_ranges":[{"min_cents":5025,"max_cents":6075,"currency_type":"USD","title":"Hourly compensation"},{"min_cents":6500,"currency_type":"CAD","title":"Hourly compensation Canada"}]}"#
+                    } else if request.starts_with("GET /careers.example.com/robots.txt ") {
+                        "User-agent: *\nAllow: /"
+                    } else if request.starts_with("GET /careers.example.com/apply?gh_jid=42 ") {
+                        r#"<img alt="Actual Company Logo" src="/brand.png">"#
                     } else {
-                        assert!(request.starts_with("GET /v1/boards/acme/jobs?content=true "));
+                        assert!(request.starts_with("GET /boards-api.greenhouse.io/v1/boards/acme/jobs?content=true "));
                         r#"{"jobs":[{"id":42,"title":"Older title","absolute_url":"https://boards.greenhouse.io/acme/jobs/42","updated_at":"2026-10-12T15:00:00Z"}]}"#
                     };
                     write!(
@@ -357,7 +375,10 @@ mod tests {
                     std::thread::sleep(std::time::Duration::from_millis(10));
                 }
             }
-            assert_eq!(requests, 3, "the second detail request must use the cache");
+            assert_eq!(
+                requests, 6,
+                "two listings, one cached detail, one robots check and one logo lookup per run"
+            );
         });
         let source = WorkerSource {
             id: "workflow".into(),
@@ -366,9 +387,11 @@ mod tests {
             identifier: "acme".into(),
             config: serde_json::json!({}),
         };
-        let client = HttpClient::new(3, 0);
+        let client = HttpClient::new(3, 0)
+            .with_replay_origin(&format!("http://{address}/"))
+            .unwrap();
         for _ in 0..2 {
-            let events = scrape_greenhouse_at(&client, &source, &format!("http://{address}"))
+            let events = scrape_greenhouse_at(&client, &source, "https://boards-api.greenhouse.io")
                 .await
                 .unwrap();
             match &events[0] {
@@ -380,11 +403,16 @@ mod tests {
                     date_posted,
                     provider_updated_at,
                     salary,
+                    company_icon_url,
                     ..
                 } => {
                     assert_eq!(external_id, "42");
                     assert_eq!(title, "Actual Engineer");
                     assert_eq!(company, "Actual Company");
+                    assert_eq!(
+                        company_icon_url.as_deref(),
+                        Some("https://careers.example.com/brand.png")
+                    );
                     assert_eq!(url, "https://careers.example.com/apply?gh_jid=42");
                     assert_eq!(date_posted.as_deref(), Some("2026-01-02T09:00:00Z"));
                     assert_eq!(provider_updated_at.as_deref(), Some("2026-10-12T15:00:00Z"));

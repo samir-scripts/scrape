@@ -1,3 +1,4 @@
+use super::branding::CompanyBranding;
 use crate::client::{ClientError, HttpClient};
 use scrape_core::enrich::{
     classify_clearance, classify_sponsorship, classify_work_auth, classify_workplace,
@@ -84,7 +85,16 @@ pub async fn scrape_ashby_with(
     );
 
     let resp: AshbyResponse = client.fetch_json(&url).await?;
-    parse_ashby_jobs_with(resp.jobs, source, sink)
+    let branding = match resp.jobs.first() {
+        Some(job) => Some(CompanyBranding::fetch(client, &job.job_url, &source.name).await),
+        None => None,
+    };
+    parse_ashby_jobs_with(resp.jobs, source, &mut |event| {
+        sink(match &branding {
+            Some(branding) => branding.apply(event),
+            None => event,
+        })
+    })
 }
 
 pub fn parse_ashby_payload(

@@ -210,6 +210,8 @@ pub fn extract_jobs_with_selectors_with(
     let date_sel = optional_selector("date", source.config.get("date").and_then(|v| v.as_str()))?;
 
     let document = Html::parse_document(html_text);
+    let company_icon_url =
+        super::branding::extract_company_logo(html_text, base_url.as_str(), &source.name);
 
     for item in document.select(&item_sel) {
         let item_full_text = item.text().collect::<Vec<_>>().join(" ");
@@ -386,9 +388,6 @@ pub fn extract_jobs_with_selectors_with(
                     .unwrap_or_else(|| element.text().collect::<String>().trim().to_owned());
                 scrape_core::posting_date::posting_instant(&raw, "UTC").map(|_| raw)
             });
-        let company_icon_url = base_url
-            .host_str()
-            .map(|h| format!("https://www.google.com/s2/favicons?domain={h}&sz=64"));
 
         if !sink(WorkerEvent::Job {
             source_id: source.id.clone(),
@@ -413,7 +412,7 @@ pub fn extract_jobs_with_selectors_with(
             description,
             description_format: description_source.as_ref().map(|_| DescriptionFormat::Html),
             description_source,
-            company_icon_url,
+            company_icon_url: company_icon_url.clone(),
         }) {
             break;
         }

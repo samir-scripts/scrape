@@ -132,6 +132,9 @@ fn jobs(events: &[WorkerEvent]) -> usize {
 fn all_adapters_stop_at_their_default_or_configured_acceptance_limit() {
     for kind in ["lever", "ashby", "selector", "jsonld", "greenhouse"] {
         let server = Server::new(move |path| {
+            if path.starts_with("/fixture.test/jobs/") {
+                return r#"<img alt="Fixture Logo" src="/company.svg">"#.into();
+            }
             if kind == "greenhouse" && !path.ends_with("?content=true") {
                 let id: u64 = path
                     .split('/')
@@ -170,12 +173,34 @@ fn all_adapters_stop_at_their_default_or_configured_acceptance_limit() {
         assert_eq!(summary(&events)[0].examined, count as u64, "{kind}");
         assert!(summary(&events)[0].limit_reached);
         let requests = server.requests.lock().unwrap();
+        if matches!(kind, "greenhouse" | "lever" | "ashby") {
+            assert_eq!(
+                requests
+                    .iter()
+                    .filter(|path| path.starts_with("/fixture.test/jobs/"))
+                    .count(),
+                1,
+                "exactly one branding page per workflow, not per job"
+            );
+            assert!(
+                events
+                    .iter()
+                    .filter_map(|event| match event {
+                        WorkerEvent::Job {
+                            company_icon_url, ..
+                        } => Some(company_icon_url.as_deref()),
+                        _ => None,
+                    })
+                    .all(|logo| logo == Some("https://fixture.test/company.svg")),
+                "{kind} must emit the provider logo through the real worker process"
+            );
+        }
         assert!(!requests.iter().any(|path| path.contains("unneeded")));
         if kind == "greenhouse" {
             assert_eq!(
                 requests.len(),
-                4,
-                "listing plus exactly three detail requests"
+                6,
+                "listing, exactly three details, one robots check and one branding page"
             );
         }
     }

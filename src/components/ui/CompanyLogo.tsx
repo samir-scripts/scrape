@@ -13,7 +13,7 @@ export function CompanyLogo({
   size = "md",
   className = "",
 }: CompanyLogoProps) {
-  const [imgError, setImgError] = useState(false);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
   const sizeClasses = {
     sm: "w-[18px] h-[18px] text-[9px]",
@@ -35,18 +35,18 @@ export function CompanyLogo({
   // Only source-provided metadata identifies an actual company logo.
   const derivedUrl = iconUrl;
 
-  if (derivedUrl && !imgError) {
+  if (derivedUrl && failedUrl !== derivedUrl) {
     return (
       <div
-        className={`inline-flex items-center justify-center border border-[var(--color-ink)] bg-[var(--color-paper)] shrink-0 overflow-hidden ${sizeClasses} ${className}`}
+        className={`inline-flex items-center justify-center border border-[var(--color-ink)] bg-[var(--palette-cream)] shrink-0 overflow-hidden ${sizeClasses} ${className}`}
         title={company}
       >
         <img
           src={derivedUrl}
           alt={company}
-          onError={() => setImgError(true)}
+          onError={() => setFailedUrl(derivedUrl)}
           className="w-full h-full object-contain p-[2px]"
-          style={{ imageRendering: "pixelated" }}
+          style={{ imageRendering: "auto" }}
         />
       </div>
     );
@@ -56,7 +56,7 @@ export function CompanyLogo({
     <div
       className={`inline-flex items-center justify-center border border-[var(--color-ink)] bg-[var(--color-paper-2)] text-[var(--color-ink)] font-mono font-bold tracking-tighter shrink-0 select-none ${sizeClasses} ${className}`}
       title={company}
-      aria-label={`${company} logo`}
+      aria-label={`${company} initials`}
     >
       {getInitials(company)}
     </div>

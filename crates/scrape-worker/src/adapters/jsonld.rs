@@ -308,22 +308,10 @@ fn parse_job_posting_map(
         None
     };
 
-    let logo_url = map
+    let company_icon_url = map
         .get("hiringOrganization")
-        .and_then(|ho| ho.get("logo"))
-        .and_then(|l| {
-            if let Some(s) = l.as_str() {
-                Some(s.to_string())
-            } else {
-                l.get("url").and_then(|u| u.as_str()).map(|s| s.to_string())
-            }
-        });
-    let company_icon_url = logo_url.or_else(|| {
-        Url::parse(page_url).ok().and_then(|u| {
-            u.host_str()
-                .map(|h| format!("https://www.google.com/s2/favicons?domain={h}&sz=64"))
-        })
-    });
+        .and_then(|organization| organization.get("logo"))
+        .and_then(|logo| super::branding::logo_url(logo, page_url));
 
     Some(WorkerEvent::Job {
         source_id: source.id.clone(),

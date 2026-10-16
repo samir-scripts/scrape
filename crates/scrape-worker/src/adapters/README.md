@@ -6,6 +6,8 @@ The `crates/scrape-worker/src/adapters` directory contains specialized parsers t
 
 Production dispatch uses `scrape_source_with` and a stopping candidate sink. `PostingGate` owns matching, canonical identity deduplication, the suppression snapshot, and the per-workflow acceptance budget (20 by default; Preview/Test at most 10). All five adapters stop record processing when the sink returns false. Greenhouse stops additional detail enrichment; JSON-LD stops recursive extraction and followed-page requests. Existing vector-returning entry points collect this same path for raw adapter tests. Whole-board JSON response downloads/deserialization can be unavoidable; the cap does not imply provider-side pagination support.
 
+`branding.rs` extracts employer-labelled images and `JobPosting.hiringOrganization.logo`, resolving relative URLs and accepting only HTTP(S) assets without credentials. Greenhouse, Lever and Ashby make at most one branding-page lookup per source/run, using the first provider-supplied posting URL with robots checks and a four-second total deadline. The resulting logo is reused only for that same employer. JSON-LD and selector sources use metadata already in their fetched HTML. A missing, blocked or failed image remains unknown; platform favicons and guessed company domains are not company branding. Saved postings acquire missing logos through normal rescraping, preserving existing images when no replacement is supplied.
+
 ---
 
 ## File Manifest
@@ -13,6 +15,7 @@ Production dispatch uses `scrape_source_with` and a stopping candidate sink. `Po
 | File | Adapter Target | Data Source & Mechanism | Key Implementation Details |
 |---|---|---|---|
 | [`mod.rs`](mod.rs) | Adapter Dispatcher | Router | Matches `source.kind` (`Greenhouse`, `Lever`, `Ashby`, `JsonLd`, `Selector`) to its respective asynchronous scraper function. |
+| [`branding.rs`](branding.rs) | Shared employer branding | Posting-page HTML | Bounded optional lookup and shared logo extraction, URL validation and employer association. |
 | [`greenhouse.rs`](greenhouse.rs) | Greenhouse | JSON REST API | Fetches `https://boards-api.greenhouse.io/v1/boards/{board}/jobs?content=true`. Keeps Remote workplace policy separate from eligible geography; uses office location fields for an explicit hybrid/on-site arrangement and labeled eligible-location sections from normalized descriptions. Fetches provider detail fields and preserves posting provenance. |
 | [`lever.rs`](lever.rs) | Lever | JSON REST API | Fetches `https://api.lever.co/v0/postings/{company}`. Parses commitment categories, workplace types, salary ranges, and plain-text descriptions. |
 | [`ashby.rs`](ashby.rs) | Ashby | JSON REST API | Fetches `https://api.ashbyhq.com/posting-api/job-board/{board}`. Normalizes compensation tiers, remote/hybrid status, and multi-location lists. |

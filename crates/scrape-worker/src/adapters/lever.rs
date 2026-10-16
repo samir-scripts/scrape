@@ -1,3 +1,4 @@
+use super::branding::CompanyBranding;
 use crate::client::{ClientError, HttpClient};
 use chrono::{DateTime, SecondsFormat};
 use scrape_core::enrich::{
@@ -75,7 +76,18 @@ pub async fn scrape_lever_with(
     );
 
     let postings: Vec<LeverPosting> = client.fetch_json(&url).await?;
-    parse_lever_postings_with(postings, source, sink)
+    let branding = match postings.first() {
+        Some(posting) => {
+            Some(CompanyBranding::fetch(client, &posting.hosted_url, &source.name).await)
+        }
+        None => None,
+    };
+    parse_lever_postings_with(postings, source, &mut |event| {
+        sink(match &branding {
+            Some(branding) => branding.apply(event),
+            None => event,
+        })
+    })
 }
 
 pub fn parse_lever_payload(

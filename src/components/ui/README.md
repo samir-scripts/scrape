@@ -14,7 +14,7 @@ The `src/components/ui` directory contains atomic, reusable UI components implem
 | **IconButton** | [`IconButton.tsx`](IconButton.tsx) | Named, focusable controls with a shared 32px minimum target, disabled semantics, forwarded refs, and outlined/danger/inverse variants. |
 | **Button** | [`Button.tsx`](Button.tsx) | Brutalist button supporting variants (`primary`, `secondary`, `ghost`, `danger`), sizes (`sm`, `md`, `lg`), high-contrast inverted active states, and keyboard focus outlines. |
 | **ClockPicker** | [`ClockPicker.tsx`](ClockPicker.tsx) | Interactive 24-hour circular analog clock face component. Allows users to click or drag radial hands to pick crawl execution hours and minutes, updating cron expressions. |
-| **CompanyLogo** | [`CompanyLogo.tsx`](CompanyLogo.tsx) | Company favicon image renderer using Google favicon proxy URLs with automatic fallback to a monospaced initial box on network errors or missing logos. |
+| **CompanyLogo** | [`CompanyLogo.tsx`](CompanyLogo.tsx) | Provider-supplied company logo on a light square surface; missing or failed images use initials. A new URL retries after an earlier image failure. No guessed domain or favicon proxy. |
 | **DeleteJobModal** | [`DeleteJobModal.tsx`](DeleteJobModal.tsx) | Soft-removal confirmation preserving saved state, with an initially unchecked future-discovery block option. |
 | **Dither** | [`Dither.tsx`](Dither.tsx) | SVG/Canvas brutalist dithering pattern component used as drop zone backgrounds and visual texture accents. |
 | **EmptyState** | [`EmptyState.tsx`](EmptyState.tsx) | High-contrast placeholder for zero-result states, missing search hits, or empty pipeline stages. Includes title, description, and optional action button. |
