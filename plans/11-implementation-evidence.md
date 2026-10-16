@@ -186,7 +186,7 @@ plan 06–09 domain/data protections remain authoritative.
 
 ## Section 4 — Employer branding evidence, cache and display
 
-Core foundation: `c4cb2a7`. All five existing extraction paths now use shared logo
+Implementation: `1e6a04f`; core foundation: `c4cb2a7`. All five existing extraction paths now use shared logo
 evidence. Explicit employer hints are separate from workflow display names;
 provider/JobPosting identities take precedence and missing identity stays unknown.
 Matching JobPosting metadata precedes employer-labelled artwork and explicit custom
