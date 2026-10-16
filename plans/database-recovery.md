@@ -162,3 +162,19 @@ schedules, unchanged applied checksums, restart, injected transactional migratio
 failure and successful retry. Restore the consistent pre-migration snapshot with a
 compatible app to roll back; reverting application code alone does not roll back
 schema or changes made since the snapshot. Never edit stored checksums.
+
+
+## Employer branding upgrade (migration 23)
+
+Migration 23 adds a branding registry and nullable job relationship references.
+Existing image URLs, job/source IDs, annotations, tracking/history and scheduling
+remain intact; historical evidence is not fabricated. Verified bytes are stored
+once per source/employer relationship, separately from metadata and last-attempt
+diagnostics. A failed lookup never overwrites a verified asset. Source deletion
+keeps artwork referenced by saved jobs. Full reset deletes the registry as well.
+
+The recognized-history snapshot applies before upgrade. Populated version-22
+upgrade/restart and injected transaction-failure tests verify preserved state,
+unchanged old checksums, rollback of both new schema objects, and safe retry.
+Restore a consistent compatible backup to roll back; Git revert alone is not a
+database rollback. Never edit applied SQL/checksums.

@@ -184,6 +184,7 @@ pub async fn execute(
         // Explicit inventory: FK dependents first; migrations and sqlite_sequence
         // are deliberately untouched. Jobs' dependents cascade on the same tx.
         for table in [
+            "employer_branding",
             "scrape_logs",
             "scrape_runs",
             "sources",
@@ -262,6 +263,17 @@ mod tests {
                 .await
                 .unwrap();
         }
+        let logo = scrape_core::branding::CompanyLogo {
+            evidence: None,
+            checked_at: "2026-10-16T00:00:00Z".into(),
+            status: scrape_core::branding::LogoStatus::MissingMetadata,
+            asset: None,
+            cached_asset_reference: None,
+            diagnostic: None,
+        };
+        crate::db::branding::record(&pool, "fixture", "Acme", &logo)
+            .await
+            .unwrap();
         for query in [
             "INSERT INTO blocked_postings(identity,title,company,blocked_at) VALUES('block','Title','Acme','2000')",
             "INSERT INTO posting_legacy_blocks(legacy_key,identity) VALUES('old','block')",
@@ -320,6 +332,7 @@ mod tests {
             for table in [
                 "sources",
                 "scrape_runs",
+                "employer_branding",
                 "scrape_logs",
                 "app_notifications",
                 "blocked_postings",

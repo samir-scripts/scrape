@@ -226,3 +226,11 @@ pub async fn posting_saved_copies(state: State<'_, AppState>, id: String) -> Res
     Ok(sqlx::query_scalar("SELECT count(*) FROM jobs WHERE removed_at IS NULL AND posting_identity = (SELECT posting_identity FROM jobs WHERE id = ?)")
         .bind(id).fetch_one(&state.db).await?)
 }
+
+#[tauri::command]
+pub async fn get_company_logo_asset(
+    state: State<'_, AppState>,
+    asset_reference: String,
+) -> Result<String> {
+    crate::db::branding::asset(&state.db, &asset_reference).await
+}

@@ -906,6 +906,42 @@ impl ScrapeRunner {
                                     .await;
                                     RunsRepo::record_counts(&self.pool, run_id, &counts).await?;
                                 }
+                                WorkerEvent::Branding {
+                                    source_id,
+                                    company,
+                                    logo,
+                                } => {
+                                    if let Err(error) = logo.validate().and_then(|_| {
+                                        if company.trim().is_empty() {
+                                            Err("Missing employer identity".into())
+                                        } else {
+                                            Ok(())
+                                        }
+                                    }) {
+                                        sidecar_err.get_or_insert_with(|| {
+                                            format!("Invalid employer branding report: {error}")
+                                        });
+                                        continue;
+                                    }
+                                    super::super::db::branding::record(
+                                        &self.pool, &source_id, &company, &logo,
+                                    )
+                                    .await?;
+                                    self.log_event(
+                                        app,
+                                        run_id,
+                                        LogLevel::Info,
+                                        Some(&source_id),
+                                        &format!(
+                                            "Employer logo {company}: {:?}; {}",
+                                            logo.status,
+                                            logo.diagnostic
+                                                .as_deref()
+                                                .unwrap_or("source evidence recorded")
+                                        ),
+                                    )
+                                    .await;
+                                }
                                 WorkerEvent::SourceInfo { .. } => {}
                                 WorkerEvent::Done { stats } => {
                                     let ids: std::collections::HashSet<_> = stats
@@ -1558,6 +1594,7 @@ mod tests {
                 description_source: None,
                 description_format: None,
                 company_icon_url: None,
+                company_logo: None,
                 locations: vec![],
             },
             ScrapedJob {
@@ -1597,6 +1634,7 @@ mod tests {
                 description_source: None,
                 description_format: None,
                 company_icon_url: None,
+                company_logo: None,
                 locations: vec![],
             },
         ];

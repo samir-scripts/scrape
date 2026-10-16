@@ -52,6 +52,7 @@ pub fn install(app: &mut tauri::App) -> bool {
             "malformed",
             "wrong-source",
             "invalid-utf8",
+            "invalid-branding",
             "nonzero",
             "missing-completion",
             "missing-summary",

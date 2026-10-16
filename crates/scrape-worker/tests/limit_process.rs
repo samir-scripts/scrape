@@ -122,7 +122,7 @@ fn run_with_limits(
         .collect()
 }
 fn source(kind: &str, id: &str, limit: Option<u32>) -> Value {
-    json!({"id": id, "kind": kind, "name": "Fixture", "identifier": if matches!(kind,"jsonld"|"selector") {"https://fixture.test/careers"} else {id}, "config": {"__workflow_spec": {"max_jobs_per_run": limit}, "follow_links": if kind == "jsonld" { Value::String("a.detail".into()) } else { Value::Null }}})
+    json!({"id": id, "kind": kind, "name": "Fixture", "identifier": if matches!(kind,"jsonld"|"selector") {"https://fixture.test/careers"} else {id}, "config": {"__company":"Fixture", "__workflow_spec": {"max_jobs_per_run": limit}, "follow_links": if kind == "jsonld" { Value::String("a.detail".into()) } else { Value::Null }}})
 }
 fn summary(events: &[WorkerEvent]) -> &[SourceScanStats] {
     match events.last().unwrap() {
@@ -141,6 +141,9 @@ fn jobs(events: &[WorkerEvent]) -> usize {
 fn all_adapters_stop_at_their_default_or_configured_acceptance_limit() {
     for kind in ["lever", "ashby", "selector", "jsonld", "greenhouse"] {
         let server = Server::new(move |path| {
+            if path == "/fixture.test/company.svg" {
+                return r##"<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><path fill="#f80" d="M0 0h32v32H0z"/></svg>"##.into();
+            }
             if path.starts_with("/fixture.test/jobs/") {
                 return r#"<img alt="Fixture Logo" src="/company.svg">"#.into();
             }
@@ -208,8 +211,8 @@ fn all_adapters_stop_at_their_default_or_configured_acceptance_limit() {
         if kind == "greenhouse" {
             assert_eq!(
                 requests.len(),
-                6,
-                "listing, exactly three details, one robots check and one branding page"
+                7,
+                "listing, exactly three details, one robots check, one branding page and one shared asset"
             );
         }
     }
@@ -364,6 +367,9 @@ fn detail_requests(server: &Server) -> Vec<String> {
 #[test]
 fn late_matches_reach_the_cap_without_enriching_known_rejections() {
     let server = Server::new(|path| {
+        if path.ends_with("/employer.svg") {
+            return r##"<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><path fill="#f80" d="M0 0h32v32H0z"/></svg>"##.into();
+        }
         if path.ends_with("?content=true") {
             return json!({"jobs":(0..200).map(|id| greenhouse_listing(id,if id < 140 {"Sales"} else {"Engineer"})).collect::<Vec<_>>(),"meta":{"total":200}}).to_string();
         }

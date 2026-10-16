@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  --color-logo-surface: #FAFAFA;
   color-scheme: light;
   --palette-paper: #F5F5DC;
   --palette-obsidian: #262628;

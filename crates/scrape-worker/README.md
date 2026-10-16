@@ -84,7 +84,7 @@ JSON-LD relative destinations resolve against their extraction page; missing or
 unsafe destinations emit errors rather than borrowing the listing URL. Worker
 HTTP fixtures and process tests are deterministic and do not verify live providers.
 
-Worker protocol version 5 adds enrichment warnings, unresolved candidates, provider totals, and explicit source outcomes to the rejection/coverage summaries introduced in version 4. Older protocol configurations fail explicitly. Rebuild the packaged sidecar with `npm run build:sidecar` after updating host/worker code. The authoritative workflow parameter is `max_jobs_per_run` (default 20, range 1–10,000); Preview/Test accepts at most 10. Each workflow stops after its own eligible budget, including refreshed records. Rejected/invalid/duplicate/blocked postings do not consume that budget. Summary counts cover examined records only and identify limit-reached coverage. The shared Rust constants also generate frontend defaults and bounds during binding export.
+Worker protocol version 5 added enrichment warnings, unresolved candidates, provider totals, and explicit source outcomes to the rejection/coverage summaries introduced in version 4. Older protocol configurations fail explicitly. Rebuild the packaged sidecar with `npm run build:sidecar` after updating host/worker code. The authoritative workflow parameter is `max_jobs_per_run` (default 20, range 1–10,000); Preview/Test accepts at most 10. Each workflow stops after its own eligible budget, including refreshed records. Rejected/invalid/duplicate/blocked postings do not consume that budget. Summary counts cover examined records only and identify limit-reached coverage. The shared Rust constants also generate frontend defaults and bounds during binding export.
 
 
 ## Bounded Greenhouse enrichment
@@ -121,3 +121,33 @@ explicit. Provider totals are separate from examined counts. Outcomes are
 owns explicit cancellation). Neither missing date/pay nor absent logo metadata
 is fabricated. Preview warnings permit saving; required-evidence failures prevent
 a successful preview. Rebuild the sidecar after changing protocol or adapters.
+
+
+## Employer branding (protocol 6)
+
+Every extraction path uses shared employer-logo evidence. `__company` is an explicit
+employer hint, separate from the workflow display name. Provider names and matching
+JobPosting organizations take precedence; missing identity stays Unknown company.
+Page lookup accepts matching JobPosting logos, employer-labelled images, then an
+explicit custom `employer_logo` selector. Relative assets resolve against the actual
+page after redirects. A configured board page can supply missing posting branding.
+Platform favicons/social previews and guessed employer domains are not substitutes.
+
+Protocol 6 adds logo evidence to candidate records and one `branding` report per
+accepted source/employer relationship. Older protocol requests fail explicitly.
+Accepted relationships share a four-second asset-download deadline and at most
+512 KiB per asset. PNG/JPEG/WebP are decoded by content, with dimensions bounded to
+2048px and a decoder allocation allowance of 32 MiB. SVG artwork is rasterized
+without external images or fonts; unsupported/empty artwork fails explicitly.
+The portable cache stores PNG only. Asset caching cannot discover additional jobs
+or consume acceptance slots; detail/page discovery still stops at the job cap.
+Missing metadata is distinct from download and decoding failure. Only failures
+emit optional enrichment warnings; they do not invalidate accepted jobs.
+
+The desktop host validates reports again and stores evidence URL/method, check
+time, content checksum and one local image per source/employer relationship. Job
+responses contain references, not duplicate image data. The shared UI reads each
+reference through local IPC once, and retains the last verified asset during a
+failed refresh. Source deletion preserves artwork for saved postings; full reset
+clears the registry and frontend cache. No logo is inferred for historical records
+without evidence. Refresh supplies new evidence without changing user annotations.

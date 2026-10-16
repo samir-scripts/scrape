@@ -4,6 +4,7 @@ use sqlx::SqlitePool;
 use std::path::Path;
 use std::time::Duration;
 
+pub mod branding;
 pub mod cleanup;
 pub mod compensation;
 mod history;
@@ -1562,7 +1563,11 @@ mod execution_outcome_upgrade_tests {
                     .fetch_one(&restarted)
                     .await
                     .unwrap(),
-                22
+                sqlx::migrate!("./migrations")
+                    .iter()
+                    .last()
+                    .unwrap()
+                    .version
             );
             assert_eq!(
                 std::fs::read_dir(directory.path())

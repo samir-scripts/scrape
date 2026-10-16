@@ -6,7 +6,7 @@ use crate::{RoleType, SourceKind, TriState, WorkplaceType};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 5;
+pub const PROTOCOL_VERSION: u32 = 6;
 pub const DEFAULT_MAX_JOBS_PER_RUN: u32 = 20;
 pub const PREVIEW_MAX_JOBS: u32 = 10;
 pub const MAX_JOB_LIMIT: u32 = 10_000;
@@ -308,6 +308,11 @@ pub enum ScanOutcome {
 #[ts(export)]
 #[allow(clippy::large_enum_variant)]
 pub enum WorkerEvent {
+    Branding {
+        source_id: String,
+        company: String,
+        logo: crate::branding::CompanyLogo,
+    },
     Warning {
         source_id: String,
         message: String,
@@ -363,6 +368,9 @@ pub enum WorkerEvent {
         #[serde(default)]
         company_icon_url: Option<String>,
         #[serde(default)]
+        #[ts(optional = nullable)]
+        company_logo: Option<crate::branding::LogoEvidence>,
+        #[serde(default)]
         work_auth: Option<ClassifiedWorkAuth>,
     },
     Progress {
@@ -386,7 +394,8 @@ pub enum WorkerEvent {
 impl WorkerEvent {
     pub fn source_id(&self) -> Option<&str> {
         match self {
-            Self::Job { source_id, .. }
+            Self::Branding { source_id, .. }
+            | Self::Job { source_id, .. }
             | Self::Warning { source_id, .. }
             | Self::SourceInfo { source_id, .. }
             | Self::Progress { source_id, .. }
@@ -651,6 +660,7 @@ mod tests {
             description_source: None,
             description_format: None,
             company_icon_url: None,
+            company_logo: None,
             work_auth: None,
         };
 

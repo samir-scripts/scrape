@@ -965,7 +965,7 @@ async fn late_greenhouse_matches_refresh_with_provenance_and_protected_state() {
     let captured = requests.clone();
     let server = std::thread::spawn(move || {
         let deadline = Instant::now() + Duration::from_secs(30);
-        while captured.lock().unwrap().len() < 12 && Instant::now() < deadline {
+        while captured.lock().unwrap().len() < 14 && Instant::now() < deadline {
             if let Ok((mut stream, _)) = listener.accept() {
                 stream.set_nonblocking(false).unwrap();
                 stream
@@ -990,6 +990,8 @@ async fn late_greenhouse_matches_refresh_with_provenance_and_protected_state() {
                         .unwrap();
                     assert!((140..143).contains(&id));
                     json!({"id":id,"title":"Changed detail title","absolute_url":"https://changed.test/job","first_published":"2026-10-15T00:00:00Z"}).to_string()
+                } else if path == "/fixture.test/employer.svg" {
+                    r##"<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><path fill="#f80" d="M0 0h32v32H0z"/></svg>"##.into()
                 } else if path == "/fixture.test/robots.txt" {
                     "User-agent: *\nAllow: /".into()
                 } else {
@@ -1007,7 +1009,7 @@ async fn late_greenhouse_matches_refresh_with_provenance_and_protected_state() {
                 std::thread::sleep(Duration::from_millis(5));
             }
         }
-        assert_eq!(captured.lock().unwrap().len(), 12);
+        assert_eq!(captured.lock().unwrap().len(), 14);
     });
     let directory = tempfile::tempdir().unwrap();
     let pool = scrape_lib::db::init_db(&directory.path().join("late.db"))

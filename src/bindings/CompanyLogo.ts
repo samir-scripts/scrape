@@ -2,4 +2,4 @@
 import type { LogoEvidence } from "./LogoEvidence";
 import type { LogoStatus } from "./LogoStatus";
 
-export type CompanyLogo = { evidence: LogoEvidence | null, checked_at: string, status: LogoStatus, asset: string | null, diagnostic: string | null, };
+export type CompanyLogo = { evidence: LogoEvidence | null, checked_at: string, status: LogoStatus, asset: string | null, cached_asset_reference?: string | null, diagnostic: string | null, };

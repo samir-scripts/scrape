@@ -26,7 +26,8 @@ pub async fn scrape_selector_with(
     sink: &mut dyn FnMut(WorkerEvent) -> bool,
 ) -> Result<(), ClientError> {
     let base_url = Url::parse(&source.identifier)?;
-    let html_text = client.fetch_text(base_url.as_str(), true).await?;
+    let (html_text, actual_page) = client.fetch_text_at(base_url.as_str(), true).await?;
+    let base_url = Url::parse(&actual_page)?;
 
     extract_jobs_with_selectors_with(&html_text, &base_url, source, sink)
 }
@@ -210,8 +211,13 @@ pub fn extract_jobs_with_selectors_with(
     let date_sel = optional_selector("date", source.config.get("date").and_then(|v| v.as_str()))?;
 
     let document = Html::parse_document(html_text);
-    let company_icon_url =
-        super::branding::extract_company_logo(html_text, base_url.as_str(), &source.name);
+    let company_logo = super::branding::resolve_page(
+        html_text,
+        base_url.as_str(),
+        &super::branding::employer_name(source),
+        source.config.get("employer_logo").and_then(|v| v.as_str()),
+    );
+    let company_icon_url = company_logo.as_ref().map(|e| e.url.clone());
 
     for item in document.select(&item_sel) {
         let item_full_text = item.text().collect::<Vec<_>>().join(" ");
@@ -393,7 +399,7 @@ pub fn extract_jobs_with_selectors_with(
             source_id: source.id.clone(),
             external_id: job_url.clone(),
             title,
-            company: source.name.clone(),
+            company: super::branding::employer_name(source),
             role_type,
             location,
             url: job_url,
@@ -413,6 +419,7 @@ pub fn extract_jobs_with_selectors_with(
             description_format: description_source.as_ref().map(|_| DescriptionFormat::Html),
             description_source,
             company_icon_url: company_icon_url.clone(),
+            company_logo: company_logo.clone(),
         }) {
             break;
         }

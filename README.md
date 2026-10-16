@@ -165,7 +165,9 @@ keep phrases together. Imported mixed Any/All groups remain visible. Preview and
 run details explain rejection categories, unresolved evidence, examined counts and
 separate provider totals. Optional enrichment failures are warnings; incomplete
 required evidence produces a partial outcome. Cancellation retains confirmed
-saved records and has its own outcome.
+saved records and has its own outcome. Employer logos retain source evidence and
+a local image cache; failed refreshes retain verified artwork. Workflow display
+names are separate from employer identity.
 Advanced and YAML editing share one validated v4 draft, with native compensation,
 posting dates, selected weekdays and timezone. Matching, schedule, limit and
 retention belong to each workflow. System settings controls the application-wide

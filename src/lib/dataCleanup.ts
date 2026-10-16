@@ -1,3 +1,4 @@
+import { clearCompanyLogoCache } from "./companyLogoCache";
 import type { QueryClient } from "@tanstack/react-query";
 import type { CleanupResult } from "../bindings/CleanupResult";
 import type { RetentionStatus } from "../bindings/RetentionStatus";
@@ -11,6 +12,7 @@ export async function applyDataCleanup(client: QueryClient, result: CleanupResul
   lastApplied.set(client, result.backup_path);
   const reset = result.counts.mode === "reset_all";
   if (reset) {
+    clearCompanyLogoCache();
     try {
       for (const key of Object.keys(localStorage)) if (key.startsWith("scrape:")) localStorage.removeItem(key);
     } catch { /* Restricted storage has no persistent preferences to clear. */ }

@@ -60,6 +60,7 @@ pub fn scraped_job_from_event(event: WorkerEvent) -> Result<ScrapedJob> {
             description_source,
             description_format,
             company_icon_url,
+            company_logo,
         } => {
             if title.trim().is_empty()
                 || external_id.trim().is_empty()
@@ -163,6 +164,7 @@ pub fn scraped_job_from_event(event: WorkerEvent) -> Result<ScrapedJob> {
                 description_source,
                 description_format,
                 company_icon_url,
+                company_logo,
                 locations,
             })
         }

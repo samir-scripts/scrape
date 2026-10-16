@@ -29,7 +29,8 @@ pub async fn scrape_jsonld_with(
     sink: &mut dyn FnMut(WorkerEvent) -> bool,
 ) -> Result<(), ClientError> {
     let base_url = Url::parse(&source.identifier)?;
-    let html_text = client.fetch_text(base_url.as_str(), true).await?;
+    let (html_text, actual_page) = client.fetch_text_at(base_url.as_str(), true).await?;
+    let base_url = Url::parse(&actual_page)?;
     if !extract_job_postings_with(&html_text, base_url.as_str(), source, sink) {
         return Ok(());
     }
@@ -48,9 +49,9 @@ pub async fn scrape_jsonld_with(
         let links = find_links(&html_text, &base_url, selector, max_pages.saturating_add(1));
         let truncated = links.len() > max_pages;
         for link in links.into_iter().take(max_pages) {
-            match client.fetch_text(link.as_str(), true).await {
-                Ok(page) => {
-                    if !extract_job_postings_with(&page, link.as_str(), source, sink) {
+            match client.fetch_text_at(link.as_str(), true).await {
+                Ok((page, actual)) => {
+                    if !extract_job_postings_with(&page, &actual, source, sink) {
                         return Ok(());
                     }
                 }
@@ -103,7 +104,26 @@ fn extract_job_postings_with(
     let selector = Selector::parse(r#"script[type="application/ld+json"]"#).unwrap();
     for script in document.select(&selector) {
         if let Ok(value) = serde_json::from_str::<Value>(&script.text().collect::<String>()) {
-            if !extract_job_postings_from_value(&value, page_url, source, sink) {
+            if !extract_job_postings_from_value(&value, page_url, source, &mut |mut event| {
+                if let WorkerEvent::Job {
+                    company,
+                    company_logo,
+                    company_icon_url,
+                    ..
+                } = &mut event
+                {
+                    if company_logo.is_none() {
+                        *company_logo = super::branding::resolve_page(
+                            html_text,
+                            page_url,
+                            company,
+                            source.config.get("employer_logo").and_then(Value::as_str),
+                        );
+                        *company_icon_url = company_logo.as_ref().map(|e| e.url.clone());
+                    }
+                }
+                sink(event)
+            }) {
                 return false;
             }
         }
@@ -165,7 +185,9 @@ fn parse_job_posting_map(
         .get("hiringOrganization")
         .and_then(|ho| ho.get("name"))
         .and_then(|n| n.as_str())
-        .unwrap_or(&source.name)
+        .filter(|name| !name.trim().is_empty())
+        .or_else(|| super::branding::employer_hint(source))
+        .unwrap_or("Unknown company")
         .to_string();
 
     let emp_type = map.get("employmentType").and_then(|et| match et {
@@ -308,10 +330,9 @@ fn parse_job_posting_map(
         None
     };
 
-    let company_icon_url = map
-        .get("hiringOrganization")
-        .and_then(|organization| organization.get("logo"))
-        .and_then(|logo| super::branding::logo_url(logo, page_url));
+    let company_logo =
+        super::branding::structured_logo(&Value::Object(map.clone()), page_url, &company);
+    let company_icon_url = company_logo.as_ref().map(|e| e.url.clone());
 
     Some(WorkerEvent::Job {
         source_id: source.id.clone(),
@@ -337,6 +358,7 @@ fn parse_job_posting_map(
         description_format: description_source.as_ref().map(|_| DescriptionFormat::Html),
         description_source,
         company_icon_url,
+        company_logo,
     })
 }
 

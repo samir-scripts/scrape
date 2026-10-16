@@ -160,7 +160,7 @@ export function DiscoveredTable({
                   <div className="flex items-center gap-2">
                     <CompanyLogo
                       company={job.company}
-                      iconUrl={job.company_icon_url}
+                      iconUrl={job.company_icon_url} logo={job.company_logo}
                       size="sm"
                     />
                     <span>{job.company}</span>

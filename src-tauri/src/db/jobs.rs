@@ -75,6 +75,9 @@ pub struct Job {
     #[ts(optional = nullable)]
     pub description: Option<scrape_core::enrich::JobDescription>,
     pub company_icon_url: Option<String>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub company_logo: Option<scrape_core::branding::CompanyLogo>,
     pub enrichment_version: i32,
     #[serde(default)]
     pub locations: Vec<ParsedLocation>,
@@ -240,6 +243,9 @@ pub struct ScrapedJob {
     pub description_format: Option<scrape_core::enrich::DescriptionFormat>,
     pub company_icon_url: Option<String>,
     #[serde(default)]
+    #[ts(optional = nullable)]
+    pub company_logo: Option<scrape_core::branding::LogoEvidence>,
+    #[serde(default)]
     pub locations: Vec<ParsedLocation>,
 }
 
@@ -268,6 +274,8 @@ impl JobsRepo {
                    clearance_evidence, experience_min, experience_max,
                    experience_raw, is_new_grad, experience_evidence,
                    description_text, description_json, description_source, company_icon_url, enrichment_version, favorited, favorited_at,
+                   (SELECT logo_json FROM employer_branding WHERE key=jobs.company_branding_key) AS logo_json,
+                   (SELECT last_attempt_json FROM employer_branding WHERE key=jobs.company_branding_key) AS logo_attempt,
                    work_auth, work_auth_evidence
             FROM jobs
             WHERE id = ?
@@ -475,6 +483,10 @@ impl JobsRepo {
                 .map(|json| serde_json::from_str(&json))
                 .transpose()?,
             company_icon_url: r.try_get("company_icon_url").unwrap_or(None),
+            company_logo: super::branding::from_storage(
+                r.try_get("logo_json")?,
+                r.try_get("logo_attempt")?,
+            )?,
             enrichment_version: r.get("enrichment_version"),
             locations,
         })
@@ -687,7 +699,9 @@ impl JobsRepo {
                    clearance_evidence, experience_min, experience_max,
                    experience_raw, is_new_grad, experience_evidence,
                    description_text, description_json, description_source, enrichment_version, favorited, favorited_at,
-                   company_icon_url, work_auth, work_auth_evidence
+                   company_icon_url, work_auth, work_auth_evidence,
+                   (SELECT logo_json FROM employer_branding WHERE key=jobs.company_branding_key) AS logo_json,
+                   (SELECT last_attempt_json FROM employer_branding WHERE key=jobs.company_branding_key) AS logo_attempt
             FROM jobs
             {}
             ORDER BY {}, id ASC
@@ -973,6 +987,9 @@ impl JobsRepo {
             .execute(&mut *tx)
             .await?;
         for job in batch {
+            if let Some(evidence) = &job.company_logo {
+                evidence.validate().map_err(AppError::Validation)?;
+            }
             stats.total += 1;
 
             let identity = super::postings::identity_in_transaction(
@@ -1283,11 +1300,12 @@ impl JobsRepo {
                 }
             }
             sqlx::query(
-                "UPDATE jobs SET posting_identity = ?, provider_updated_at = ?, compensation_json = ?, compensation_migrated = 1, removed_at = NULL, source_name_snapshot = COALESCE(source_name_snapshot, (SELECT name FROM sources WHERE id = jobs.source_id)) WHERE dedupe_key = ?",
+                "UPDATE jobs SET posting_identity = ?, provider_updated_at = ?, compensation_json = ?, compensation_migrated = 1, removed_at = NULL, source_name_snapshot = COALESCE(source_name_snapshot, (SELECT name FROM sources WHERE id = jobs.source_id)), company_branding_key = ? WHERE dedupe_key = ?",
             )
             .bind(&identity)
             .bind(&job.provider_updated_at)
             .bind(serde_json::to_string(&job.compensation)?)
+            .bind(job.source_id.as_deref().map(|id|scrape_core::branding::relationship_key(id,&job.company)))
             .bind(&dedupe_key)
             .execute(&mut *tx)
             .await?;
@@ -1743,6 +1761,7 @@ mod tests {
                 description_source: None,
                 description_format: None,
                 company_icon_url: None,
+                company_logo: None,
                 locations: vec![ParsedLocation {
                     raw: "San Francisco, CA".to_string(),
                     city: Some("San Francisco".to_string()),
@@ -1796,6 +1815,7 @@ mod tests {
                 description_source: None,
                 description_format: None,
                 company_icon_url: None,
+                company_logo: None,
                 locations: vec![ParsedLocation {
                     raw: "Remote".to_string(),
                     city: None,
@@ -1983,6 +2003,7 @@ mod tests {
             description_source: None,
             description_format: None,
             company_icon_url: None,
+            company_logo: None,
             locations: vec![ParsedLocation {
                 raw: "San Francisco, CA".to_string(),
                 city: Some("San Francisco".to_string()),
@@ -2055,6 +2076,7 @@ mod tests {
             description_source: None,
             description_format: None,
             company_icon_url: None,
+            company_logo: None,
             locations: vec![ParsedLocation {
                 raw: "Seattle, WA".to_string(),
                 city: Some("Seattle".to_string()),
@@ -2178,6 +2200,7 @@ mod tests {
             description_source: None,
                 description_format: None,
             company_icon_url: None,
+            company_logo: None,
             locations: vec![],
         };
 
@@ -2272,6 +2295,7 @@ mod tests {
                 description_source: None,
                 description_format: None,
                 company_icon_url: None,
+                company_logo: None,
                 locations: vec![ParsedLocation {
                     raw: "Remote, US".to_string(),
                     city: None,
@@ -2325,6 +2349,7 @@ mod tests {
                 description_source: None,
                 description_format: None,
                 company_icon_url: None,
+                company_logo: None,
                 locations: vec![ParsedLocation {
                     raw: "Arlington, VA, US".to_string(),
                     city: Some("Arlington".to_string()),
@@ -2418,6 +2443,7 @@ mod tests {
             description_source: None,
             description_format: None,
             company_icon_url: None,
+            company_logo: None,
             locations: vec![ParsedLocation {
                 raw: "San Francisco, CA".to_string(),
                 city: Some("San Francisco".to_string()),
@@ -2464,6 +2490,7 @@ mod tests {
             description_source: None,
             description_format: None,
             company_icon_url: None,
+            company_logo: None,
             locations: vec![ParsedLocation {
                 raw: "Toronto, ON".to_string(),
                 city: Some("Toronto".to_string()),
@@ -2552,6 +2579,7 @@ mod tests {
             description_source: None,
             description_format: None,
             company_icon_url: None,
+            company_logo: None,
             locations: vec![],
         };
 
@@ -2619,6 +2647,7 @@ mod tests {
             description_source: None,
             description_format: None,
             company_icon_url: None,
+            company_logo: None,
             locations: vec![],
         };
 
@@ -2659,6 +2688,7 @@ mod tests {
             description_source: None,
             description_format: None,
             company_icon_url: None,
+            company_logo: None,
             locations: vec![],
         };
 
@@ -3116,6 +3146,7 @@ mod tests {
             description_source: None,
             description_format: None,
             company_icon_url: None,
+            company_logo: None,
         }];
 
         sqlx::query("INSERT INTO sources (id, kind, name, identifier, created_at) VALUES ('original-workflow', 'greenhouse', 'TestCo', 'testco', '2026-01-01')").execute(&pool).await.unwrap();

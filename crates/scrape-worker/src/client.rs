@@ -204,7 +204,11 @@ impl HttpClient {
         }
     }
 
-    pub async fn fetch_text(&self, url: &str, check_robots: bool) -> Result<String, ClientError> {
+    pub async fn fetch_text_at(
+        &self,
+        url: &str,
+        check_robots: bool,
+    ) -> Result<(String, String), ClientError> {
         let parsed_url = Url::parse(url)?;
         let host = parsed_url.host_str().unwrap_or("").to_string();
 
@@ -219,8 +223,19 @@ impl HttpClient {
             .execute_with_retries(|| self.client.get(transport.clone()).send())
             .await?;
 
+        let actual = if self.replay_origin.is_some() {
+            url.to_owned()
+        } else {
+            resp.url().to_string()
+        };
         let text = resp.text().await?;
-        Ok(text)
+        Ok((text, actual))
+    }
+
+    pub async fn fetch_text(&self, url: &str, check_robots: bool) -> Result<String, ClientError> {
+        self.fetch_text_at(url, check_robots)
+            .await
+            .map(|(text, _)| text)
     }
 
     /// Cache detail responses for this worker lifetime, with a bounded size and TTL.
@@ -264,5 +279,84 @@ impl HttpClient {
         // instead of reducing malformed provider payloads to a transport error.
         let bytes = resp.bytes().await?;
         Ok(serde_json::from_slice(&bytes)?)
+    }
+}
+
+impl HttpClient {
+    /// Decoding never relies on Content-Type. Bound decompressed bytes while reading.
+    pub async fn fetch_logo(&self, raw: &str) -> Result<Vec<u8>, String> {
+        if !scrape_core::branding::http_url(raw) {
+            return Err("Unsafe logo URL".into());
+        }
+        let url = Url::parse(raw).map_err(|e| e.to_string())?;
+        self.check_robots(&url).await.map_err(|e| e.to_string())?;
+        let _guard = self.rate_limit(url.host_str().unwrap_or("")).await;
+        let client = Client::builder()
+            .user_agent(USER_AGENT)
+            .timeout(Duration::from_secs(4))
+            .redirect(reqwest::redirect::Policy::custom(|attempt| {
+                if attempt.previous().len() >= 5
+                    || !scrape_core::branding::http_url(attempt.url().as_str())
+                {
+                    attempt.error("Unsafe or excessive logo redirect")
+                } else {
+                    attempt.follow()
+                }
+            }))
+            .build()
+            .map_err(|e| e.to_string())?;
+        let mut response = client
+            .get(self.transport_url(raw).map_err(|e| e.to_string())?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .error_for_status()
+            .map_err(|e| e.to_string())?;
+        if response
+            .content_length()
+            .is_some_and(|n| n > scrape_core::branding::MAX_LOGO_BYTES as u64)
+        {
+            return Err("Logo exceeds byte limit".into());
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+            if bytes.len() + chunk.len() > scrape_core::branding::MAX_LOGO_BYTES {
+                return Err("Logo exceeds byte limit".into());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        Ok(bytes)
+    }
+}
+
+impl HttpClient {
+    pub async fn fetch_branding_page(&self, raw: &str) -> Result<(String, String), String> {
+        if !scrape_core::branding::http_url(raw) {
+            return Err("Unsafe branding page URL".into());
+        }
+        let url = Url::parse(raw).map_err(|e| e.to_string())?;
+        self.check_robots(&url).await.map_err(|e| e.to_string())?;
+        let _guard = self.rate_limit(url.host_str().unwrap_or("")).await;
+        let mut response = self
+            .client
+            .get(self.transport_url(raw).map_err(|e| e.to_string())?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .error_for_status()
+            .map_err(|e| e.to_string())?;
+        let actual = if self.replay_origin.is_some() {
+            raw.to_owned()
+        } else {
+            response.url().to_string()
+        };
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+            if bytes.len() + chunk.len() > 512 * 1024 {
+                return Err("Branding page exceeds 512 KiB".into());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        Ok((String::from_utf8_lossy(&bytes).into_owned(), actual))
     }
 }

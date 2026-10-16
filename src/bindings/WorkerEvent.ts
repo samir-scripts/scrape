@@ -2,10 +2,12 @@
 import type { ClassifiedClearance } from "./ClassifiedClearance";
 import type { ClassifiedSponsorship } from "./ClassifiedSponsorship";
 import type { ClassifiedWorkAuth } from "./ClassifiedWorkAuth";
+import type { CompanyLogo } from "./CompanyLogo";
 import type { CoverageTermination } from "./CoverageTermination";
 import type { DescriptionFormat } from "./DescriptionFormat";
 import type { ExperienceClassification } from "./ExperienceClassification";
 import type { JobDescription } from "./JobDescription";
+import type { LogoEvidence } from "./LogoEvidence";
 import type { ParsedLocation } from "./ParsedLocation";
 import type { RoleType } from "./RoleType";
 import type { Salary } from "./Salary";
@@ -16,4 +18,4 @@ import type { WorkplaceType } from "./WorkplaceType";
 /**
  * NDJSON events streamed by scrape-worker over stdout.
  */
-export type WorkerEvent = { "type": "warning", source_id: string, message: string, eligibility_incomplete: boolean, termination: CoverageTermination | null, } | { "type": "source_info", source_id: string, provider_total: number | null, } | { "type": "job", source_id: string, external_id: string, title: string, company: string, role_type: RoleType, location: string, url: string, date_posted: string | null, provider_updated_at?: string | null, salary: Salary | null, locations: Array<ParsedLocation>, location_data_complete: boolean, workplace_type: WorkplaceType, sponsorship: ClassifiedSponsorship | null, clearance: ClassifiedClearance | null, experience: ExperienceClassification | null, is_new_grad: TriState, description_text: string | null, description?: JobDescription | null, description_source?: string | null, description_format?: DescriptionFormat | null, company_icon_url: string | null, work_auth: ClassifiedWorkAuth | null, } | { "type": "progress", source_id: string, fetched: bigint, matched: bigint, } | { "type": "error", invalid_posting?: boolean | null, source_id: string, message: string, retryable: boolean, } | { "type": "done", stats: WorkerStats, };
+export type WorkerEvent = { "type": "branding", source_id: string, company: string, logo: CompanyLogo, } | { "type": "warning", source_id: string, message: string, eligibility_incomplete: boolean, termination: CoverageTermination | null, } | { "type": "source_info", source_id: string, provider_total: number | null, } | { "type": "job", source_id: string, external_id: string, title: string, company: string, role_type: RoleType, location: string, url: string, date_posted: string | null, provider_updated_at?: string | null, salary: Salary | null, locations: Array<ParsedLocation>, location_data_complete: boolean, workplace_type: WorkplaceType, sponsorship: ClassifiedSponsorship | null, clearance: ClassifiedClearance | null, experience: ExperienceClassification | null, is_new_grad: TriState, description_text: string | null, description?: JobDescription | null, description_source?: string | null, description_format?: DescriptionFormat | null, company_icon_url: string | null, company_logo?: LogoEvidence | null, work_auth: ClassifiedWorkAuth | null, } | { "type": "progress", source_id: string, fetched: bigint, matched: bigint, } | { "type": "error", invalid_posting?: boolean | null, source_id: string, message: string, retryable: boolean, } | { "type": "done", stats: WorkerStats, };

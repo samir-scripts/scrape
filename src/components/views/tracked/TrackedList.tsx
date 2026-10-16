@@ -1,3 +1,4 @@
+import { CompanyLogo } from "../../ui/CompanyLogo";
 import { RemoveJobButton } from "../../ui/RemoveJobButton";
 import type { JobSort } from "../../../bindings/JobSort";
 import { useState } from "react";
@@ -229,9 +230,7 @@ export function TrackedList({
                       >
                         {job.title}
                       </button>
-                      <p className="text-sm mt-1 text-[var(--color-ink-mute)]">
-                        {job.company}
-                      </p>
+                      <div className="flex items-center gap-2 text-sm mt-1 text-[var(--color-ink-mute)]"><CompanyLogo company={job.company} iconUrl={job.company_icon_url} logo={job.company_logo} /><span>{job.company}</span></div>
                       <p className="tracked-mobile-meta mt-1 text-xs">
                         {formatJobLocation(job.location, job.workplace_type, job.locations)} ·{" "}
                         {formatSalary(job)}

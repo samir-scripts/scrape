@@ -45,6 +45,7 @@ Additional forward migrations:
 | 0019 | Preserve original description evidence separately from canonical text and sanitized structured description. |
 | 0020 | Forward description-format checkpoint shared with the recognized historical variant. |
 | 0021 | Explicit workflow configuration review state and transactional compatibility conversion. |
+| 0023 | Employer branding registry and saved-posting relationship references; one local image, separate last-attempt diagnostics, no source-delete cascade. |
 | 0022 | Additive run/source outcome columns; preserve coarse historical statuses and every existing row. |
 | 0017 | Recognized pre-0011 Greenhouse update timestamps preserved as edits, with false posting dates cleared. |
 

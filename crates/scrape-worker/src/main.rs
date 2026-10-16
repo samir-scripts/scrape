@@ -197,6 +197,10 @@ async fn execute_worker(
         let mut gate = PostingGate::new(source, filters, &blocked, started, dry_run)?;
         let mut output_error = None;
         let mut source_failed = false;
+        let mut logos = std::collections::BTreeMap::<
+            String,
+            (String, Option<scrape_core::branding::LogoEvidence>),
+        >::new();
         tracing::info!(
             "Scraping source: {} ({:?}), limit {}",
             source.name,
@@ -211,6 +215,25 @@ async fn execute_worker(
             &enrichment,
             &mut |event, evidence| {
                 if let Some(event) = gate.accept_with_evidence(event, evidence) {
+                    if let WorkerEvent::Job {
+                        company,
+                        company_logo,
+                        ..
+                    } = &event
+                    {
+                        let key = company.trim().to_lowercase();
+                        let entry = logos
+                            .entry(key)
+                            .or_insert_with(|| (company.clone(), company_logo.clone()));
+                        if company_logo.as_ref().is_some_and(|logo| {
+                            entry
+                                .1
+                                .as_ref()
+                                .is_none_or(|current| logo.method < current.method)
+                        }) {
+                            entry.1 = company_logo.clone();
+                        }
+                    }
                     source_failed |= matches!(event, WorkerEvent::Error { .. });
                     if let Err(error) = emit_event(&event) {
                         output_error = Some(error);
@@ -234,6 +257,69 @@ async fn execute_worker(
                     error,
                     client::ClientError::Reqwest(_) | client::ClientError::HttpStatus(..)
                 ),
+            })?;
+        }
+        // Asset caching is optional and separate from discovery/acceptance. One bounded
+        // download per accepted employer relationship, never one per posting.
+        let logo_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(4);
+        for (_, (company, evidence)) in logos {
+            use scrape_core::branding::{CompanyLogo, LogoStatus};
+            let mut logo = CompanyLogo {
+                evidence,
+                checked_at: chrono::Utc::now().to_rfc3339(),
+                status: LogoStatus::MissingMetadata,
+                asset: None,
+                cached_asset_reference: None,
+                diagnostic: None,
+            };
+            if let Some(evidence) = &logo.evidence {
+                if tokio::time::Instant::now() >= logo_deadline {
+                    logo.status = LogoStatus::DownloadFailed;
+                    logo.diagnostic =
+                        Some("Source branding deadline reached; no new download scheduled".into());
+                } else {
+                    match tokio::time::timeout_at(logo_deadline, client.fetch_logo(&evidence.url))
+                        .await
+                    {
+                        Ok(Ok(bytes)) => match scrape_core::branding::cache_asset(&bytes) {
+                            Ok(asset) => {
+                                logo.asset = Some(asset);
+                                logo.status = LogoStatus::Verified;
+                            }
+                            Err(error) => {
+                                logo.status = LogoStatus::DecodeFailed;
+                                logo.diagnostic = Some(error);
+                            }
+                        },
+                        result => {
+                            logo.status = LogoStatus::DownloadFailed;
+                            logo.diagnostic=Some(format!("Logo download unavailable or source branding deadline reached: {result:?}"));
+                        }
+                    }
+                }
+            }
+            if matches!(
+                logo.status,
+                LogoStatus::DownloadFailed | LogoStatus::DecodeFailed
+            ) {
+                let warning = WorkerEvent::Warning {
+                    source_id: source.id.clone(),
+                    message: format!(
+                        "Employer logo {:?} for {company}: {}. Retain any last verified asset.",
+                        logo.status,
+                        logo.diagnostic.as_deref().unwrap_or_default()
+                    ),
+                    eligibility_incomplete: false,
+                    termination: None,
+                };
+                // The posting gate is full by design here; warnings do not accept candidates.
+                gate.summary.enrichment_warnings += 1;
+                emit_event(&warning)?;
+            }
+            emit_event(&WorkerEvent::Branding {
+                source_id: source.id.clone(),
+                company,
+                logo,
             })?;
         }
         use scrape_core::protocol::{CoverageTermination, ScanOutcome};

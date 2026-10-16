@@ -570,6 +570,8 @@ const apiImplementation = {
     return invoke<Page<Job>>("list_jobs", { filter: filter || null });
   },
 
+  getCompanyLogoAsset: (assetReference: string): Promise<string> => invoke<string>("get_company_logo_asset", { assetReference }),
+
   getJob: (id: string): Promise<Job> => {
     if (!isTauri()) {
       const found = devJobs.find((j) => j.id === id);

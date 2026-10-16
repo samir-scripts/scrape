@@ -123,3 +123,20 @@ Paper/Obsidian outcome displays and contrast using labelled simulated runs.
 cancelled outcomes through the actual native host/worker IPC and verifies saved
 run/source outcomes after reload. These are authored fixtures, not live company
 verification. Native scripts use isolated storage; never point them at user data.
+
+
+Plan 11 employer-logo verification: `node scripts/native-branding.mjs` uses a
+temporary native profile, authored local JSON-LD, and the separately captured public
+Cloudflare logo asset. It verifies real worker ingestion, one image request per
+source/employer/run, 24px/32px WKWebView image decoding and visible orange pixels,
+local IPC asset references, offline refresh/reload, notes/favorite/tracking
+preservation and saved artwork after source deletion. It does not establish live
+career-site ingestion, physical native gestures, or native screenshot acceptance.
+
+`e2e/company-branding.pw.ts` uses labelled synthetic jobs plus the recorded logo
+for browser review in both themes at wide/narrow sizes and 200% CSS zoom. Artwork
+review does not establish page-wide zoom/layout acceptance. To reproduce the PNG
+review fixture through production validation, use
+`cargo run -p scrape-core --example cache-logo-fixture -- INPUT OUTPUT.png`.
+Capture URL/time/checksums and the original JPEG-format bytes are preserved next
+to `crates/scrape-worker/tests/fixtures/cloudflare-logo.json`.

@@ -184,12 +184,108 @@ authored protocol fixtures. These do not establish Sections 4–8 acceptance. Ex
 plan 06–09 domain/data protections remain authoritative.
 
 
-## Section 4 — In progress
+## Section 4 — Employer branding evidence, cache and display
 
-Added shared Rust branding evidence/report contracts and bounded PNG/JPEG/WebP
-decoding/SVG rasterization. Cached assets are self-contained PNGs; SVG external
-images and fonts are not fetched. Core branding tests passed (one behavior test
-and four generated-contract exports). The full extraction → persistence → UI
-integration, migration and native acceptance remain in progress. A public
-Cloudflare branding asset was captured from the existing fixture's exact URL for
-offline pixel review; it is not a live career-site ingestion capture.
+Core foundation: `c4cb2a7`. All five existing extraction paths now use shared logo
+evidence. Explicit employer hints are separate from workflow display names;
+provider/JobPosting identities take precedence and missing identity stays unknown.
+Matching JobPosting metadata precedes employer-labelled artwork and explicit custom
+selectors. Configured board pages can supply branding missing from posting pages.
+Relative assets use the actual response page after redirects. Platform names,
+favicons, social previews, unsafe URLs and mismatched organizations are not employer
+evidence. Custom employer selectors validate through WorkflowSpec, source config,
+YAML round trips and actual selector extraction.
+
+Protocol v6 carries candidate evidence and one branding report per accepted
+source/employer relationship. Missing metadata, download failure, decoding failure
+and verified artwork are separate. Downloads share a four-second source allowance,
+with a 512 KiB byte limit; decoders limit dimensions to 2048px and request 32 MiB
+allocation limits. PNG/JPEG/WebP bytes are decoded regardless of URL/Content-Type;
+SVG is rasterized without external images/fonts. Empty or unsupported artwork fails
+explicitly. Accepted jobs survive optional logo failure; malformed report bytes
+fail the protocol while retaining valid partial results. The host revalidates
+report bytes and timestamps before persistence.
+
+Forward-only migration 23 stores original evidence URL/page/method, validation time,
+checksum, one PNG per source/employer relationship, and separate last-attempt
+metadata. Job rows carry stable relationship references. Job responses contain
+metadata/content references instead of repeating image bytes. A shared bounded
+frontend cache reads each image once through validated local IPC. Verified assets
+survive temporary failures, offline reload and source deletion. Full reset clears
+both registries. Legacy image URLs remain intact without fabricated provenance.
+Consistent backup/recovery and populated v22 migration/rollback/retry tests protect
+notes, favorites, applied status/history, schedules and existing checksums.
+
+The shared logo control now uses 24px list/card boxes and 32px inspector boxes,
+neutral light backing, preserved aspect ratio and no internal padding. Discovered,
+tracked list, Kanban/drag previews and the shared inspector use it. Accessible
+initials cover missing metadata, cached-read and image failures; refresh retries a
+changed validation attempt.
+
+Validation actually run:
+
+- `cargo test --workspace`: **358 passed**: host 150, real-worker/repository 6,
+  core 148, worker 23, adapters 8, new branding processes 5, bounded processes 13,
+  protocol processes 5. Fixtures use loopback HTTP and temporary databases.
+  New process tests cover all five adapters, renamed workflows, one shared image
+  request for two jobs, configured board fallback, custom selectors, missing
+  metadata, failed download, invalid image content, and invalid CSS failing before
+  any provider request. Empty employer names fall back to the explicit hint or
+  Unknown company without trusting nameless logo metadata. Resolver tests reject
+  organization mismatches/platform/credentialed URLs and preserve evidence priority.
+- `cargo test -p scrape services::workflow::tests::advanced_specs_are_lossless`
+  and `cargo test -p scrape-worker adapters::branding`: passed after adding the
+  selector persistence/invalid-expression checks and safe evidence-page guard.
+- Rebuilt the packaged sidecar; Rust formatting, Clippy with `-D warnings`, and
+  Rust-generated binding export passed. No bindings were hand-edited.
+- A second Rust export matched a SHA-256 inventory of every generated TypeScript
+  contract with no drift. `SCRAPE_STARTUP_MODES=current19,unknown19` native startup
+  checks passed: recognized history upgraded with saved state retained; unknown
+  checksum history was refused without file mutation. Artifacts:
+  `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-1pRrq0`
+  and `.../scrape-native-smoke-FgYbHn`.
+- Frontend: **448 tests / 75 files passed**, using `npx vitest run --maxWorkers=1`,
+  followed by `node scripts/test-app-startup.mjs`. New control tests cover cached
+  artwork, refresh, missing/display failures, shared IPC reads and cache clearing.
+  TypeScript/production build and style guard passed; existing chunk advisory.
+- Nine Chromium journeys passed across `company-branding`, `enrichment-outcomes`,
+  `keywords`, and `workflows`; the two logo journeys passed again after the final
+  cache-reference/semantic-markup changes. Tests check actual decoded pixels,
+  24px/32px dimensions, no CDN requests, missing/broken fallbacks, aspect ratio,
+  backing, rendered contrast, narrow layouts and logo scaling at 200% CSS zoom.
+  Reviewed Paper 1280px, Obsidian 480px and Obsidian 200% images; all six are saved
+  in [branding review assets](assets/11-branding-review/). The 200% review shows
+  page-wide horizontal overflow; logo scaling passed, global zoom/layout acceptance
+  remains open for the UI repair work. No prior screenshot baselines were changed.
+  Two additional `e2e/kanban.pw.ts` journeys passed pointer/keyboard movement,
+  cancellation, Move to, narrow-board scrolling and restart after card logo changes.
+  Their new captures are kept with this section; previous plan-10 assets are intact.
+- `node scripts/native-branding.mjs`: passed in isolated WKWebView storage. Actual
+  worker → host → database → shared component, 24px/32px decoding and recognizable
+  Cloudflare pixels (26 orange pixels in the 24px review canvas), exactly two worker
+  asset attempts across initial run and offline refresh, no WebView CDN dependency,
+  offline reload, notes/favorite/applied preservation, and source deletion with
+  retained artwork. Artifacts:
+  `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-GdWiP7`.
+- `node scripts/native-smoke.mjs`: passed in isolated storage, including real
+  preview/ingestion, cancellation, protected state, native fonts/opener, and
+  malformed branding/protocol output with partial-result retention. Artifacts:
+  `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-2XjF1A`.
+
+The original source-provided Cloudflare asset was fetched separately from the exact
+URL already present in the repository page fixture. Capture URL/time/checksum,
+original JPEG bytes (despite its .png URL), and canonical PNG checksum are recorded
+in `crates/scrape-worker/tests/fixtures/cloudflare-logo.json`. The review PNG is
+reproducible through the production validator's `cache-logo-fixture` example.
+This verifies public branding artwork, not live career-site discovery/ingestion.
+
+Initial fixture failures exposed missing image endpoints; fixtures now serve
+actual bounded artwork and retain exact request assertions. One concurrent
+frontend run timed out in unrelated workflow controls and left a cascading test
+failure; a serial rerun passed with unchanged timeouts/assertions. React's nested
+paragraph warning was fixed by making the inline logo wrapper a span.
+
+No user database, physical native gestures, full native screenshot/zoom review or
+live career-site verification was used. Original-report reproduction and Sections
+5–8 remain incomplete. Employer logos requiring external SVG resources/fonts or
+unsupported formats produce explicit optional diagnostics rather than guessed art.

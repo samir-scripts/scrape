@@ -77,9 +77,15 @@ pub async fn scrape_lever_with(
 
     let postings: Vec<LeverPosting> = client.fetch_json(&url).await?;
     let branding = match postings.first() {
-        Some(posting) => {
-            Some(CompanyBranding::fetch(client, &posting.hosted_url, &source.name).await)
-        }
+        Some(posting) => Some(
+            CompanyBranding::fetch_source(
+                client,
+                &posting.hosted_url,
+                super::branding::employer_hint(source).unwrap_or(""),
+                source,
+            )
+            .await,
+        ),
         None => None,
     };
     if let Some(warning) = branding
@@ -255,7 +261,7 @@ fn parse_lever_postings_with(
             source_id: source.id.clone(),
             external_id: posting.id,
             title: posting.text,
-            company: source.name.clone(),
+            company: super::branding::employer_name(source),
             role_type,
             location: location_str,
             url: posting.hosted_url,
@@ -277,6 +283,7 @@ fn parse_lever_postings_with(
                 .map(|_| DescriptionFormat::Mixed),
             description_source,
             company_icon_url,
+            company_logo: None,
         }) {
             break;
         }

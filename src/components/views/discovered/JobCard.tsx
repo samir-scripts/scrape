@@ -105,7 +105,7 @@ export function JobCard({
         <div className="flex items-center gap-2 min-w-0">
           <CompanyLogo
             company={job.company}
-            iconUrl={job.company_icon_url}
+            iconUrl={job.company_icon_url} logo={job.company_logo}
             size="sm"
           />
           <span className="font-semibold text-[var(--color-ink)] truncate max-w-[200px]">

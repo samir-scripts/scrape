@@ -47,6 +47,14 @@ pub async fn scrape_source_with_evidence(
     limits: &scrape_core::protocol::EnrichmentLimits,
     sink: &mut dyn FnMut(WorkerEvent, Option<scrape_core::matching::MatchingEvidence>) -> bool,
 ) -> Result<(), ClientError> {
+    if let Some(value) = source.config.get("employer_logo") {
+        let selector = value.as_str().ok_or_else(|| {
+            ClientError::Configuration("employer_logo must be a CSS selector string".into())
+        })?;
+        scraper::Selector::parse(selector).map_err(|error| {
+            ClientError::Configuration(format!("Invalid employer_logo selector: {error}"))
+        })?;
+    }
     let mut validated = |event, evidence| {
         let event = match &event {
             WorkerEvent::Job { url, title, .. }

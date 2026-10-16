@@ -226,6 +226,14 @@ async fn execute_dry_run_worker(
                                 });
                                 continue;
                             }
+                            if let WorkerEvent::Branding { logo, .. } = &event {
+                                if let Err(error) = logo.validate() {
+                                    failure.get_or_insert_with(|| {
+                                        format!("Invalid employer branding report: {error}")
+                                    });
+                                    continue;
+                                }
+                            }
                             if let WorkerEvent::Done { stats } = &event {
                                 if stats.sources.len() != config.sources.len()
                                     || stats
@@ -526,6 +534,9 @@ pub async fn preview_workflow(
                 } else {
                     result.warnings.get_or_insert_with(Vec::new).push(message);
                 }
+            }
+            WorkerEvent::Branding { logo, .. } => {
+                logo.validate().map_err(AppError::Validation)?;
             }
             WorkerEvent::SourceInfo { .. } => {}
             WorkerEvent::Done { stats } => {

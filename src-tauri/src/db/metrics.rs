@@ -558,6 +558,7 @@ mod tests {
             description_source: None,
             description_format: None,
             company_icon_url: None,
+            company_logo: None,
             locations: vec![],
         }
     }

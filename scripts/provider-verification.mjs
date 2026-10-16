@@ -81,7 +81,7 @@ for (const provider of providers) {
     origin = `http://127.0.0.1:${server.address().port}`;
   }
   const config = {
-    version: 5,
+    version: 6,
     sources: [
       {
         id: "recorded-" + provider.identifier,

@@ -1,4 +1,4 @@
-Current revision: [Reliable ingestion, multi-source workflows, and UI repair](11-reliable-ingestion-and-ui-repair.md). Implement one numbered section at a time. It supersedes plan 10’s time-format radios and Kanban surfaces. Sections 1 diagnostics, 2 keywords, and 3 bounded enrichment/outcomes have [implementation evidence](11-implementation-evidence.md); original-report reproduction and Sections 4–8 remain open.
+Current revision: [Reliable ingestion, multi-source workflows, and UI repair](11-reliable-ingestion-and-ui-repair.md). Implement one numbered section at a time. It supersedes plan 10’s time-format radios and Kanban surfaces. Sections 1 diagnostics, 2 keywords, 3 bounded enrichment/outcomes, and 4 employer branding have [implementation evidence](11-implementation-evidence.md); original-report reproduction and Sections 5–8 remain open.
 
 The latest proposed desktop repair is [Desktop usability and extraction](08-desktop-usability-and-extraction.md). It documents the screenshot-reported regressions, replaces conflicting plan 07 layout decisions, and requires actual native interaction verification before completion.
 

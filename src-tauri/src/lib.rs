@@ -172,6 +172,7 @@ pub fn run() {
             commands::retention::get_retention_status,
             commands::jobs::list_jobs,
             commands::jobs::get_job,
+            commands::jobs::get_company_logo_asset,
             commands::jobs::get_job_locations,
             commands::jobs::update_job_status,
             commands::jobs::bulk_update_job_status,

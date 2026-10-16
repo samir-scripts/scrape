@@ -382,10 +382,15 @@ async fn scrape_greenhouse_filtered_at(
         {
             match tokio::time::timeout_at(
                 deadline,
-                CompanyBranding::fetch(
+                CompanyBranding::fetch_source(
                     client,
                     &job.absolute_url,
-                    job.company_name.as_deref().unwrap_or(&source.name),
+                    job.company_name
+                        .as_deref()
+                        .filter(|name| !name.trim().is_empty())
+                        .or_else(|| super::branding::employer_hint(source))
+                        .unwrap_or(""),
+                    source,
                 ),
             )
             .await
@@ -576,7 +581,10 @@ fn parse_greenhouse_jobs_with(
             source_id: source.id.clone(),
             external_id: job.id.to_string(),
             title: job.title,
-            company: job.company_name.unwrap_or_else(|| source.name.clone()),
+            company: job
+                .company_name
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or_else(|| super::branding::employer_name(source)),
             role_type,
             location: effective_location_str,
             url,
@@ -596,6 +604,7 @@ fn parse_greenhouse_jobs_with(
             description_format: description_source.as_ref().map(|_| DescriptionFormat::Html),
             description_source,
             company_icon_url,
+            company_logo: None,
         }) {
             return Ok(false);
         }

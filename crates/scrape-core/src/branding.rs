@@ -40,6 +40,10 @@ pub struct CompanyLogo {
     pub checked_at: String,
     pub status: LogoStatus,
     pub asset: Option<String>,
+    // Read models use a content reference; worker reports carry validated bytes.
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub cached_asset_reference: Option<String>,
     pub diagnostic: Option<String>,
 }
 /// No domain guesses or platform identities. Relationship keys survive source deletion.
@@ -66,6 +70,7 @@ impl LogoEvidence {
     }
 }
 impl CompanyLogo {
+    /// Validate worker report bytes before persistence. Read models expose a cache reference.
     pub fn validate(&self) -> Result<(), String> {
         chrono::DateTime::parse_from_rfc3339(&self.checked_at)
             .map_err(|_| "Logo check timestamp is invalid")?;
@@ -115,9 +120,13 @@ fn decode_raster(bytes: &[u8]) -> Result<image::DynamicImage, String> {
     limits.max_image_height = Some(MAX_LOGO_DIMENSION);
     limits.max_alloc = Some(32 * 1024 * 1024);
     reader.limits(limits);
-    reader
+    let image = reader
         .decode()
-        .map_err(|e| format!("Logo decoding failed: {e}"))
+        .map_err(|e| format!("Logo decoding failed: {e}"))?;
+    if image.to_rgba8().pixels().all(|pixel| pixel.0[3] == 0) {
+        return Err("Logo contains no visible artwork".into());
+    }
+    Ok(image)
 }
 /// Canonical PNGs need no network, scripts, fonts or external SVG resources to display.
 pub fn cache_asset(bytes: &[u8]) -> Result<String, String> {
@@ -125,19 +134,18 @@ pub fn cache_asset(bytes: &[u8]) -> Result<String, String> {
         return Err("Logo exceeds 512 KiB".into());
     }
     let png = if let Ok(image) = decode_raster(bytes) {
-        if image.to_rgba8().pixels().all(|pixel| pixel.0[3] == 0) {
-            return Err("Logo contains no visible artwork".into());
-        }
         let mut output = Cursor::new(Vec::new());
         image
             .write_to(&mut output, image::ImageOutputFormat::Png)
             .map_err(|e| e.to_string())?;
         output.into_inner()
     } else {
-        let mut options = resvg::usvg::Options::default();
-        options.image_href_resolver = resvg::usvg::ImageHrefResolver {
-            resolve_data: Box::new(|_, _, _| None),
-            resolve_string: Box::new(|_, _| None),
+        let options = resvg::usvg::Options {
+            image_href_resolver: resvg::usvg::ImageHrefResolver {
+                resolve_data: Box::new(|_, _, _| None),
+                resolve_string: Box::new(|_, _| None),
+            },
+            ..Default::default()
         };
         let tree = resvg::usvg::Tree::from_data(bytes, &options)
             .map_err(|e| format!("Logo is not a decodable PNG, JPEG, WebP or SVG: {e}"))?;
@@ -167,8 +175,15 @@ mod tests {
     use super::*;
     #[test]
     fn validates_pixels_and_blocks_missing_external_svg_artwork() {
-        let svg=br##"<svg xmlns="http://www.w3.org/2000/svg" width="80" height="20"><path fill="#f80" d="M0 0h80v20H0z"/></svg>"##;
+        let svg=br##"<svg xmlns="http://www.w3.org/2000/svg" width="80" height="20"><path fill="#f80" d="M4 4h72v12H4z"/></svg>"##;
         let asset = cache_asset(svg).unwrap();
+        let png = STANDARD
+            .decode(asset.strip_prefix("data:image/png;base64,").unwrap())
+            .unwrap();
+        let pixels = decode_raster(&png).unwrap().to_rgba8();
+        assert_eq!(pixels.dimensions(), (80, 20));
+        assert_eq!(pixels.get_pixel(0, 0).0[3], 0);
+        assert!(pixels.get_pixel(8, 8).0[3] > 0);
         let report = CompanyLogo {
             evidence: Some(LogoEvidence {
                 url: "https://fixture.test/logo.svg".into(),
@@ -178,6 +193,7 @@ mod tests {
             checked_at: "2026-10-16T00:00:00Z".into(),
             status: LogoStatus::Verified,
             asset: Some(asset),
+            cached_asset_reference: None,
             diagnostic: None,
         };
         report.validate().unwrap();

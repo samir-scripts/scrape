@@ -138,6 +138,7 @@ export function WorkflowSections({
                 "salary_selector",
                 "description_selector",
                 "date_selector",
+                "employer_logo_selector",
                 "title_regex",
                 "link_regex",
                 "location_regex",

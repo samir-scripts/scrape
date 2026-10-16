@@ -1,3 +1,4 @@
+import { CompanyLogo } from "../ui/CompanyLogo";
 import { useEffect, useRef, useState } from "react";
 import type { Job } from "../../bindings/Job";
 import type { JobStatus } from "../../bindings/JobStatus";
@@ -126,8 +127,9 @@ export function JobInspectorContent({
             <h2 className="text-xl font-bold normal-case leading-snug break-words">
               {job.title}
             </h2>
-            <p className="mt-1 text-sm text-[var(--color-ink-mute)]">
-              {job.company}
+            <p className="flex items-center gap-2 mt-1 text-sm text-[var(--color-ink-mute)]">
+              <CompanyLogo company={job.company} iconUrl={job.company_icon_url} logo={job.company_logo} size="lg" />
+              <span>{job.company}</span>
             </p>
           </div>
           <div className="flex items-center gap-1 shrink-0">

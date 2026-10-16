@@ -59,6 +59,9 @@ pub struct WorkflowExtractor {
     pub date_selector: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
+    pub employer_logo_selector: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
     pub title_regex: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
@@ -450,6 +453,7 @@ pub fn source_input(spec: &WorkflowSpec, timezone: &str) -> Result<CreateSourceI
         ("salary", &extractor.salary_selector),
         ("description", &extractor.description_selector),
         ("date", &extractor.date_selector),
+        ("employer_logo", &extractor.employer_logo_selector),
         ("title_regex", &extractor.title_regex),
         ("link_regex", &extractor.link_regex),
         ("location_regex", &extractor.location_regex),
@@ -597,6 +601,7 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
         "salary",
         "description",
         "date",
+        "employer_logo",
         "follow_links",
         "max_pages",
         "title_regex",
@@ -613,7 +618,9 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
         .flat_map(|object| object.keys())
     {
         let implemented = match kind {
-            SourceKind::Jsonld => ["url", "follow_links", "max_pages"].contains(&key.as_str()),
+            SourceKind::Jsonld => {
+                ["url", "follow_links", "max_pages", "employer_logo"].contains(&key.as_str())
+            }
             SourceKind::Selector => {
                 allowed.contains(&key.as_str())
                     && !["follow_links", "max_pages"].contains(&key.as_str())
@@ -643,6 +650,7 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
         "salary",
         "description",
         "date",
+        "employer_logo",
         "follow_links",
     ] {
         if let Some(value) = config.get(key) {
@@ -759,7 +767,7 @@ mod tests {
 
     #[test]
     fn advanced_specs_are_lossless_and_irrelevant_or_malformed_selectors_fail() {
-        let value = serde_json::json!({"version":3,"metadata":{"name":"Careers","company":"Publisher"},"extractor":{"kind":"selector","url":"https://example.com/careers","job_container":".job","title_selector":"h2","url_selector":"a","date_selector":"time","salary_regex":"[0-9]+","url_patterns":["*/jobs/*"]},"filters":{"include_keywords":[],"matching":{"keywords":{"any":["Engineer"],"all":["Rust"],"exclude":["Senior"],"fields":["title","description"]},"compensation":{"min_minor":5025,"max_minor":6075,"currency":"USD","interval":"hour"}}},"schedule":{"cadence":"weekly","time":"02:30","weekdays":[1,5],"timezone":"America/New_York"},"retention":{"days":90}});
+        let value = serde_json::json!({"version":3,"metadata":{"name":"Careers","company":"Publisher"},"extractor":{"kind":"selector","url":"https://example.com/careers","job_container":".job","title_selector":"h2","url_selector":"a","date_selector":"time","employer_logo_selector":".employer-logo","salary_regex":"[0-9]+","url_patterns":["*/jobs/*"]},"filters":{"include_keywords":[],"matching":{"keywords":{"any":["Engineer"],"all":["Rust"],"exclude":["Senior"],"fields":["title","description"]},"compensation":{"min_minor":5025,"max_minor":6075,"currency":"USD","interval":"hour"}}},"schedule":{"cadence":"weekly","time":"02:30","weekdays":[1,5],"timezone":"America/New_York"},"retention":{"days":90}});
         let spec = validate(value.clone(), "UTC").unwrap();
         let encoded = serde_json::to_value(&spec).unwrap();
         assert_eq!(
@@ -768,10 +776,15 @@ mod tests {
         );
         let input = source_input(&spec, "UTC").unwrap();
         assert_eq!(input.config.as_ref().unwrap()["date"], "time");
+        assert_eq!(
+            input.config.as_ref().unwrap()["employer_logo"],
+            ".employer-logo"
+        );
         assert_eq!(input.config.as_ref().unwrap()["__workflow_spec"], encoded);
         for (field, invalid) in [
             ("salary_regex", "["),
             ("date_selector", "["),
+            ("employer_logo_selector", "["),
             ("kind", "greenhouse"),
         ] {
             let mut bad = value.clone();

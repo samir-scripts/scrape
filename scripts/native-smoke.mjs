@@ -43,6 +43,7 @@ process.stdin.on("data", bytes => {
   }
   if (mode === "missing-summary") done.stats.sources = [];
   if (mode === "duplicate-summary") done.stats.sources = [summary, summary];
+  if (mode === "invalid-branding") output = Buffer.concat([output,Buffer.from(line({type:"branding",source_id:source.id,company:"Fixture Co",logo:{status:"verified",checked_at:"2026-10-16T00:00:00Z",asset:"data:image/png;base64,broken",evidence:{url:"https://fixture.test/logo.png",page_url:"https://fixture.test/jobs",method:"employer_label"},diagnostic:null}}))]);
   if (mode === "malformed") output = Buffer.concat([output, Buffer.from('{"type":"job"}\\n')]);
   if (mode === "wrong-source") output = Buffer.concat([output, Buffer.from(line({ ...job, source_id: "unknown-workflow" }))]);
   if (mode === "invalid-utf8") {
@@ -163,13 +164,13 @@ await writeFile(join(directory, "smoke.js"), `
       assert(saved.status === expected && saved.counts.enrichment_warnings === 1, "Saved run outcome changed");
     }
     steps.push("optional enrichment warnings, missing required evidence, saved/source outcome classification and counts (authored protocol fixtures)");
-    for (const mode of ["malformed", "wrong-source", "invalid-utf8", "nonzero", "missing-completion", "missing-summary", "duplicate-summary", "timeout"]) {
+    for (const mode of ["malformed", "wrong-source", "invalid-utf8", "invalid-branding", "nonzero", "missing-completion", "missing-summary", "duplicate-summary", "timeout"]) {
       await invoke("plugin:event|emit", { event: "native-smoke-control", payload: { mode } });
       // Wait for the script driver to prepare a scoped process fixture.
       await pause(300);
       const count = (await invoke("list_jobs", { filter: {} })).total;
       const failed = await invoke("run_source_now", { id: recreated.id });
-      const reason = { malformed: "Malformed worker event", "wrong-source": "unknown workflow ID", "invalid-utf8": "UTF-8", nonzero: "Some(7)", "missing-completion": "completion", "missing-summary": "one summary", "duplicate-summary": "one summary", timeout: "timed out" }[mode];
+      const reason = { malformed: "Malformed worker event", "wrong-source": "unknown workflow ID", "invalid-utf8": "UTF-8", "invalid-branding": "Invalid employer branding report", nonzero: "Some(7)", "missing-completion": "completion", "missing-summary": "one summary", "duplicate-summary": "one summary", timeout: "timed out" }[mode];
       assert(failed.error?.includes(reason), "Wrong failure reason for " + mode + ": " + failed.error);
       assert(failed.status !== "success" && failed.counts.inserted === 1 && (await invoke("list_jobs", { filter: {} })).total === count + 1, "Protocol failure lost partial results or succeeded: " + mode + " " + JSON.stringify(failed));
     }
