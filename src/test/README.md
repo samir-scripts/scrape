@@ -48,6 +48,21 @@ The `src/test` directory contains the automated test suites for the React fronte
 | [`tooltip.test.ts`](tooltip.test.ts) | Tooltip delay, viewport collision detection, and keyboard focus display. |
 | [`tracked_list_sorting.test.ts`](tracked_list_sorting.test.ts) | Tracked table list sorting by company, title, date applied, and status. |
 | [`tristate_filter_logic.test.ts`](tristate_filter_logic.test.ts) | TriState logic for visa sponsorship, security clearance, and new grad filters. |
+| [`workflow_editor_interaction.test.tsx`](workflow_editor_interaction.test.tsx) | End-to-end `AddSourceModal` and `WorkflowSections` wizard navigation, preview gating, and save behavior. |
+| [`workflow_geography_interaction.test.tsx`](workflow_geography_interaction.test.tsx) | Searchable country/subdivision comboboxes, workplace selection, and unknown-geography opt-in. |
+| [`workflow_import_interaction.test.tsx`](workflow_import_interaction.test.tsx) | Shared `WorkflowImportButton` file upload, validation, replacement confirmation, and error recovery. |
+| [`keyword_entry_interaction.test.tsx`](keyword_entry_interaction.test.tsx) | `KeywordInput` chip commits, phrase preservation, deduplication, IME composition, and synchronous flush. |
+| [`scan_diagnostics_interaction.test.tsx`](scan_diagnostics_interaction.test.tsx) | `ScanDiagnostics` categorized rejection breakdown and overlapping failure examples in preview and run details. |
+| [`enrichment_outcomes_interaction.test.tsx`](enrichment_outcomes_interaction.test.tsx) | Optional enrichment warning vs. required-evidence partial outcomes, cancellation, and log filtering. |
+| [`company_logo_interaction.test.tsx`](company_logo_interaction.test.tsx) | `CompanyLogo` local IPC asset loading, shared cache deduplication, initials fallback, and refresh retry. |
+| [`kanban_movement_interaction.test.tsx`](kanban_movement_interaction.test.tsx), [`job_status_queue.test.tsx`](job_status_queue.test.tsx) | Pointer/keyboard Kanban movement, `Move to` menus, and serialized per-job status mutation queue. |
+| [`job_inspector_interaction.test.tsx`](job_inspector_interaction.test.tsx), [`split_inspector_interaction.test.tsx`](split_inspector_interaction.test.tsx), [`resizable_split_primitive.test.tsx`](resizable_split_primitive.test.tsx) | Shared `JobInspector`, adjustable `ResizableSplitPane`, responsive modal fallback, and note persistence. |
+| [`job_paginator_interaction.test.tsx`](job_paginator_interaction.test.tsx), [`repository_pagination_interaction.test.tsx`](repository_pagination_interaction.test.tsx) | Bottom `JobPaginator` and SQLite repository page query orchestration. |
+| [`sort_in_filters_interaction.test.tsx`](sort_in_filters_interaction.test.tsx), [`table_sort_interaction.test.tsx`](table_sort_interaction.test.tsx), [`persisted_native_filters.test.ts`](persisted_native_filters.test.ts) | Consolidated **Filters & sort** panel, removable sort chip, and persisted native filter state. |
+| [`removal_interaction.test.tsx`](removal_interaction.test.tsx), [`data_management_interaction.test.tsx`](data_management_interaction.test.tsx) | Soft removal with optional blocking, Undo, restoration, and confirmed Data Management bulk cleanup/reset. |
+| [`select_interaction.test.tsx`](select_interaction.test.tsx), [`action_menu_interaction.test.tsx`](action_menu_interaction.test.tsx), [`icon_controls_interaction.test.tsx`](icon_controls_interaction.test.tsx) | Headless UI–based `Select`, `Combobox`, `ActionMenu`, and accessible `IconButton` primitives. |
+| [`schedule_control.test.tsx`](schedule_control.test.tsx), [`scheduler_events.test.ts`](scheduler_events.test.ts), [`run_all_workflows.test.ts`](run_all_workflows.test.ts) | TopNav `ScheduleControl` status/pause popover, scheduler event updates, and Run all orchestration. |
+| [`browser_runtime.test.ts`](browser_runtime.test.ts), [`recorded_execution_guard.test.ts`](recorded_execution_guard.test.ts), [`posting_opener.test.ts`](posting_opener.test.ts), [`api_error_boundary.test.ts`](api_error_boundary.test.ts), [`theme_contrast.test.ts`](theme_contrast.test.ts), [`settings_date_format_interaction.test.tsx`](settings_date_format_interaction.test.tsx), [`native_salary_interaction.test.tsx`](native_salary_interaction.test.tsx), [`location_filter_interaction.test.tsx`](location_filter_interaction.test.tsx), [`job_card_interaction.test.tsx`](job_card_interaction.test.tsx) | Runtime mode guards, recorded showcase execution blocks, external URL safety, theme token contrast, date formatting, and compensation/location controls. |
 | [`workflow_modal_toast.test.ts`](workflow_modal_toast.test.ts) | Modal interactions during workflow creation and toast notification feedback. |
 | [`workflow_statuses_and_log_filtering.test.ts`](workflow_statuses_and_log_filtering.test.ts) | Scrape run status badges and execution log filtering. |
 | [`yaml_workflow.test.ts`](yaml_workflow.test.ts) | YAML workflow specification schema validation, error messages, and round-tripping. |
@@ -57,9 +72,9 @@ The `src/test` directory contains the automated test suites for the React fronte
 ## Running Tests
 
 ```bash
-# Run all Vitest test suites
+# Run all Vitest test suites plus the Vite startup smoke check
 npm test
 
-# Run tests in watch mode
-npm run test:watch
+# Run Vitest serially if concurrent workers time out under load
+npx vitest run --maxWorkers=1
 ```

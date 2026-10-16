@@ -10,14 +10,17 @@ The `workflows/` directory contains sample and user-defined declarative YAML wor
 
 | File | Target Entity | Key Configurations |
 |---|---|---|
-| [`software-engineering-internships.yaml`](software-engineering-internships.yaml) | Cloudflare Engineering Internships | Demonstrates Version 2 of the Scrape Workflow Specification: targets Cloudflare's Greenhouse board (`kind: greenhouse`), configures a daily morning schedule at 09:00, filters for internship roles with SQL queries and keyword rules (`include_keywords`, `exclude_keywords`), targets specific cities (San Francisco, Austin, London, Lisbon, Remote), and sets a 45-day retention policy for untracked listings. |
+| [`software-engineering-internships.yaml`](software-engineering-internships.yaml) | Cloudflare Engineering Internships | Bundled sample YAML workflow (written in legacy v2 format to exercise automatic v1–v3 → v4 compatibility conversion through `src-tauri/src/services/workflow.rs`). Targets Cloudflare's Greenhouse board, configures a daily 09:00 schedule, filters for internship roles and keywords, and sets a 45-day untracked-only retention policy. |
 
 ---
 
-## Specification Schema Structure
+## Specification Schema Structure (`WorkflowSpec` v4)
+
+New and exported workflows use `version: 4` (with legacy `version: 1..3` files converted automatically on import by the authoritative Rust resolver in `src-tauri/src/services/workflow.rs`):
 
 ```yaml
-version: 2
+version: 4
+max_jobs_per_run: 20
 metadata:
   name: "Company — Target Role"
   company: "Company Name"
@@ -26,16 +29,22 @@ extractor:
   kind: greenhouse | lever | ashby | jsonld | selector
   url: "https://boards.greenhouse.io/..."
 schedule:
-  cadence: hourly | six_hours | twelve_hours | daily | manual
-  time: "HH:MM"
-  cron: "0 0 9 * * *"
+  cadence: daily | manual
+  time: "09:00"
+  timezone: "America/New_York"
+  weekdays: [1, 2, 3, 4, 5]
+  run_on_startup: false
 filters:
-  role_types: [internship, swe, ...]
-  query: "SQL query expression"
-  include_keywords: [...]
-  exclude_keywords: [...]
-  locations: [...]
+  matching:
+    keywords:
+      any: ["Software Engineer"]
+      all: []
+      exclude: ["Senior", "Staff"]
+      fields: [title]
+    workplace_types: [remote, hybrid, onsite]
+    countries: ["US"]
+    regions: ["US-CA", "US-NY"]
 retention:
-  days: 45
-  policy: untracked_only | all
+  days: 30
+  policy: untracked_only
 ```

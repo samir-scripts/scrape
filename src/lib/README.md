@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `src/lib` directory contains the client-side domain logic, state management, IPC client, math algorithms, and parsing utilities that power the Scrape frontend.
+The `src/lib` directory contains the Tauri IPC client, Zustand UI state store, local company logo cache, formatting utilities, YAML workflow bridges, and explicit browser demonstration (`?demo=1`) helpers. In desktop execution, SQLite (`src-tauri/src/db/jobs.rs`) is authoritative for job filtering, sorting, counting, and pagination.
 
 ---
 
@@ -10,24 +10,35 @@ The `src/lib` directory contains the client-side domain logic, state management,
 
 | File | Purpose & Key Exports |
 |---|---|
-| [`api.ts`](api.ts) | **Tauri IPC Client**: Strongly-typed wrappers for all backend commands (`getJobs`, `updateJobStatus`, `deleteJob`, `startScrape`, `getSources`, etc.). Includes a dev-mode mock generator that produces realistic, authentic seed jobs (e.g. Cloudflare internships) when running outside the Tauri runtime. |
-| [`store.ts`](store.ts) | **Global Zustand Store**: Central reactive state container (`useStore`). Manages active navigation tab, selected job ID, search queries, active filter sets, toast notifications, confirmation dialog states, and user preferences. |
-| [`filter.ts`](filter.ts) | **Client-Side Filtering & Sorting**: Core algorithms (`filterJobs`, `sortJobs`) evaluating full-text search, role types, salary ranges, location matches, workplace arrangement (`onsite`, `hybrid`, `remote`), visa sponsorship, security clearance, work authorization, and new grad status. |
-| [`constants.ts`](constants.ts) | **Application Constants**: Status display metadata (`STATUS_CONFIG`), tracked pipeline stages (`TRACKED_STAGES`), role color mapping (`ROLE_CONFIG`), theme variables, and default filter initializers. |
-| [`cronClock.ts`](cronClock.ts) | **Cron & Clock Math**: Math utilities converting 24-hour clock face coordinates (angles, radii) into standard cron strings and human-readable time strings (`HH:MM`). |
-| [`events.ts`](events.ts) | **Backend Event Subscriptions**: Strongly-typed listeners wrapping `@tauri-apps/api/event` (`listenToScrapeEvents`, `listenToNotifications`). |
-| [`formatters.ts`](formatters.ts) | **Display Formatters**: Functions formatting currency numbers (`$150K`), salary intervals (`/yr`, `/hr`), dates, relative timestamps (`3m ago`, `2d ago`), and metrics percentages. |
-| [`kanbanNavigation.ts`](kanbanNavigation.ts) | **Spatial Kanban Navigation**: Algorithms for keyboard navigation across columns and cards. Handles stage transitions (`Shift+Left`, `Shift+Right`) and card selection (`Up`, `Down`, `j`, `k`). |
-| [`locationData.ts`](locationData.ts) | **Geographic Datasets**: Static database of North American states, Canadian provinces, and global tech hubs used for auto-completing location filter chips. |
-| [`positioning.ts`](positioning.ts) | **Popover Positioning Engine**: Calculates geometric viewport coordinates for tooltips, context menus, and notification popovers to prevent screen edge clipping. |
-| [`salary.ts`](salary.ts) | **Salary Input Parser**: Parses user-typed salary query expressions (e.g. `"$120k"`, `"60/hr"`) into normalized numeric values for the range slider filters. |
-| [`status.ts`](status.ts) | **Status Workflow Logic**: Helper functions governing application pipeline stage transitions and tracking statuses. |
-| [`toast.ts`](toast.ts) | **Toast Dispatch API**: Lightweight imperatively-callable notification dispatcher (`toast.success()`, `toast.error()`, `toast.info()`). |
-| [`yamlJob.ts`](yamlJob.ts) | **YAML Job Bridge**: Transforms job listings to and from YAML workflow representations. |
-| [`yamlWorkflow.ts`](yamlWorkflow.ts) | **Workflow Specification Parser**: Parses, validates, and serializes Version 2 declarative YAML workflow specifications using the `yaml` library. |
+| [`api.ts`](api.ts) | **Tauri IPC Client**: Strongly-typed wrappers for all backend commands (`listJobs`, `getJob`, `updateJobStatus`, `removeJob`, `restorePosting`, `getCompanyLogoAsset`, `validateWorkflow`, `previewWorkflow`, `saveWorkflow`, `runScrapeNow`, `previewDataCleanup`, `executeDataCleanup`, etc.), with an explicit recorded/synthetic browser fallback when `?demo=1` is active. |
+| [`companyLogoCache.ts`](companyLogoCache.ts) | **Local Logo Asset Cache**: Content-addressed in-memory cache (`loadCompanyLogoAsset`, `clearCompanyLogoCache`) that reads verified PNG artwork once per reference over local IPC (`get_company_logo_asset`). |
+| [`constants.ts`](constants.ts) | **Application Constants**: Status display metadata (`STATUS_CONFIG`), tracked pipeline stages (`TRACKED_STAGES`), role metadata (`ROLE_CONFIG`), navigation tabs (`NAV_TABS`), and default filter initializers. |
+| [`cronClock.ts`](cronClock.ts) | **Cron & Clock Math**: Utilities converting 24-hour clock face coordinates into cron expressions and `HH:MM` time strings. |
+| [`dataCleanup.ts`](dataCleanup.ts) | **Data Cleanup State Sync**: Shared `applyDataCleanup` and `applyAutomaticRetention` handlers that clear stale selections/Undo, reset pagination and React Query caches, and clear `scrape:` preferences and logo cache on full reset. |
+| [`errors.ts`](errors.ts) | **IPC Error Normalizer**: Extracts readable messages (`errorMessage`) from serialized Tauri `{ kind, message }` errors and JavaScript `Error` instances. |
+| [`events.ts`](events.ts) | **Backend Event Subscriptions**: Strongly-typed listeners wrapping `@tauri-apps/api/event` (`scrape://event`, `jobs://changed`, `sources://changed`, `scheduler://status`, `retention://updated`, `data://cleaned`). |
+| [`filter.ts`](filter.ts) | **Display Formatters & Demo Filter Mirror**: Display helpers (`formatSalary`, `formatExperience`, `formatWorkAuth`, `triStateToLabel`, `countActiveFilters`) and a client-side mirror (`filterJobs`, `sortJobs`) used only in explicit `?demo=1` browser mode and parity tests. Production desktop queries filter, sort, and paginate in SQLite. |
+| [`formatters.ts`](formatters.ts) | **Date, Time & Number Formatters**: Formats timestamps according to user-selected date (`MM/DD/YY`, `DD/MM/YY`, `MM/DD/YYYY`, `DD/MM/YYYY`, `YYYY-MM-DD`) and time (`12h` / `24h`) preferences, plus relative times and compact numbers. |
+| [`jobLocationLabel.ts`](jobLocationLabel.ts) | **Location Label Formatter**: Formats normalized `ParsedLocation` records and `WorkplaceType` into concise card/table/inspector location summaries. |
+| [`jobSort.ts`](jobSort.ts) | **Sort Options & Persistence**: Defines `JOB_SORT_OPTIONS`, view-contextual defaults (`date_added_desc` for Discovered, `status_changed_at_desc` for Tracked), and persisted sort preferences. |
+| [`kanbanNavigation.ts`](kanbanNavigation.ts) | **Spatial Kanban Navigation**: Algorithms for keyboard navigation across columns and cards (`Shift+Left`, `Shift+Right`, `Up`, `Down`, `j`, `k`). |
+| [`locationData.ts`](locationData.ts) | **Geography Catalog Re-export**: Exposes Rust-generated `GEOGRAPHY_CATALOG` (`COUNTRIES`, `REGIONS_BY_COUNTRY`) and legacy location filter autocomplete options. |
+| [`pagination.ts`](pagination.ts) | **Pagination Boundary Math**: Converts 1-based UI page numbers and page sizes into repository `limit`/`offset` parameters and bounded page counts. |
+| [`positioning.ts`](positioning.ts) | **Popover Positioning Engine**: Calculates geometric viewport coordinates for tooltips, menus, and popovers to prevent screen edge clipping. |
+| [`postingUrl.ts`](postingUrl.ts) | **Safe External URL Opener**: Validates `http:`/`https:` destination URLs and opens them through `@tauri-apps/plugin-opener`. |
+| [`recordedExample.json`](recordedExample.json), [`recordedJobs.ts`](recordedJobs.ts) | **Recorded Provider Showcase**: Worker-generated artifact of recorded public SEP postings (with capture provenance from `fixtures/providers/manifest.json`) displayed in `?demo=1` mode. |
+| [`runtime.ts`](runtime.ts) | **Runtime Mode Detection**: Distinguishes native Tauri execution from the desktop-required browser screen, explicit `?demo=1` recorded showcase, and dev-only `?demo=1&fixtures=1` synthetic test harness. |
+| [`salary.ts`](salary.ts) | **Salary Input Parser**: Parses user-typed salary expressions and converts between display units and fixed-point native compensation hundredths. |
+| [`schedulePresentation.ts`](schedulePresentation.ts) | **Schedule Instant Formatter**: Formats backend UTC schedule instants in the workflow's or device's IANA timezone, including date context across day/year boundaries. |
+| [`status.ts`](status.ts) | **Workflow & Run Status Logic**: Maps `Source`, `ScrapeRun`, `ScanOutcome`, and `ScrapeLogEntry` records into display statuses and error/warning log filters. |
+| [`store.ts`](store.ts) | **Global Zustand Store**: Central reactive UI state container (`useUIStore`) managing active navigation tab, selected job ID, persisted `JobFilter` and `JobSort` specs, pagination, modal states, and user preferences. |
+| [`toast.ts`](toast.ts) | **Toast Dispatch Store**: Imperative and reactive notification store (`useToastStore`) supporting action buttons (e.g. soft-removal Undo). |
+| [`workflowImport.ts`](workflowImport.ts) | **Shared YAML Import Pipeline**: Parses uploaded or edited YAML documents and validates them through the canonical Rust `validate_workflow` command without mutating the active draft on failure. |
+| [`yamlJob.ts`](yamlJob.ts) | **Legacy v1 YAML Bridge**: Deprecated v1 compatibility serializer retained for historical migration/compatibility tests. |
+| [`yamlWorkflow.ts`](yamlWorkflow.ts) | **WorkflowSpec v4 YAML Serializer**: Converts between `Source` records, `WorkflowSpec` v4 drafts, and declarative YAML representations. |
 
-App list queries now use view/filter/page keys and repository pages rather than
-fetching a capped set for client filtering. Changing filters resets to the first
+App list queries use view/filter/sort/page keys and SQLite repository pages rather than
+fetching a capped set for client filtering. Changing filters or sort resets to the first
 page; older responses populate their own query keys and cannot overwrite newer
 results. Navigation counts use independent repository totals. Native filter values
 are persisted under a versioned storage key, including hourly cents and interval.

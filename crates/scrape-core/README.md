@@ -14,13 +14,20 @@
 ```
 scrape-core/
 ├── Cargo.toml      # Package manifest with optional sqlx features and ts-rs bindings
-└── src/            # Core modules (types, protocol, role, filter, enrich)
-    ├── enrich/     # Heuristic analysis algorithms (salary, location, workplace, etc.)
-    ├── filter.rs   # SQL query evaluation and worker-side filtering logic
-    ├── lib.rs      # Crate root, module exports, and timestamp utilities
-    ├── protocol.rs # Subprocess IPC contracts (WorkerConfig, WorkerEvent, NDJSON)
-    ├── role.rs     # Role category classification heuristics (SWE, Data, etc.)
-    └── types.rs    # Core enums and domain structures (JobStatus, RoleType, etc.)
+├── data/           # Pinned ISO country and subdivision catalog (regions.json)
+├── examples/       # Reproducible branding asset validator (cache-logo-fixture.rs)
+└── src/            # Core domain modules
+    ├── branding.rs     # Employer logo evidence resolution, decoding, and PNG normalization
+    ├── enrich/         # Heuristic analysis algorithms (salary, location, workplace, HTML, etc.)
+    ├── filter.rs       # SQL filter compilation and legacy/query predicate evaluation
+    ├── geography.rs    # Country/subdivision catalog and bounded geographic normalization
+    ├── identity.rs     # Canonical posting identity and URL normalization
+    ├── lib.rs          # Crate root, module exports, and timestamp utilities
+    ├── matching.rs     # Authoritative keyword/geography/workplace/partial-evidence matcher & diagnostics
+    ├── posting_date.rs # Publication timestamp normalization and timezone-aware date rules
+    ├── protocol.rs     # Subprocess IPC contracts (WorkerConfig, WorkerEvent, NDJSON v6)
+    ├── role.rs         # Role category classification heuristics (SWE, Data, etc.)
+    └── types.rs        # Core enums and domain structures (JobStatus, RoleType, etc.)
 ```
 
 ---
@@ -29,22 +36,30 @@ scrape-core/
 
 | File | Responsibilities & Exports |
 |---|---|
-| [`Cargo.toml`](Cargo.toml) | Declares crate metadata and dependencies (`serde`, `chrono`, `ts-rs`, `regex`, optional `sqlx`). Contains the `sqlx` feature flag to toggle database trait derivations without bloating the worker binary. |
-| [`src/lib.rs`](src/README.md) | Crate root. Re-exports public submodules (`types`, `protocol`, `role`, `filter`, `enrich`) and provides shared utilities such as `now_iso()` for UTC ISO-8601 millisecond timestamping. |
+| [`Cargo.toml`](Cargo.toml) | Declares crate metadata and dependencies (`serde`, `chrono`, `ts-rs`, `regex`, `image`, `resvg`, `isocountry`, optional `sqlx`). |
+| [`data/`](data/README.md) | Contains `regions.json` and documentation for the Rust-owned geography catalog exported to `src/bindings/geographyCatalog.ts`. |
+| [`examples/cache-logo-fixture.rs`](examples/cache-logo-fixture.rs) | CLI example that runs raw logo bytes through production `branding` validation to reproduce review PNGs. |
+| [`src/lib.rs`](src/README.md) | Crate root. Re-exports public submodules and shared utilities (`now_iso()`, `INGESTION_LIMITS`, `PROTOCOL_VERSION`). |
 | [`src/types.rs`](src/README.md#typesrs) | Canonical domain enumerations: `JobStatus`, `RoleType`, `TriState`, `SalaryInterval`, `SalarySource`, `SourceKind`, `SourceCadence`, `ClearanceLevel`, `WorkAuthRequirement`, and `WorkplaceType`. |
-| [`src/protocol.rs`](src/README.md#protocolrs) | IPC protocol definitions for host-worker communication: `WorkerConfig`, `WorkerLimits`, `WorkerFilters`, `WorkerSource`, `WorkerEvent`, `WorkerStats`, and `ScrapedJob`. |
+| [`src/protocol.rs`](src/README.md#protocolrs) | IPC protocol v6 definitions for host-worker communication: `WorkerConfig`, `WorkerLimits`, `EnrichmentLimits`, `WorkerFilters`, `WorkerSource`, `WorkerEvent`, `WorkerStats`, `SourceScanStats`, `ScanOutcome`, `CoverageTermination`, and `ScrapedJob`. |
+| [`src/matching.rs`](src/README.md#matchingrs) | Single authoritative owner of `PostingRules` evaluation, `KeywordRules` (Any/All/Exclude/fields), partial-evidence decisions for bounded enrichment, primary `RejectionReason` categorization, and `RejectionExample` diagnostics. |
+| [`src/filter.rs`](src/README.md#filterrs) | SQL-style filter parser and evaluator plus parameterized SQLite `WHERE` clause compilation for saved-job queries and `PostingRules`. |
+| [`src/identity.rs`](src/README.md#identityrs) | Canonical `PostingIdentity` derivation across ATS providers, JSON-LD, and custom selectors so deduplication, rescraping, and suppression share one identity rule. |
+| [`src/geography.rs`](src/README.md#geographyrs) | ISO alpha-2 country and qualified subdivision (`US-CA`, `CA-ON`, etc.) catalog, alias resolution, and exported `CountryOption`/`RegionOption` bindings. |
+| [`src/posting_date.rs`](src/README.md#posting_daters) | Authoritative publication date parsing and calendar-day comparison in an explicit IANA timezone without conflating provider edit timestamps with publication dates. |
+| [`src/branding.rs`](src/README.md#brandingrs) | Employer identity precedence, `LogoEvidence`/`LogoStatus`/`LogoMethod`, bounded image decoding (PNG/JPEG/WebP/SVG), and canonical PNG re-encoding. |
 | [`src/role.rs`](src/README.md#rolers) | Role classification engine that analyzes job titles and external hints to categorize postings into `RoleType` (`swe`, `data`, `product`, `design`, `seasonal`, `other`). |
-| [`src/filter.rs`](src/README.md#filterrs) | SQL-style filter parser and evaluator for pre-filtering job records before emitting events. Supports `WHERE` clauses, keyword exclusions, and token matching. |
-| [`src/enrich/`](src/enrich/README.md) | Heuristic parsing engine for unstructured ATS fields: compensation ranges, multi-location strings, security clearance, visa sponsorship, work authorization, experience/new-grad detection, and workplace arrangement (onsite/remote/hybrid). |
+| [`src/enrich/`](src/enrich/README.md) | Heuristic parsing engine for unstructured ATS fields: native compensation ranges, multi-location strings, security clearance, visa sponsorship, work authorization, experience/new-grad detection, workplace arrangement, and structured HTML normalization. |
 
 ---
 
 ## TypeScript Binding Generation
 
-Types marked with `#[derive(TS)]` from `ts-rs` automatically synchronize Rust models with TypeScript types in `src/bindings/` when running tests:
+Types marked with `#[derive(TS)]` from `ts-rs` automatically synchronize Rust models with TypeScript types in `src/bindings/` when running the workspace export tests:
 
 ```bash
-cargo test -p scrape-core -- test_bindings
+npm run gen:types
+# or: cargo test --workspace export_bindings
 ```
 
 Compensation now includes separate native ranges in fixed-point hundredths of a

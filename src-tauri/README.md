@@ -11,8 +11,8 @@
 1. **Native Window & Tray Shell**: Initializes the application window with custom brutalist styling, preserves window state, and hosts the persistent system tray menu (`src-tauri/src/services/tray.rs`).
 2. **Local-First SQLite Database**: Runs embedded migrations and exposes a high-performance SQLite connection pool via `sqlx` (`src-tauri/src/db/`).
 3. **IPC Bridge**: Exposes strongly-typed Tauri commands (`src-tauri/src/commands/`) invoked from the React frontend via Tauri's IPC protocol.
-4. **Worker Orchestration**: Spawns and manages the `scrape-worker` sidecar process, piping events into SQLite and broadcasting progress to the webview (`src-tauri/src/services/runner.rs`).
-5. **Background Scheduler**: Maintains automated crawling intervals according to user-configured source cadences and global cron schedules (`src-tauri/src/services/scheduler.rs`).
+4. **Worker Orchestration**: Spawns and manages the `scrape-worker` sidecar process, validating NDJSON protocol v6 output, persisting jobs/branding/outcomes into SQLite, and broadcasting progress to the webview (`src-tauri/src/services/runner.rs`).
+5. **Background Scheduler & Retention**: Evaluates per-workflow IANA calendar schedules (`src-tauri/src/services/scheduler.rs`, `calendar.rs`) under the global automatic-scraping pause, and runs automatic 24-hour safe data retention (`src-tauri/src/services/retention.rs`).
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -23,7 +23,7 @@
 ┌────────────────────────────────────────────────────────┐
 │                      src-tauri                         │
 │  ├── commands/   (IPC Handler Endpoints)               │
-│  ├── services/   (Runner, Scheduler, Tray, System)     │
+│  ├── services/   (Workflow, Runner, Scheduler, ..)     │
 │  └── db/         (SQLite Pool, Migrations, Repositories)│
 └─────────────┬────────────────────────────┬─────────────┘
               │ Spawns Sidecar             │ Queries / Updates
@@ -40,18 +40,21 @@
 
 ```
 src-tauri/
-├── Cargo.toml          # Rust package manifest with Tauri v2 and sqlx dependencies
-├── build.rs            # Build script compiling Tauri attributes and resources
-├── tauri.conf.json     # Tauri v2 bundle, window, security, and plugin configuration
-├── binaries/           # Bundled architecture-specific sidecar binaries
-├── capabilities/       # Tauri v2 security ACL and window permission rules
-├── gen/                # Auto-generated Tauri schema configurations
-├── icons/              # Application and tray icons (PNG, ICNS, ICO)
-├── migrations/         # Embedded SQL migrations executed via sqlx
-└── src/                # Rust backend source code
-    ├── commands/       # Tauri IPC commands callable from TypeScript
-    ├── db/             # SQLite database queries and repositories
-    └── services/       # Background workers, scheduler, and OS integrations
+├── Cargo.toml              # Rust package manifest with Tauri v2 and sqlx dependencies
+├── build.rs                # Build script compiling Tauri attributes and resources
+├── tauri.conf.json         # Tauri v2 bundle, window, security, and plugin configuration
+├── binaries/               # Bundled architecture-specific sidecar binaries
+├── capabilities/           # Tauri v2 security ACL and window permission rules
+├── examples/               # Standalone database repair utility (repair_database.rs)
+├── gen/                    # Auto-generated Tauri schema configurations
+├── historical-migrations/  # Immutable historical SQL variants for upgrade verification
+├── icons/                  # Application and tray icons (PNG, ICNS, ICO)
+├── migrations/             # Forward-only embedded SQL migrations (0001–0023)
+├── src/                    # Rust backend source code
+│   ├── commands/           # Tauri IPC commands callable from TypeScript
+│   ├── db/                 # SQLite database queries and repositories
+│   └── services/           # Workflow validation, worker runner, scheduler, retention, startup
+└── tests/                  # Real packaged worker → temporary SQLite integration tests
 ```
 
 ---
@@ -63,6 +66,8 @@ src-tauri/
 | [`Cargo.toml`](Cargo.toml) | Declares backend dependencies: `tauri`, `tauri-plugin-opener`, `tauri-plugin-notification`, `sqlx` (SQLite), `tokio`, `scrape-core`, `serde`, and `chrono`. |
 | [`build.rs`](build.rs) | Build automation script invoking `tauri_build::build()`. |
 | [`tauri.conf.json`](tauri.conf.json) | Central Tauri v2 configuration file defining bundle identity, window dimensions, system tray behavior, plugin permissions, and sidecar definitions. |
+| [`examples/repair_database.rs`](examples/repair_database.rs) | CLI utility for inspecting and safely repairing recognized historical SQLite databases. |
+| [`tests/worker_repository.rs`](tests/worker_repository.rs) | End-to-end integration tests driving the actual packaged `scrape-worker` binary against local HTTP fixtures into temporary SQLite databases. |
 
 ---
 
@@ -73,6 +78,7 @@ src-tauri/
 | [`binaries/`](binaries/README.md) | Compiled target binaries for the `scrape-worker` sidecar. |
 | [`capabilities/`](capabilities/README.md) | Tauri v2 permission declarations and security capabilities. |
 | [`gen/`](gen/README.md) | Auto-generated configuration schemas. |
+| [`historical-migrations/`](migrations/README.md) | Preserved original migration SQL variants used to verify populated historical upgrades. |
 | [`icons/`](icons/README.md) | Multi-resolution platform application and tray icon assets. |
-| [`migrations/`](migrations/README.md) | Versioned SQL migrations establishing the local SQLite database schema. |
+| [`migrations/`](migrations/README.md) | Versioned forward-only SQL migrations establishing the local SQLite database schema. |
 | [`src/`](src/README.md) | Rust application entry points, state containers, error types, commands, and services. |

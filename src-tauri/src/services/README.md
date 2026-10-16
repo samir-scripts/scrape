@@ -11,11 +11,17 @@ The `src-tauri/src/services` directory contains long-running background tasks, p
 | File | Service Domain | Core Responsibilities & Implementation |
 |---|---|---|
 | [`mod.rs`](mod.rs) | Service Root | Consolidates service modules and exports public service constructs. |
-| [`runner.rs`](runner.rs) | Worker Process Orchestration | `ScrapeRunner`: Manages the lifecycle of the `scrape-worker` sidecar. Prepares `WorkerConfig`, spawns the child process, streams line-delimited JSON events from `stdout`, verifies against deletion tombstones, writes jobs into SQLite via `db::jobs::upsert_scraped_job`, and broadcasts progress events (`scrape-event`) to the webview. |
-| [`scheduler.rs`](scheduler.rs) | Automated Crawl Scheduling | `SchedulerService`: Continuous background task that evaluates cron schedules and per-source cadences (`hourly`, `six_hours`, `twelve_hours`, `daily`). Automatically triggers `ScrapeRunner` passes when targets become due. |
+| [`workflow.rs`](workflow.rs) | Authoritative Workflow Specification | Defines and validates `WorkflowSpec` (currently v4) with path-specific diagnostics, converts legacy v1–v3 configurations through a single compatibility resolver, and prepares worker execution inputs and previews. |
+| [`runner.rs`](runner.rs) | Worker Process Orchestration | `ScrapeRunner`: Spawns the `scrape-worker` sidecar with `PROTOCOL_VERSION = 6`, streams and revalidates NDJSON events (`Job`, `Branding`, `Warning`, `SourceCompleted`, `Completed`), enforces write coordination, and broadcasts `scrape://event` updates. |
+| [`ingestion.rs`](ingestion.rs) | Ingestion & Revalidation | Validates worker-emitted job records, source scan summaries, and employer branding reports before persisting them to SQLite. |
+| [`scheduler.rs`](scheduler.rs) | Automated Crawl Dispatcher | `SchedulerService`: Unified background dispatcher that evaluates per-workflow schedules and startup triggers, coalesces due runs, respects the global automatic-scraping pause, and coordinates with manual runs. |
+| [`calendar.rs`](calendar.rs) | IANA Calendar Scheduling | Computes next-run UTC instants for `CalendarSchedule` (local `HH:MM`, ISO weekdays, and IANA timezone), handling DST gaps and overlaps deterministically. |
 | [`retention.rs`](retention.rs) | Automatic Data Retention | `RetentionService`: Runs after startup and every 24 elapsed hours, independent of scraping pause and workflow enablement. Shares the fixed-clock, protected-record predicate with post-run and explicit retention routes; defers without cancelling work when the shared writer is busy and records the last result. |
-| [`tray.rs`](tray.rs) | System Tray Integration | Manages the native OS menu bar / taskbar tray icon. Builds context menus (Open Scrape, Run Scrape Now, Preferences, Quit) and toggles window visibility when clicked. |
+| [`process.rs`](process.rs) | Subprocess Lifecycle & Reaping | Structured argument handling, bounded/redacted `stderr` capture, cancellation, and process-tree termination/reaping for sidecar workers. |
+| [`startup.rs`](startup.rs) | Safe Database Startup | Coordinates pre-migration read-only history checks, `VACUUM INTO` backups, and migration execution during host initialization. |
+| [`tray.rs`](tray.rs) | System Tray Integration | Manages the native OS menu bar / taskbar tray icon, context menus, and window visibility toggling. |
 | [`system.rs`](system.rs) | OS Interop & Notifications | Manages desktop system notifications via `tauri-plugin-notification` and coordinates external URL navigation via `tauri-plugin-opener`. |
+| [`native_smoke.rs`](native_smoke.rs) | Debug-Only Native Test Harness | Provides isolated temporary-profile IPC, sidecar, window-resize, and startup smoke verification hooks (compiled/enabled only for explicit debug smoke runs, never affecting release builds or user data). |
 
 ---
 
@@ -24,39 +30,22 @@ The `src-tauri/src/services` directory contains long-running background tasks, p
 ```
 Application Boot (lib.rs)
         │
+        ├──► startup.rs (Read-only history check, VACUUM INTO backup, migrations)
         ├──► SchedulerService::start()
-        │         │ (Periodically checks due cadences)
+        │         │ (Evaluates per-workflow CalendarSchedule & pause state)
         │         ▼
-        │    ScrapeRunner::run_sources()
+        │    ScrapeRunner
         │         │
-        │         ├──► Spawns scrape-worker Sidecar
-        │         ├──► Reads NDJSON Events (WorkerEvent)
-        │         ├──► Upserts into SQLite Database
+        │         ├──► Spawns scrape-worker Sidecar (Protocol v6)
+        │         ├──► Revalidates NDJSON Events (ingestion.rs)
+        │         ├──► Upserts Jobs, Branding & Outcomes into SQLite
         │         └──► Emits Tauri Window Events
-        │
+        ├──► RetentionService (Startup + 24h safe cleanup sweep)
         └──► TrayService::init() (Maintains background presence)
 ```
 
-Workflow filters now resolve absent fields from global defaults, while explicit
-empty collections remove restrictions. Invalid/unsupported values are errors.
-Run all sends effective filters per source; preview accepts the same draft filters.
-All automatic scheduler paths share a pause flag, including delayed startup and
-per-source dispatch. Due-date comparisons use parsed instants. Per-workflow IANA
-calendar scheduling, DST policy, and the unified dispatcher remain pending.
+Each workflow owns an explicit `WorkflowSpec` v4 configuration (matching rules, `CalendarSchedule`, `max_jobs_per_run`, and retention policy) without global inheritance. Legacy v1–v3 workflows and imports are converted once through `workflow.rs`; invalid stored specs remain preserved and marked `needs_review` so they cannot broaden matches or run automatically. Explicit empty collections remove restrictions.
 
-Calendar scheduling and a single dispatcher are now implemented. Daily/weekly
-sources can carry generated `CalendarSchedule` settings in their configuration:
-local time, ISO weekdays and IANA timezone. Creation, edits and post-run updates
-use the same calculation. Gaps run at the first valid instant; overlaps use their
-first occurrence once. UTC instants are stored consistently. One queue coalesces
-due workflows and waits through manual-run overlap; missed occurrences become one
-catch-up run before the next future date. All automatic paths share persisted
-pause, and actual schedule/startup triggers are recorded for per-workflow runs.
+Calendar scheduling (`calendar.rs`) computes next runs from local time, ISO weekdays, and IANA timezone across creation, edits, and post-run updates. DST gaps run at the first valid instant; overlaps use their first occurrence once. One dispatcher queue in `scheduler.rs` coalesces due workflows and waits through manual-run overlap; missed occurrences become one catch-up run before the next future date. All automatic paths share the persisted global pause flag, while explicit manual runs remain available.
 
-`PostingRules` is shared by worker evaluation and repository query compilation.
-It supports any/all/exclude keywords by explicit field, native compensation,
-experience, role/workplace, eligibility and geography. Posting-date rules use one
-captured run-start instant and explicit IANA timezone; date-only upper bounds end
-at the following midnight. Missing dates are never replaced with discovery/update
-time. The repository caches normalized date evidence without changing originals.
-Worker protocol 2 prevents an older sidecar from silently ignoring these rules.
+`PostingRules` is shared by worker evaluation and repository query compilation. It supports Any/All/Exclude keywords by explicit field, partial-evidence evaluation for bounded detail enrichment, native compensation, experience, role/workplace, eligibility, and geography. Posting-date rules use one captured run-start instant and explicit IANA timezone; missing publication dates are never replaced with discovery or provider `updated_at` edit time. Worker protocol v6 enforces exact contract compatibility between the host and sidecar.

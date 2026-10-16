@@ -49,8 +49,11 @@ scrape-worker/
 │   ├── lib.rs      # Library exports for testing and integration
 │   └── main.rs     # CLI binary entry point (stdin/stdout NDJSON loop)
 └── tests/          # Integration tests and ATS fixture responses
-    ├── adapter_tests.rs  # End-to-end adapter verification tests
-    └── fixtures/         # Mock payloads from real ATS platforms
+    ├── adapter_tests.rs    # Offline adapter and auto-detection verification
+    ├── branding_process.rs # Subprocess tests for employer branding evidence & decoding
+    ├── limit_process.rs    # Subprocess tests for bounded ingestion & detail enrichment
+    ├── worker_process.rs   # Subprocess protocol, diagnostics & error handling tests
+    └── fixtures/           # Mock payloads and branding fixtures from real ATS platforms
 ```
 
 ---

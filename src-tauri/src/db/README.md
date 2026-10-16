@@ -10,13 +10,18 @@ The `src-tauri/src/db` directory encapsulates all data access logic, repository 
 
 | File | Target Table(s) | Key Functions & Operations |
 |---|---|---|
-| [`mod.rs`](mod.rs) | Database Connection Pool | `init_pool(db_path) -> Result<SqlitePool, ...>`: Configures SQLite pragmas (`PRAGMA journal_mode = WAL`, `PRAGMA synchronous = NORMAL`, `PRAGMA foreign_keys = ON`), establishes the connection pool, and executes schema migrations from `src-tauri/migrations/`. |
-| [`jobs.rs`](jobs.rs) | `jobs`, `deleted_jobs` | `list_jobs`, `get_job`, `upsert_scraped_job`, `update_status`, `toggle_favorite`, `delete_job`. Handles dynamic filtering, text search, and pagination. When jobs are scraped, checks `deleted_jobs` tombstones to prevent resurrecting user-deleted jobs. When a job is deleted, atomically records a tombstone and removes the job record. |
-| [`sources.rs`](sources.rs) | `sources` | `list_sources`, `get_source`, `create_source`, `update_source`, `delete_source`, `record_source_run`. Manages custom scraping targets, enabled flags, schedule cadences, and last scraped timestamps. |
-| [`runs.rs`](runs.rs) | `scrape_runs` | `create_run`, `complete_run`, `list_recent_runs`, `get_run_details`. Records execution telemetry, duration, items discovered, error logs, and trigger types (manual vs. scheduled). |
-| [`metrics.rs`](metrics.rs) | `jobs` | `compute_overview_metrics`, `get_daily_application_velocity`, `get_salary_distribution_buckets`. Executes aggregation queries calculating application funnel conversion rates, status distributions, and salary quartiles. |
-| [`settings.rs`](settings.rs) | `settings` | `get_settings`, `save_settings`. Serializes and retrieves global user preferences, crawl cadences, retention parameters, and filter presets. |
-| [`notifications.rs`](notifications.rs) | `notifications` | `insert_notification`, `list_notifications`, `mark_read`, `mark_all_read`, `clear_all`. Manages the in-app notification ledger, tracking crawl completions, scrape failures, and alerts. |
+| [`mod.rs`](mod.rs) | Database Connection Pool & Startup | Configures SQLite pragmas (`WAL`, `synchronous = NORMAL`, `foreign_keys = ON`), validates historical migration prefixes before writable changes, takes `VACUUM INTO` backups, and executes forward-only migrations from `src-tauri/migrations/`. |
+| [`jobs.rs`](jobs.rs) | `jobs`, `job_locations`, `job_status_events` | `JobsRepo`: SQLite-side filtering, sorting, counting, and pagination; upserting scraped postings while preserving user notes, favorites, and tracked status; soft removal (`remove_job`), restoration (`restore_posting`), and cross-workflow blocking via `postings`. |
+| [`postings.rs`](postings.rs) | `postings`, `deleted_jobs` | Canonical posting identity registry (`PostingIdentity`), cross-workflow discovery suppression (`blocked`), and legacy tombstone reconciliation. |
+| [`branding.rs`](branding.rs) | `employer_brandings`, `employer_branding_assets` | Stores verified employer logo evidence (URL, page, method, timestamp, SHA-256) and one deduplicated PNG asset per source/employer relationship, retaining verified artwork across temporary refresh failures and source deletion. |
+| [`cleanup.rs`](cleanup.rs) | All application tables | `preview` and `execute` for confirmed Data Management operations (`DeleteAll`, `KeepFavorites`, `KeepTracked`, `ResetAll`) with `VACUUM INTO` recovery snapshots and posting-identity protection. |
+| [`compensation.rs`](compensation.rs) | `job_compensations` | Persists and queries native compensation ranges (hundredths of currency units, interval, currency, source evidence) separately from annual compatibility analytics. |
+| [`history.rs`](history.rs) | `_sqlx_migrations` | Read-only historical migration checksum and schema verification against recognized migration histories before applying new upgrades. |
+| [`sources.rs`](sources.rs) | `sources` | `SourcesRepo`: Manages workflow/source records, enabled flags, schedule cadences, review status (`needs_review`), and last-scraped timestamps. |
+| [`runs.rs`](runs.rs) | `scrape_runs`, `scrape_logs` | `RunsRepo`: Records execution telemetry, `ScanOutcome`, `RunCounts` (including per-source `SourceScanStats` summaries), duration, log entries, and trigger types. |
+| [`metrics.rs`](metrics.rs) | `jobs`, `job_status_events` | `MetricsRepo`: Aggregation queries calculating stage totals, conversion rates, role distributions, salary distribution buckets, streaks, and daily velocity. |
+| [`settings.rs`](settings.rs) | `settings` | `SettingsRepo`: Serializes and retrieves user preferences, appearance settings, and automatic-scraping pause state. |
+| [`notifications.rs`](notifications.rs) | `notifications` | `NotificationsRepo`: Manages the in-app notification ledger for crawl completions, warnings/errors, and alerts. |
 
 Migration startup now refuses checksum mismatches instead of rewriting history;
 pending disk upgrades receive a consistent SQLite snapshot. See

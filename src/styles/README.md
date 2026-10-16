@@ -10,16 +10,16 @@ The `src/styles` directory defines the styling foundation for Scrape. It impleme
 
 | File | Framework / Format | Description & Key Features |
 |---|---|---|
-| [`index.css`](index.css) | Tailwind CSS v4 / PostCSS | Core stylesheet defining: custom typography sets (JetBrains Mono, IBM Plex Sans, serif accents), brutalist CSS variables (`--color-paper`, `--color-ink`, `--color-border`, `--color-surface`, `--color-dim`), theme modes (`paper` vs `obsidian`), 0px border-radius resets, 1px borders, scrollbar styling, and `.bg-dither` canvas patterns for drop targets. |
+| [`index.css`](index.css) | Tailwind CSS v4 | Core stylesheet defining all semantic theme tokens (`--color-surface`, `--color-surface-raised`, `--color-text`, `--color-text-muted`, `--color-border`, `--color-danger`, `--color-stage-*`, `--color-logo-surface`, `--color-scrollbar-*`), spacing and control height tokens (`--spacing-*`, `--control-height*`), global interface typography (`--font-ui` across 6 bundled options and `--font-code` for YAML/code), Paper (light) and Obsidian (dark) themes, 0px border-radius/shadow resets, and `.bg-dither` patterns. |
 
 ---
 
 ## Design System Invariants
 
-1. **Strict 0px Border Radius**: No rounded corners (`rounded-none` or `border-radius: 0`).
-2. **Hairline 1px Rules**: Crisp, high-contrast borders between columns, cards, and headers.
-3. **Monochrome Dominance**: High contrast base palette (Paper `#F5F5DC` and Ink `#1A1A1A`) with sparse, meaningful signal accents (lime for applied, blue for interviewing, cherry for rejected).
-4. **Uppercase Typography**: Headers, labels, tags, and status badges are rendered in uppercase tracking.
+1. **Strict 0px Border Radius & No Box Shadows**: No rounded corners or drop shadows (`rounded-none`, `shadow-none`), enforced by `scripts/check-style.mjs`.
+2. **Hairline 1px Rules**: Crisp, high-contrast borders with one border per meaningful surface.
+3. **Semantic Palette & Stage Tokens**: Paper (`#F5F5DC`) and Obsidian (`#262628`) surfaces with Ink (`#1A1A1A`) and Cream (`#FFF6EE`) text, plus semantic stage tokens: Applied lavender (`#C6C2F2`), Interviewing cream (`#FFF6EE` / `#E4C891`), Offer lime (`#D6DC82`), and Rejected cherry (`#D86072`).
+4. **Global Typography**: One selected `--font-ui` family applies to all UI surfaces, dialogs, portals, and toasts; uppercase is reserved for short labels and actions while job titles and prose stay in natural case.
 
 Semantic danger/success/warning/information colors now have separate Paper and
 Obsidian values. Muted foregrounds were darkened/lightened for text contrast;

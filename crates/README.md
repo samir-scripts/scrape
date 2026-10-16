@@ -46,8 +46,8 @@ In Scrape's local-first architecture:
 
 | Directory | Crate Name | Type | Description |
 |---|---|---|---|
-| [`scrape-core/`](scrape-core/README.md) | `scrape-core` | Library | Core domain models, IPC protocol definitions, role inference, SQL filter parser, and extraction heuristics (location, salary, clearance, sponsorship, work authorization, experience, workplace type). |
-| [`scrape-worker/`](scrape-worker/README.md) | `scrape-worker` | Binary & Library | Standalone executable sidecar that fetches, parses, and normalizes job listings from Greenhouse, Lever, Ashby, JSON-LD schemas, and custom CSS selectors. |
+| [`scrape-core/`](scrape-core/README.md) | `scrape-core` | Library | Authoritative domain models, worker NDJSON protocol (`PROTOCOL_VERSION` = 6), categorized matching and partial-evidence evaluation, SQL filter compiler, canonical posting identity, geography catalog (`data/regions.json`), posting dates, employer branding evidence/validation, and extraction heuristics (location, salary, clearance, sponsorship, work authorization, experience, workplace type, HTML normalization). |
+| [`scrape-worker/`](scrape-worker/README.md) | `scrape-worker` | Binary & Library | Standalone executable sidecar that fetches, parses, and normalizes job listings and employer branding from Greenhouse (with bounded detail enrichment), Lever, Ashby, JSON-LD schemas, and custom CSS selectors. |
 
 ---
 

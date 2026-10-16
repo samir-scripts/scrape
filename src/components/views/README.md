@@ -19,8 +19,8 @@ src/components/views/
 
 | View Directory | Primary Purpose | Key Features |
 |---|---|---|
-| [`discovered/`](discovered/README.md) | **Discovered Jobs Feed** | High-density card grid or table of freshly crawled listings, split-pane inspector, authentic job URL opener, favoriting, and tombstone deletion. |
-| [`tracked/`](tracked/README.md) | **Application Tracker** | Drag-and-drop Kanban board and tabular list tracking job applications across `APPLIED`, `INTERVIEWING`, `OFFER`, and `REJECTED` stages. |
-| [`scraper/`](scraper/README.md) | **Crawler Control Room** | Source management, manual crawl trigger buttons, active execution monitoring, and streaming NDJSON log console. |
+| [`discovered/`](discovered/README.md) | **Discovered Jobs Feed** | High-density card grid or table of freshly crawled listings, adjustable `ResizableSplitPane` inspector (`JobInspector`), unread indicator, authentic job URL opener, favoriting, and soft removal with optional blocking. |
+| [`tracked/`](tracked/README.md) | **Application Tracker** | Handle-driven Kanban board and 6-column default tabular list tracking job applications across `APPLIED`, `INTERVIEWING`, `OFFER`, and `REJECTED` stages. |
+| [`scraper/`](scraper/README.md) | **Workflow Registry & Execution** | Independent workflow management (**Add workflow**, **Run all**, **Import YAML**), manual and preview triggers, cancellation, and reconciled run/source diagnostic logs. |
 | [`metrics/`](metrics/README.md) | **Analytics Dashboard** | Visx visualizations showing application velocity over time, role distribution donuts, salary distribution histograms, and funnel conversion rates. |
-| [`settings/`](settings/README.md) | **Configuration Center** | Six-tab configuration panel managing sources, automated cron crawl schedules, filter rules, appearance themes, database backups, and logs. |
+| [`settings/`](settings/README.md) | **Preferences & Workflow Editor** | Four-category settings screen (**Appearance**, **System**, **Removed & blocked jobs**, **Data management**) plus the shared workflow configuration components (`AddSourceModal`, `WorkflowSections`, `KeywordMatching`, `GeographyMatching`, `ScanDiagnostics`). |

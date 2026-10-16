@@ -10,6 +10,7 @@ The `src/components/ui` directory contains atomic, reusable UI components implem
 
 | Component | File | Responsibilities & Props |
 |---|---|---|
+| **ActionMenu** | [`ActionMenu.tsx`](ActionMenu.tsx) | Headless UI–based accessible menu with portal positioning (`PopupPosition`), keyboard navigation, optional dividers, and danger item styling. |
 | **Icon** | [`Icon.tsx`](Icon.tsx) | Original SVG paths on a shared 24-unit grid, with 14/16/20px sizes, `currentColor`, square caps, and decorative accessibility semantics. |
 | **IconButton** | [`IconButton.tsx`](IconButton.tsx) | Named, focusable controls with a shared 32px minimum target, disabled semantics, forwarded refs, and outlined/danger/inverse variants. |
 | **Button** | [`Button.tsx`](Button.tsx) | Brutalist button supporting variants (`primary`, `secondary`, `ghost`, `danger`), sizes (`sm`, `md`, `lg`), high-contrast inverted active states, and keyboard focus outlines. |
@@ -20,17 +21,19 @@ The `src/components/ui` directory contains atomic, reusable UI components implem
 | **EmptyState** | [`EmptyState.tsx`](EmptyState.tsx) | High-contrast placeholder for zero-result states, missing search hits, or empty pipeline stages. Includes title, description, and optional action button. |
 | **FavoriteButton** | [`FavoriteButton.tsx`](FavoriteButton.tsx) | Star icon toggle button providing instant optimistic toggling of a job's `favorited` flag. |
 | **Field** | [`Field.tsx`](Field.tsx) | Form field wrapper binding labels, required asterisks, helper text, and error validation messages to form controls. |
-| **Input** | [`Input.tsx`](Input.tsx) | Monospaced text input with 0px radius, 1px border, clear button, and optional prefix/suffix icons. |
-| **KeyHint** | [`KeyHint.tsx`](KeyHint.tsx) | Monospaced keyboard shortcut pill (e.g. `⌘K`, `J`, `K`, `ESC`) used throughout buttons, menus, and footer bars. |
+| **Input** | [`Input.tsx`](Input.tsx) | Text input with 0px radius, 1px border, clear button, and optional prefix/suffix icons. |
+| **KeyHint** | [`KeyHint.tsx`](KeyHint.tsx) | Keyboard shortcut pill (e.g. `⌘K`, `J`, `K`, `ESC`) used throughout buttons, menus, and footer bars. |
+| **KeywordInput** | [`KeywordInput.tsx`](KeywordInput.tsx) | Reusable chip input keeping unfinished text separate from committed terms. Supports Enter/Add/comma/newline/paste commits, phrase preservation, case-insensitive deduplication, IME composition safety, two-stage Backspace focus/deletion, and synchronous flush before editor actions. |
 | **ListRow** | [`ListRow.tsx`](ListRow.tsx) | Standardized hoverable list item container with left/right slots and border separators. |
 | **Modal** | [`Modal.tsx`](Modal.tsx) | Shared modal/inline inspector shell. Modal presentation uses native dialog focus trapping; inline presentation retains content without remounting. Manages Escape, focus restoration and scroll across responsive transitions. |
 | **Panel** | [`Panel.tsx`](Panel.tsx) | Heavy-bordered content container with optional title header bar and collapsible body. |
 | **RangeSlider** | [`RangeSlider.tsx`](RangeSlider.tsx) | Dual-thumb brutalist range slider for bounded numeric ranges (salary minimum/maximum, years of experience). Supports step increments and thumb tooltips. |
+| **RemoveJobButton** | [`RemoveJobButton.tsx`](RemoveJobButton.tsx) | Shared trash SVG trigger with danger styling and contextual accessible name (`Remove [title] at [company]`). |
 | **Rule** | [`Rule.tsx`](Rule.tsx) | Hairline 1px horizontal or vertical divider (`hr` / `div`) styled with `--color-border`. |
-| **Select** | [`Select.tsx`](Select.tsx) | Native select with shared control height, global font inheritance, theme colors, and platform keyboard behavior. |
-| **Table** | [`Table.tsx`](Table.tsx) | Monospaced data table components (`Table`, `TableHead`, `TableRow`, `TableCell`) with sort headers and zebra striping. |
-| **Tag** | [`Tag.tsx`](Tag.tsx) | Pill-style badge tag displaying role categories, workplace arrangements (`IN-OFFICE`, `REMOTE`, `HYBRID`), and status labels. |
-| **Toast** | [`Toast.tsx`](Toast.tsx) | Floating alert notification item displaying progress countdown, status icon, and dismiss button. |
+| **Select** | [`Select.tsx`](Select.tsx) | Headless UI–based themed `Select` (Listbox) and searchable `Combobox` with top-layer portal positioning, unclipped popups, nested Escape handling, global `--font-ui` inheritance, and keyboard/typeahead navigation. |
+| **Table** | [`Table.tsx`](Table.tsx) | Data table components (`Table`, `TableHead`, `TableRow`, `TableCell`) with sort headers and zebra striping. |
+| **Tag** | [`Tag.tsx`](Tag.tsx) | Badge tag displaying role categories, workplace arrangements (`IN-OFFICE`, `REMOTE`, `HYBRID`), and semantic stage labels. |
+| **Toast** | [`Toast.tsx`](Toast.tsx) | Floating alert notification item displaying progress countdown, status icon, optional action (such as Undo), and dismiss button. |
 | **Toggle** | [`Toggle.tsx`](Toggle.tsx) | Binary toggle switch with brutalist square indicator and custom checked styling. |
 | **Tooltip** | [`Tooltip.tsx`](Tooltip.tsx) | Instant hover tooltip computing geometric coordinates via `src/lib/positioning.ts` to prevent window edge overflow. |
 
