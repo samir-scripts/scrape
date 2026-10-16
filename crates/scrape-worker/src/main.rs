@@ -228,6 +228,7 @@ async fn execute_worker(
             })?;
         }
         if source_failed {
+            gate.summary.termination = scrape_core::protocol::CoverageTermination::Failed;
             stats.sources_failed += 1;
         } else {
             stats.sources_ok += 1;

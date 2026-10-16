@@ -29,6 +29,10 @@ pub enum RunStatus {
 #[serde(default)]
 #[ts(export)]
 pub struct RunCounts {
+    // Detailed summaries are absent on historical runs.
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub sources: Option<Vec<scrape_core::protocol::SourceScanStats>>,
     #[ts(type = "number")]
     pub fetched: i64,
     #[ts(type = "number")]
@@ -417,6 +421,21 @@ mod tests {
             updated: 1,
             failed: 2,
             retention_removed: 5,
+            sources: Some(vec![scrape_core::protocol::SourceScanStats {
+                source_id: "fixture".into(),
+                limit: 20,
+                examined: 12,
+                rejected: 4,
+                matched: 6,
+                accepted: 4,
+                blocked: 2,
+                invalid: 2,
+                rejections: vec![scrape_core::protocol::RejectionCount {
+                    reason: scrape_core::matching::RejectionReason::Geography,
+                    count: 4,
+                }],
+                ..Default::default()
+            }]),
         };
         RunsRepo::record_config(&pool, &run.id, &config)
             .await

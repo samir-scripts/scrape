@@ -276,3 +276,65 @@ fn preview_is_capped_at_ten_or_the_lower_limit_and_global_budgets_are_independen
         .iter()
         .all(|s| s.limit == 20 && s.limit_reached));
 }
+
+#[test]
+fn authored_large_board_explains_low_counts_without_changing_restrictions() {
+    // Authored diagnostic control, not the missing original Cloudflare response/config.
+    let server = Server::new(|_| {
+        json!((0..438).map(|id| {
+        let title = if id < 2 { "Software Engineer Intern" } else if id < 400 { "Software Engineer" } else { "Sales Manager" };
+        json!({"id":id.to_string(),"text":title,"hostedUrl":format!("https://fixture.test/{id}"),"categories":{"location":"Remote","commitment": if id < 2 {"Internship"} else {"Full-time"}}})
+    }).collect::<Vec<_>>()).to_string()
+    });
+    let configurations = [
+        (json!({}), 438),
+        (
+            json!({"matching":{"keywords":{"any":["Engineer"],"fields":["title"]}}}),
+            400,
+        ),
+        (
+            json!({"include_keywords":["Software","Engineer","Intern"],"exclude_keywords":["MBA","Sales","Marketing"],"locations":["Remote","San Francisco, CA","Austin, TX"],"role_types":["internship"]}),
+            2,
+        ),
+    ];
+    for (filters, expected) in configurations {
+        let events = run(
+            &server,
+            vec![source("lever", "board", Some(500))],
+            filters,
+            vec![],
+            false,
+        );
+        assert_eq!(jobs(&events), expected);
+        let scan = &summary(&events)[0];
+        scan.validate().unwrap();
+        assert_eq!(scan.examined, 438);
+        assert_eq!(scan.accepted, expected as u64);
+        assert_eq!(scan.rejected, 438 - expected as u64);
+        assert_eq!(
+            scan.rejections.iter().map(|r| r.count).sum::<u64>(),
+            scan.rejected
+        );
+        assert_eq!(
+            scan.examined,
+            scan.accepted + scan.blocked + scan.rejected + scan.invalid + scan.duplicates
+        );
+        assert_eq!(
+            scan.termination,
+            scrape_core::protocol::CoverageTermination::Exhausted
+        );
+        assert_eq!(
+            scan.provider_total, None,
+            "Do not invent provider totals from array length"
+        );
+        if expected == 2 {
+            assert!(scan.rejections.iter().any(|r| r.reason
+                == scrape_core::matching::RejectionReason::LegacyRoleType
+                && r.count == 398));
+            assert!(scan
+                .rejection_examples
+                .iter()
+                .all(|e| e.primary == scrape_core::matching::RejectionReason::LegacyRoleType));
+        }
+    }
+}

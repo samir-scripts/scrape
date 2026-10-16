@@ -354,6 +354,9 @@ pub struct PreviewPosting {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct WorkflowPreview {
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub sources: Option<Vec<scrape_core::protocol::SourceScanStats>>,
     pub spec: crate::services::workflow::WorkflowSpec,
     pub jobs: Vec<PreviewPosting>,
     #[ts(type = "number")]
@@ -416,6 +419,7 @@ pub async fn preview_workflow(
     .await?;
     let mut result = WorkflowPreview {
         spec: spec.clone(),
+        sources: None,
         jobs: vec![],
         fetched: 0,
         matched: 0,
@@ -480,6 +484,10 @@ pub async fn preview_workflow(
                 result.errors.push(message);
             }
             WorkerEvent::Done { stats } => {
+                for scan in &stats.sources {
+                    scan.validate().map_err(AppError::Validation)?;
+                }
+                result.sources = Some(stats.sources.clone());
                 for scan in stats.sources {
                     result.blocked += scan.blocked;
                     result.sampled |= scan.limit_reached;
@@ -488,8 +496,14 @@ pub async fn preview_workflow(
         }
     }
     result.rejected = result
-        .fetched
-        .saturating_sub(result.matched + result.invalid);
+        .sources
+        .as_ref()
+        .map(|sources| sources.iter().map(|scan| scan.rejected).sum())
+        .unwrap_or_else(|| {
+            result
+                .fetched
+                .saturating_sub(result.matched + result.invalid)
+        });
     result.sampled |= result.matched.saturating_sub(result.blocked) > result.jobs.len() as u64;
     Ok(result)
 }

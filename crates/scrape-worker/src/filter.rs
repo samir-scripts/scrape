@@ -29,7 +29,7 @@ impl<'a> FilterMatcher<'a> {
 
 /// One source's acceptance budget, shared by every adapter and execution route.
 pub struct PostingGate<'a> {
-    matcher: FilterMatcher<'a>,
+    matcher: scrape_core::matching::MatchingEvaluator<'a>,
     source: &'a scrape_core::WorkerSource,
     blocked: &'a std::collections::HashSet<String>,
     seen: std::collections::HashSet<String>,
@@ -47,7 +47,7 @@ impl<'a> PostingGate<'a> {
     ) -> Result<Self, String> {
         let limit = source.max_jobs_per_run()?;
         Ok(Self {
-            matcher: FilterMatcher::new(filters)?,
+            matcher: scrape_core::matching::MatchingEvaluator::new(filters)?,
             source,
             blocked,
             seen: Default::default(),
@@ -83,11 +83,6 @@ impl<'a> PostingGate<'a> {
         if let WorkerEvent::Job {
             external_id,
             title,
-            location,
-            company,
-            description_text,
-            salary,
-            role_type,
             url,
             ..
         } = &event
@@ -114,23 +109,33 @@ impl<'a> PostingGate<'a> {
                 self.summary.duplicates += 1;
                 return None;
             }
-            let filters = self.matcher.filters;
-            let ctx = JobFilterContext {
-                title,
-                location,
-                company,
-                description: description_text.as_deref().unwrap_or(""),
-                role_type: *role_type,
-            };
-            if !self.matcher.matches_context(&ctx)
-                || !filters
-                    .matching
-                    .as_ref()
-                    .is_none_or(|rules| rules.matches_event_at(&event, self.started))
-                || !filters.compensation.as_ref().is_none_or(|pay| {
-                    pay.matches(salary.as_ref().map(|s| s.ranges.as_slice()).unwrap_or(&[]))
-                })
-            {
+            let reasons = self.matcher.rejection_reasons(&event, self.started);
+            if let Some(primary) = reasons.first().copied() {
+                self.summary.rejected += 1;
+                if let Some(count) = self
+                    .summary
+                    .rejections
+                    .iter_mut()
+                    .find(|count| count.reason == primary)
+                {
+                    count.count += 1;
+                } else {
+                    self.summary
+                        .rejections
+                        .push(scrape_core::protocol::RejectionCount {
+                            reason: primary,
+                            count: 1,
+                        });
+                }
+                if self.summary.rejection_examples.len() < 5 {
+                    self.summary
+                        .rejection_examples
+                        .push(scrape_core::protocol::RejectionExample {
+                            title: title.clone(),
+                            primary,
+                            overlapping: reasons,
+                        });
+                }
                 return None;
             }
             self.summary.matched += 1;
@@ -143,7 +148,11 @@ impl<'a> PostingGate<'a> {
                 return None;
             }
             self.accepted += 1;
+            self.summary.accepted = u64::from(self.accepted);
             self.summary.limit_reached = self.full();
+            if self.full() {
+                self.summary.termination = scrape_core::protocol::CoverageTermination::JobLimit;
+            }
         }
         Some(event)
     }

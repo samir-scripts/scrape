@@ -1,3 +1,4 @@
+import { ScanDiagnostics } from "./ScanDiagnostics";
 import type { WorkflowSpec } from "../../../bindings/WorkflowSpec";
 import { WorkflowImportButton } from "./WorkflowImportButton";
 import { IconButton } from "../../ui/IconButton";
@@ -635,7 +636,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                             {r.status === "running" ? "RUNNING…" : `+${Number(r.jobs_new)}`}
                           </span>
                         </div>
-                        {r.counts && <p className="text-xs">Fetched {r.counts.fetched} · rejected {r.counts.rejected} · blocked {r.counts.blocked} · inserted {r.counts.inserted} · updated {r.counts.updated} · failed {r.counts.failed} · retention removed {r.counts.retention_removed}</p>}
+                        {r.counts && <p className="text-xs">Examined {r.counts.fetched} · rejected {r.counts.rejected} · blocked {r.counts.blocked} · inserted {r.counts.inserted} · updated {r.counts.updated} · failed {r.counts.failed} · retention removed {r.counts.retention_removed}</p>}
                         {r.error && (
                           <span className={`text-xs truncate ${isSelected ? "text-[var(--color-danger)]" : "text-[var(--color-danger)]"}`}>
                             ERR: {r.error}
@@ -675,6 +676,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                 </div>
               </div>
 
+              <ScanDiagnostics sources={selectedRun?.counts?.sources} />
               {isLoadingLogs ? (
                 <div className="p-4 text-center text-xs text-[var(--color-ink-mute)] font-mono">
                   STREAMING LOGS…

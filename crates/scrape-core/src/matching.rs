@@ -8,6 +8,93 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+/// Stable primary categories. Detailed failures may overlap; primary counts do not.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum RejectionReason {
+    Query,
+    Policy,
+    LegacyKeywords,
+    LegacyExclusion,
+    LegacyLocation,
+    LegacyRoleType,
+    KeywordAny,
+    KeywordAll,
+    KeywordExclusion,
+    PostingDate,
+    Compensation,
+    RoleType,
+    Workplace,
+    Experience,
+    NewGrad,
+    Sponsorship,
+    WorkAuthorization,
+    Clearance,
+    Geography,
+    InvalidCandidate,
+}
+
+/// Compiles legacy expressions once and uses the same predicates for decisions and diagnostics.
+pub struct MatchingEvaluator<'a> {
+    filters: &'a crate::WorkerFilters,
+    predicates: Vec<(RejectionReason, crate::FilterExpr)>,
+}
+impl<'a> MatchingEvaluator<'a> {
+    pub fn new(filters: &'a crate::WorkerFilters) -> Result<Self, String> {
+        Ok(Self {
+            filters,
+            predicates: filters.categorized_predicates()?,
+        })
+    }
+    pub fn rejection_reasons(
+        &self,
+        event: &WorkerEvent,
+        started: chrono::DateTime<chrono::Utc>,
+    ) -> Vec<RejectionReason> {
+        let WorkerEvent::Job {
+            title,
+            location,
+            company,
+            description_text,
+            role_type,
+            salary,
+            ..
+        } = event
+        else {
+            return vec![RejectionReason::InvalidCandidate];
+        };
+        let context = JobFilterContext {
+            title,
+            location,
+            company,
+            description: description_text.as_deref().unwrap_or(""),
+            role_type: *role_type,
+        };
+        let mut reasons: Vec<_> = self
+            .predicates
+            .iter()
+            .filter(|(_, predicate)| !predicate.eval(&context))
+            .map(|(reason, _)| *reason)
+            .collect();
+        if let Some(rules) = &self.filters.matching {
+            reasons.extend(rules.rejection_reasons_at(event, started));
+        }
+        if self.filters.compensation.as_ref().is_some_and(|pay| {
+            !pay.matches(salary.as_ref().map(|s| s.ranges.as_slice()).unwrap_or(&[]))
+        }) {
+            reasons.push(RejectionReason::Compensation);
+        }
+        // Legacy and structured compensation can fail together, but describe one category.
+        let mut seen = std::collections::BTreeSet::new();
+        reasons.retain(|reason| seen.insert(*reason));
+        reasons
+    }
+    pub fn matches_at(&self, event: &WorkerEvent, started: chrono::DateTime<chrono::Utc>) -> bool {
+        self.rejection_reasons(event, started).is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 #[ts(export)]
@@ -42,6 +129,9 @@ impl KeywordRules {
         }
     }
     pub fn matches(&self, context: &JobFilterContext) -> bool {
+        self.rejection_reasons(context).is_empty()
+    }
+    pub fn rejection_reasons(&self, context: &JobFilterContext) -> Vec<RejectionReason> {
         let contains = |word: &str| {
             self.fields().iter().any(|field| {
                 context
@@ -50,9 +140,17 @@ impl KeywordRules {
                     .contains(&word.to_ascii_lowercase())
             })
         };
-        (self.any.is_empty() || self.any.iter().any(|word| contains(word)))
-            && self.all.iter().all(|word| contains(word))
-            && !self.exclude.iter().any(|word| contains(word))
+        let mut reasons = Vec::new();
+        if !self.any.is_empty() && !self.any.iter().any(|word| contains(word)) {
+            reasons.push(RejectionReason::KeywordAny);
+        }
+        if !self.all.iter().all(|word| contains(word)) {
+            reasons.push(RejectionReason::KeywordAll);
+        }
+        if self.exclude.iter().any(|word| contains(word)) {
+            reasons.push(RejectionReason::KeywordExclusion);
+        }
+        reasons
     }
 }
 
@@ -207,14 +305,16 @@ impl PostingRules {
         event: &WorkerEvent,
         started: chrono::DateTime<chrono::Utc>,
     ) -> bool {
-        if let Some(date) = &self.posting_date {
-            if let WorkerEvent::Job { date_posted, .. } = event {
-                if !date.matches(date_posted.as_deref(), started) {
-                    return false;
-                }
-            }
-        }
+        self.rejection_reasons_at(event, started).is_empty()
+    }
+    pub fn rejection_reasons_at(
+        &self,
+        event: &WorkerEvent,
+        started: chrono::DateTime<chrono::Utc>,
+    ) -> Vec<RejectionReason> {
+        let mut reasons = Vec::new();
         let WorkerEvent::Job {
+            date_posted,
             title,
             company,
             location,
@@ -231,7 +331,7 @@ impl PostingRules {
             ..
         } = event
         else {
-            return false;
+            return vec![RejectionReason::InvalidCandidate];
         };
         let context = JobFilterContext {
             title,
@@ -240,27 +340,31 @@ impl PostingRules {
             description: description_text.as_deref().unwrap_or(""),
             role_type: *role_type,
         };
-        if self
-            .keywords
-            .as_ref()
-            .is_some_and(|rules| !rules.matches(&context))
-            || self.compensation.as_ref().is_some_and(|filter| {
-                !filter.matches(salary.as_ref().map(|s| s.ranges.as_slice()).unwrap_or(&[]))
-            })
-        {
-            return false;
+        if let Some(date) = &self.posting_date {
+            if !date.matches(date_posted.as_deref(), started) {
+                reasons.push(RejectionReason::PostingDate);
+            }
         }
-        if !self.role_types.is_empty() && !self.role_types.contains(role_type)
-            || !self.workplaces.is_empty() && !self.workplaces.contains(workplace_type)
-        {
-            return false;
+        if let Some(keywords) = &self.keywords {
+            reasons.extend(keywords.rejection_reasons(&context));
+        }
+        if self.compensation.as_ref().is_some_and(|filter| {
+            !filter.matches(salary.as_ref().map(|s| s.ranges.as_slice()).unwrap_or(&[]))
+        }) {
+            reasons.push(RejectionReason::Compensation);
+        }
+        if !self.role_types.is_empty() && !self.role_types.contains(role_type) {
+            reasons.push(RejectionReason::RoleType);
+        }
+        if !self.workplaces.is_empty() && !self.workplaces.contains(workplace_type) {
+            reasons.push(RejectionReason::Workplace);
         }
         if self.experience_min.is_some() || self.experience_max.is_some() {
             let min = experience.as_ref().and_then(|e| e.min_years);
             let max = experience.as_ref().and_then(|e| e.max_years);
             if min.is_none() && max.is_none() {
                 if !self.experience_include_unknown {
-                    return false;
+                    reasons.push(RejectionReason::Experience);
                 }
             } else if self
                 .experience_min
@@ -269,30 +373,39 @@ impl PostingRules {
                     .experience_max
                     .is_some_and(|hi| min.is_some_and(|lo| lo > hi))
             {
-                return false;
+                reasons.push(RejectionReason::Experience);
             }
         }
         if self.new_grad.as_deref() == Some("only") && *is_new_grad != TriState::Yes
             || self.new_grad.as_deref() == Some("exclude") && *is_new_grad == TriState::Yes
         {
-            return false;
+            reasons.push(RejectionReason::NewGrad);
         }
         if !self.sponsorship.is_empty()
             && !self
                 .sponsorship
                 .contains(&sponsorship.as_ref().map(|s| s.value).unwrap_or_default())
-            || !self.work_auth.is_empty()
-                && !self
-                    .work_auth
-                    .contains(&work_auth.as_ref().map(|s| s.value).unwrap_or_default())
-            || !self.clearance.is_empty()
-                && !self
-                    .clearance
-                    .contains(&clearance.as_ref().map(|s| s.value).unwrap_or_default())
         {
-            return false;
+            reasons.push(RejectionReason::Sponsorship);
         }
-        self.geography_matches(locations)
+        if !self.work_auth.is_empty()
+            && !self
+                .work_auth
+                .contains(&work_auth.as_ref().map(|s| s.value).unwrap_or_default())
+        {
+            reasons.push(RejectionReason::WorkAuthorization);
+        }
+        if !self.clearance.is_empty()
+            && !self
+                .clearance
+                .contains(&clearance.as_ref().map(|s| s.value).unwrap_or_default())
+        {
+            reasons.push(RejectionReason::Clearance);
+        }
+        if !self.geography_matches(locations) {
+            reasons.push(RejectionReason::Geography);
+        }
+        reasons
     }
     pub fn sqlite_predicates(&self) -> (Vec<String>, Vec<Bind>) {
         self.sqlite_predicates_at(chrono::Utc::now())
@@ -520,5 +633,68 @@ mod geography_tests {
         ] {
             assert!(rules.validate().is_err());
         }
+    }
+}
+
+#[cfg(test)]
+mod diagnostics_tests {
+    use super::*;
+    #[test]
+    fn decisions_and_overlapping_reasons_share_the_same_predicates() {
+        let filters: crate::WorkerFilters = serde_json::from_value(serde_json::json!({
+            "query":"title LIKE '%Engineer%'", "policy":{"title":"%Rust%"},
+            "include_keywords":["Developer"], "exclude_keywords":["Senior"],
+            "locations":["Austin"], "role_types":["internship"],
+            "matching":{"keywords":{"any":["Engineer"],"all":["Rust"],"exclude":["Senior"],"fields":["title"]},"countries":["US"],"role_types":["internship"]}
+        })).unwrap();
+        let evaluator = MatchingEvaluator::new(&filters).unwrap();
+        let started = chrono::DateTime::parse_from_rfc3339("2026-10-16T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let event: WorkerEvent = serde_json::from_value(serde_json::json!({"type":"job","source_id":"fixture","external_id":"1","title":"Senior Engineer","company":"Fixture","url":"https://fixture.test/1","location":"Remote","role_type":"full_time"})).unwrap();
+        let reasons = evaluator.rejection_reasons(&event, started);
+        assert!(!evaluator.matches_at(&event, started));
+        assert!(reasons.contains(&RejectionReason::Policy));
+        assert!(reasons.contains(&RejectionReason::LegacyKeywords));
+        assert!(reasons.contains(&RejectionReason::LegacyExclusion));
+        assert!(reasons.contains(&RejectionReason::LegacyLocation));
+        assert!(reasons.contains(&RejectionReason::LegacyRoleType));
+        assert!(reasons.contains(&RejectionReason::KeywordAll));
+        assert!(reasons.contains(&RejectionReason::KeywordExclusion));
+        assert!(reasons.contains(&RejectionReason::RoleType));
+        assert!(reasons.contains(&RejectionReason::Geography));
+        assert!(!reasons.contains(&RejectionReason::KeywordAny));
+        let context = JobFilterContext {
+            title: "Senior Engineer",
+            location: "Remote",
+            description: "",
+            company: "Fixture",
+            role_type: RoleType::FullTime,
+        };
+        assert_eq!(
+            filters.to_expr().unwrap().eval(&context),
+            !reasons.iter().any(|r| matches!(
+                r,
+                RejectionReason::Query
+                    | RejectionReason::Policy
+                    | RejectionReason::LegacyKeywords
+                    | RejectionReason::LegacyExclusion
+                    | RejectionReason::LegacyLocation
+                    | RejectionReason::LegacyRoleType
+            ))
+        );
+        assert_eq!(
+            filters
+                .matching
+                .as_ref()
+                .unwrap()
+                .matches_event_at(&event, started),
+            filters
+                .matching
+                .as_ref()
+                .unwrap()
+                .rejection_reasons_at(&event, started)
+                .is_empty()
+        );
     }
 }

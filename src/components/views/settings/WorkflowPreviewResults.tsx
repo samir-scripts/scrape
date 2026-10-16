@@ -1,3 +1,4 @@
+import { ScanDiagnostics } from "./ScanDiagnostics";
 import type { WorkflowSpec } from "../../../bindings/WorkflowSpec";
 import type { WorkflowPreview } from "../../../bindings/WorkflowPreview";
 import { openPostingUrl } from "../../../lib/postingUrl";
@@ -15,10 +16,11 @@ export function WorkflowPreviewResults({ preview, draft, setError }: { preview: 
                     Preview breakdown
                   </summary>
                   <p>
-                    {preview.fetched} fetched · {preview.matched} matched ·{" "}
+                    {preview.fetched} examined · {preview.matched} matched ·{" "}
                     {preview.rejected} rejected · {preview.blocked} blocked ·{" "}
                     {preview.invalid} invalid
                   </p>
+                  <ScanDiagnostics sources={preview.sources} />
                 </details>
                 {preview.errors.map((e, i) => (
                   <p

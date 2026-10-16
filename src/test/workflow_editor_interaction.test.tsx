@@ -22,11 +22,11 @@ describe("one workflow draft", () => {
     const limit = screen.getByRole("textbox", { name: "Maximum matching jobs per run" });
     expect((limit as HTMLInputElement).value).toBe("20");
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
-    await screen.findByText(/3 fetched/);
+    await screen.findByText(/3 examined/);
     for (const invalid of ["0", "1.5", "10001", "abc"]) {
       await user.clear(limit); await user.type(limit, invalid);
       expect(limit.getAttribute("aria-invalid")).toBe("true");
-      expect(screen.queryByText(/3 fetched/)).toBeNull();
+      expect(screen.queryByText(/3 examined/)).toBeNull();
       await user.click(screen.getByRole("button", { name: "Preview matches" }));
       expect(extract).toHaveBeenCalledTimes(1);
     }
@@ -39,7 +39,7 @@ describe("one workflow draft", () => {
     await user.click(screen.getByRole("button", { name: "Review workflow" }));
     expect(screen.getByText(/Maximum 7 matching jobs per run/)).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
-    await screen.findByText(/3 fetched/);
+    await screen.findByText(/3 examined/);
     await user.click(screen.getByRole("button", { name: "Save workflow" }));
     await waitFor(() => expect(save).toHaveBeenCalled());
     expect(save.mock.calls[0][0].max_jobs_per_run).toBe(7);
@@ -55,7 +55,7 @@ describe("one workflow draft", () => {
     await screen.findByRole("textbox", { name: "Title keywords (any)" });
     await user.type(screen.getByRole("textbox", { name: "Title keywords (any)" }), "Engineer");
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
-    await screen.findByText(/3 fetched/);
+    await screen.findByText(/3 examined/);
     // Schedule editing invalidates the old preview.
     await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
     await user.click(screen.getByRole("button", { name: "Schedule", expanded: false }));
@@ -89,7 +89,7 @@ describe("one workflow draft", () => {
     await user.type(screen.getByRole("textbox", { name: "Workflow name" }), " revised");
     expect(cancel).toHaveBeenCalled();
     finish(preview(mock.mock.calls[0][0]));
-    await waitFor(() => expect(screen.queryByText(/3 fetched/)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/3 examined/)).toBeNull());
   });
   it("re-detects an interrupted source before preview without losing the latest matching rule", async () => {
     const user = userEvent.setup(); let finishDetection!: (result: {kind:string;identifier:string;name:string}) => void;

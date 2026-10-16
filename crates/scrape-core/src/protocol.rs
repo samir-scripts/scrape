@@ -6,7 +6,7 @@ use crate::{RoleType, SourceKind, TriState, WorkplaceType};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 3;
+pub const PROTOCOL_VERSION: u32 = 4;
 pub const DEFAULT_MAX_JOBS_PER_RUN: u32 = 20;
 pub const PREVIEW_MAX_JOBS: u32 = 10;
 pub const MAX_JOB_LIMIT: u32 = 10_000;
@@ -107,7 +107,18 @@ pub struct WorkerFilters {
 
 impl WorkerFilters {
     pub fn to_expr(&self) -> Result<crate::filter::FilterExpr, String> {
+        Ok(crate::FilterExpr::And(
+            self.categorized_predicates()?
+                .into_iter()
+                .map(|(_, expr)| expr)
+                .collect(),
+        ))
+    }
+    pub fn categorized_predicates(
+        &self,
+    ) -> Result<Vec<(crate::matching::RejectionReason, crate::FilterExpr)>, String> {
         use crate::filter::{FilterExpr, FilterField, FilterOp};
+        use crate::matching::RejectionReason as Reason;
         if let Some(matching) = &self.matching {
             matching.validate()?;
         }
@@ -120,14 +131,14 @@ impl WorkerFilters {
         if let Some(ref q) = self.query {
             let trimmed = q.trim();
             if !trimmed.is_empty() {
-                and_clauses.push(FilterExpr::parse_query(trimmed)?);
+                and_clauses.push((Reason::Query, FilterExpr::parse_query(trimmed)?));
             }
         }
 
         // 2. If explicit structured policy object is present, parse it
         if let Some(ref pol) = self.policy {
             if !pol.is_null() {
-                and_clauses.push(FilterExpr::parse_structured_policy(pol)?);
+                and_clauses.push((Reason::Policy, FilterExpr::parse_structured_policy(pol)?));
             }
         }
 
@@ -151,7 +162,7 @@ impl WorkerFilters {
                     ])
                 })
                 .collect();
-            and_clauses.push(FilterExpr::Or(includes));
+            and_clauses.push((Reason::LegacyKeywords, FilterExpr::Or(includes)));
         }
 
         if !self.exclude_keywords.is_empty() {
@@ -173,7 +184,10 @@ impl WorkerFilters {
                     ])
                 })
                 .collect();
-            and_clauses.push(FilterExpr::Not(Box::new(FilterExpr::Or(excludes))));
+            and_clauses.push((
+                Reason::LegacyExclusion,
+                FilterExpr::Not(Box::new(FilterExpr::Or(excludes))),
+            ));
         }
 
         if !self.locations.is_empty() {
@@ -186,7 +200,7 @@ impl WorkerFilters {
                     value: format!("%{}%", loc),
                 })
                 .collect();
-            and_clauses.push(FilterExpr::Or(locs));
+            and_clauses.push((Reason::LegacyLocation, FilterExpr::Or(locs)));
         }
 
         if !self.role_types.is_empty() {
@@ -210,20 +224,17 @@ impl WorkerFilters {
                     RoleType::Unknown => roles.push("unknown".to_string()),
                 }
             }
-            and_clauses.push(FilterExpr::FieldIn {
-                field: FilterField::RoleType,
-                values: roles,
-                negated: false,
-            });
+            and_clauses.push((
+                Reason::LegacyRoleType,
+                FilterExpr::FieldIn {
+                    field: FilterField::RoleType,
+                    values: roles,
+                    negated: false,
+                },
+            ));
         }
 
-        if and_clauses.is_empty() {
-            Ok(FilterExpr::AlwaysTrue)
-        } else if and_clauses.len() == 1 {
-            Ok(and_clauses.remove(0))
-        } else {
-            Ok(FilterExpr::And(and_clauses))
-        }
+        Ok(and_clauses)
     }
 }
 
@@ -335,12 +346,89 @@ pub struct WorkerStats {
 pub struct SourceScanStats {
     pub source_id: String,
     pub limit: u32,
+    #[ts(type = "number")]
     pub examined: u64,
+    #[ts(type = "number")]
     pub matched: u64,
+    #[ts(type = "number")]
     pub blocked: u64,
+    #[ts(type = "number")]
     pub duplicates: u64,
+    #[ts(type = "number")]
     pub invalid: u64,
     pub limit_reached: bool,
+    #[serde(default)]
+    #[ts(type = "number")]
+    pub accepted: u64,
+    #[serde(default)]
+    #[ts(type = "number")]
+    pub rejected: u64,
+    #[serde(default)]
+    pub rejections: Vec<RejectionCount>,
+    #[serde(default)]
+    pub rejection_examples: Vec<RejectionExample>,
+    #[serde(default)]
+    pub termination: CoverageTermination,
+    // Unknown unless the provider explicitly supplies a total.
+    #[serde(default)]
+    #[ts(type = "number | null")]
+    pub provider_total: Option<u64>,
+}
+
+impl SourceScanStats {
+    pub fn validate(&self) -> Result<(), String> {
+        let examined = u128::from(self.accepted)
+            + u128::from(self.blocked)
+            + u128::from(self.rejected)
+            + u128::from(self.duplicates)
+            + u128::from(self.invalid);
+        let primary_count: u128 = self.rejections.iter().map(|r| u128::from(r.count)).sum();
+        let categories: std::collections::BTreeSet<_> =
+            self.rejections.iter().map(|r| r.reason).collect();
+        if examined != u128::from(self.examined)
+            || u128::from(self.matched) != u128::from(self.accepted) + u128::from(self.blocked)
+            || primary_count != u128::from(self.rejected)
+            || categories.len() != self.rejections.len()
+            || self.accepted > u64::from(self.limit)
+            || self.limit_reached != (self.accepted == u64::from(self.limit))
+            || self.rejection_examples.len() > 5
+            || self.rejection_examples.iter().any(|e| {
+                e.overlapping.first() != Some(&e.primary) || !categories.contains(&e.primary)
+            })
+        {
+            return Err(format!("Worker scan summary for {} has inconsistent candidate counts or rejection diagnostics", self.source_id));
+        }
+        validate_job_limit(self.limit)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export)]
+pub struct RejectionCount {
+    pub reason: crate::matching::RejectionReason,
+    #[ts(type = "number")]
+    pub count: u64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export)]
+pub struct RejectionExample {
+    pub title: String,
+    pub primary: crate::matching::RejectionReason,
+    /// Includes primary; these conditions overlap and must not be added together.
+    pub overlapping: Vec<crate::matching::RejectionReason>,
+}
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, TS, PartialEq)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum CoverageTermination {
+    #[default]
+    Exhausted,
+    JobLimit,
+    RequestLimit,
+    TimeLimit,
+    Cancelled,
+    Failed,
 }
 
 #[cfg(test)]
@@ -355,6 +443,41 @@ mod tests {
             .join("../../src/bindings/ingestionLimits.ts");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, output).unwrap();
+    }
+
+    #[test]
+    fn scan_summaries_reject_inconsistent_or_overlapping_primary_counts() {
+        let valid = SourceScanStats {
+            source_id: "fixture".into(),
+            limit: 20,
+            examined: 4,
+            matched: 2,
+            accepted: 1,
+            blocked: 1,
+            invalid: 1,
+            rejected: 1,
+            rejections: vec![RejectionCount {
+                reason: crate::matching::RejectionReason::Geography,
+                count: 1,
+            }],
+            ..Default::default()
+        };
+        valid.validate().unwrap();
+        let mut invalid = valid.clone();
+        invalid.rejected = 2;
+        assert!(invalid
+            .validate()
+            .unwrap_err()
+            .contains("inconsistent candidate counts"));
+        let mut invalid = valid.clone();
+        invalid.rejections.push(valid.rejections[0].clone());
+        assert!(invalid.validate().is_err());
+        let mut invalid = valid.clone();
+        invalid.accepted = 21;
+        assert!(invalid.validate().is_err());
+        let mut invalid = valid;
+        invalid.limit_reached = true;
+        assert!(invalid.validate().is_err());
     }
 
     #[test]

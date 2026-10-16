@@ -893,6 +893,15 @@ impl ScrapeRunner {
                                     );
                                 }
                                 WorkerEvent::Done { stats } => {
+                                    if let Some(error) =
+                                        stats.sources.iter().find_map(|scan| scan.validate().err())
+                                    {
+                                        sidecar_err = Some(error);
+                                        continue;
+                                    }
+                                    counts.rejected =
+                                        stats.sources.iter().map(|scan| scan.rejected as i64).sum();
+                                    counts.sources = Some(stats.sources.clone());
                                     for scan in stats.sources {
                                         if !config.sources.iter().any(|s| s.id == scan.source_id) {
                                             sidecar_err = Some(

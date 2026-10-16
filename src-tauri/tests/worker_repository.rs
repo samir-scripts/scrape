@@ -472,7 +472,7 @@ async fn remote_us_eligibility_survives_greenhouse_worker_persistence_and_restar
     let server = std::thread::spawn(move || {
         let deadline = Instant::now() + Duration::from_secs(20);
         let mut requests = 0;
-        while requests < 3 && Instant::now() < deadline {
+        while requests < 5 && Instant::now() < deadline {
             if let Ok((mut stream, _)) = listener.accept() {
                 // Accepted sockets may inherit nonblocking mode on macOS.
                 stream.set_nonblocking(false).unwrap();
@@ -485,7 +485,15 @@ async fn remote_us_eligibility_survives_greenhouse_worker_persistence_and_restar
                 let path = request.split_whitespace().nth(1).unwrap_or_default();
                 let body = if path.ends_with("/jobs?content=true") {
                     serde_json::json!({"jobs": jobs}).to_string()
+                } else if path.ends_with("/robots.txt") {
+                    "User-agent: *\nAllow: /".into()
+                } else if path.starts_with("/boards.greenhouse.io/cloudflare/jobs/") {
+                    "<html><body>Authored empty branding response</body></html>".into()
                 } else {
+                    assert!(
+                        path.starts_with("/boards-api.greenhouse.io/"),
+                        "Unexpected fixture request: {path}"
+                    );
                     let id = path
                         .rsplit('/')
                         .next()
@@ -512,7 +520,10 @@ async fn remote_us_eligibility_survives_greenhouse_worker_persistence_and_restar
                 std::thread::sleep(Duration::from_millis(10));
             }
         }
-        assert_eq!(requests, 3, "one board request and two detail requests");
+        assert_eq!(
+            requests, 5,
+            "one board, two details, robots and branding requests"
+        );
     });
 
     let directory = tempfile::tempdir().unwrap();
@@ -731,9 +742,14 @@ async fn bounded_worker_refresh_preview_and_lower_override_preserve_saved_state(
 }
 
 #[tokio::test]
-async fn country_subdivision_workplace_and_unknown_rules_match_worker_and_sql() {
+async fn keyword_geography_decisions_and_diagnostics_match_worker_and_sql() {
     use scrape_core::matching::PostingRules;
     let cases: Vec<serde_json::Value> = vec![
+        serde_json::json!({"keywords":{"any":["Engineer","Developer"],"fields":["title"]}}),
+        serde_json::json!({"keywords":{"all":["Engineer","Developer"],"fields":["title"]}}),
+        serde_json::json!({"keywords":{"any":["Engineer","Developer"],"all":["Rust"],"exclude":["Senior"],"fields":["title"]}}),
+        serde_json::json!({"keywords":{"exclude":["Engineer"],"fields":["title"]}}),
+        serde_json::json!({"keywords":{"all":["Engin"],"fields":["title"]}}),
         serde_json::json!({"countries":["US"]}),
         serde_json::json!({"countries":["US"],"workplaces":["remote"]}),
         serde_json::json!({"countries":["US"],"regions":["US-CA"],"workplaces":["remote"]}),
@@ -767,7 +783,7 @@ async fn country_subdivision_workplace_and_unknown_rules_match_worker_and_sql() 
         let body = serde_json::json!({"jobs":postings}).to_string();
         let deadline = Instant::now() + Duration::from_secs(30);
         let mut count = 0;
-        while count < requests && Instant::now() < deadline {
+        while count < requests * 3 && Instant::now() < deadline {
             if let Ok((mut stream, _)) = listener.accept() {
                 stream.set_nonblocking(false).unwrap();
                 stream
@@ -775,12 +791,23 @@ async fn country_subdivision_workplace_and_unknown_rules_match_worker_and_sql() 
                     .unwrap();
                 let mut bytes = [0; 4096];
                 let n = stream.read(&mut bytes).unwrap();
-                assert!(String::from_utf8_lossy(&bytes[..n]).starts_with("GET /api.ashbyhq.com/posting-api/job-board/geography?includeCompensation=true "));
+                let request = String::from_utf8_lossy(&bytes[..n]);
+                let path = request.split_whitespace().nth(1).unwrap();
+                let response = match path {
+                    "/api.ashbyhq.com/posting-api/job-board/geography?includeCompensation=true" => {
+                        body.as_str()
+                    }
+                    "/fixture.test/robots.txt" => "User-agent: *\nAllow: /",
+                    "/fixture.test/remote-us" => {
+                        "<html><body>Authored empty branding response</body></html>"
+                    }
+                    _ => panic!("Unexpected fixture request: {path}"),
+                };
                 write!(
                     stream,
                     "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                    body.len(),
-                    body
+                    response.len(),
+                    response
                 )
                 .unwrap();
                 count += 1;
@@ -788,7 +815,7 @@ async fn country_subdivision_workplace_and_unknown_rules_match_worker_and_sql() 
                 std::thread::sleep(Duration::from_millis(5));
             }
         }
-        assert_eq!(count, requests);
+        assert_eq!(count, requests * 3);
     });
     let dir = tempfile::tempdir().unwrap();
     let pool = scrape_lib::db::init_db(&dir.path().join("geography.db"))
@@ -822,6 +849,7 @@ async fn country_subdivision_workplace_and_unknown_rules_match_worker_and_sql() 
     };
     let origin = format!("http://{address}");
     let unfiltered = invoke_replay(&config, false, Some(&origin));
+    let all_candidates = unfiltered.clone();
     let rows: Vec<_> = unfiltered
         .into_iter()
         .filter(|e| matches!(e, WorkerEvent::Job { .. }))
@@ -839,7 +867,39 @@ async fn country_subdivision_workplace_and_unknown_rules_match_worker_and_sql() 
     for value in cases {
         let rules: PostingRules = serde_json::from_value(value.clone()).unwrap();
         config.filters.matching = Some(rules.clone());
-        let mut actual: Vec<_> = invoke_replay(&config, false, Some(&origin))
+        let events = invoke_replay(&config, false, Some(&origin));
+        let evaluator = scrape_core::matching::MatchingEvaluator::new(&config.filters).unwrap();
+        let started = chrono::Utc::now();
+        let mut expected_reasons = std::collections::BTreeMap::new();
+        for event in all_candidates
+            .iter()
+            .filter(|event| matches!(event, WorkerEvent::Job { .. }))
+        {
+            let reasons = evaluator.rejection_reasons(event, started);
+            assert_eq!(
+                evaluator.matches_at(event, started),
+                rules.matches_event_at(event, started)
+            );
+            if let Some(reason) = reasons.first() {
+                *expected_reasons.entry(*reason).or_insert(0u64) += 1;
+            }
+        }
+        let WorkerEvent::Done { stats } = events.last().unwrap() else {
+            panic!("Missing completion");
+        };
+        assert_eq!(
+            stats.sources[0].rejected,
+            expected_reasons.values().sum::<u64>()
+        );
+        assert_eq!(
+            stats.sources[0]
+                .rejections
+                .iter()
+                .map(|r| (r.reason, r.count))
+                .collect::<std::collections::BTreeMap<_, _>>(),
+            expected_reasons
+        );
+        let mut actual: Vec<_> = events
             .into_iter()
             .filter_map(|e| {
                 if let WorkerEvent::Job { external_id, .. } = e {
