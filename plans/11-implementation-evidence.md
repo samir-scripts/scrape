@@ -1,6 +1,6 @@
 # Reliable ingestion implementation evidence
 
-Revision contract: [plan 11](11-reliable-ingestion-and-ui-repair.md). Work began on a clean tree at `17b13de` after committing the specification. Existing review assets were preserved. The six original screenshots and exact active workflow configuration were not supplied in this context, so the exact reported Cloudflare run remains unverified. Tests never use the live user database.
+Revision contract: [plan 11](11-reliable-ingestion-and-ui-repair.md). Work began on a clean tree at `17b13de` after committing the specification. Existing review assets were preserved. The six original screenshots and exact active workflow configuration were not supplied in this context, so the exact reported Cloudflare run remains unverified. Tests never use the live user database. Section entries describe their checkpoint; later sections supersede earlier pending notes and protocol versions.
 
 ## Section 1 — Matching diagnostics foundation
 
@@ -84,7 +84,7 @@ Sections 3–8 acceptance. No user database was read or modified.
 
 ## Section 3 — Bounded enrichment and explicit outcomes
 
-Core foundation: `1a31218`. Shared Rust partial matching distinguishes conclusive
+Implementation: `96ce464`; core foundation: `1a31218`. Shared Rust partial matching distinguishes conclusive
 rejection from unresolved fields across nested OR/NOT, exclusions, selected fields,
 dates and compensation. Completion-property tests require every early decision to
 hold under the tested completions; complete assessments use existing predicates.
