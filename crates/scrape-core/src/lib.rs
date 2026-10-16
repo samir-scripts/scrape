@@ -4,6 +4,7 @@
 //! that enum values written to SQLite, sent over the NDJSON protocol, and
 //! exported to TypeScript always agree.
 
+pub mod branding;
 pub mod enrich;
 pub mod filter;
 pub mod geography;

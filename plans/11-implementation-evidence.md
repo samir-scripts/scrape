@@ -182,3 +182,14 @@ native screenshot/zoom review, or logo-asset validation/cache was performed here
 Browser outcomes use labelled fictional data; native warning classification uses
 authored protocol fixtures. These do not establish Sections 4–8 acceptance. Existing
 plan 06–09 domain/data protections remain authoritative.
+
+
+## Section 4 — In progress
+
+Added shared Rust branding evidence/report contracts and bounded PNG/JPEG/WebP
+decoding/SVG rasterization. Cached assets are self-contained PNGs; SVG external
+images and fonts are not fetched. Core branding tests passed (one behavior test
+and four generated-contract exports). The full extraction → persistence → UI
+integration, migration and native acceptance remain in progress. A public
+Cloudflare branding asset was captured from the existing fixture's exact URL for
+offline pixel review; it is not a live career-site ingestion capture.
