@@ -750,6 +750,9 @@ async fn keyword_geography_decisions_and_diagnostics_match_worker_and_sql() {
         serde_json::json!({"keywords":{"any":["Engineer","Developer"],"all":["Rust"],"exclude":["Senior"],"fields":["title"]}}),
         serde_json::json!({"keywords":{"exclude":["Engineer"],"fields":["title"]}}),
         serde_json::json!({"keywords":{"all":["Engin"],"fields":["title"]}}),
+        serde_json::json!({"keywords":{"any":["Machine Learning"],"fields":["title"]}}),
+        serde_json::json!({"keywords":{"any":["Engineer"],"all":["Software"],"exclude":["Manager"],"fields":["title"]}}),
+        serde_json::json!({"keywords":{"any":["Remote"],"fields":["location"]}}),
         serde_json::json!({"countries":["US"]}),
         serde_json::json!({"countries":["US"],"workplaces":["remote"]}),
         serde_json::json!({"countries":["US"],"regions":["US-CA"],"workplaces":["remote"]}),
@@ -779,7 +782,7 @@ async fn keyword_geography_decisions_and_diagnostics_match_worker_and_sql() {
             ("onsite-ny","New York, US","In-Person"),
             ("multi","Remote - US-WA; Toronto, Ontario, Canada","Remote"),
             ("unknown-plus-us","Remote; US-CA","Remote"),
-        ].into_iter().map(|(id,location,workplace)| serde_json::json!({"id":id,"title":"Engineer","jobUrl":format!("https://fixture.test/{id}"),"location":location,"workplaceType":workplace})).collect();
+        ].into_iter().map(|(id,location,workplace)| serde_json::json!({"id":id,"title":match id { "hybrid-on" => "Machine Learning Engineer", "multi" => "Software Developer", "onsite-gb" => "Engineering Manager", _ => "Software Engineer" },"jobUrl":format!("https://fixture.test/{id}"),"location":location,"workplaceType":workplace})).collect();
         let body = serde_json::json!({"jobs":postings}).to_string();
         let deadline = Instant::now() + Duration::from_secs(30);
         let mut count = 0;

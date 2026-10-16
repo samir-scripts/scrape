@@ -41,7 +41,7 @@ it('registry upload opens an unsaved draft and Run all remains available while s
  await screen.findByRole('dialog', { name: 'Create workflow' });
  expect((screen.getByLabelText('Workflow name') as HTMLInputElement).value).toBe('Imported board'); expect(save).not.toHaveBeenCalled();
  await user.click(screen.getByRole('button', { name: 'Continue to Matching' }));
- expect(screen.getByLabelText("Title keywords (any)")).toBeTruthy();
+ expect(screen.getByLabelText("Keywords")).toBeTruthy();
  expect(screen.queryByText(/Global keyword defaults/)).toBeNull();
 });
 it('confirms against edits made while file validation is in flight and ignores an empty file selection', async () => {

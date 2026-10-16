@@ -107,3 +107,10 @@ SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_SCHEDULE=1 npm run test:native-star
 ```
 
 Exercises actual WKWebView schedule controls and backend IPC: create/update/toggle/delete, manual-only/no enabled workflows, timezone/dispatcher instant agreement, pause/resume, focus restoration, and no implicit scrape. `npm run test:native` additionally verifies running while paused, completion, cancellation and recovery using the actual local sidecar. Do not edit files or generate bindings while a native dev check is running: Vite reload interrupts its page-injected script. The harness checks DOM/IPC; it does not prove native pointer gestures or screenshot appearance.
+
+
+Plan 11 keyword verification: `SCRAPE_STARTUP_MODES=fresh SCRAPE_NATIVE_WORKFLOW=1 node scripts/test-native-startup.mjs`
+uses an isolated profile and local fixture to check two All keywords, themed
+schedule selection, real preview and saved configuration. This harness dispatches
+DOM events inside WKWebView; it does not establish physical typing/IME or native
+file-chooser acceptance. See `plans/11-implementation-evidence.md`.

@@ -52,8 +52,8 @@ describe("one workflow draft", () => {
     render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
     await user.type(screen.getByRole("textbox", { name: "Source URL or board identifier" }), "https://boards.greenhouse.io/acme");
     await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
-    await screen.findByRole("textbox", { name: "Title keywords (any)" });
-    await user.type(screen.getByRole("textbox", { name: "Title keywords (any)" }), "Engineer");
+    await screen.findByRole("textbox", { name: "Keywords" });
+    await user.type(screen.getByRole("textbox", { name: "Keywords" }), "Engineer");
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
     await screen.findByText(/3 examined/);
     // Schedule editing invalidates the old preview.
@@ -102,7 +102,7 @@ describe("one workflow draft", () => {
     await user.clear(screen.getByRole("textbox", { name: "Source URL or board identifier" }));
     await user.type(screen.getByRole("textbox", { name: "Source URL or board identifier" }), "https://boards.greenhouse.io/acme-new");
     await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
-    await user.type(screen.getByRole("textbox",{name:"Title keywords (any)"}),"Engineer");
+    await user.type(screen.getByRole("textbox",{name:"Keywords"}),"Engineer");
     await user.click(screen.getByRole("button",{name:"Preview matches"}));
     await screen.findByText(/No eligible postings/);
     expect(detection).toHaveBeenCalledTimes(2);

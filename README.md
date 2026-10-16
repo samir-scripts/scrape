@@ -159,10 +159,16 @@ and database-backed workflows.
 
 Create a workflow with a source URL, preview actual matches, then choose Manual or
 Daily (09:00 in the displayed device timezone) and save. Saving does not scrape;
-Run now is explicit. Advanced and YAML editing share one validated v3 draft, with
-keywords, native compensation, posting dates, selected weekdays and timezone.
-Automatic scheduling and global matching defaults are available in Scraper.
-Pausing automation leaves explicit manual runs available.
+Run now is explicit. Standard Matching provides keyword chips with Any/All,
+exclusions and search fields. Enter, Add, commas or newlines commit terms; spaces
+keep phrases together. Imported mixed Any/All groups remain visible. Preview and
+run details explain rejection categories and examined counts.
+Advanced and YAML editing share one validated v4 draft, with native compensation,
+posting dates, selected weekdays and timezone. Matching, schedule, limit and
+retention belong to each workflow. System settings controls the application-wide
+automatic-scraping pause; explicit manual runs remain available. See
+[the active revision](plans/11-reliable-ingestion-and-ui-repair.md) for multi-source
+and browser/script requirements that are still pending.
 
 Hourly filters compare explicitly hourly ranges in their original currency,
 including cents and inclusive overlap. Annual analytics are separately derived.

@@ -21,7 +21,7 @@ test("create a workflow through actual controls without an implicit scrape", asy
   await page.keyboard.press("Enter");
   await dialog.getByRole("checkbox", { name: "Remote", exact: true }).check();
   await dialog
-    .getByRole("textbox", { name: "Title keywords (any)" })
+    .getByRole("textbox", { name: "Keywords", exact: true })
     .fill("NoSuchRole");
   await dialog.getByRole("button", { name: "Preview matches" }).click();
   await expect(dialog.getByText(/No eligible postings/)).toBeVisible();
@@ -46,7 +46,7 @@ test("create a workflow through actual controls without an implicit scrape", asy
   await expect(edit.getByRole("combobox", { name: "Country", exact: true })).toHaveValue("United States");
   await expect(edit.getByRole("button", { name: "Remove California", exact: true })).toBeVisible();
   await expect(edit.getByRole("checkbox", { name: "Remote", exact: true })).toBeChecked();
-  await expect(edit.getByLabel("Title keywords (any)")).toHaveValue("NoSuchRole");
+  await expect(edit.getByRole("button", { name: "Remove NoSuchRole from Keywords" })).toBeVisible();
   await edit.getByRole("button", { name: "Back", exact: true }).click();
   await expect(edit.getByLabel("Workflow name")).toHaveValue("fixture-board");
   await edit.getByRole("button", { name: "Cancel", exact: true }).click();

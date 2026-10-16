@@ -51,11 +51,6 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
     (rules?.new_grad && rules.new_grad !== "any")
       ? "additional matching rules"
       : null,
-    rules?.keywords?.all?.length ||
-    rules?.keywords?.exclude?.length ||
-    rules?.keywords?.fields?.some((field) => field !== "title")
-      ? "additional keyword rules"
-      : null,
     draft.extractor.kind === "selector" ||
     Object.keys(draft.extractor.source_config || {}).some(
       (key) => key !== "url",
@@ -109,7 +104,7 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
         <fieldset disabled={locked} className={yaml != null ? "hidden" : "min-w-0 grid gap-4"}>
           {(["Source", "Matching", "Schedule"] as const).map(section => <section key={section} data-workflow-step={section} hidden={step !== section} className={step === section ? "grid gap-3" : "hidden"}>
             <h3 className="text-base font-bold normal-case">{section === "Matching" ? "Matching (optional)" : section}</h3>
-            <WorkflowSections draft={draft} change={change} advanced={advanced} section={section} />
+            <WorkflowSections key={`${section}:${model.inputSession}`} draft={draft} change={change} advanced={advanced} section={section} />
             {section === "Source" && <p aria-live="polite" className="text-[var(--color-ink-mute)]">{model.operation === "detect" ? "Detecting source…" : detected ? `Source: ${draft.extractor.kind} · ${draft.metadata.company || draft.metadata.name}` : "Paste a careers URL. Continue to detect its source, or configure an adapter in Advanced settings."}</p>}
             {section === "Schedule" && <details><summary className="cursor-pointer min-h-9">Retention</summary><WorkflowSections draft={draft} change={change} advanced section="Retention" /></details>}
           </section>)}
@@ -126,7 +121,7 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
         <section className="grid gap-3 border-t pt-3">
           <button type="button" aria-expanded={advanced} className="text-left underline cursor-pointer min-h-9" onClick={() => setAdvanced(!advanced)}>{advanced ? "Hide advanced settings" : "Advanced settings"}</button>
           {advancedSettings.length > 0 && <p className="text-[var(--color-ink-mute)]">Active advanced settings: {advancedSettings.join(", ")}.</p>}
-          {advanced && <div className="flex flex-wrap gap-2"><Button disabled={locked} onClick={() => yaml == null ? setYaml(workflowSpecToYaml(draft)) : void model.applyYaml()}>{yaml == null ? "Edit YAML" : "Apply YAML to form"}</Button><Button disabled={yaml != null} onClick={() => { const url = URL.createObjectURL(new Blob([workflowSpecToYaml(draft)], { type: "text/yaml" })); const link = document.createElement("a"); link.href = url; link.download = "workflow.yaml"; link.click(); URL.revokeObjectURL(url); }}>Export YAML</Button></div>}
+          {advanced && <div className="flex flex-wrap gap-2"><Button disabled={locked} onClick={() => yaml == null ? setYaml(workflowSpecToYaml(model.commitInputs())) : void model.applyYaml()}>{yaml == null ? "Edit YAML" : "Apply YAML to form"}</Button><Button disabled={yaml != null} onClick={() => { const url = URL.createObjectURL(new Blob([workflowSpecToYaml(model.commitInputs())], { type: "text/yaml" })); const link = document.createElement("a"); link.href = url; link.download = "workflow.yaml"; link.click(); URL.revokeObjectURL(url); }}>Export YAML</Button></div>}
         </section>
         {(step === "Matching" || step === "Review") && <WorkflowPreviewResults preview={preview} draft={draft} setError={setError} />}
       </>}

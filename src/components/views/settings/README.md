@@ -9,6 +9,22 @@ Run now afterward. Advanced settings remain intact and are summarized in Simple
 mode. Source configuration and YAML use the canonical desktop v4 validator, with
 v1–v3 compatibility conversion at import.
 
+`KeywordInput` keeps unfinished text separate from committed chips. Enter, Add,
+comma and newline commit terms; multi-term paste preserves phrases, ignores empty
+terms and deduplicates case-insensitively. Empty-input Backspace focuses the last
+removal control before deletion. Composition events preserve IME input. Pending
+edits invalidate preview, and editor actions synchronously commit all keyword
+inputs before reading the draft. Input sessions reset only when replacing or
+reopening a workflow, so abandoned text cannot leak across workflows.
+
+`KeywordMatching` exposes Any/All, exclusion and Search in in standard Matching.
+Imported mixed Any/All rules keep both groups visible, including temporarily empty
+groups. Empty imported fields mean every supported field, as in Rust. At least
+one field remains selected during editing. This UI edits Rust `KeywordRules` and
+adds no matcher. Matching decisions and run explanations use Rust's shared
+`MatchingEvaluator`; `ScanDiagnostics` shows reconciled primary counts and explicitly
+overlapping examples in previews and saved run details.
+
 Matching includes Maximum matching jobs per run: default 20, positive whole numbers up to 10,000, preserved through YAML/edit/reopen. Changing any limit draft invalidates preview; invalid text prevents continuing or previewing. Review explains the run/preview caps. `JobLimitInput` and other consumers use constants generated from Rust by `export_bindings_ingestion_limits`. Preview accepts at most 10 (or the lower configured limit) and labels partial coverage. Existing records refreshed by a run count toward the limit; saved jobs are not removed by changing it.
 
 `GeographyMatching` uses the generated Rust catalog for country/subdivision search and the same `PostingRules` draft as YAML and execution. Enter or blur commits a known name/code; Escape restores a search draft. Any input edit invalidates preview and invalid text blocks continuation. Changing country clears incompatible subdivisions; imported multiple-country rules remain visible and intact until explicitly changed. Workplace choices are multi-select in Simple mode. Unknown geography is opt-in. Advanced contains additional location text restrictions and optional raw geography codes. The catalog is complete for US states/DC, Canadian provinces/territories, UK constituent countries and Australian states/territories; other subdivision coverage is explicitly bounded in the catalog README.

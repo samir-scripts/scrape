@@ -1,3 +1,5 @@
+import type { WorkflowDraftChange } from "../../../hooks/useWorkflowDraft";
+import { KeywordMatching } from "./KeywordMatching";
 import { GeographyMatching } from "./GeographyMatching";
 import { INGESTION_LIMITS } from "../../../bindings/ingestionLimits";
 import { SalaryRangeFilter } from "../../filters/SalaryRangeFilter";
@@ -38,7 +40,7 @@ export function WorkflowSections({
 }: {
   onSourceBlur?: () => void;
   draft: WorkflowSpec;
-  change: (next: WorkflowSpec) => void;
+  change: WorkflowDraftChange;
   advanced: boolean;
   section: "Source" | "Matching" | "Schedule" | "Retention";
 }) {
@@ -165,28 +167,7 @@ export function WorkflowSections({
     return (
       <div className="grid gap-3">
         <JobLimitInput value={draft.max_jobs_per_run ?? INGESTION_LIMITS.default} onChange={value => change(value == null ? { ...draft } : { ...draft, max_jobs_per_run: value })} />
-        <p className="text-sm text-[var(--color-ink-mute)]">
-          Separate terms with commas.
-        </p>
-        {(["any", ...(advanced ? ["all", "exclude"] : [])] as const).map(
-          (rule) =>
-            field(
-              rule === "any" ? "Title keywords (any)" : `Keywords (${rule})`,
-              rules.keywords?.[rule as "any" | "all" | "exclude"]?.join(", ") ||
-                "",
-              (value) =>
-                setRules({
-                  keywords: {
-                    any: [],
-                    all: [],
-                    exclude: [],
-                    fields: ["title"],
-                    ...rules.keywords,
-                    [rule]: words(value),
-                  },
-                }),
-            ),
-        )}
+        <KeywordMatching rules={rules} change={change} />
         <GeographyMatching rules={rules} onChange={setRules} onDraftChange={() => change({ ...draft })} />
         {advanced && field(
           "Location matches (additional text restriction)",
@@ -199,40 +180,6 @@ export function WorkflowSections({
         )}
         {advanced && (
           <>
-            <fieldset className="flex flex-wrap gap-3">
-              <legend>Keyword fields</legend>
-              {(["title", "description", "company", "location"] as const).map(
-                (value) => (
-                  <label key={value}>
-                    <input
-                      type="checkbox"
-                      checked={(rules.keywords?.fields || ["title"]).includes(
-                        value,
-                      )}
-                      onChange={(e) =>
-                        setRules({
-                          keywords: {
-                            any: [],
-                            all: [],
-                            exclude: [],
-                            ...rules.keywords,
-                            fields: e.target.checked
-                              ? [
-                                  ...(rules.keywords?.fields || ["title"]),
-                                  value,
-                                ]
-                              : (rules.keywords?.fields || ["title"]).filter(
-                                  (v) => v !== value,
-                                ),
-                          },
-                        })
-                      }
-                    />{" "}
-                    {value}
-                  </label>
-                ),
-              )}
-            </fieldset>
             <fieldset className="flex flex-wrap gap-3">
               <legend>Roles</legend>
               {(

@@ -1,3 +1,4 @@
+import { COMMIT_KEYWORDS } from "../components/ui/KeywordInput";
 import { INGESTION_LIMITS } from "../bindings/ingestionLimits";
 import { useEffect, useRef, useState } from "react";
 import type { Source } from "../bindings/Source";
@@ -9,6 +10,7 @@ import { sourceToWorkflowSpec, canonicalizeAtsUrl } from "../lib/yamlWorkflow";
 
 export const WORKFLOW_STEPS = ["Source", "Matching", "Schedule", "Review"] as const;
 export type WorkflowStep = typeof WORKFLOW_STEPS[number];
+export type WorkflowDraftChange = (next: WorkflowSpec | ((current: WorkflowSpec) => WorkflowSpec)) => void;
 const newDraft = (): WorkflowSpec => ({
   version: 4, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true }, extractor: { kind: "jsonld", url: "" },
   schedule: { cadence: "daily", time: "09:00", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, run_on_startup: false },
@@ -18,6 +20,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   isOpen: boolean; initialSource?: Source | null; initialSpec?: WorkflowSpec | null; onSourceSaved: () => void;
 }) {
   const [draft, setDraft] = useState<WorkflowSpec>(newDraft);
+  const [inputSession, setInputSession] = useState(0);
   const [step, setStep] = useState<WorkflowStep>("Source"), [visited, setVisited] = useState(0);
   const [advanced, setAdvanced] = useState(false), [yaml, setYamlState] = useState<string | null>(null);
   const [detected, setDetected] = useState("");
@@ -35,6 +38,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   const invalidate = () => { cancel(); setPreview(null); setPreviewRevision(null); };
   useEffect(() => {
     if (isOpen) {
+      setInputSession(value => value + 1);
       invalidate(); setDraft(initialSpec || (initialSource ? sourceToWorkflowSpec(initialSource) : newDraft()));
       setDetected(initialSpec?.extractor.url || initialSource?.identifier || "");
       setStep("Source"); setVisited(0); setAdvanced(false); setYamlState(null); setError(""); setSaved(null); setPendingImport(null); setDirty(false);
@@ -44,9 +48,15 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
       request.current = null; revision.current++;
     };
   }, [isOpen, initialSource, initialSpec]);
-  const change = (next: WorkflowSpec) => {
-    invalidate(); setDirty(true); setDraft(next); setError("");
-    if (next.extractor.url !== draftRef.current.extractor.url) setDetected(advanced ? next.extractor.url : "");
+  const change: WorkflowDraftChange = (update) => {
+    const previous = draftRef.current;
+    const next = typeof update === "function" ? update(previous) : update;
+    invalidate(); setDirty(true); draftRef.current = next; setDraft(next); setError("");
+    if (next.extractor.url !== previous.extractor.url) setDetected(advanced ? next.extractor.url : "");
+  };
+  const commitInputs = () => {
+    content.current?.querySelectorAll("input[data-keyword-input]").forEach(input => input.dispatchEvent(new Event(COMMIT_KEYWORDS)));
+    return draftRef.current;
   };
   const setYaml = (value: string | null) => { invalidate(); setDirty(true); setYamlState(value); };
   const report = (value: unknown, fallback: WorkflowStep = step) => {
@@ -72,6 +82,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     setError("Fix the highlighted inputs before continuing."); return true;
   };
   const applyImport = (spec: WorkflowSpec) => {
+    setInputSession(value => value + 1);
     change(spec); setDetected(spec.extractor.url); setYamlState(null); setStep("Source"); setVisited(0); setPendingImport(null);
   };
   const replaceImport = (spec: WorkflowSpec) => { if (dirty) setPendingImport(spec); else applyImport(spec); };
@@ -82,12 +93,14 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     try {
       const validated = await importWorkflowYaml(yaml || "");
       if (revision.current !== current) return;
+      setInputSession(value => value + 1);
       change(validated); setDetected(validated.extractor.url); setYamlState(null);
     } catch (error) { if (revision.current === current) report(error); }
     finally { if (revision.current === current) setOperation(null); }
   };
-  const navigate = (target: WorkflowStep) => { setStep(target); setError(""); };
+  const navigate = (target: WorkflowStep) => { commitInputs(); setStep(target); setError(""); };
   const next = async () => {
+    const draft = commitInputs();
     if (yaml != null) { report("Apply YAML to the form before continuing."); return; }
     if (invalidInputs()) return;
     if (step === "Source") {
@@ -106,7 +119,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   };
   const runPreview = async () => {
     if (invalidInputs()) return;
-    let effective = draft;
+    let effective = commitInputs();
     if (!advanced && !detected) { const result = await detect(); if (!result) return; effective = result; }
     const current = ++revision.current, id = crypto.randomUUID();
     request.current = id; setOperation("preview"); setError(""); setPreview(null);
@@ -118,7 +131,8 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   };
   const canSave = !!preview && previewRevision === revision.current && !preview.errors.length && yaml == null && !operation && !pendingImport;
   const save = async () => {
-    if (!canSave) return;
+    const draft = commitInputs();
+    if (!canSave || previewRevision !== revision.current) return;
     const current = revision.current; setOperation("save"); setError("");
     try {
       const source = await api.saveWorkflow(draft, initialSource?.id); onSourceSaved();
@@ -133,5 +147,5 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     catch (error) { report(error); return false; }
     finally { setOperation(null); }
   };
-  return { draft, change, step, visited, navigate, next, advanced, setAdvanced, yaml, setYaml, detected, preview, error, errorStep, setError, operation, busy: !!operation, saved, content, cancel, detect, applyYaml, runPreview, save, canSave, replaceImport, pendingImport, confirmImport, cancelImport, runSaved };
+  return { draft, change, commitInputs, inputSession, step, visited, navigate, next, advanced, setAdvanced, yaml, setYaml, detected, preview, error, errorStep, setError, operation, busy: !!operation, saved, content, cancel, detect, applyYaml, runPreview, save, canSave, replaceImport, pendingImport, confirmImport, cancelImport, runSaved };
 }
