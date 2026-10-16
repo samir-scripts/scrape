@@ -43,6 +43,9 @@ Additional forward migrations:
 | 0016 | Run-stage counts and effective execution specification. |
 | 0018 | Finalize posting-removal provenance; exact historical variant gets missing schema through a separate immutable manifest. |
 | 0019 | Preserve original description evidence separately from canonical text and sanitized structured description. |
+| 0020 | Forward description-format checkpoint shared with the recognized historical variant. |
+| 0021 | Explicit workflow configuration review state and transactional compatibility conversion. |
+| 0022 | Additive run/source outcome columns; preserve coarse historical statuses and every existing row. |
 | 0017 | Recognized pre-0011 Greenhouse update timestamps preserved as edits, with false posting dates cleared. |
 
 The Rust backfills preserve source identities, uncertain legacy salary values and

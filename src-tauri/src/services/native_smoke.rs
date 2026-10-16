@@ -47,11 +47,15 @@ pub fn install(app: &mut tauri::App) -> bool {
             let _ = std::fs::remove_file(control_directory.join("worker-fixture"));
             let _ = std::fs::remove_file(control_directory.join("timeout-seconds"));
         } else if [
+            "optional-warning",
+            "required-evidence",
             "malformed",
             "wrong-source",
             "invalid-utf8",
             "nonzero",
             "missing-completion",
+            "missing-summary",
+            "duplicate-summary",
             "timeout",
         ]
         .contains(&mode)

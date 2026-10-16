@@ -9,24 +9,39 @@ use url::Url;
 pub struct CompanyBranding {
     company: String,
     logo: Option<String>,
+    warning: Option<String>,
 }
 
 impl CompanyBranding {
     pub async fn fetch(client: &HttpClient, page_url: &str, company: &str) -> Self {
-        let logo =
-            match tokio::time::timeout(Duration::from_secs(4), client.fetch_text(page_url, true))
-                .await
-            {
-                Ok(Ok(html)) => extract_company_logo(&html, page_url, company),
-                result => {
-                    tracing::warn!("Company logo lookup unavailable for {page_url}: {result:?}");
-                    None
-                }
-            };
+        let mut warning = None;
+        let logo = match tokio::time::timeout(
+            Duration::from_secs(4),
+            client.fetch_text(page_url, true),
+        )
+        .await
+        {
+            Ok(Ok(html)) => extract_company_logo(&html, page_url, company),
+            result => {
+                let message = format!("Company branding page unavailable for {page_url}: {result:?}. The logo stays unknown when no verified asset is available.");
+                tracing::warn!("{message}");
+                warning = Some(message);
+                None
+            }
+        };
         Self {
             company: company.into(),
             logo,
+            warning,
         }
+    }
+    pub fn warning(&self, source_id: &str) -> Option<WorkerEvent> {
+        self.warning.as_ref().map(|message| WorkerEvent::Warning {
+            source_id: source_id.into(),
+            message: message.clone(),
+            eligibility_incomplete: false,
+            termination: None,
+        })
     }
 
     pub fn apply(&self, mut event: WorkerEvent) -> WorkerEvent {

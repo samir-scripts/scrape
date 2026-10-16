@@ -1,3 +1,4 @@
+import { runStatusLabel } from "../../../lib/status";
 import type { SourceScanStats } from "../../../bindings/SourceScanStats";
 import type { RejectionReason } from "../../../bindings/RejectionReason";
 
@@ -20,9 +21,9 @@ export function ScanDiagnostics({ sources }: { sources?: SourceScanStats[] | nul
   if (!sources?.length) return null;
   return <div className="grid gap-3">
     {sources.map(source => <section key={source.source_id} aria-label={`Scan details ${source.source_id}`} className="grid gap-2">
-      <p>{source.source_id} · {terminations[source.termination]} · cap {source.limit}</p>
+      <p>{source.source_id}{source.outcome ? ` · ${runStatusLabel(source.outcome)}` : ""} · {terminations[source.termination]} · cap {source.limit}</p>
       {source.provider_total != null && <p>Provider-reported total: {source.provider_total}</p>}
-      <p>{source.examined} examined · {source.accepted} accepted · {source.rejected} matching rejections · {source.blocked} blocked · {source.duplicates} duplicates · {source.invalid} invalid</p>
+      <p>{source.examined} examined · {source.accepted} accepted · {source.rejected} matching rejections · {source.blocked} blocked · {source.duplicates} duplicates · {source.invalid} invalid · {source.unresolved ?? 0} unresolved · {source.enrichment_warnings ?? 0} enrichment warnings</p>
       <p className="text-[var(--color-ink-mute)]">Counts describe examined candidates. Unvisited pages and provider eligibility are not inferred.</p>
       {!!source.rejections.length && <ul className="list-disc pl-5">
         {source.rejections.map(({ reason, count }) => <li key={reason}>{reasons[reason]}: {count}</li>)}

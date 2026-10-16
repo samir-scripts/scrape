@@ -114,3 +114,12 @@ uses an isolated profile and local fixture to check two All keywords, themed
 schedule selection, real preview and saved configuration. This harness dispatches
 DOM events inside WKWebView; it does not establish physical typing/IME or native
 file-chooser acceptance. See `plans/11-implementation-evidence.md`.
+
+
+Plan 11 bounded-enrichment verification uses `cargo test --workspace` with local
+HTTP fixtures and temporary databases. `e2e/enrichment-outcomes.pw.ts` checks
+Paper/Obsidian outcome displays and contrast using labelled simulated runs.
+`npm run test:native` additionally drives optional-warning, required-evidence and
+cancelled outcomes through the actual native host/worker IPC and verifies saved
+run/source outcomes after reload. These are authored fixtures, not live company
+verification. Native scripts use isolated storage; never point them at user data.

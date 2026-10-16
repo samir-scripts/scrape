@@ -218,6 +218,35 @@ async fn execute_dry_run_worker(
                     }
                     match serde_json::from_str::<WorkerEvent>(line) {
                         Ok(event) => {
+                            if event.source_id().is_some_and(|id| {
+                                !config.sources.iter().any(|source| source.id == id)
+                            }) {
+                                failure.get_or_insert_with(|| {
+                                    "Worker preview emitted an unknown source ID".into()
+                                });
+                                continue;
+                            }
+                            if let WorkerEvent::Done { stats } = &event {
+                                if stats.sources.len() != config.sources.len()
+                                    || stats
+                                        .sources
+                                        .iter()
+                                        .map(|scan| &scan.source_id)
+                                        .collect::<std::collections::HashSet<_>>()
+                                        .len()
+                                        != stats.sources.len()
+                                    || stats.sources.iter().any(|scan| {
+                                        !config
+                                            .sources
+                                            .iter()
+                                            .any(|source| source.id == scan.source_id)
+                                            || scan.outcome.is_none()
+                                            || scan.validate().is_err()
+                                    })
+                                {
+                                    failure.get_or_insert_with(|| "Worker preview completion has missing or inconsistent source summaries".into());
+                                }
+                            }
                             done = matches!(event, WorkerEvent::Done { .. });
                             events.push(event);
                         }
@@ -356,6 +385,9 @@ pub struct PreviewPosting {
 pub struct WorkflowPreview {
     #[serde(default)]
     #[ts(optional = nullable)]
+    pub warnings: Option<Vec<String>>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
     pub sources: Option<Vec<scrape_core::protocol::SourceScanStats>>,
     pub spec: crate::services::workflow::WorkflowSpec,
     pub jobs: Vec<PreviewPosting>,
@@ -420,6 +452,7 @@ pub async fn preview_workflow(
     let mut result = WorkflowPreview {
         spec: spec.clone(),
         sources: None,
+        warnings: Some(vec![]),
         jobs: vec![],
         fetched: 0,
         matched: 0,
@@ -483,6 +516,18 @@ pub async fn preview_workflow(
                 }
                 result.errors.push(message);
             }
+            WorkerEvent::Warning {
+                message,
+                eligibility_incomplete,
+                ..
+            } => {
+                if eligibility_incomplete {
+                    result.errors.push(message);
+                } else {
+                    result.warnings.get_or_insert_with(Vec::new).push(message);
+                }
+            }
+            WorkerEvent::SourceInfo { .. } => {}
             WorkerEvent::Done { stats } => {
                 for scan in &stats.sources {
                     scan.validate().map_err(AppError::Validation)?;
@@ -491,6 +536,15 @@ pub async fn preview_workflow(
                 for scan in stats.sources {
                     result.blocked += scan.blocked;
                     result.sampled |= scan.limit_reached;
+                    if matches!(
+                        scan.outcome,
+                        Some(
+                            scrape_core::protocol::ScanOutcome::Partial
+                                | scrape_core::protocol::ScanOutcome::Failed
+                        )
+                    ) {
+                        result.errors.push(if scan.outcome == Some(scrape_core::protocol::ScanOutcome::Failed) { "Source could not complete usable processing. Inspect diagnostics and retry.".into() } else { format!("Source processing incomplete: {} candidates need eligibility evidence. Inspect scan details and retry.",scan.unresolved) });
+                    }
                 }
             }
         }

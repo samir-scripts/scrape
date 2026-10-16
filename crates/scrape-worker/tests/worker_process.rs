@@ -167,3 +167,37 @@ fn source_specific_invalid_filters_fail_even_when_global_filters_are_valid() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("Invalid workflow filters"));
     assert!(output.stdout.is_empty());
 }
+
+#[test]
+fn invalid_enrichment_limits_and_incompatible_protocol_fail_before_extraction() {
+    for config in [
+        serde_json::json!({"version":scrape_core::PROTOCOL_VERSION,"sources":[],"limits":{"enrichment":{"max_requests":101}}}),
+        serde_json::json!({"version":scrape_core::PROTOCOL_VERSION,"sources":[],"limits":{"enrichment":{"timeout_ms":0}}}),
+        serde_json::json!({"version":scrape_core::PROTOCOL_VERSION,"sources":[],"limits":{"enrichment":{"timeout_ms":45001}}}),
+        serde_json::json!({"version":scrape_core::PROTOCOL_VERSION-1,"sources":[]}),
+    ] {
+        let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+            .arg("--stdin")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        use std::io::Write;
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(&serde_json::to_vec(&config).unwrap())
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+        let message = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            message.contains("limits.enrichment")
+                || message.contains("Unsupported protocol version"),
+            "{message}"
+        );
+    }
+}

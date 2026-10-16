@@ -6,7 +6,7 @@ use crate::{RoleType, SourceKind, TriState, WorkplaceType};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 4;
+pub const PROTOCOL_VERSION: u32 = 5;
 pub const DEFAULT_MAX_JOBS_PER_RUN: u32 = 20;
 pub const PREVIEW_MAX_JOBS: u32 = 10;
 pub const MAX_JOB_LIMIT: u32 = 10_000;
@@ -242,6 +242,9 @@ impl WorkerFilters {
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct WorkerLimits {
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub enrichment: Option<EnrichmentLimits>,
     #[serde(default = "default_concurrency")]
     pub concurrency: usize,
     #[serde(default = "default_per_host_delay_ms")]
@@ -253,11 +256,50 @@ pub struct WorkerLimits {
 impl Default for WorkerLimits {
     fn default() -> Self {
         Self {
+            enrichment: None,
             concurrency: default_concurrency(),
             per_host_delay_ms: default_per_host_delay_ms(),
             request_timeout_s: default_request_timeout_s(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+#[ts(export)]
+pub struct EnrichmentLimits {
+    pub max_requests: u32,
+    #[ts(type = "number")]
+    pub timeout_ms: u64,
+}
+impl Default for EnrichmentLimits {
+    fn default() -> Self {
+        Self {
+            max_requests: 100,
+            timeout_ms: 45_000,
+        }
+    }
+}
+impl EnrichmentLimits {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.max_requests > 100 || !(1..=45_000).contains(&self.timeout_ms) {
+            return Err(
+                "limits.enrichment: max_requests must be 0–100 and timeout_ms must be 1–45000"
+                    .into(),
+            );
+        }
+        Ok(())
+    }
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS, PartialEq)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ScanOutcome {
+    Success,
+    SuccessWithWarnings,
+    Partial,
+    Failed,
+    Cancelled,
 }
 
 /// NDJSON events streamed by scrape-worker over stdout.
@@ -266,6 +308,17 @@ impl Default for WorkerLimits {
 #[ts(export)]
 #[allow(clippy::large_enum_variant)]
 pub enum WorkerEvent {
+    Warning {
+        source_id: String,
+        message: String,
+        eligibility_incomplete: bool,
+        termination: Option<CoverageTermination>,
+    },
+    SourceInfo {
+        source_id: String,
+        #[ts(type = "number | null")]
+        provider_total: Option<u64>,
+    },
     Job {
         source_id: String,
         external_id: String,
@@ -330,6 +383,19 @@ pub enum WorkerEvent {
     },
 }
 
+impl WorkerEvent {
+    pub fn source_id(&self) -> Option<&str> {
+        match self {
+            Self::Job { source_id, .. }
+            | Self::Warning { source_id, .. }
+            | Self::SourceInfo { source_id, .. }
+            | Self::Progress { source_id, .. }
+            | Self::Error { source_id, .. } => Some(source_id),
+            Self::Done { .. } => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS, PartialEq)]
 #[ts(export)]
 pub struct WorkerStats {
@@ -373,6 +439,15 @@ pub struct SourceScanStats {
     #[serde(default)]
     #[ts(type = "number | null")]
     pub provider_total: Option<u64>,
+    #[serde(default)]
+    #[ts(type = "number")]
+    pub unresolved: u64,
+    #[serde(default)]
+    #[ts(type = "number")]
+    pub enrichment_warnings: u64,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub outcome: Option<ScanOutcome>,
 }
 
 impl SourceScanStats {
@@ -381,11 +456,29 @@ impl SourceScanStats {
             + u128::from(self.blocked)
             + u128::from(self.rejected)
             + u128::from(self.duplicates)
-            + u128::from(self.invalid);
+            + u128::from(self.invalid)
+            + u128::from(self.unresolved);
         let primary_count: u128 = self.rejections.iter().map(|r| u128::from(r.count)).sum();
         let categories: std::collections::BTreeSet<_> =
             self.rejections.iter().map(|r| r.reason).collect();
-        if examined != u128::from(self.examined)
+        let max_safe_integer = (1u64 << 53) - 1;
+        if [
+            self.examined,
+            self.matched,
+            self.accepted,
+            self.blocked,
+            self.rejected,
+            self.duplicates,
+            self.invalid,
+            self.unresolved,
+            self.enrichment_warnings,
+        ]
+        .iter()
+        .any(|count| *count > max_safe_integer)
+            || self
+                .provider_total
+                .is_some_and(|total| total > max_safe_integer)
+            || examined != u128::from(self.examined)
             || u128::from(self.matched) != u128::from(self.accepted) + u128::from(self.blocked)
             || primary_count != u128::from(self.rejected)
             || categories.len() != self.rejections.len()
@@ -474,6 +567,12 @@ mod tests {
         assert!(invalid.validate().is_err());
         let mut invalid = valid.clone();
         invalid.accepted = 21;
+        assert!(invalid.validate().is_err());
+        let mut invalid = valid.clone();
+        invalid.provider_total = Some(1u64 << 53);
+        assert!(invalid.validate().is_err());
+        let mut invalid = valid.clone();
+        invalid.enrichment_warnings = u64::MAX;
         assert!(invalid.validate().is_err());
         let mut invalid = valid;
         invalid.limit_reached = true;

@@ -29,9 +29,20 @@ process.stdin.on("data", bytes => {
   const source = config.sources[0];
   const job = { type: "job", source_id: source.id, external_id: "failure-" + mode, title: "Partial protocol fixture " + mode, company: "Fixture Co", role_type: "full_time", salary: { min: 104520, max: 126360, currency: "USD", interval: "hour", raw: "USD 50.25–60.75 HOUR", source: "structured", ranges: [{ min_minor: 5025, max_minor: 6075, currency: "USD", interval: "hour", raw: "USD 50.25–60.75 HOUR", source: "structured", derived: false, location: null }] }, url: "${origin}/detail?fixture=" + mode };
   const progress = { type: "progress", source_id: source.id, fetched: 1, matched: 1 };
-  const done = { type: "done", stats: { sources_ok: 1, sources_failed: 0, duration_ms: 1, jobs_emitted: 1 } };
+  const summary = { source_id: source.id, limit: 20, examined: 1, matched: 1, accepted: 1, rejected: 0, blocked: 0, invalid: 0, duplicates: 0, unresolved: 0, enrichment_warnings: 0, limit_reached: false, rejections: [], rejection_examples: [], termination: "exhausted", outcome: "success" };
+  const done = { type: "done", stats: { sources_ok: 1, sources_failed: 0, duration_ms: 1, jobs_emitted: 1, sources: [summary] } };
   const line = value => JSON.stringify(value) + "\\n";
   let output = Buffer.from(line(job) + line(progress));
+  if (["optional-warning", "required-evidence"].includes(mode)) {
+    const required = mode === "required-evidence";
+    const warning = { type: "warning", source_id: source.id, message: required ? "Required publication date unavailable" : "Optional logo download unavailable", eligibility_incomplete: required, termination: null };
+    output = Buffer.from(line(warning) + (required ? "" : line(job)) + line({ ...progress, matched: required ? 0 : 1 }));
+    done.stats.sources = [{ source_id: source.id, limit: source.config?.__workflow_spec?.max_jobs_per_run || 20, examined: 1, matched: required ? 0 : 1, accepted: required ? 0 : 1, rejected: 0, blocked: 0, invalid: 0, duplicates: 0, limit_reached: false, rejections: [], rejection_examples: [], termination: required ? "failed" : "exhausted", provider_total: null, unresolved: required ? 1 : 0, enrichment_warnings: 1, outcome: required ? "partial" : "success_with_warnings" }];
+    done.stats.jobs_emitted = required ? 0 : 1;
+    done.stats.sources_ok = required ? 0 : 1; done.stats.sources_failed = required ? 1 : 0;
+  }
+  if (mode === "missing-summary") done.stats.sources = [];
+  if (mode === "duplicate-summary") done.stats.sources = [summary, summary];
   if (mode === "malformed") output = Buffer.concat([output, Buffer.from('{"type":"job"}\\n')]);
   if (mode === "wrong-source") output = Buffer.concat([output, Buffer.from(line({ ...job, source_id: "unknown-workflow" }))]);
   if (mode === "invalid-utf8") {
@@ -132,26 +143,39 @@ await writeFile(join(directory, "smoke.js"), `
     assert(await invoke("cancel_scrape"), "Run cancellation was not accepted");
     const cancelled = await pending;
     assert(!(await invoke("get_scheduler_status")).running, "Cancellation left scheduler status running");
-    assert(cancelled.status === "failed" && cancelled.error?.includes("cancelled"), "Cancelled worker was reported as success");
+    assert(cancelled.status === "cancelled" && cancelled.counts.failed === 0 && cancelled.error?.includes("cancelled"), "Cancellation did not retain its explicit outcome without failed postings");
     const pendingPreview = invoke("preview_workflow", { spec: { ...spec, extractor: { kind: "jsonld", url: "${origin}/slow" } }, requestId: "cancelled-preview" }).then(() => false, error => (error?.message || String(error)).includes("cancelled"));
     await pause(500); await invoke("cancel_workflow_preview", { requestId: "cancelled-preview" });
     assert(await pendingPreview, "Preview cancellation failed");
     await invoke("update_source", { input: { id: slow.id, enabled: false } });
     assert((await invoke("run_scrape_now")).status === "success", "Cancellation left the execution guard locked");
     steps.push("run/preview cancellation, reaping and recovery");
-    for (const mode of ["malformed", "wrong-source", "invalid-utf8", "nonzero", "missing-completion", "timeout"]) {
+    for (const mode of ["optional-warning", "required-evidence"]) {
+      await invoke("plugin:event|emit", { event: "native-smoke-control", payload: { mode } }); await pause(300);
+      const count = (await invoke("list_jobs", { filter: {} })).total;
+      const result = await invoke("run_source_now", { id: recreated.id });
+      const expected = mode === "optional-warning" ? "success_with_warnings" : "partial";
+      assert(result.status === expected && result.counts.failed === 0 && result.counts.enrichment_warnings === 1, "Incorrect enrichment classification: " + JSON.stringify(result));
+      assert((await invoke("list_jobs", { filter: {} })).total === count + (mode === "optional-warning" ? 1 : 0), "Required evidence was persisted or optional candidate lost");
+      const source = (await invoke("list_sources")).find(source => source.id === recreated.id);
+      assert(source.last_outcome === expected, "Source outcome did not persist");
+      const saved = (await invoke("list_scrape_runs", { limit: 100 })).find(run => run.id === result.id);
+      assert(saved.status === expected && saved.counts.enrichment_warnings === 1, "Saved run outcome changed");
+    }
+    steps.push("optional enrichment warnings, missing required evidence, saved/source outcome classification and counts (authored protocol fixtures)");
+    for (const mode of ["malformed", "wrong-source", "invalid-utf8", "nonzero", "missing-completion", "missing-summary", "duplicate-summary", "timeout"]) {
       await invoke("plugin:event|emit", { event: "native-smoke-control", payload: { mode } });
       // Wait for the script driver to prepare a scoped process fixture.
       await pause(300);
       const count = (await invoke("list_jobs", { filter: {} })).total;
       const failed = await invoke("run_source_now", { id: recreated.id });
-      const reason = { malformed: "Malformed worker event", "wrong-source": "unknown workflow ID", "invalid-utf8": "UTF-8", nonzero: "Some(7)", "missing-completion": "completion", timeout: "timed out" }[mode];
+      const reason = { malformed: "Malformed worker event", "wrong-source": "unknown workflow ID", "invalid-utf8": "UTF-8", nonzero: "Some(7)", "missing-completion": "completion", "missing-summary": "one summary", "duplicate-summary": "one summary", timeout: "timed out" }[mode];
       assert(failed.error?.includes(reason), "Wrong failure reason for " + mode + ": " + failed.error);
       assert(failed.status !== "success" && failed.counts.inserted === 1 && (await invoke("list_jobs", { filter: {} })).total === count + 1, "Protocol failure lost partial results or succeeded: " + mode + " " + JSON.stringify(failed));
     }
     await invoke("plugin:event|emit", { event: "native-smoke-control", payload: { mode: "restore-real-worker" } }); await pause(300);
     assert((await invoke("run_source_now", { id: recreated.id })).status === "success", "Protocol failure left the guard locked");
-    steps.push("malformed/unknown-source/UTF-8 output, nonzero exit, missing completion, timeout and partial-result recovery");
+    steps.push("malformed/unknown-source/UTF-8 output, nonzero exit, missing completion, missing/duplicate summaries, timeout and partial-result recovery");
     await invoke("plugin:opener|open_url", { url: "${origin}/detail?gh_jid=42", with: null });
     await pause(1500); steps.push("native external opener command");
     await invoke("plugin:event|emit", { event: "native-smoke-result", payload: { ok: true, steps } });

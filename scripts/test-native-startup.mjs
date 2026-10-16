@@ -104,7 +104,7 @@ def audit(path):
  counts={name:c.execute('SELECT COUNT(*) FROM '+name).fetchone()[0] for (name,) in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchall()}
  c.close(); return history,counts
 history,counts=audit(root/'scrape_data.db')
-assert len(history)==20
+assert [row[0] for row in history]==sorted(int(path.name.split("_")[0]) for path in pathlib.Path("src-tauri/migrations").glob("*.sql"))
 assert all(n==0 for table,n in counts.items() if table not in ('_sqlx_migrations','app_settings'))
 backups=list((root/'backups').glob('*.db')); assert len(backups)==4
 saved=[]

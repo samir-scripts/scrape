@@ -68,7 +68,24 @@ impl<'a> PostingGate<'a> {
         self.accepted >= self.summary.limit
     }
     pub fn accept(&mut self, event: scrape_core::WorkerEvent) -> Option<scrape_core::WorkerEvent> {
+        self.accept_with_evidence(event, None)
+    }
+    pub fn accept_with_evidence(
+        &mut self,
+        event: scrape_core::WorkerEvent,
+        evidence: Option<scrape_core::matching::MatchingEvidence>,
+    ) -> Option<scrape_core::WorkerEvent> {
         use scrape_core::WorkerEvent;
+        if let WorkerEvent::SourceInfo { provider_total, .. } = &event {
+            self.summary.provider_total = *provider_total;
+            return None;
+        }
+        if let WorkerEvent::Warning { termination, .. } = &event {
+            self.summary.enrichment_warnings += 1;
+            if let Some(termination) = termination {
+                self.summary.termination = *termination;
+            }
+        }
         if self.full() {
             return None;
         }
@@ -109,7 +126,13 @@ impl<'a> PostingGate<'a> {
                 self.summary.duplicates += 1;
                 return None;
             }
-            let reasons = self.matcher.rejection_reasons(&event, self.started);
+            let assessment = evidence
+                .as_ref()
+                .map(|evidence| self.matcher.assess(&event, self.started, evidence));
+            let reasons = assessment
+                .as_ref()
+                .map(|assessment| assessment.rejected.clone())
+                .unwrap_or_else(|| self.matcher.rejection_reasons(&event, self.started));
             if let Some(primary) = reasons.first().copied() {
                 self.summary.rejected += 1;
                 if let Some(count) = self
@@ -136,6 +159,13 @@ impl<'a> PostingGate<'a> {
                             overlapping: reasons,
                         });
                 }
+                return None;
+            }
+            if assessment
+                .as_ref()
+                .is_some_and(|assessment| !assessment.unresolved.is_empty())
+            {
+                self.summary.unresolved += 1;
                 return None;
             }
             self.summary.matched += 1;

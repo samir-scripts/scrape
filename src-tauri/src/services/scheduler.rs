@@ -583,6 +583,7 @@ mod tests {
             enabled: true,
             last_run_at: None,
             last_status: None,
+            last_outcome: None,
             last_error: None,
             created_at: "2026-10-10T00:00:00Z".to_string(),
             cadence: SourceCadence::Global,

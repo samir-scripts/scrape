@@ -145,3 +145,20 @@ preferences, disables launch at login, clears the diagnostic log, and leaves
 scraping paused. OS/log-cleanup failures are shown as warnings after database
 success. Schema, migration metadata and recovery backups remain. A reset marker
 prevents the sample workflow from being silently recreated on restart.
+
+
+## Execution outcome upgrade (migration 22)
+
+Migration 22 adds `scrape_runs.outcome` and `sources.last_outcome`. It does not
+rewrite existing CHECK constraints, statuses, records or migration checksums.
+Historical outcomes remain NULL; reads fall back to their original status.
+New warnings and cancellation use the explicit outcome alongside a compatible
+coarse stored status. Scheduling, source/job identities and protected user state
+remain unchanged.
+
+The normal recognized-history pre-migration snapshot applies. Populated version-21
+upgrade tests cover notes, favorites, tracking/history, suppression, run/log records,
+schedules, unchanged applied checksums, restart, injected transactional migration
+failure and successful retry. Restore the consistent pre-migration snapshot with a
+compatible app to roll back; reverting application code alone does not roll back
+schema or changes made since the snapshot. Never edit stored checksums.

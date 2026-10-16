@@ -11,6 +11,8 @@ const USER_AGENT: &str = "Scrape/0.1.0 (local job tracker)";
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
+    #[error("Invalid extraction configuration: {0}")]
+    Configuration(String),
     #[error("Network error: {0}")]
     Reqwest(#[from] reqwest::Error),
     #[error("Invalid URL: {0}")]
@@ -258,7 +260,9 @@ impl HttpClient {
             .execute_with_retries(|| self.client.get(transport.clone()).send())
             .await?;
 
-        let json = resp.json::<T>().await?;
-        Ok(json)
+        // Keep serde diagnostics (for example a missing listing collection)
+        // instead of reducing malformed provider payloads to a transport error.
+        let bytes = resp.bytes().await?;
+        Ok(serde_json::from_slice(&bytes)?)
     }
 }

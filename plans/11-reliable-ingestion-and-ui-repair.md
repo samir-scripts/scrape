@@ -1,6 +1,6 @@
 # Reliable ingestion, multi-source workflows, and UI repair
 
-Status: Section 1 diagnostics foundation and Section 2 keyword entry implemented and verified; original-report reproduction, later adapter outcomes, and Sections 3–8 remain open. See [implementation evidence](11-implementation-evidence.md). Continue one numbered section at a time. Source: user-approved plan, 2026-10-16. This document records the implementation contract; requirements below are not claims of shipped behavior. Preserve plans 06–09's identity, provenance, matching, suppression, retention, scheduling, migration, and user-data protections.
+Status: Section 1 diagnostics foundation, Section 2 keyword entry, and Section 3 bounded Greenhouse enrichment/outcome persistence implemented and verified. Original-report reproduction and Sections 4–8 remain open. See [implementation evidence](11-implementation-evidence.md). Continue one numbered section at a time. Source: user-approved plan, 2026-10-16. This document records the implementation contract; requirements below are not claims of shipped behavior. Preserve plans 06–09's identity, provenance, matching, suppression, retention, scheduling, migration, and user-data protections.
 
 This plan supersedes plan 10's time-format radio control and Kanban surface decisions. Use a themed Select for time format and explicit Paper board/column surfaces. Other plan 10 contracts remain in force.
 
@@ -26,6 +26,8 @@ Use reusable chips with unfinished-text state. Enter/Add/comma/newline commit; p
 ## 3. Bounded discovery and enrichment
 
 Discover → normalize authoritative available evidence → reject only conclusively ineligible candidates → enrich unresolved evidence → final match → accept. Detail responses may change fields; prove early rejection safe per adapter. Prioritize required eligibility evidence; optional detail failure is a warning, required evidence failure yields partial coverage. Stop scheduling at the cap. Keep URL protections, cancellation, cache, pacing, request/time bounds, and unknown date/pay semantics. Verify late eligible candidates after many irrelevant records through actual worker processes.
+
+Implementation contract: nonempty Greenhouse listing fields are the provider snapshot; detail responses fill gaps and do not overwrite its original ID/title/destination/description. This supersedes the former detail-over-listing merge precedence, while preserving plans 06–09’s identity and provenance protections. Default detail allowance remains 100 requests and 45 seconds, now spent on eligible/unresolved candidates rather than the first 100 records.
 
 Outcomes: success for complete scans or intentional job limit; success with warnings for optional enrichment failures; partial for missing coverage/required evidence; failed for no usable source, invalid configuration, protocol/persistence failures; cancelled for explicit cancellation with persisted counts retained.
 

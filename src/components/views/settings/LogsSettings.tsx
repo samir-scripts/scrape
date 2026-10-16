@@ -1,3 +1,4 @@
+import { runRequiresAttention, runStatusLabel } from "../../../lib/status";
 import { Icon } from "../../ui/Icon";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -32,7 +33,7 @@ export function LogsSettings() {
 
   // Determine if a run requires attention (failed, partial, or has an error message)
   const isRunError = (run: ScrapeRun): boolean => {
-    return run.status === "failed" || run.status === "partial" || !!run.error;
+    return runRequiresAttention(run);
   };
 
   // Filter runs based on toggle
@@ -213,7 +214,7 @@ export function LogsSettings() {
                               : ""
                           }
                         >
-                          {run.status.toUpperCase()}
+                          {runStatusLabel(run.status)}
                         </strong>
                       </span>
                       <span>
@@ -262,7 +263,7 @@ export function LogsSettings() {
                           : "border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)]"
                       }`}
                     >
-                      {selectedRun.status.toUpperCase()}
+                      {runStatusLabel(selectedRun.status)}
                     </span>
                   </div>
                 </div>

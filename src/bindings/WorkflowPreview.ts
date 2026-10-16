@@ -3,4 +3,4 @@ import type { PreviewPosting } from "./PreviewPosting";
 import type { SourceScanStats } from "./SourceScanStats";
 import type { WorkflowSpec } from "./WorkflowSpec";
 
-export type WorkflowPreview = { sources?: Array<SourceScanStats> | null, spec: WorkflowSpec, jobs: Array<PreviewPosting>, fetched: number, matched: number, rejected: number, blocked: number, invalid: number, sampled: boolean, errors: Array<string>, next_run_at: string | null, };
+export type WorkflowPreview = { warnings?: Array<string> | null, sources?: Array<SourceScanStats> | null, spec: WorkflowSpec, jobs: Array<PreviewPosting>, fetched: number, matched: number, rejected: number, blocked: number, invalid: number, sampled: boolean, errors: Array<string>, next_run_at: string | null, };

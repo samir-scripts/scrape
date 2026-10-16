@@ -8,13 +8,18 @@ use scrape_core::enrich::{
 use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource};
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct GreenhouseResponse {
-    #[serde(default)]
-    jobs: Vec<GreenhouseJob>,
+    meta: Option<GreenhouseMeta>,
+    jobs: Vec<serde_json::Value>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
+struct GreenhouseMeta {
+    total: Option<u64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 struct GreenhouseJob {
     id: i64,
     title: String,
@@ -28,13 +33,13 @@ struct GreenhouseJob {
     pay_input_ranges: Option<Vec<GreenhousePayRange>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct GreenhouseOffice {
     name: Option<String>,
     location: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct GreenhousePayRange {
     min_cents: Option<i64>,
     max_cents: Option<i64>,
@@ -43,7 +48,7 @@ struct GreenhousePayRange {
     blurb: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct GreenhouseLocation {
     name: Option<String>,
 }
@@ -80,69 +85,330 @@ async fn scrape_greenhouse_at_with(
     base: &str,
     sink: &mut dyn FnMut(WorkerEvent) -> bool,
 ) -> Result<(), ClientError> {
+    scrape_greenhouse_filtered_at(
+        client,
+        source,
+        base,
+        &scrape_core::WorkerFilters::default(),
+        chrono::Utc::now(),
+        &scrape_core::protocol::EnrichmentLimits::default(),
+        &mut |event, _| sink(event),
+    )
+    .await
+}
+
+pub async fn scrape_greenhouse_filtered_with(
+    client: &HttpClient,
+    source: &WorkerSource,
+    filters: &scrape_core::WorkerFilters,
+    started: chrono::DateTime<chrono::Utc>,
+    limits: &scrape_core::protocol::EnrichmentLimits,
+    sink: &mut dyn FnMut(WorkerEvent, Option<scrape_core::matching::MatchingEvidence>) -> bool,
+) -> Result<(), ClientError> {
+    scrape_greenhouse_filtered_at(
+        client,
+        source,
+        "https://boards-api.greenhouse.io",
+        filters,
+        started,
+        limits,
+        sink,
+    )
+    .await
+}
+
+impl GreenhouseJob {
+    // Listing title and URL identify the provider snapshot. Detail fields only fill gaps.
+    fn merge_detail(&mut self, detail: Self) {
+        if self
+            .location
+            .as_ref()
+            .and_then(|location| location.name.as_deref())
+            .is_none_or(|name| name.trim().is_empty())
+        {
+            self.location = detail.location;
+        }
+        if self.offices.is_none() {
+            self.offices = detail.offices;
+        }
+        if self.first_published.is_none() {
+            self.first_published = detail.first_published;
+        }
+        if self.updated_at.is_none() {
+            self.updated_at = detail.updated_at;
+        }
+        if self.pay_input_ranges.as_ref().is_none_or(Vec::is_empty) {
+            self.pay_input_ranges = detail.pay_input_ranges;
+        }
+        if self
+            .company_name
+            .as_ref()
+            .is_none_or(|name| name.trim().is_empty())
+        {
+            self.company_name = detail.company_name;
+        }
+        if self
+            .content
+            .as_ref()
+            .is_none_or(|content| content.trim().is_empty())
+        {
+            self.content = detail.content;
+        }
+    }
+    fn evidence(&self) -> scrape_core::matching::MatchingEvidence {
+        use scrape_core::FilterField;
+        let mut fields = vec![FilterField::Title, FilterField::RoleType];
+        if self
+            .content
+            .as_ref()
+            .is_some_and(|value| !value.trim().is_empty())
+        {
+            fields.push(FilterField::Description);
+        }
+        if self
+            .company_name
+            .as_ref()
+            .is_some_and(|value| !value.trim().is_empty())
+        {
+            fields.push(FilterField::Company);
+        }
+        if self
+            .location
+            .as_ref()
+            .and_then(|location| location.name.as_deref())
+            .is_some_and(|value| {
+                !value.trim().is_empty()
+                    && (value.eq_ignore_ascii_case("Remote")
+                        || self.offices.is_some()
+                        || !matches!(
+                            value.to_ascii_lowercase().as_str(),
+                            "in-office"
+                                | "in office"
+                                | "on-site"
+                                | "onsite"
+                                | "hybrid"
+                                | "distributed"
+                        ))
+            })
+        {
+            fields.push(FilterField::Location);
+        }
+        scrape_core::matching::MatchingEvidence {
+            fields,
+            posting_date: self.first_published.is_some(),
+            compensation: self
+                .pay_input_ranges
+                .as_ref()
+                .is_some_and(|ranges| !ranges.is_empty()),
+            opportunity_exhausted: false,
+        }
+    }
+    fn event(&self, source: &WorkerSource) -> Result<WorkerEvent, ClientError> {
+        let mut event = None;
+        parse_greenhouse_jobs_with(vec![self.clone()], source, &mut |candidate| {
+            event = Some(candidate);
+            false
+        })?;
+        Ok(event.expect("A Greenhouse record always normalizes to one candidate"))
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn scrape_greenhouse_filtered_at(
+    client: &HttpClient,
+    source: &WorkerSource,
+    base: &str,
+    filters: &scrape_core::WorkerFilters,
+    started: chrono::DateTime<chrono::Utc>,
+    limits: &scrape_core::protocol::EnrichmentLimits,
+    sink: &mut dyn FnMut(WorkerEvent, Option<scrape_core::matching::MatchingEvidence>) -> bool,
+) -> Result<(), ClientError> {
+    use scrape_core::matching::MatchingEvaluator;
+    use scrape_core::protocol::CoverageTermination;
+    // Validate before I/O, including compatibility collectors.
+    limits.validate().map_err(ClientError::Configuration)?;
+    let matcher = MatchingEvaluator::new(filters).map_err(ClientError::Configuration)?;
     let board_url = format!("{base}/v1/boards/{}/jobs", source.identifier.trim());
-    let resp: GreenhouseResponse = client
+    let response: GreenhouseResponse = client
         .fetch_json(&format!("{board_url}?content=true"))
         .await?;
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(45);
+    if let Some(total) = response.meta.and_then(|meta| meta.total) {
+        if !sink(
+            WorkerEvent::SourceInfo {
+                source_id: source.id.clone(),
+                provider_total: Some(total),
+            },
+            None,
+        ) {
+            return Ok(());
+        }
+    }
+    let deadline =
+        tokio::time::Instant::now() + std::time::Duration::from_millis(limits.timeout_ms);
+    let mut requests = 0;
     let mut bound_reported = false;
     let mut branding = None;
-    for (index, mut job) in resp.jobs.into_iter().enumerate() {
-        if !bound_reported && (index >= 100 || tokio::time::Instant::now() >= deadline) {
-            if !sink(WorkerEvent::Error { source_id: source.id.clone(), message: "Greenhouse detail enrichment reached its bound; remaining posting dates and structured pay are unknown".into(), retryable: true, invalid_posting: Some(false) }) { return Ok(()); }
-            bound_reported = true;
+    let mut discovered = std::collections::HashSet::new();
+    for (index, value) in response.jobs.into_iter().enumerate() {
+        let mut job = match serde_json::from_value::<GreenhouseJob>(value) {
+            Ok(job) => job,
+            Err(error) => {
+                if !sink(WorkerEvent::Error { source_id: source.id.clone(), message: format!("Greenhouse candidate {index} is invalid: {error}. A posting must provide its original ID, title and destination."), retryable: false, invalid_posting: Some(true) }, None) { break; }
+                continue;
+            }
+        };
+        let candidate = job.event(source)?;
+        if job.title.trim().is_empty()
+            || scrape_core::identity::normalized_detail_url(&job.absolute_url).is_err()
+        {
+            if !sink(
+                WorkerEvent::Error {
+                    source_id: source.id.clone(),
+                    message: format!(
+                        "Posting {} has a missing title or invalid HTTP(S) destination",
+                        job.id
+                    ),
+                    retryable: false,
+                    invalid_posting: Some(true),
+                },
+                None,
+            ) {
+                break;
+            }
+            continue;
         }
-        if !bound_reported {
-            let url = format!("{board_url}/{}?pay_transparency=true", job.id);
-            match tokio::time::timeout_at(deadline, client.fetch_json_cached::<GreenhouseJob>(&url))
-                .await
+        let identity = scrape_core::PostingIdentity::for_posting(
+            Some(source.kind),
+            Some(&source.identifier),
+            Some(&job.id.to_string()),
+            &job.absolute_url,
+        )
+        .map_err(ClientError::Configuration)?
+        .key;
+        if !discovered.insert(identity) {
+            if !sink(candidate, Some(job.evidence())) {
+                break;
+            }
+            continue;
+        }
+        let mut evidence = job.evidence();
+        let assessment = matcher.assess(&candidate, started, &evidence);
+        if !assessment.rejected.is_empty() {
+            if !sink(candidate, Some(evidence)) {
+                break;
+            }
+            continue;
+        }
+        let bound = if tokio::time::Instant::now() >= deadline {
+            Some(CoverageTermination::TimeLimit)
+        } else if requests >= limits.max_requests {
+            Some(CoverageTermination::RequestLimit)
+        } else {
+            None
+        };
+        let mut unavailable = None;
+        let mut detail_received = false;
+        if let Some(bound) = bound {
+            evidence.opportunity_exhausted = true;
+            if !bound_reported {
+                unavailable = Some((format!("Greenhouse detail enrichment reached its {} bound; missing publication dates and compensation remain unknown", if bound == CoverageTermination::TimeLimit { "time" } else { "request" }), Some(bound)));
+                bound_reported = true;
+            }
+        } else {
+            requests += 1;
+            let detail_url = format!("{board_url}/{}?pay_transparency=true", job.id);
+            match tokio::time::timeout_at(
+                deadline,
+                client.fetch_json_cached::<GreenhouseJob>(&detail_url),
+            )
+            .await
             {
                 Ok(Ok(detail)) if detail.id == job.id => {
-                    // Use provider fields without constructing a destination or publication date.
-                    job.title = detail.title;
-                    job.absolute_url = detail.absolute_url;
-                    if detail.location.is_some() {
-                        job.location = detail.location;
-                    }
-                    if detail.offices.is_some() {
-                        job.offices = detail.offices;
-                    }
-                    job.first_published = detail.first_published;
-                    job.updated_at = detail.updated_at;
-                    job.pay_input_ranges = detail.pay_input_ranges;
-                    job.company_name = detail.company_name;
-                    if detail.content.is_some() {
-                        job.content = detail.content;
-                    }
+                    job.merge_detail(detail);
+                    detail_received = true;
+                    evidence = job.evidence();
+                    evidence.opportunity_exhausted = true;
                 }
                 result => {
-                    if !sink(WorkerEvent::Error {
-                        source_id: source.id.clone(),
-                        message: format!(
-                            "Greenhouse detail {} unavailable or has a mismatched ID: {result:?}",
-                            job.id
-                        ),
-                        retryable: true,
-                        invalid_posting: Some(false),
-                    }) {
-                        return Ok(());
-                    }
+                    evidence.opportunity_exhausted = true;
+                    let termination = result
+                        .as_ref()
+                        .err()
+                        .map(|_| CoverageTermination::TimeLimit);
+                    unavailable = Some((format!("Greenhouse detail {} unavailable or has a mismatched ID: {result:?}. Retry the source to obtain missing evidence.",job.id), termination));
                 }
             }
         }
-        if branding.is_none() {
-            branding = Some(
+        let candidate = job.event(source)?;
+        if detail_received {
+            if let WorkerEvent::Job {
+                salary: Some(_), ..
+            } = &candidate
+            {
+                evidence.compensation = true;
+            }
+        }
+        let final_assessment = matcher.assess(&candidate, started, &evidence);
+        if detail_received
+            && final_assessment.rejected.is_empty()
+            && !final_assessment.unresolved.is_empty()
+        {
+            unavailable = Some((format!("Greenhouse detail {} did not provide required eligibility evidence. Missing fields remain unknown; inspect filters and retry.",job.id), None));
+        }
+        if let Some((message, termination)) = unavailable {
+            bound_reported |= termination.is_some();
+            if !sink(
+                WorkerEvent::Warning {
+                    source_id: source.id.clone(),
+                    message,
+                    eligibility_incomplete: !final_assessment.unresolved.is_empty(),
+                    termination,
+                },
+                None,
+            ) {
+                return Ok(());
+            }
+        }
+        if !final_assessment.rejected.is_empty() || !final_assessment.unresolved.is_empty() {
+            if !sink(candidate, Some(evidence)) {
+                break;
+            }
+            continue;
+        }
+        // Optional branding shares the remaining detail time, and is never scheduled after its bounds.
+        if branding.is_none()
+            && requests < limits.max_requests
+            && tokio::time::Instant::now() < deadline
+        {
+            match tokio::time::timeout_at(
+                deadline,
                 CompanyBranding::fetch(
                     client,
                     &job.absolute_url,
                     job.company_name.as_deref().unwrap_or(&source.name),
-                )
-                .await,
-            );
+                ),
+            )
+            .await
+            {
+                Ok(asset) => {
+                    if let Some(warning) = asset.warning(&source.id) {
+                        if !sink(warning, None) {
+                            return Ok(());
+                        }
+                    }
+                    branding = Some(asset);
+                }
+                Err(_) => {
+                    bound_reported = true;
+                    if !sink(WorkerEvent::Warning { source_id: source.id.clone(), message: "Optional company branding lookup reached the remaining enrichment time limit; logo remains unknown.".into(), eligibility_incomplete: false, termination: Some(CoverageTermination::TimeLimit) },None) { return Ok(()); }
+                }
+            }
         }
-        let branding = branding.as_ref().unwrap();
-        if !parse_greenhouse_jobs_with(vec![job], source, &mut |event| sink(branding.apply(event)))?
-        {
+        let event = match &branding {
+            Some(branding) => branding.apply(candidate),
+            None => candidate,
+        };
+        if !sink(event, None) {
             break;
         }
     }
@@ -154,7 +420,19 @@ pub fn parse_greenhouse_payload(
     source: &WorkerSource,
 ) -> Result<Vec<WorkerEvent>, ClientError> {
     let resp: GreenhouseResponse = serde_json::from_str(json)?;
-    parse_greenhouse_jobs(resp.jobs, source)
+    let mut events = Vec::new();
+    for (index, value) in resp.jobs.into_iter().enumerate() {
+        match serde_json::from_value::<GreenhouseJob>(value) {
+            Ok(job) => events.extend(parse_greenhouse_jobs(vec![job], source)?),
+            Err(error) => events.push(WorkerEvent::Error {
+                source_id: source.id.clone(),
+                message: format!("Greenhouse candidate {index} is invalid: {error}"),
+                retryable: false,
+                invalid_posting: Some(true),
+            }),
+        }
+    }
+    Ok(events)
 }
 
 fn parse_greenhouse_jobs(
@@ -354,14 +632,14 @@ mod tests {
                     let body = if request
                         .starts_with("GET /boards-api.greenhouse.io/v1/boards/acme/jobs/42?pay_transparency=true ")
                     {
-                        r#"{"id":42,"title":"Actual Engineer","company_name":"Actual Company","absolute_url":"https://careers.example.com/apply?gh_jid=42","first_published":"2026-01-02T09:00:00Z","updated_at":"2026-10-12T15:00:00Z","pay_input_ranges":[{"min_cents":5025,"max_cents":6075,"currency_type":"USD","title":"Hourly compensation"},{"min_cents":6500,"currency_type":"CAD","title":"Hourly compensation Canada"}]}"#
+                        r#"{"id":42,"title":"Actual Engineer","company_name":"Actual Company","absolute_url":"https://changed.example.com/jobs/42","first_published":"2026-01-02T09:00:00Z","updated_at":"2026-10-12T15:00:00Z","pay_input_ranges":[{"min_cents":5025,"max_cents":6075,"currency_type":"USD","title":"Hourly compensation"},{"min_cents":6500,"currency_type":"CAD","title":"Hourly compensation Canada"}]}"#
                     } else if request.starts_with("GET /careers.example.com/robots.txt ") {
                         "User-agent: *\nAllow: /"
                     } else if request.starts_with("GET /careers.example.com/apply?gh_jid=42 ") {
                         r#"<img alt="Actual Company Logo" src="/brand.png">"#
                     } else {
                         assert!(request.starts_with("GET /boards-api.greenhouse.io/v1/boards/acme/jobs?content=true "));
-                        r#"{"jobs":[{"id":42,"title":"Older title","absolute_url":"https://boards.greenhouse.io/acme/jobs/42","updated_at":"2026-10-12T15:00:00Z"}]}"#
+                        r#"{"jobs":[{"id":42,"title":"Listing Engineer","absolute_url":"https://careers.example.com/apply?gh_jid=42","updated_at":"2026-10-12T15:00:00Z"}]}"#
                     };
                     write!(
                         stream,
@@ -407,7 +685,7 @@ mod tests {
                     ..
                 } => {
                     assert_eq!(external_id, "42");
-                    assert_eq!(title, "Actual Engineer");
+                    assert_eq!(title, "Listing Engineer");
                     assert_eq!(company, "Actual Company");
                     assert_eq!(
                         company_icon_url.as_deref(),
@@ -444,7 +722,7 @@ mod tests {
 
         let resp: GreenhouseResponse = serde_json::from_str(json).unwrap();
         assert_eq!(resp.jobs.len(), 1);
-        let job = &resp.jobs[0];
+        let job: GreenhouseJob = serde_json::from_value(resp.jobs[0].clone()).unwrap();
         assert_eq!(job.id, 5012345);
         assert_eq!(job.title, "Software Engineer, Data Intern");
         let role_type = RoleType::infer(&job.title, None);

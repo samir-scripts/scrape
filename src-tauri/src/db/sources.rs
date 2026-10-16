@@ -16,6 +16,9 @@ pub struct Source {
     pub enabled: bool,
     pub last_run_at: Option<String>,
     pub last_status: Option<String>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub last_outcome: Option<scrape_core::protocol::ScanOutcome>,
     pub last_error: Option<String>,
     pub created_at: String,
     pub cadence: SourceCadence,
@@ -56,6 +59,19 @@ pub struct UpdateSourceInput {
     pub retention_days: Option<i64>,
     pub retention_policy: Option<String>,
     pub filters: Option<serde_json::Value>,
+}
+
+fn source_outcome(status: &str) -> Result<(&str, &str)> {
+    match status {
+        "ok" | "success" | "empty" => Ok((status, "success")),
+        "success_with_warnings" => Ok(("success", "success_with_warnings")),
+        "partial" => Ok(("error", "partial")),
+        "cancelled" => Ok(("error", "cancelled")),
+        "error" | "failed" => Ok(("error", "failed")),
+        _ => Err(AppError::Validation(format!(
+            "Unknown source outcome: {status}"
+        ))),
+    }
 }
 
 pub struct SourcesRepo;
@@ -108,6 +124,10 @@ impl SourcesRepo {
             enabled: enabled_int == 1,
             last_run_at: r.get("last_run_at"),
             last_status: r.get("last_status"),
+            last_outcome: r
+                .get::<Option<String>, _>("last_outcome")
+                .map(|value| serde_json::from_value(serde_json::Value::String(value)))
+                .transpose()?,
             last_error: r.get("last_error"),
             created_at: r.get("created_at"),
             cadence,
@@ -124,7 +144,7 @@ impl SourcesRepo {
     pub async fn list(pool: &SqlitePool) -> Result<Vec<Source>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_error, created_at,
+            SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_outcome, last_error, created_at,
                    cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters, needs_review
             FROM sources
             ORDER BY created_at DESC
@@ -144,7 +164,7 @@ impl SourcesRepo {
     pub async fn get(pool: &SqlitePool, id: &str) -> Result<Source> {
         let r = sqlx::query(
             r#"
-            SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_error, created_at,
+            SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_outcome, last_error, created_at,
                    cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters, needs_review
             FROM sources
             WHERE id = ?
@@ -325,17 +345,19 @@ impl SourcesRepo {
         error: Option<&str>,
     ) -> Result<()> {
         let now = now_iso();
+        let (storage_status, outcome) = source_outcome(status)?;
         sqlx::query(
             r#"
             UPDATE sources
-            SET last_run_at = ?1, last_status = ?2, last_error = ?3
+            SET last_run_at = ?1, last_status = ?2, last_error = ?3, last_outcome = ?5
             WHERE id = ?4
             "#,
         )
         .bind(now)
-        .bind(status)
+        .bind(storage_status)
         .bind(error)
         .bind(id)
+        .bind(outcome)
         .execute(pool)
         .await?;
 
@@ -351,19 +373,21 @@ impl SourcesRepo {
         next_run_at: Option<&str>,
     ) -> Result<()> {
         let now = now_iso();
+        let (storage_status, outcome) = source_outcome(status)?;
         sqlx::query(
             r#"
             UPDATE sources
-            SET last_run_at = ?1, last_status = ?2, last_error = ?3, last_run_duration_ms = ?4, next_run_at = ?5
+            SET last_run_at = ?1, last_status = ?2, last_error = ?3, last_run_duration_ms = ?4, next_run_at = ?5, last_outcome = ?7
             WHERE id = ?6
             "#,
         )
         .bind(now)
-        .bind(status)
+        .bind(storage_status)
         .bind(error)
         .bind(duration_ms)
         .bind(next_run_at)
         .bind(id)
+        .bind(outcome)
         .execute(pool)
         .await?;
 
@@ -377,7 +401,7 @@ impl SourcesRepo {
     pub async fn get_due_sources_at(pool: &SqlitePool, now: &str) -> Result<Vec<Source>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_error, created_at,
+            SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_outcome, last_error, created_at,
                    cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters, needs_review
             FROM sources
             WHERE enabled = 1

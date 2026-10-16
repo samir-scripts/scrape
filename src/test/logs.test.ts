@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { runRequiresAttention } from "../lib/status";
 import type { ScrapeRun } from "../bindings/ScrapeRun";
 
 const createMockRun = (overrides: Partial<ScrapeRun> = {}): ScrapeRun => ({
@@ -29,9 +30,7 @@ describe("Scraper Logs & Run History", () => {
   });
 
   it("identifies runs requiring attention with red square error marker", () => {
-    const isRunError = (run: ScrapeRun): boolean => {
-      return run.status === "failed" || run.status === "partial" || !!run.error;
-    };
+    const isRunError = runRequiresAttention;
 
     const successRun = createMockRun({ status: "success", error: null });
     const failedRun = createMockRun({ status: "failed", error: "Connection timed out" });
@@ -42,12 +41,12 @@ describe("Scraper Logs & Run History", () => {
     expect(isRunError(failedRun)).toBe(true);
     expect(isRunError(partialRun)).toBe(true);
     expect(isRunError(erroredSuccessRun)).toBe(true);
+    expect(isRunError(createMockRun({status: "cancelled", error: "Explicit cancellation"}))).toBe(false);
+    expect(isRunError(createMockRun({status: "success_with_warnings", error: "Optional enrichment warning"}))).toBe(false);
   });
 
   it("filters runs between all runs and errors only", () => {
-    const isRunError = (run: ScrapeRun): boolean => {
-      return run.status === "failed" || run.status === "partial" || !!run.error;
-    };
+    const isRunError = runRequiresAttention;
 
     const runs = [
       createMockRun({ id: "1", status: "success" }),

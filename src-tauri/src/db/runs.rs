@@ -21,8 +21,41 @@ pub enum TriggerType {
 pub enum RunStatus {
     Running,
     Success,
+    SuccessWithWarnings,
+    Cancelled,
     Partial,
     Failed,
+}
+
+impl RunStatus {
+    pub fn from_source_status(status: &str) -> Self {
+        match status {
+            "success" | "ok" | "empty" => Self::Success,
+            "success_with_warnings" => Self::SuccessWithWarnings,
+            "partial" => Self::Partial,
+            "cancelled" => Self::Cancelled,
+            _ => Self::Failed,
+        }
+    }
+    fn storage_status(self) -> Self {
+        match self {
+            Self::SuccessWithWarnings => Self::Success,
+            Self::Cancelled => Self::Partial,
+            other => other,
+        }
+    }
+}
+impl From<scrape_core::protocol::ScanOutcome> for RunStatus {
+    fn from(outcome: scrape_core::protocol::ScanOutcome) -> Self {
+        use scrape_core::protocol::ScanOutcome;
+        match outcome {
+            ScanOutcome::Success => Self::Success,
+            ScanOutcome::SuccessWithWarnings => Self::SuccessWithWarnings,
+            ScanOutcome::Partial => Self::Partial,
+            ScanOutcome::Failed => Self::Failed,
+            ScanOutcome::Cancelled => Self::Cancelled,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS, PartialEq)]
@@ -47,6 +80,13 @@ pub struct RunCounts {
     pub failed: i64,
     #[ts(type = "number")]
     pub retention_removed: i64,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    #[ts(type = "number | null")]
+    pub enrichment_warnings: Option<u64>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub examination_incomplete: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
@@ -166,7 +206,8 @@ impl RunsRepo {
         error: Option<&str>,
     ) -> Result<ScrapeRun> {
         let finished_at = now_iso();
-        let status_str = match serde_json::to_value(status)? {
+        let outcome = serde_json::to_value(status)?.as_str().unwrap().to_owned();
+        let status_str = match serde_json::to_value(status.storage_status())? {
             serde_json::Value::String(s) => s,
             _ => unreachable!(),
         };
@@ -174,7 +215,7 @@ impl RunsRepo {
         sqlx::query(
             r#"
             UPDATE scrape_runs
-            SET status = ?1, finished_at = ?2, jobs_found = ?3, jobs_new = ?4, error = ?5
+            SET status = ?1, finished_at = ?2, jobs_found = ?3, jobs_new = ?4, error = ?5, outcome = ?7
             WHERE id = ?6
             "#,
         )
@@ -184,6 +225,7 @@ impl RunsRepo {
         .bind(jobs_new)
         .bind(error)
         .bind(id)
+        .bind(outcome)
         .execute(pool)
         .await?;
 
@@ -194,7 +236,7 @@ impl RunsRepo {
         use sqlx::Row;
         let r = sqlx::query(
             r#"
-            SELECT id, trigger, status, started_at, finished_at, jobs_found, jobs_new, error, source_id, counts_json, effective_config_json
+            SELECT id, trigger, COALESCE(outcome, status) AS status, started_at, finished_at, jobs_found, jobs_new, error, source_id, counts_json, effective_config_json
             FROM scrape_runs
             WHERE id = ?
             "#,
@@ -234,7 +276,7 @@ impl RunsRepo {
         use sqlx::Row;
         let rows = sqlx::query(
             r#"
-            SELECT id, trigger, status, started_at, finished_at, jobs_found, jobs_new, error, source_id, counts_json, effective_config_json
+            SELECT id, trigger, COALESCE(outcome, status) AS status, started_at, finished_at, jobs_found, jobs_new, error, source_id, counts_json, effective_config_json
             FROM scrape_runs
             ORDER BY started_at DESC
             LIMIT ?
@@ -283,7 +325,7 @@ impl RunsRepo {
         use sqlx::Row;
         let rows = sqlx::query(
             r#"
-            SELECT id, trigger, status, started_at, finished_at, jobs_found, jobs_new, error, source_id, counts_json, effective_config_json
+            SELECT id, trigger, COALESCE(outcome, status) AS status, started_at, finished_at, jobs_found, jobs_new, error, source_id, counts_json, effective_config_json
             FROM scrape_runs
             WHERE source_id = ?1
                OR id IN (SELECT DISTINCT run_id FROM scrape_logs WHERE source_id = ?1)
@@ -421,6 +463,8 @@ mod tests {
             updated: 1,
             failed: 2,
             retention_removed: 5,
+            enrichment_warnings: Some(1),
+            examination_incomplete: None,
             sources: Some(vec![scrape_core::protocol::SourceScanStats {
                 source_id: "fixture".into(),
                 limit: 20,

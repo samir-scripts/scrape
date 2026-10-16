@@ -82,6 +82,14 @@ pub async fn scrape_lever_with(
         }
         None => None,
     };
+    if let Some(warning) = branding
+        .as_ref()
+        .and_then(|branding| branding.warning(&source.id))
+    {
+        if !sink(warning) {
+            return Ok(());
+        }
+    }
     parse_lever_postings_with(postings, source, &mut |event| {
         sink(match &branding {
             Some(branding) => branding.apply(event),

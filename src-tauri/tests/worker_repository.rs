@@ -178,6 +178,7 @@ async fn preview_single_global_identity_and_native_pay_survive_persistence_and_b
         filters_by_source: Default::default(),
         run_started_at: Some("2026-10-13T13:00:00Z".into()),
         limits: WorkerLimits {
+            enrichment: None,
             request_timeout_s: 3,
             per_host_delay_ms: 0,
             concurrency: 1,
@@ -376,6 +377,7 @@ async fn recorded_lever_response_survives_actual_worker_and_repository() {
         filters_by_source: Default::default(),
         run_started_at: Some("2026-10-14T03:27:51Z".into()),
         limits: WorkerLimits {
+            enrichment: None,
             request_timeout_s: 3,
             per_host_delay_ms: 0,
             concurrency: 1,
@@ -560,6 +562,7 @@ async fn remote_us_eligibility_survives_greenhouse_worker_persistence_and_restar
         filters_by_source: Default::default(),
         run_started_at: Some("2026-10-14T12:00:00Z".into()),
         limits: WorkerLimits {
+            enrichment: None,
             request_timeout_s: 3,
             per_host_delay_ms: 0,
             concurrency: 1,
@@ -948,5 +951,165 @@ async fn keyword_geography_decisions_and_diagnostics_match_worker_and_sql() {
         }
     }
     server.join().unwrap();
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn late_greenhouse_matches_refresh_with_provenance_and_protected_state() {
+    use serde_json::json;
+    use std::sync::{Arc, Mutex};
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let captured = requests.clone();
+    let server = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while captured.lock().unwrap().len() < 12 && Instant::now() < deadline {
+            if let Ok((mut stream, _)) = listener.accept() {
+                stream.set_nonblocking(false).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                let mut buffer = [0; 4096];
+                let n = stream.read(&mut buffer).unwrap();
+                let request = String::from_utf8_lossy(&buffer[..n]);
+                let path = request.split_whitespace().nth(1).unwrap();
+                captured.lock().unwrap().push(path.to_string());
+                let body = if path.ends_with("?content=true") {
+                    json!({"jobs":(0..200).map(|id|json!({"id":id,"title":if id<140 {"Sales"} else {"Engineer"},"absolute_url":format!("https://fixture.test/jobs/{id}"),"company_name":"Fixture","content":"<p>Listing evidence</p>"})).collect::<Vec<_>>(),"meta":{"total":200}}).to_string()
+                } else if path.contains("?pay_transparency=true") {
+                    let id: u64 = path
+                        .rsplit('/')
+                        .next()
+                        .unwrap()
+                        .split('?')
+                        .next()
+                        .unwrap()
+                        .parse()
+                        .unwrap();
+                    assert!((140..143).contains(&id));
+                    json!({"id":id,"title":"Changed detail title","absolute_url":"https://changed.test/job","first_published":"2026-10-15T00:00:00Z"}).to_string()
+                } else if path == "/fixture.test/robots.txt" {
+                    "User-agent: *\nAllow: /".into()
+                } else {
+                    assert_eq!(path, "/fixture.test/jobs/140");
+                    "<img alt='Fixture Logo' src='/employer.svg'>".into()
+                };
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                )
+                .unwrap();
+            } else {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+        assert_eq!(captured.lock().unwrap().len(), 12);
+    });
+    let directory = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&directory.path().join("late.db"))
+        .await
+        .unwrap();
+    let spec=scrape_lib::services::workflow::validate(json!({"version":4,"metadata":{"name":"Late candidate fixture","company":"Fixture"},"extractor":{"kind":"greenhouse","url":"board"},"max_jobs_per_run":3,"schedule":{"cadence":"manual","timezone":"UTC"},"filters":{"matching":{"keywords":{"any":["Engineer"],"fields":["title"]},"posting_date":{"last_hours":72,"timezone":"UTC"}}}}),"UTC").unwrap();
+    let source = SourcesRepo::create(
+        &pool,
+        scrape_lib::services::workflow::source_input(&spec, "UTC").unwrap(),
+    )
+    .await
+    .unwrap();
+    let config = WorkerConfig {
+        version: PROTOCOL_VERSION,
+        sources: vec![WorkerSource {
+            id: source.id.clone(),
+            kind: source.kind,
+            name: "Fixture".into(),
+            identifier: source.identifier.clone(),
+            config: source.config.clone(),
+        }],
+        filters: scrape_lib::services::runner::resolve_worker_filters(
+            &source.filters,
+            WorkerFilters::default(),
+        )
+        .unwrap(),
+        filters_by_source: Default::default(),
+        run_started_at: Some("2026-10-16T00:00:00Z".into()),
+        limits: WorkerLimits {
+            per_host_delay_ms: 0,
+            request_timeout_s: 3,
+            ..Default::default()
+        },
+        blocked_postings: vec![],
+    };
+    let mut protected = None;
+    for pass in 0..2 {
+        let events = invoke_replay(&config, false, Some(&format!("http://{address}")));
+        let WorkerEvent::Done { stats } = events.last().unwrap() else {
+            panic!("Missing completion")
+        };
+        let scan = &stats.sources[0];
+        scan.validate().unwrap();
+        assert_eq!((scan.examined, scan.rejected, scan.accepted), (143, 140, 3));
+        assert_eq!(
+            scan.outcome,
+            Some(scrape_core::protocol::ScanOutcome::Success)
+        );
+        assert_eq!(scan.provider_total, Some(200));
+        let mut budget =
+            scrape_lib::services::ingestion::RunPostingBudget::new(&config.sources).unwrap();
+        let rows: Vec<_> = events
+            .into_iter()
+            .filter(|event| matches!(event, WorkerEvent::Job { .. }))
+            .map(|event| {
+                budget.take(event.source_id().unwrap()).unwrap();
+                scraped_job_from_event(event).unwrap()
+            })
+            .collect();
+        let stats = JobsRepo::upsert_scraped(&pool, &rows).await.unwrap();
+        assert_eq!(
+            if pass == 0 {
+                stats.inserted
+            } else {
+                stats.updated
+            },
+            3
+        );
+        let saved = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+        assert_eq!(saved.total, 3);
+        for job in &saved.items {
+            assert_eq!(job.title, "Engineer");
+            assert!(job.url.starts_with("https://fixture.test/jobs/"));
+            assert_eq!(job.date_posted.as_deref(), Some("2026-10-15T00:00:00Z"));
+            assert_eq!(job.description_text.as_deref(), Some("Listing evidence"));
+        }
+        if pass == 0 {
+            let id = saved.items[0].id.clone();
+            sqlx::query("UPDATE jobs SET notes='Protected late-match note',favorited=1,status='applied' WHERE id=?").bind(&id).execute(&pool).await.unwrap();
+            protected = Some(id);
+        } else {
+            let state: (String, bool, String) =
+                sqlx::query_as("SELECT notes,favorited,status FROM jobs WHERE id=?")
+                    .bind(protected.as_ref().unwrap())
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                state,
+                ("Protected late-match note".into(), true, "applied".into())
+            );
+        }
+    }
+    server.join().unwrap();
+    assert_eq!(
+        requests
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|path| path.contains("?pay_transparency=true"))
+            .count(),
+        6
+    );
     pool.close().await;
 }

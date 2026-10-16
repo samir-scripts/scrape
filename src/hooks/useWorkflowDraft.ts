@@ -143,7 +143,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   const runSaved = async () => {
     if (!saved) return false;
     setOperation("run"); setError("");
-    try { const run = await api.runSourceNow(saved.id); if (["failed", "partial"].includes(run.status)) throw new Error(run.error || "Workflow run failed."); return true; }
+    try { const run = await api.runSourceNow(saved.id); if (["failed", "partial", "cancelled"].includes(run.status)) throw new Error(run.error || "Workflow run failed."); return true; }
     catch (error) { report(error); return false; }
     finally { setOperation(null); }
   };

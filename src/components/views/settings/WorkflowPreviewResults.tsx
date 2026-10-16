@@ -22,6 +22,7 @@ export function WorkflowPreviewResults({ preview, draft, setError }: { preview: 
                   </p>
                   <ScanDiagnostics sources={preview.sources} />
                 </details>
+                {preview.warnings?.map((message, index) => <p role="status" key={`warning-${index}`} className="text-[var(--color-warning)]">Warning: {message}</p>)}
                 {preview.errors.map((e, i) => (
                   <p
                     role="alert"

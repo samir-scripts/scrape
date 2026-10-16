@@ -898,7 +898,7 @@ const apiImplementation = {
       if (enabled.length) {
         const runs: ScrapeRun[] = [];
         for (const source of enabled) runs.push(await api.runSourceNow(source.id));
-        const failed = runs.filter(run => run.status !== "success");
+        const failed = runs.filter(run => !["success", "success_with_warnings"].includes(run.status));
         return { ...runs[runs.length - 1], trigger: "manual", source_id: null,
           status: failed.length ? "failed" : "success", error: failed.length ? failed.map(run => run.error || "Fixture run failed").join("; ") : null,
           jobs_found: runs.reduce((sum, run) => sum + run.jobs_found, 0n),

@@ -89,6 +89,14 @@ pub async fn scrape_ashby_with(
         Some(job) => Some(CompanyBranding::fetch(client, &job.job_url, &source.name).await),
         None => None,
     };
+    if let Some(warning) = branding
+        .as_ref()
+        .and_then(|branding| branding.warning(&source.id))
+    {
+        if !sink(warning) {
+            return Ok(());
+        }
+    }
     parse_ashby_jobs_with(resp.jobs, source, &mut |event| {
         sink(match &branding {
             Some(branding) => branding.apply(event),

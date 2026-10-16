@@ -162,7 +162,10 @@ Daily (09:00 in the displayed device timezone) and save. Saving does not scrape;
 Run now is explicit. Standard Matching provides keyword chips with Any/All,
 exclusions and search fields. Enter, Add, commas or newlines commit terms; spaces
 keep phrases together. Imported mixed Any/All groups remain visible. Preview and
-run details explain rejection categories and examined counts.
+run details explain rejection categories, unresolved evidence, examined counts and
+separate provider totals. Optional enrichment failures are warnings; incomplete
+required evidence produces a partial outcome. Cancellation retains confirmed
+saved records and has its own outcome.
 Advanced and YAML editing share one validated v4 draft, with native compensation,
 posting dates, selected weekdays and timezone. Matching, schedule, limit and
 retention belong to each workflow. System settings controls the application-wide

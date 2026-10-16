@@ -51,6 +51,33 @@ impl Drop for MaintenanceGuard {
     }
 }
 
+fn aggregate_run_status(
+    statuses: &HashMap<String, (String, Option<String>)>,
+    found: i64,
+) -> RunStatus {
+    let values: Vec<_> = statuses
+        .values()
+        .map(|(status, _)| RunStatus::from_source_status(status))
+        .collect();
+    if values.contains(&RunStatus::Cancelled) {
+        RunStatus::Cancelled
+    } else if !values.is_empty()
+        && found == 0
+        && values.iter().all(|status| *status == RunStatus::Failed)
+    {
+        RunStatus::Failed
+    } else if values
+        .iter()
+        .any(|status| matches!(status, RunStatus::Failed | RunStatus::Partial))
+    {
+        RunStatus::Partial
+    } else if values.contains(&RunStatus::SuccessWithWarnings) {
+        RunStatus::SuccessWithWarnings
+    } else {
+        RunStatus::Success
+    }
+}
+
 pub fn resolve_worker_filters(
     source_filters: &serde_json::Value,
     global_filters: WorkerFilters,
@@ -315,30 +342,15 @@ impl ScrapeRunner {
             Ok((total_found, total_new, source_statuses)) => {
                 // Update source statuses
                 for (src_id, (status, err_msg)) in &source_statuses {
-                    let _ = SourcesRepo::set_last_result(
-                        &self.pool,
-                        src_id,
-                        status,
-                        err_msg.as_deref(),
-                    )
-                    .await;
+                    SourcesRepo::set_last_result(&self.pool, src_id, status, err_msg.as_deref())
+                        .await?;
                 }
 
-                let has_errors = source_statuses.values().any(|(s, _)| s == "error");
-                let all_failed = !source_statuses.is_empty()
-                    && source_statuses.values().all(|(s, _)| s == "error");
-                let final_status = if all_failed {
-                    RunStatus::Failed
-                } else if has_errors {
-                    RunStatus::Partial
-                } else {
-                    RunStatus::Success
-                };
-
-                let err_summary = if has_errors {
-                    Some("One or more sources encountered errors during scrape")
-                } else {
-                    None
+                let final_status = aggregate_run_status(&source_statuses, total_found);
+                let err_summary = match final_status {
+                    RunStatus::Failed|RunStatus::Partial => Some("One or more sources had incomplete processing; inspect source scan details"),
+                    RunStatus::Cancelled => Some("Worker cancelled; partial results retained"),
+                    _ => None,
                 };
 
                 let finished = RunsRepo::finish(
@@ -526,7 +538,7 @@ impl ScrapeRunner {
                         )
                     });
 
-                let _ = SourcesRepo::set_run_result(
+                SourcesRepo::set_run_result(
                     &self.pool,
                     source_id,
                     &status,
@@ -534,13 +546,9 @@ impl ScrapeRunner {
                     Some(duration_ms),
                     next_run.as_deref(),
                 )
-                .await;
+                .await?;
 
-                let final_status = if status == "error" {
-                    RunStatus::Failed
-                } else {
-                    RunStatus::Success
-                };
+                let final_status = aggregate_run_status(&source_statuses, total_found);
 
                 let finished = RunsRepo::finish(
                     &self.pool,
@@ -555,20 +563,16 @@ impl ScrapeRunner {
                 self.log_event(
                     app,
                     &run.id,
-                    if final_status == RunStatus::Success {
-                        LogLevel::Info
-                    } else {
-                        LogLevel::Error
+                    match final_status {
+                        RunStatus::Failed => LogLevel::Error,
+                        RunStatus::Partial | RunStatus::SuccessWithWarnings => LogLevel::Warn,
+                        _ => LogLevel::Info,
                     },
                     Some(source_id),
                     &format!(
-                        "Workflow run completed in {:.2}s with status: {}",
+                        "Workflow run completed in {:.2}s with status: {:?}",
                         duration_ms as f64 / 1000.0,
-                        if final_status == RunStatus::Success {
-                            "SUCCESS"
-                        } else {
-                            "FAILED"
-                        }
+                        final_status
                     ),
                 )
                 .await;
@@ -633,7 +637,7 @@ impl ScrapeRunner {
                     &format!("Workflow execution failed: {}", err_str),
                 )
                 .await;
-                let _ = SourcesRepo::set_run_result(
+                SourcesRepo::set_run_result(
                     &self.pool,
                     source_id,
                     "error",
@@ -641,7 +645,7 @@ impl ScrapeRunner {
                     Some(duration_ms),
                     next_run.as_deref(),
                 )
-                .await;
+                .await?;
                 let finished =
                     RunsRepo::finish(&self.pool, &run.id, RunStatus::Failed, 0, 0, Some(&err_str))
                         .await?;
@@ -662,8 +666,10 @@ impl ScrapeRunner {
     ) -> Result<(i64, i64, HashMap<String, (String, Option<String>)>)> {
         let mut budget = super::ingestion::RunPostingBudget::new(&config.sources)?;
         RunsRepo::record_config(&self.pool, run_id, &config).await?;
-        let mut counts = RunCounts::default();
-        let mut invalid = 0i64;
+        let mut counts = RunCounts {
+            examination_incomplete: Some(true),
+            ..Default::default()
+        };
         let (mut rx, child) = crate::services::process::worker_command(app)?
             .args(["--stdin"])
             .spawn()
@@ -771,11 +777,8 @@ impl ScrapeRunner {
                                 continue;
                             }
                         };
-                        if let WorkerEvent::Job { source_id, .. }
-                        | WorkerEvent::Progress { source_id, .. }
-                        | WorkerEvent::Error { source_id, .. } = &worker_event
-                        {
-                            if !config.sources.iter().any(|source| &source.id == source_id) {
+                        if let Some(source_id) = worker_event.source_id() {
+                            if !config.sources.iter().any(|source| source.id == source_id) {
                                 sidecar_err = Some(format!(
                                     "Worker emitted an unknown workflow ID: {source_id}"
                                 ));
@@ -819,9 +822,6 @@ impl ScrapeRunner {
                                     matched,
                                 } => {
                                     counts.fetched += fetched as i64;
-                                    counts.rejected +=
-                                        (fetched as i64 - matched as i64 - invalid).max(0);
-                                    invalid = 0;
                                     RunsRepo::record_counts(&self.pool, run_id, &counts).await?;
                                     source_statuses
                                         .entry(source_id.clone())
@@ -833,7 +833,7 @@ impl ScrapeRunner {
                                             LogLevel::Warn,
                                             Some(&source_id),
                                             &format!(
-                                                "Fetched {} postings from remote board, but 0 matched workflow filters (check keywords, role types, and locations)",
+                                                "Examined {} candidates with 0 confirmed matches; inspect scan details for rejections, invalid records, and missing eligibility evidence",
                                                 fetched
                                             ),
                                         )
@@ -845,7 +845,7 @@ impl ScrapeRunner {
                                             LogLevel::Info,
                                             Some(&source_id),
                                             &format!(
-                                                "Fetched {} postings, matched {} jobs",
+                                                "Examined {} candidates, matched {} jobs",
                                                 fetched, matched
                                             ),
                                         )
@@ -864,12 +864,9 @@ impl ScrapeRunner {
                                     source_id,
                                     message,
                                     retryable,
-                                    invalid_posting,
+                                    invalid_posting: _,
                                 } => {
                                     counts.failed += 1;
-                                    if invalid_posting == Some(true) {
-                                        invalid += 1;
-                                    }
                                     RunsRepo::record_counts(&self.pool, run_id, &counts).await?;
                                     source_statuses.insert(
                                         source_id.clone(),
@@ -892,16 +889,58 @@ impl ScrapeRunner {
                                         }),
                                     );
                                 }
+                                WorkerEvent::Warning {
+                                    source_id, message, ..
+                                } => {
+                                    *counts.enrichment_warnings.get_or_insert(0) += 1;
+                                    source_statuses.entry(source_id.clone()).or_insert_with(|| {
+                                        ("success_with_warnings".into(), Some(message.clone()))
+                                    });
+                                    self.log_event(
+                                        app,
+                                        run_id,
+                                        LogLevel::Warn,
+                                        Some(&source_id),
+                                        &message,
+                                    )
+                                    .await;
+                                    RunsRepo::record_counts(&self.pool, run_id, &counts).await?;
+                                }
+                                WorkerEvent::SourceInfo { .. } => {}
                                 WorkerEvent::Done { stats } => {
+                                    let ids: std::collections::HashSet<_> = stats
+                                        .sources
+                                        .iter()
+                                        .map(|scan| scan.source_id.as_str())
+                                        .collect();
+                                    if ids.len() != config.sources.len()
+                                        || ids.len() != stats.sources.len()
+                                        || config
+                                            .sources
+                                            .iter()
+                                            .any(|source| !ids.contains(source.id.as_str()))
+                                        || stats.sources.iter().any(|scan| scan.outcome.is_none())
+                                    {
+                                        sidecar_err.get_or_insert_with(|| "Worker completion must contain one summary and outcome for every configured source".into());
+                                        continue;
+                                    }
                                     if let Some(error) =
                                         stats.sources.iter().find_map(|scan| scan.validate().err())
                                     {
-                                        sidecar_err = Some(error);
+                                        sidecar_err.get_or_insert(error);
                                         continue;
                                     }
+                                    counts.enrichment_warnings = Some(
+                                        stats
+                                            .sources
+                                            .iter()
+                                            .map(|scan| scan.enrichment_warnings)
+                                            .sum(),
+                                    );
                                     counts.rejected =
                                         stats.sources.iter().map(|scan| scan.rejected as i64).sum();
                                     counts.sources = Some(stats.sources.clone());
+                                    counts.examination_incomplete = Some(false);
                                     for scan in stats.sources {
                                         if !config.sources.iter().any(|s| s.id == scan.source_id) {
                                             sidecar_err = Some(
@@ -910,6 +949,30 @@ impl ScrapeRunner {
                                             );
                                             continue;
                                         }
+                                        let outcome =
+                                            scan.outcome.expect("Validated source outcome");
+                                        let status = match outcome {
+                                            scrape_core::protocol::ScanOutcome::Success => "success",
+                                            scrape_core::protocol::ScanOutcome::SuccessWithWarnings => "success_with_warnings",
+                                            scrape_core::protocol::ScanOutcome::Partial => "partial",
+                                            scrape_core::protocol::ScanOutcome::Failed => "error",
+                                            scrape_core::protocol::ScanOutcome::Cancelled => "cancelled",
+                                        };
+                                        let message = if matches!(
+                                            outcome,
+                                            scrape_core::protocol::ScanOutcome::Partial
+                                                | scrape_core::protocol::ScanOutcome::Failed
+                                        ) {
+                                            Some(format!("Source processing is {status}: {} candidates lack required eligibility evidence; {} invalid; coverage {:?}. {} Inspect warnings and retry.",scan.unresolved,scan.invalid,scan.termination,source_statuses.get(&scan.source_id).and_then(|(_,message)| message.as_deref()).unwrap_or("")))
+                                        } else {
+                                            source_statuses
+                                                .get(&scan.source_id)
+                                                .and_then(|(_, message)| message.clone())
+                                        };
+                                        source_statuses.insert(
+                                            scan.source_id.clone(),
+                                            (status.into(), message),
+                                        );
                                         counts.blocked += scan.blocked as i64;
                                         self.log_event(app, run_id, LogLevel::Info, Some(&scan.source_id), &format!("Examined {} postings; {} matched, {} blocked, {} duplicates; limit {}{}. Counts cover examined postings only.", scan.examined, scan.matched, scan.blocked, scan.duplicates, scan.limit, if scan.limit_reached { " reached; stopped early, source coverage may be incomplete" } else { " not reached" })).await;
                                     }
@@ -967,9 +1030,43 @@ impl ScrapeRunner {
 
         // Terminal failures override earlier progress; partial rows remain recoverable.
         if let Some(message) = worker_failure(termination_code, saw_done, sidecar_err.as_deref()) {
-            counts.failed = counts.failed.max(1);
+            let cancelled = self.cancel_requested.load(Ordering::SeqCst);
+            if !cancelled {
+                counts.failed = counts.failed.max(1);
+            }
+            counts.examination_incomplete = Some(!saw_done);
+            counts.fetched = counts.fetched.max(total_found);
+            if let Some(scans) = counts.sources.as_mut() {
+                for scan in scans {
+                    scan.termination = if cancelled {
+                        scrape_core::protocol::CoverageTermination::Cancelled
+                    } else {
+                        scrape_core::protocol::CoverageTermination::Failed
+                    };
+                    scan.outcome = Some(if cancelled {
+                        scrape_core::protocol::ScanOutcome::Cancelled
+                    } else if scan.accepted > 0 {
+                        scrape_core::protocol::ScanOutcome::Partial
+                    } else {
+                        scrape_core::protocol::ScanOutcome::Failed
+                    });
+                }
+            }
             for source in &config.sources {
-                source_statuses.insert(source.id.clone(), ("error".into(), Some(message.clone())));
+                source_statuses.insert(
+                    source.id.clone(),
+                    (
+                        (if cancelled {
+                            "cancelled"
+                        } else if total_found > 0 {
+                            "partial"
+                        } else {
+                            "error"
+                        })
+                        .into(),
+                        Some(message.clone()),
+                    ),
+                );
             }
         }
 
@@ -1086,6 +1183,30 @@ mod tests {
         let third = runner.try_acquire_lock();
         assert!(third.is_ok());
         assert!(!runner.cancel_requested.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn aggregate_outcomes_distinguish_warnings_partial_failures_and_cancellation() {
+        for (statuses, found, expected) in [
+            (vec!["success"], 0, RunStatus::Success),
+            (
+                vec!["success_with_warnings", "success"],
+                1,
+                RunStatus::SuccessWithWarnings,
+            ),
+            (vec!["partial"], 0, RunStatus::Partial),
+            (vec!["error"], 0, RunStatus::Failed),
+            (vec!["error"], 1, RunStatus::Partial),
+            (vec!["error", "success"], 0, RunStatus::Partial),
+            (vec!["cancelled", "success"], 1, RunStatus::Cancelled),
+        ] {
+            let statuses = statuses
+                .into_iter()
+                .enumerate()
+                .map(|(i, s)| (i.to_string(), (s.to_string(), None)))
+                .collect();
+            assert_eq!(aggregate_run_status(&statuses, found), expected);
+        }
     }
 
     #[test]

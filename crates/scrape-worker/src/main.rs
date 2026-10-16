@@ -158,6 +158,8 @@ async fn execute_worker(
     if config.limits.concurrency != 1 {
         return Err("Worker concurrency currently supports one source at a time".into());
     }
+    let enrichment = config.limits.enrichment.clone().unwrap_or_default();
+    enrichment.validate()?;
     let start_time = Instant::now();
     let mut client = HttpClient::new(
         config.limits.request_timeout_s,
@@ -201,16 +203,23 @@ async fn execute_worker(
             source.kind,
             gate.summary.limit
         );
-        let result = adapters::scrape_source_with(&client, source, &mut |event| {
-            if let Some(event) = gate.accept(event) {
-                source_failed |= matches!(event, WorkerEvent::Error { .. });
-                if let Err(error) = emit_event(&event) {
-                    output_error = Some(error);
-                    return false;
+        let result = adapters::scrape_source_with_evidence(
+            &client,
+            source,
+            filters,
+            started,
+            &enrichment,
+            &mut |event, evidence| {
+                if let Some(event) = gate.accept_with_evidence(event, evidence) {
+                    source_failed |= matches!(event, WorkerEvent::Error { .. });
+                    if let Err(error) = emit_event(&event) {
+                        output_error = Some(error);
+                        return false;
+                    }
                 }
-            }
-            !gate.full()
-        })
+                !gate.full()
+            },
+        )
         .await;
         if let Some(error) = output_error {
             return Err(error.into());
@@ -227,8 +236,26 @@ async fn execute_worker(
                 ),
             })?;
         }
-        if source_failed {
-            gate.summary.termination = scrape_core::protocol::CoverageTermination::Failed;
+        use scrape_core::protocol::{CoverageTermination, ScanOutcome};
+        let outcome = if source_failed {
+            gate.summary.termination = CoverageTermination::Failed;
+            if gate.summary.examined > gate.summary.invalid {
+                ScanOutcome::Partial
+            } else {
+                ScanOutcome::Failed
+            }
+        } else if gate.summary.unresolved > 0 {
+            if gate.summary.termination == CoverageTermination::Exhausted {
+                gate.summary.termination = CoverageTermination::Failed;
+            }
+            ScanOutcome::Partial
+        } else if gate.summary.enrichment_warnings > 0 {
+            ScanOutcome::SuccessWithWarnings
+        } else {
+            ScanOutcome::Success
+        };
+        gate.summary.outcome = Some(outcome);
+        if matches!(outcome, ScanOutcome::Failed | ScanOutcome::Partial) {
             stats.sources_failed += 1;
         } else {
             stats.sources_ok += 1;

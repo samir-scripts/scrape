@@ -488,7 +488,11 @@ mod tests {
                 .fetch_one(&upgraded)
                 .await
                 .unwrap(),
-            21
+            sqlx::migrate!("./migrations")
+                .iter()
+                .last()
+                .unwrap()
+                .version
         );
         let backup_count = std::fs::read_dir(directory.path())
             .unwrap()
@@ -745,7 +749,11 @@ mod tests {
                 .fetch_one(&restarted)
                 .await
                 .unwrap(),
-            21
+            sqlx::migrate!("./migrations")
+                .iter()
+                .last()
+                .unwrap()
+                .version
         );
         assert_eq!(
             sqlx::query_scalar::<_, Vec<u8>>(
@@ -826,7 +834,11 @@ mod tests {
                     .fetch_one(&upgraded)
                     .await
                     .unwrap(),
-                21
+                sqlx::migrate!("./migrations")
+                    .iter()
+                    .last()
+                    .unwrap()
+                    .version
             );
             let states: Vec<(String, bool, String, Option<String>, String)> = sqlx::query_as("SELECT notes,favorited,status,removed_at,source_name_snapshot FROM jobs ORDER BY id").fetch_all(&upgraded).await.unwrap();
             assert_eq!(states.len(), 4);
@@ -1294,5 +1306,276 @@ mod tests {
         assert!(init_db(&path).await.is_err());
         assert_eq!(std::fs::read(&path).unwrap(), original);
         assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+    }
+}
+
+#[cfg(test)]
+mod execution_outcome_upgrade_tests {
+    use super::*;
+    use crate::db::{
+        runs::{RunCounts, RunStatus, RunsRepo, TriggerType},
+        sources::SourcesRepo,
+    };
+
+    #[tokio::test]
+    async fn populated_v21_upgrade_keeps_state_checksums_backup_and_restart_after_failure() {
+        for inject_failure in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("outcomes.db");
+            let original = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(
+                    SqliteConnectOptions::new()
+                        .filename(&path)
+                        .create_if_missing(true)
+                        .journal_mode(SqliteJournalMode::Wal)
+                        .foreign_keys(true),
+                )
+                .await
+                .unwrap();
+            let mut historical = sqlx::migrate!("./migrations");
+            historical.migrations = historical
+                .iter()
+                .filter(|m| m.version <= 21)
+                .cloned()
+                .collect::<Vec<_>>()
+                .into();
+            historical.run(&original).await.unwrap();
+            sqlx::query("INSERT INTO app_settings(key,value,updated_at) VALUES ('migration.workflow_settings_v4','true','2026-01-01')").execute(&original).await.unwrap();
+            sqlx::query("INSERT INTO sources(id,kind,name,identifier,created_at,enabled,cadence,next_run_at,last_status,last_error,config) VALUES ('source','greenhouse','Fixture','board','2026-01-01',1,'daily','2030-01-01T09:00:00Z','error','Historical failure','{}')").execute(&original).await.unwrap();
+            sqlx::query("INSERT INTO jobs(id,dedupe_key,source_id,external_id,title,company,role_type,url,date_added,last_seen_at,status,status_changed_at,notes,favorited) VALUES ('job','source:42','source','42','Engineer','Fixture','full_time','https://fixture.test/42','2026-01-01','2026-01-01','applied','2026-01-01','Protected note',1)").execute(&original).await.unwrap();
+            sqlx::query("INSERT INTO job_status_events(job_id,to_status,changed_at) VALUES ('job','applied','2026-01-01')").execute(&original).await.unwrap();
+            sqlx::query("INSERT INTO blocked_postings(identity,title,company,blocked_at) VALUES ('protected-block','Blocked job','Fixture','2026-01-01')").execute(&original).await.unwrap();
+            sqlx::query("INSERT INTO scrape_runs(id,trigger,status,started_at,finished_at,jobs_found,jobs_new,source_id,counts_json) VALUES ('historical','single_source','partial','2026-01-01','2026-01-01',2,1,'source','{\"fetched\":2,\"inserted\":1}')").execute(&original).await.unwrap();
+            sqlx::query("INSERT INTO scrape_logs(id,run_id,timestamp,level,message) VALUES ('log','historical','2026-01-01','warn','Historical log')").execute(&original).await.unwrap();
+            let checksums: Vec<(i64, String)> = sqlx::query_as(
+                "SELECT version,hex(checksum) FROM _sqlx_migrations ORDER BY version",
+            )
+            .fetch_all(&original)
+            .await
+            .unwrap();
+            if inject_failure {
+                let mut failing = sqlx::migrate!("./migrations");
+                failing.migrations = failing
+                    .iter()
+                    .map(|migration| {
+                        if migration.version == 22 {
+                            sqlx::migrate::Migration::new(
+                                22,
+                                migration.description.clone(),
+                                migration.migration_type,
+                                format!(
+                                    "{}\nSELECT missing_column FROM missing_table;",
+                                    migration.sql
+                                )
+                                .into(),
+                                false,
+                            )
+                        } else {
+                            migration.clone()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .into();
+                assert!(failing.run(&original).await.is_err());
+                let columns: Vec<String> =
+                    sqlx::query_scalar("SELECT name FROM pragma_table_info('scrape_runs')")
+                        .fetch_all(&original)
+                        .await
+                        .unwrap();
+                assert!(!columns.contains(&"outcome".to_string()));
+                assert_eq!(
+                    sqlx::query_scalar::<_, i64>("SELECT max(version) FROM _sqlx_migrations")
+                        .fetch_one(&original)
+                        .await
+                        .unwrap(),
+                    21
+                );
+            }
+            let upgraded = init_db(&path).await.unwrap();
+            let backups: Vec<_> = std::fs::read_dir(directory.path())
+                .unwrap()
+                .flatten()
+                .filter(|entry| {
+                    entry
+                        .file_name()
+                        .to_string_lossy()
+                        .contains("pre-migration")
+                })
+                .collect();
+            assert_eq!(backups.len(), 1);
+            let backup = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(
+                    SqliteConnectOptions::new()
+                        .filename(backups[0].path())
+                        .read_only(true),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>("SELECT max(version) FROM _sqlx_migrations")
+                    .fetch_one(&backup)
+                    .await
+                    .unwrap(),
+                21
+            );
+            for pool in [&backup, &upgraded] {
+                let state: (String, bool, String) =
+                    sqlx::query_as("SELECT notes,favorited,status FROM jobs WHERE id='job'")
+                        .fetch_one(pool)
+                        .await
+                        .unwrap();
+                assert_eq!(state, ("Protected note".into(), true, "applied".into()));
+                let schedule: (String, String, String) = sqlx::query_as(
+                    "SELECT cadence,next_run_at,last_error FROM sources WHERE id='source'",
+                )
+                .fetch_one(pool)
+                .await
+                .unwrap();
+                assert_eq!(
+                    schedule,
+                    (
+                        "daily".into(),
+                        "2030-01-01T09:00:00Z".into(),
+                        "Historical failure".into()
+                    )
+                );
+                assert_eq!(
+                    sqlx::query_scalar::<_, i64>("SELECT count(*) FROM job_status_events")
+                        .fetch_one(pool)
+                        .await
+                        .unwrap(),
+                    1
+                );
+                assert_eq!(
+                    sqlx::query_scalar::<_, i64>("SELECT count(*) FROM blocked_postings")
+                        .fetch_one(pool)
+                        .await
+                        .unwrap(),
+                    1
+                );
+                assert_eq!(
+                    sqlx::query_scalar::<_, String>(
+                        "SELECT message FROM scrape_logs WHERE id='log'"
+                    )
+                    .fetch_one(pool)
+                    .await
+                    .unwrap(),
+                    "Historical log"
+                );
+                assert!(sqlx::query("PRAGMA foreign_key_check")
+                    .fetch_all(pool)
+                    .await
+                    .unwrap()
+                    .is_empty());
+                let prefix:Vec<(i64,String)>=sqlx::query_as("SELECT version,hex(checksum) FROM _sqlx_migrations WHERE version<=21 ORDER BY version").fetch_all(pool).await.unwrap();
+                assert_eq!(prefix, checksums);
+            }
+            assert_eq!(
+                RunsRepo::get(&upgraded, "historical").await.unwrap().status,
+                RunStatus::Partial
+            );
+            assert!(SourcesRepo::get(&upgraded, "source")
+                .await
+                .unwrap()
+                .last_outcome
+                .is_none());
+            for (outcome, source_status) in [
+                (RunStatus::SuccessWithWarnings, "success_with_warnings"),
+                (RunStatus::Cancelled, "cancelled"),
+                (RunStatus::Partial, "partial"),
+            ] {
+                let run = RunsRepo::start_with_source(
+                    &upgraded,
+                    TriggerType::SingleSource,
+                    Some("source"),
+                )
+                .await
+                .unwrap();
+                let counts = RunCounts {
+                    inserted: 1,
+                    enrichment_warnings: Some(2),
+                    ..Default::default()
+                };
+                RunsRepo::record_counts(&upgraded, &run.id, &counts)
+                    .await
+                    .unwrap();
+                RunsRepo::finish(
+                    &upgraded,
+                    &run.id,
+                    outcome,
+                    1,
+                    1,
+                    Some("Diagnostic fixture"),
+                )
+                .await
+                .unwrap();
+                SourcesRepo::set_run_result(
+                    &upgraded,
+                    "source",
+                    source_status,
+                    Some("Diagnostic fixture"),
+                    Some(5),
+                    Some("2030-01-01T09:00:00Z"),
+                )
+                .await
+                .unwrap();
+                assert_eq!(
+                    RunsRepo::get(&upgraded, &run.id).await.unwrap().status,
+                    outcome
+                );
+                assert_eq!(
+                    RunsRepo::list_by_source(&upgraded, "source", 100)
+                        .await
+                        .unwrap()
+                        .into_iter()
+                        .find(|r| r.id == run.id)
+                        .unwrap()
+                        .counts,
+                    Some(counts)
+                );
+                assert_eq!(
+                    serde_json::to_value(
+                        SourcesRepo::get(&upgraded, "source")
+                            .await
+                            .unwrap()
+                            .last_outcome
+                    )
+                    .unwrap(),
+                    serde_json::json!(source_status)
+                );
+            }
+            backup.close().await;
+            upgraded.close().await;
+            original.close().await;
+            let restarted = init_db(&path).await.unwrap();
+            assert_eq!(
+                SourcesRepo::get(&restarted, "source")
+                    .await
+                    .unwrap()
+                    .last_outcome,
+                Some(scrape_core::protocol::ScanOutcome::Partial)
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>("SELECT max(version) FROM _sqlx_migrations")
+                    .fetch_one(&restarted)
+                    .await
+                    .unwrap(),
+                22
+            );
+            assert_eq!(
+                std::fs::read_dir(directory.path())
+                    .unwrap()
+                    .flatten()
+                    .filter(|entry| entry
+                        .file_name()
+                        .to_string_lossy()
+                        .contains("pre-migration"))
+                    .count(),
+                1
+            );
+            restarted.close().await;
+        }
     }
 }

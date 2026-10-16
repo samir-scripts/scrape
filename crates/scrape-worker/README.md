@@ -84,4 +84,40 @@ JSON-LD relative destinations resolve against their extraction page; missing or
 unsafe destinations emit errors rather than borrowing the listing URL. Worker
 HTTP fixtures and process tests are deterministic and do not verify live providers.
 
-Worker protocol version 4 adds explicit primary rejection categories, overlapping examples, acceptance counts, and coverage termination to source summaries. Older protocol configurations fail explicitly. Rebuild the packaged sidecar with `npm run build:sidecar` after updating host/worker code. The authoritative workflow parameter is `max_jobs_per_run` (default 20, range 1–10,000); Preview/Test accepts at most 10. Each workflow stops after its own eligible budget, including refreshed records. Rejected/invalid/duplicate/blocked postings do not consume that budget. Summary counts cover examined records only and identify limit-reached coverage. The shared Rust constants also generate frontend defaults and bounds during binding export.
+Worker protocol version 5 adds enrichment warnings, unresolved candidates, provider totals, and explicit source outcomes to the rejection/coverage summaries introduced in version 4. Older protocol configurations fail explicitly. Rebuild the packaged sidecar with `npm run build:sidecar` after updating host/worker code. The authoritative workflow parameter is `max_jobs_per_run` (default 20, range 1–10,000); Preview/Test accepts at most 10. Each workflow stops after its own eligible budget, including refreshed records. Rejected/invalid/duplicate/blocked postings do not consume that budget. Summary counts cover examined records only and identify limit-reached coverage. The shared Rust constants also generate frontend defaults and bounds during binding export.
+
+
+## Bounded Greenhouse enrichment
+
+The listing request uses `content=true`. Its original ID, title and destination
+identify the provider snapshot; detail responses fill missing fields without
+replacing that identity or a nonempty listing description. `updated_at` remains
+provider edit time, never publication time. This precedence makes title/role
+rejection safe before detail requests. Field availability follows the
+[Greenhouse Job Board API](https://docs.greenhouse.io/job-board.html), with authored
+HTTP fixtures proving the extraction contract rather than claiming live coverage.
+
+The shared Rust matching evaluator distinguishes conclusive rejection from
+unresolved evidence. Known rejects and repeated canonical identities spend no
+detail allowance. Missing fields receive a detail opportunity before final
+matching; failed required evidence remains unresolved and is not persisted.
+Explicit include-unknown rules still apply after the enrichment opportunity ends.
+Accepted candidates receive optional details/branding within the remaining bound.
+The sink stops new processing/requests immediately at the acceptance cap.
+
+`WorkerLimits.enrichment` optionally sets `max_requests` (0–100, default 100) and
+`timeout_ms` (1–45,000, default 45,000). The deadline begins after listing discovery,
+includes normalization and optional branding, and bounds each detail request.
+Invalid limits fail before network access. Request counts cover detail attempts;
+branding keeps its existing bounded lookups and shares the time deadline. A
+whole-board download may still occur before candidate processing stops.
+
+Optional detail/branding failures emit `warning` events, not failed-posting errors.
+Valid details missing required fields yield partial coverage. Source summaries
+reconcile accepted + blocked + rejected + duplicates + invalid + unresolved with
+examined, group rejections by one primary reason, and keep overlapping examples
+explicit. Provider totals are separate from examined counts. Outcomes are
+`success`, `success_with_warnings`, `partial`, `failed`, and `cancelled` (the host
+owns explicit cancellation). Neither missing date/pay nor absent logo metadata
+is fabricated. Preview warnings permit saving; required-evidence failures prevent
+a successful preview. Rebuild the sidecar after changing protocol or adapters.

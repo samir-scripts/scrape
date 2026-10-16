@@ -9,7 +9,7 @@ it("explains primary rejection counts and explicitly overlapping examples throug
   const source: SourceScanStats = {
     source_id: "Authored diagnostic fixture", limit: 20, examined: 438, matched: 2,
     accepted: 2, blocked: 0, rejected: 436, duplicates: 0, invalid: 0,
-    limit_reached: false, provider_total: null, termination: "exhausted",
+    limit_reached: false, provider_total: null, termination: "exhausted", unresolved: 0, enrichment_warnings: 0, outcome: "success",
     rejections: [{ reason: "legacy_role_type", count: 436 }],
     rejection_examples: [{ title: "Software Engineer", primary: "legacy_role_type", overlapping: ["legacy_role_type", "geography"] }],
   };

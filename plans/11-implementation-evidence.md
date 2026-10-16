@@ -82,12 +82,103 @@ Native file-chooser gestures, physical pointer/IME interaction, 200% native zoom
 and live company verification were not performed. These results do not establish
 Sections 3–8 acceptance. No user database was read or modified.
 
-## Section 3 — In progress
+## Section 3 — Bounded enrichment and explicit outcomes
 
-Shared Rust partial matching now distinguishes a known rejection from unresolved
-fields, including nested OR/NOT, exclusions and multiple search fields. Complete
-matching predicates remain authoritative. Deterministic completion-property tests
-prove that any decision made from known fields holds under every tested completion
-of the missing fields. Core tests and `cargo clippy -p scrape-core --all-targets -- -D warnings`
-passed for this foundation. Adapter, outcome, migration and integration acceptance
-are still in progress; this checkpoint does not claim Section 3 completion.
+Core foundation: `1a31218`. Shared Rust partial matching distinguishes conclusive
+rejection from unresolved fields across nested OR/NOT, exclusions, selected fields,
+dates and compensation. Completion-property tests require every early decision to
+hold under the tested completions; complete assessments use existing predicates.
+
+Greenhouse now evaluates normalized listing evidence before details. Nonempty
+listing fields define the snapshot: details fill gaps and cannot rewrite original
+ID/title/destination/description. A conflicting-detail fixture proves this through
+the real worker and persistence. Known rejects and canonical duplicates spend no
+detail requests. Required eligibility gets a detail opportunity; valid detail with
+missing required evidence and failed detail remain unresolved unless the active
+rule explicitly includes unknowns. Optional enrichment failures are warnings.
+Unknown publication dates and native compensation remain unknown; provider edit
+time is not publication time.
+
+Default detail bounds remain 100 attempts/45 seconds, independently configurable
+only downward via validated worker limits. Branding shares remaining time; existing
+URL validation, pacing, cache, cancellation, suppression and persistence caps remain.
+No new detail/page requests are scheduled after acceptance reaches the cap. Listing
+response download/deserialization can still include the whole board. Provider
+`meta.total`, examined, primary rejections, duplicates, invalid, unresolved,
+accepted/blocked and enrichment warnings are separate; coverage reports bounds.
+Malformed individual records are isolated; missing listing collections fail with
+an actionable parser diagnostic.
+
+Worker protocol v5 adds warnings, provider totals and outcomes, and rejects protocol
+v4 requests. WorkflowSpec remains v4 until Section 5. Host/preview validate source
+summaries and IDs; warnings do not inflate failed-posting counts. Preview warnings
+permit save, required-evidence failures prevent a successful preview. Source and
+run outcomes distinguish success, success with warnings, partial, failed, cancelled.
+Cancelled/incomplete runs retain confirmed saved-record counts and identify unknown
+worker counters. Browser error filters exclude explicit cancellation and optional
+warnings; cancellation notifications are informational.
+
+Forward-only migration 22 adds outcome columns, preserving old CHECK constraints
+and historical NULL outcomes/status fallbacks. Populated v21 upgrades preserve job
+IDs, notes, favorites, applied status/history, suppression, source scheduling,
+run/log records and applied checksums. Tests verify the consistent v21 snapshot,
+transaction rollback after an injected migration failure, successful retry and
+idempotent restart. See [recovery](database-recovery.md): reverting code does not
+roll back a database. No user database was used.
+
+Validation actually run:
+
+- Rebuilt packaged sidecar: `node scripts/build-sidecar.mjs`.
+- `cargo test --workspace`: **345 passed** across host (148), repository/actual
+  worker integration (6), core (143), worker (22), adapters (8), bounded worker
+  processes (13), protocol/process checks (5). Local HTTP and temporary SQLite only.
+  The late-match fixture skips 140 Sales postings then accepts 20 Engineers with
+  exactly 20 detail requests; duplicate listings do not spend detail allowance.
+  Other fixtures cover unavailable optional/required details, missing required
+  fields after valid detail, explicit unknown inclusion, title-or-description
+  rescue, zero-request/time bounds, invalid limits and malformed records.
+  The two-run persistence fixture inserts then refreshes three late matches and
+  retains title/URL/date provenance, notes, favorite and applied status.
+- `cargo fmt --all --check`,
+  `cargo clippy --workspace --all-targets -- -D warnings`,
+  `cargo test --workspace export_bindings`: passed. A before/after SHA-256 comparison
+  confirmed no drift on a second Rust binding export; new TypeScript is generated.
+- `npm test`: **446 tests / 75 files passed**, plus frontend startup smoke.
+  Actual controls check optional-warning preview save eligibility, required-evidence
+  blocking, status/error filtering, cancellation and failure recovery. Replaced
+  copied log-filter test predicates with the shared production helper.
+- `npm run build`, `node scripts/check-style.mjs`, `git diff --check`: passed.
+  Production build retains the existing large-chunk advisory.
+- Seven Playwright journeys passed:
+  `e2e/enrichment-outcomes.pw.ts`, `e2e/keywords.pw.ts`, `e2e/workflows.pw.ts`
+  with `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers`. Authored simulated
+  runs cover warning/partial/cancelled labels, truthful provider/scan diagnostics,
+  error filtering and rendered text contrast in Paper/Obsidian, alongside keyword
+  save/reopen and registry regressions. Visually reviewed both new 1024px screenshots,
+  preserved in [enrichment review assets](assets/11-enrichment-review/).
+- `cargo build -p scrape`, then `node scripts/native-smoke.mjs`: passed in isolated
+  WKWebView storage, actual sidecar HTTP preview/ingestion, native persistence,
+  protected-state/blocking, cancellation/reaping/recovery, and authored protocol
+  fixtures for optional-warning/required-evidence outcome persistence, malformed
+  output, unknown IDs, UTF-8 failure, nonzero exit, missing completion, missing/
+  duplicate source summaries, timeout and partial-result retention. Native fonts
+  and local external opener also passed. Artifacts:
+  `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-V745R9`.
+- `SCRAPE_STARTUP_MODES=current19,unknown19 node scripts/test-native-startup.mjs`:
+  passed. The known historical database upgraded with protected state retained;
+  the unknown checksum history failed before database mutation. Artifacts:
+  `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-gYSRJX`
+  and `.../scrape-native-smoke-xSvUGY`.
+
+The initial sandboxed Rust run could not bind fixture sockets; the same suites
+passed with local-server access. A new missing-collection assertion exposed
+reqwest’s generic decode message; retaining serde diagnostics fixed the behavior
+without weakening the assertion. A detail-timeout fixture was adjusted to allow
+normalization before delaying the response; it still requires exactly one detail
+request and no later requests after the deadline.
+
+No live company check, original 438/436/2 reconstruction, physical native gestures,
+native screenshot/zoom review, or logo-asset validation/cache was performed here.
+Browser outcomes use labelled fictional data; native warning classification uses
+authored protocol fixtures. These do not establish Sections 4–8 acceptance. Existing
+plan 06–09 domain/data protections remain authoritative.

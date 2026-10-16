@@ -64,8 +64,10 @@ it('shows cancellation while Run all is pending and refreshes after controlled c
  render(<QueryClientProvider client={new QueryClient()}><SourcesSettings settings={DEFAULT_SETTINGS} /></QueryClientProvider>);
  const user = userEvent.setup(); await user.click(await screen.findByRole('button', { name: 'Run all' }));
  await user.click(await screen.findByRole('button', { name: 'Cancel run' })); expect(cancel).toHaveBeenCalledTimes(1);
- finish({ id: 'cancelled-fixture', status: 'partial', trigger: 'manual', started_at: '2026-10-15', finished_at: '2026-10-15', jobs_found: 1n, jobs_new: 1n, error: 'Cancelled after partial fixture result', source_id: null });
+ finish({ id: 'cancelled-fixture', status: 'cancelled', trigger: 'manual', started_at: '2026-10-15', finished_at: '2026-10-15', jobs_found: 1n, jobs_new: 1n, error: 'Cancelled after partial fixture result', source_id: null });
  await waitFor(() => expect(screen.queryByRole('button', { name: 'Cancel run' })).toBeNull());
+ expect(useToastStore.getState().toasts.some(toast => toast.type === 'error')).toBe(false);
+ expect(useToastStore.getState().toasts.some(toast => toast.title === 'RUN CANCELLED')).toBe(true);
 });
 
 it('consolidates contextual actions and reports delete failure from the menu', async () => {

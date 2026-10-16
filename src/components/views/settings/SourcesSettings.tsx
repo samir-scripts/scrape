@@ -1,3 +1,4 @@
+import { sourceNeedsAttention, runStatusBadge, runStatusLabel } from "../../../lib/status";
 import { ScanDiagnostics } from "./ScanDiagnostics";
 import type { WorkflowSpec } from "../../../bindings/WorkflowSpec";
 import { WorkflowImportButton } from "./WorkflowImportButton";
@@ -183,7 +184,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   const handleRunAll = async () => {
     if (isRecordedMode() || activeRun) return;
     setRunningAll(true);
-    try { const run = await api.runScrapeNow(); if (["failed", "partial"].includes(run.status)) throw new Error(run.error || "Run all did not complete."); }
+    try { const run = await api.runScrapeNow(); if (run.status === "cancelled") notifyInfo(run.error || "Committed results remain saved.", "RUN CANCELLED"); else if (["failed", "partial"].includes(run.status)) throw new Error(run.error || "Run all did not complete."); }
     catch (error) { notifyError(String(error), "RUN ALL DID NOT COMPLETE"); }
     finally { setRunningAll(false); refreshAfterRun(); }
   };
@@ -195,7 +196,8 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
       const runPromise = api.runSourceNow(source.id);
       await refreshInspectedRunsAndLogs(source.id);
       const run = await runPromise;
-      if (["failed", "partial"].includes(run.status)) throw new Error(run.error || "Workflow run did not complete.");
+      if (run.status === "cancelled") notifyInfo(run.error || "Committed results remain saved.", "RUN CANCELLED");
+      else if (["failed", "partial"].includes(run.status)) throw new Error(run.error || "Workflow run did not complete.");
     } catch (e) {
       notifyError(String(e), "WORKFLOW RUN FAILED");
     } finally {
@@ -248,7 +250,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
       } else if (activeTab === "custom") {
         if (s.kind !== "selector" && s.kind !== "jsonld") return false;
       } else if (activeTab === "errors") {
-        if (s.last_status !== "error") return false;
+        if (!sourceNeedsAttention(s)) return false;
       }
 
       // Search filter
@@ -266,7 +268,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   const counts = useMemo(() => {
     const ats = sources.filter((s) => s.kind === "greenhouse" || s.kind === "lever" || s.kind === "ashby").length;
     const custom = sources.filter((s) => s.kind === "selector" || s.kind === "jsonld").length;
-    const errors = sources.filter((s) => s.last_status === "error").length;
+    const errors = sources.filter((s) => sourceNeedsAttention(s)).length;
     return { all: sources.length, ats, custom, errors };
   }, [sources]);
 
@@ -486,7 +488,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       <span className={`text-xs ${statusVisual.bulletClass}`}>
                         {statusVisual.bulletGlyph}
                       </span>
-                      {s.last_status === "error" && !s.needs_review ? <button type="button"
+                      {sourceNeedsAttention(s) && !s.needs_review ? <button type="button"
                         aria-label={`View failed run for ${s.name}`} onClick={() => setInspectedSource(s)}
                         className={`text-xs font-mono uppercase font-bold underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-signal)] ${statusVisual.colorClass}`}>
                         {statusVisual.label}
@@ -619,14 +621,10 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                           <div className="flex items-center gap-1.5">
                             <span
                               className={`px-1 py-0.2 text-[9px] uppercase font-bold border ${
-                                r.status === "success"
-                                  ? "bg-[var(--color-lime)] text-[var(--color-accent-ink)] border-[var(--color-ink)]"
-                                  : r.status === "running"
-                                  ? "bg-[var(--color-paper-2)] text-[var(--color-ink)] border-[var(--color-ink)] animate-pulse"
-                                  : "bg-[var(--color-danger)] text-[var(--color-paper)] border-[var(--color-danger)]"
+                                runStatusBadge(r.status)
                               }`}
                             >
-                              {r.status}
+                              {runStatusLabel(r.status)}
                             </span>
                             <span className="text-xs">
                               {formatDateTime(r.started_at, settings)}
@@ -636,10 +634,11 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                             {r.status === "running" ? "RUNNING…" : `+${Number(r.jobs_new)}`}
                           </span>
                         </div>
-                        {r.counts && <p className="text-xs">Examined {r.counts.fetched} · rejected {r.counts.rejected} · blocked {r.counts.blocked} · inserted {r.counts.inserted} · updated {r.counts.updated} · failed {r.counts.failed} · retention removed {r.counts.retention_removed}</p>}
+                        {r.counts && <p className="text-xs">Examined {r.counts.examination_incomplete ? "at least " : ""}{r.counts.fetched} · rejected {r.counts.examination_incomplete ? "unknown" : r.counts.rejected} · blocked {r.counts.examination_incomplete ? "at least " : ""}{r.counts.blocked} · inserted {r.counts.inserted} · updated {r.counts.updated} · failed {r.counts.failed} · enrichment warnings {r.counts.enrichment_warnings ?? 0} · retention removed {r.counts.retention_removed}</p>}
+                        {r.counts?.examination_incomplete && <p className="text-xs">Worker counters are incomplete; saved-record counts are confirmed.</p>}
                         {r.error && (
-                          <span className={`text-xs truncate ${isSelected ? "text-[var(--color-danger)]" : "text-[var(--color-danger)]"}`}>
-                            ERR: {r.error}
+                          <span className={`text-xs truncate ${isSelected ? "text-[var(--color-paper)]" : r.status === "success_with_warnings" ? "text-[var(--color-warning)]" : r.status === "cancelled" ? "text-[var(--color-ink-mute)]" : "text-[var(--color-danger)]"}`}>
+                            {r.status === "success_with_warnings" ? "WARNING" : r.status === "cancelled" ? "CANCELLED" : "DETAIL"}: {r.error}
                           </span>
                         )}
                       </div>
@@ -751,6 +750,8 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       <strong className="text-[var(--color-ink)]">{ev.title}</strong> · {ev.company} · {ev.location || "Location unknown"} ({ev.role_type})
                       {ev.salary?.raw ? ` · ${ev.salary.raw}` : ""}
                     </span>
+                  ) : ev.type === "warning" ? (
+                    <span className="text-[var(--color-warning)]">{ev.eligibility_incomplete ? "INCOMPLETE ELIGIBILITY" : "WARNING"}: {ev.message}</span>
                   ) : ev.type === "error" ? (
                     <span className="text-[var(--color-danger)]">
                       ERROR: {ev.message}
@@ -764,6 +765,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
               ))
             )}
           </div>
+          <ScanDiagnostics sources={testEvents.find(event => event.type === "done")?.stats.sources} />
         </div>
       )}
 

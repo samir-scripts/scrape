@@ -28,7 +28,26 @@ pub async fn scrape_source_with(
     source: &WorkerSource,
     sink: &mut dyn FnMut(WorkerEvent) -> bool,
 ) -> Result<(), ClientError> {
-    let mut validated = |event| {
+    scrape_source_with_evidence(
+        client,
+        source,
+        &scrape_core::WorkerFilters::default(),
+        chrono::Utc::now(),
+        &scrape_core::protocol::EnrichmentLimits::default(),
+        &mut |event, _| sink(event),
+    )
+    .await
+}
+
+pub async fn scrape_source_with_evidence(
+    client: &HttpClient,
+    source: &WorkerSource,
+    filters: &scrape_core::WorkerFilters,
+    started: chrono::DateTime<chrono::Utc>,
+    limits: &scrape_core::protocol::EnrichmentLimits,
+    sink: &mut dyn FnMut(WorkerEvent, Option<scrape_core::matching::MatchingEvidence>) -> bool,
+) -> Result<(), ClientError> {
+    let mut validated = |event, evidence| {
         let event = match &event {
             WorkerEvent::Job { url, title, .. }
                 if !url::Url::parse(url).is_ok_and(|u| matches!(u.scheme(), "http" | "https")) =>
@@ -42,17 +61,32 @@ pub async fn scrape_source_with(
             }
             _ => event,
         };
-        sink(event)
+        sink(event, evidence)
     };
     match source.kind {
         SourceKind::Greenhouse => {
-            greenhouse::scrape_greenhouse_with(client, source, &mut validated).await
+            greenhouse::scrape_greenhouse_filtered_with(
+                client,
+                source,
+                filters,
+                started,
+                limits,
+                &mut validated,
+            )
+            .await
         }
-        SourceKind::Lever => lever::scrape_lever_with(client, source, &mut validated).await,
-        SourceKind::Ashby => ashby::scrape_ashby_with(client, source, &mut validated).await,
-        SourceKind::Jsonld => jsonld::scrape_jsonld_with(client, source, &mut validated).await,
+        SourceKind::Lever => {
+            lever::scrape_lever_with(client, source, &mut |event| validated(event, None)).await
+        }
+        SourceKind::Ashby => {
+            ashby::scrape_ashby_with(client, source, &mut |event| validated(event, None)).await
+        }
+        SourceKind::Jsonld => {
+            jsonld::scrape_jsonld_with(client, source, &mut |event| validated(event, None)).await
+        }
         SourceKind::Selector => {
-            selector::scrape_selector_with(client, source, &mut validated).await
+            selector::scrape_selector_with(client, source, &mut |event| validated(event, None))
+                .await
         }
     }
 }
