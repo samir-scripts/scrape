@@ -1,5 +1,4 @@
 import { Icon } from "../../ui/Icon";
-import { IconButton } from "../../ui/IconButton";
 import { RemoveJobButton } from "../../ui/RemoveJobButton";
 import { useState } from "react";
 import type { Job } from "../../../bindings/Job";
@@ -29,7 +28,7 @@ interface DiscoveredTableProps {
   selectedJobId: string | null;
   onSelectJob: (job: Job) => void;
   onUpdateStatus: (jobId: string, status: JobStatus) => void;
-  onOpenUrl: (url: string) => void;
+  onOpenUrl?: (url: string) => void;
   onToggleFavorite?: (jobId: string) => void;
   onDelete?: (job: Job) => void;
 }
@@ -72,7 +71,6 @@ export function DiscoveredTable({
   selectedJobId,
   onSelectJob,
   onUpdateStatus,
-  onOpenUrl,
   onToggleFavorite,
   onDelete,
 }: DiscoveredTableProps) {
@@ -224,11 +222,6 @@ export function DiscoveredTable({
                     >
                       IGN
                     </button>
-                    <IconButton
-                      label={`Open ${job.title} at ${job.company} in browser`}
-                      onClick={(e) => { e.stopPropagation(); onOpenUrl(job.url); }}
-                      variant="outlined"
-                    ><Icon name="external" /></IconButton>
                     {onDelete && <RemoveJobButton title={job.title} company={job.company} onClick={e => { e.stopPropagation(); onDelete(job); }} />}
                   </div>
                 </TableCell>

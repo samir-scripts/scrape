@@ -1,5 +1,3 @@
-import { Icon } from "../../ui/Icon";
-import { IconButton } from "../../ui/IconButton";
 import { RemoveJobButton } from "../../ui/RemoveJobButton";
 import type { MouseEvent } from "react";
 import type { Job } from "../../../bindings/Job";
@@ -13,8 +11,8 @@ interface JobCardProps {
   job: Job;
   selected?: boolean;
   onClick?: () => void;
-  onToggleFavorite?: (jobId: string) => void;
   onOpenUrl?: (url: string) => void;
+  onToggleFavorite?: (jobId: string) => void;
   onDelete?: (job: Job) => void;
   className?: string;
 }
@@ -24,7 +22,6 @@ export function JobCard({
   selected = false,
   onClick,
   onToggleFavorite,
-  onOpenUrl,
   onDelete,
   className = "",
 }: JobCardProps) {
@@ -81,13 +78,6 @@ export function JobCard({
         <div className="flex items-center gap-1 shrink-0 pt-0.5">
           {job.status !== "scraped" && job.status !== "viewed" && (
             <Tag status={job.status} />
-          )}
-          {onOpenUrl && (
-            <IconButton
-              label={`Open ${job.title} at ${job.company} in browser`}
-              onClick={(e: MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onOpenUrl(job.url); }}
-              variant="default"
-            ><Icon name="external" /></IconButton>
           )}
           {onToggleFavorite && (
             <FavoriteButton

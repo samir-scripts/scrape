@@ -133,7 +133,6 @@ export function DiscoveredView({
             selected={job.id === selectedJobId}
             onClick={() => setSelectedJobId(job.id)}
             onToggleFavorite={onToggleFavorite}
-            onOpenUrl={onOpenUrl}
             onDelete={onRequestDelete}
           />
         ))}

@@ -1,7 +1,7 @@
 # Settings and workflow configuration
 
 Settings provides Appearance, System, Removed & blocked jobs, and Data management.
-Scraper provides workflow configuration and the application-wide automatic-scraping pause.
+System contains the application-wide automatic-scraping pause. Scraper provides workflow configuration.
 
 `AddSourceModal` and `WorkflowSections` share one draft across Simple, Advanced and
 YAML. Simple creation is URL → actual preview → schedule/save, with an explicit

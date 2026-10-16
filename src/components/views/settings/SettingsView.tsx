@@ -23,7 +23,7 @@ const CATEGORY_TOOLTIPS: Record<SettingsCategory, string> = {
   data: "Permanently clear saved jobs or reset application data",
   removed: "Restore saved postings and manage future discovery blocks",
   appearance: "Theme, motion, dither patterns, and interface tooltips",
-  system: "Locale, timezone, time formats, and data export",
+  system: "Automatic scraping, locale, timezone, time formats, and data export",
 };
 
 export function SettingsView({

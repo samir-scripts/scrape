@@ -24,7 +24,7 @@ const paths = {
   filter: "M3 4h18v4h-3v3h-3v10l-6-3v-7H6V8H3z",
   bell: "M10 2h4v3h4v11h3v3H3v-3h3V5h4zM10 22h4",
   terminal: "M2 4h20v16H2zM6 8l4 4-4 4M13 16h5",
-  more: "M5 12a1 1 0 1 0 2 0a1 1 0 1 0-2 0M11 12a1 1 0 1 0 2 0a1 1 0 1 0-2 0M17 12a1 1 0 1 0 2 0a1 1 0 1 0-2 0",
+  more: "M12 4a1 1 0 1 0 0 2a1 1 0 0 0 0-2M12 11a1 1 0 1 0 0 2a1 1 0 0 0 0-2M12 18a1 1 0 1 0 0 2a1 1 0 0 0 0-2",
   check: "M4 12l5 5L20 6",
 } as const;
 export type IconName = keyof typeof paths;

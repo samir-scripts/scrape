@@ -9,7 +9,7 @@ import { generateScrapedJobsForSource, SAMPLE_SWE_SOURCE } from "../lib/api";
 afterEach(cleanup);
 
 describe("independent card keyboard controls", () => {
-  it("opens the stored destination without activating details; delete/favorite also stay independent", async () => {
+  it("keeps posting navigation in details; delete/favorite remain independent", async () => {
     const job = {
       ...generateScrapedJobsForSource(SAMPLE_SWE_SOURCE)[0],
       location: "Remote",
@@ -33,9 +33,8 @@ describe("independent card keyboard controls", () => {
     render(<Harness />);
     expect(screen.getByText("Remote · United States")).toBeTruthy();
     const user = userEvent.setup();
-    screen.getByRole("button", { name: /^Open .* in browser$/ }).focus();
-    await user.keyboard("{Enter}");
-    expect(open).toHaveBeenCalledExactlyOnceWith(job.url);
+    expect(screen.queryByRole("button", { name: /^Open .* in browser$/ })).toBeNull();
+    expect(open).not.toHaveBeenCalled();
     expect(details).not.toHaveBeenCalled();
     screen.getByRole("button", { name: /^Remove / }).focus();
     await user.keyboard(" ");

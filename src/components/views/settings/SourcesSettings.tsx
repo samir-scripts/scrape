@@ -15,9 +15,9 @@ import { listen } from "@tauri-apps/api/event";
 import { useUIStore } from "../../../lib/store";
 import { formatDateTime, formatTime } from "../../../lib/formatters";
 import { Button } from "../../ui/Button";
+import { Toggle } from "../../ui/Toggle";
 import { Input } from "../../ui/Input";
 import { Table, TableHead, TableHeader, TableBody, TableRow, TableCell } from "../../ui/Table";
-import { Toggle } from "../../ui/Toggle";
 import { Rule } from "../../ui/Rule";
 import { Tooltip } from "../../ui/Tooltip";
 import { Select } from "../../ui/Select";
@@ -37,10 +37,9 @@ function workflowTimezone(source: Source, settings?: Settings): string {
 
 interface SourcesSettingsProps {
   settings?: Settings;
-  onUpdateSetting?: (key: string, value: unknown) => void;
 }
 
-export function SourcesSettings({ settings, onUpdateSetting }: SourcesSettingsProps = {}) {
+export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   const queryClient = useQueryClient();
   const [sources, setSources] = useState<Source[]>([]);
   const [sourceLoadError, setSourceLoadError] = useState("");
@@ -319,7 +318,6 @@ export function SourcesSettings({ settings, onUpdateSetting }: SourcesSettingsPr
               }}
               aria-label="Add workflow"
             >
-              <Icon name="plus" />
               ADD WORKFLOW
             </Button>
           </Tooltip>
@@ -328,7 +326,6 @@ export function SourcesSettings({ settings, onUpdateSetting }: SourcesSettingsPr
             <Button variant="danger" onClick={() => api.cancelScrape().then(cancelled => notifyInfo(cancelled ? "Cancellation requested; committed results remain saved." : "No active run to cancel.")).catch(error => notifyError(String(error)))}>Cancel run</Button>
           </> : <Button variant="default" disabled={isRecordedMode() || !sources.some(source => source.enabled && !source.needs_review)} onClick={() => void handleRunAll()}>Run all</Button>}
           <WorkflowImportButton disabled={isRecordedMode() || isAddModalOpen} onImport={spec => { setEditingSource(null); setImportedSpec(spec); setIsAddModalOpen(true); }} />
-          {settings && onUpdateSetting && <Toggle label="Automatic scraping enabled" checked={settings.scraper_enabled} onChange={(enabled) => onUpdateSetting("scraper.enabled", enabled)} />}
         </div>
       </div>
 

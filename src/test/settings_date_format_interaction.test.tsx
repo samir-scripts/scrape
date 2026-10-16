@@ -38,3 +38,11 @@ it("selects a readable date example and updates the labeled time radio group", a
   expect((screen.getByRole("radio", { name: "24-hour" }) as HTMLInputElement).checked).toBe(true);
   expect(screen.getByRole("radiogroup", { name: "Time format" })).toBeTruthy();
 });
+
+it("stores the application-wide automatic scraping pause in System settings", async () => {
+  const update = vi.fn();
+  render(<SystemSettings settings={{ ...DEFAULT_SETTINGS, scraper_enabled: false }} onUpdateSetting={update} />);
+  const toggle = screen.getByRole("switch", { name: "AUTOMATIC SCRAPING ENABLED" });
+  await userEvent.setup().click(toggle);
+  expect(update).toHaveBeenCalledWith("scraper.enabled", true);
+});

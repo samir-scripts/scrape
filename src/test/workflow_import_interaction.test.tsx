@@ -27,15 +27,12 @@ it('imports only after validation, confirms replacement, preserves the old draft
  await screen.findByText(/Unsupported workflow version/);
  expect((screen.getByLabelText('Workflow name') as HTMLInputElement).value).toBe('Imported board'); expect(save).not.toHaveBeenCalled();
 });
-it('registry upload opens an unsaved draft and Run all remains available while automatic scheduling is paused', async () => {
+it('registry upload opens an unsaved draft and Run all remains available while scheduled runs are paused in Settings', async () => {
  vi.spyOn(api, 'listSources').mockResolvedValue([SAMPLE_SWE_SOURCE]);
  const run = vi.spyOn(api, 'runScrapeNow').mockRejectedValueOnce(new Error('worker failed')).mockResolvedValue({ status: 'partial', error: 'One workflow failed' } as never);
  const save = vi.spyOn(api, 'saveWorkflow'); const queryClient = new QueryClient();
- const updateSetting = vi.fn();
- render(<QueryClientProvider client={queryClient}><SourcesSettings settings={{ ...DEFAULT_SETTINGS, scraper_enabled: false }} onUpdateSetting={updateSetting} /></QueryClientProvider>);
- const pause = await screen.findByRole('switch', { name: 'Automatic scraping enabled' });
- await userEvent.setup().click(pause);
- expect(updateSetting).toHaveBeenCalledWith('scraper.enabled', true);
+ render(<QueryClientProvider client={queryClient}><SourcesSettings settings={{ ...DEFAULT_SETTINGS, scraper_enabled: false }} /></QueryClientProvider>);
+ expect(screen.queryByRole('switch', { name: 'Automatic scraping enabled' })).toBeNull();
  const user = userEvent.setup(); await user.click(await screen.findByRole('button', { name: 'Run all' }));
  await waitFor(() => expect(useToastStore.getState().toasts.some(toast => toast.title === 'RUN ALL DID NOT COMPLETE')).toBe(true));
  await user.click(screen.getByRole('button', { name: 'Run all' })); await waitFor(() => expect(run).toHaveBeenCalledTimes(2));

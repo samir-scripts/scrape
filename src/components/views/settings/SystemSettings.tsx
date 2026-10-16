@@ -130,6 +130,16 @@ export function SystemSettings({
 
       <Rule />
 
+      <section className="flex flex-col gap-3 p-4 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/30" aria-label="Automatic scraping">
+        <h3 className="font-mono text-xs font-bold uppercase tracking-wider">Automatic scraping</h3>
+        <p className="font-mono text-xs text-[var(--color-ink-mute)]">Pause or resume scheduled workflow runs. Manual runs remain available while paused.</p>
+        <Toggle
+          checked={settings.scraper_enabled}
+          onChange={(enabled) => onUpdateSetting("scraper.enabled", enabled)}
+          label="AUTOMATIC SCRAPING ENABLED"
+        />
+      </section>
+
       {/* Locale & Timezone Info */}
       <div className="flex flex-col gap-2 p-4 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 font-mono text-xs">
         <span className="font-bold uppercase tracking-wider text-[var(--color-ink)]">

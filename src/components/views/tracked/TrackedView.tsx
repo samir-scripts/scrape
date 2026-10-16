@@ -189,7 +189,6 @@ export function TrackedView({
           jobs={filteredJobs}
           selectedJobId={selectedJobId}
           onSelectJob={handleSelectJob}
-          onOpenUrl={onOpenUrl}
           onToggleFavorite={onToggleFavorite}
           onDelete={onRequestDelete}
         />

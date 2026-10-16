@@ -1,5 +1,3 @@
-import { Icon } from "../../ui/Icon";
-import { IconButton } from "../../ui/IconButton";
 import { RemoveJobButton } from "../../ui/RemoveJobButton";
 import type { JobSort } from "../../../bindings/JobSort";
 import { useState } from "react";
@@ -29,7 +27,7 @@ interface TrackedListProps {
   jobs: Job[];
   selectedJobId: string | null;
   onSelectJob: (job: Job) => void;
-  onOpenUrl: (url: string) => void;
+  onOpenUrl?: (url: string) => void;
   onToggleFavorite?: (jobId: string) => void;
   onDelete?: (job: Job) => void;
 }
@@ -78,7 +76,6 @@ export function TrackedList({
   jobs,
   selectedJobId,
   onSelectJob,
-  onOpenUrl,
   onToggleFavorite,
   onDelete,
   onRepositorySort,
@@ -261,9 +258,6 @@ export function TrackedList({
                 ))}
                 <TableCell>
                   <div className="flex gap-2">
-                    <IconButton label={`Open ${job.title} posting`} title="Open posting" onClick={() => onOpenUrl(job.url)}>
-                      <Icon name="external" />
-                    </IconButton>
                     {onDelete && (
                       <RemoveJobButton
                         title={job.title}

@@ -400,12 +400,7 @@ export default function App() {
       {view === "metrics" && <MetricsView />}
 
       {view === "scraper" && (
-        <ScraperView
-          settings={settings}
-          onUpdateSetting={(key, value) =>
-            updateSettingMutation.mutate({ key, value })
-          }
-        />
+        <ScraperView settings={settings} />
       )}
 
       {view === "settings" && (

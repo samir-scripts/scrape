@@ -77,8 +77,8 @@ describe("Job URL Navigation & Authenticity Engine", () => {
     });
   });
 
-  describe("JobCard External Navigation Action", () => {
-    it("renders an external link button on the card with onOpenUrl handler", () => {
+  describe("JobCard listing actions", () => {
+    it("keeps external navigation out of the compact card actions", () => {
       const onOpenUrl = vi.fn();
       const html = renderToStaticMarkup(
         React.createElement(JobCard, {
@@ -87,8 +87,7 @@ describe("Job URL Navigation & Authenticity Engine", () => {
         })
       );
 
-      expect(html).toContain(`aria-label="Open ${mockJob.title.replaceAll("&", "&amp;")} at ${mockJob.company} in browser"`);
-      expect(html).toContain('aria-hidden="true"');
+      expect(html).not.toContain(`aria-label="Open ${mockJob.title.replaceAll("&", "&amp;")} at ${mockJob.company} in browser"`);
     });
   });
 

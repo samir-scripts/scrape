@@ -72,6 +72,13 @@ This ledger records checks actually run for [plan 10](10-ui-workflow-refinement.
 
 ## Final verification and remaining native acceptance
 
+### Follow-up visual corrections
+
+- Restored the Add workflow button to its prior text-only shape after review found the added plus icon wrapped above the label. Changed the workflow More actions glyph to vertical dots. Kanban headers now use a flat theme surface and a two-pixel stage-color rule, without the stage-tinted background.
+- Removed the unclear external-link button from discovered cards, discovered table rows, and tracked-list rows. Opening a job's details remains the explicit route to the posting link. Updated card interaction tests to verify that listing actions omit the browser shortcut.
+- Follow-up request moved the application-wide automatic-scraping toggle from the workflow registry into Settings → System. The registry retains per-workflow enable toggles; manual Run all remains available while automatic scraping is paused. Added a System settings interaction test for persistence through `scraper.enabled`.
+- `npm run build`: passed (existing Vite large-chunk advisory). Five focused Vitest files: **31 passed**. `node scripts/check-style.mjs` and `git diff --check`: passed. Playwright workflow/Kanban visual journey could not start because the sandbox denied binding the local server (`listen EPERM`); native visual acceptance remains outstanding.
+
 - Section commits, in order: `3347e84`, `2fdb2eb`, `ed34010`, `74a72c3`, `b92c2ae`, `d6077bf`, `536570e`, `b58da25`. The final UI code passed `npm test` (**433 across 71 files** plus Vite startup smoke), `npm run build` (with the existing large-chunk advisory), `npx tsc --noEmit`, `node scripts/check-style.mjs`, and `git diff --check`. Kanban Chromium journey: **2 passed** for both themes. Sorting/layout Chromium journey: **5 passed**, including open sort menus in both themes.
 - Rust workspace tests, Clippy, formatting and binding export passed during Section 4; Sections 5–6 contain no Rust or generated-contract changes. Isolated `npm run test:native` passed the startup-retention, read-only preview, worker persistence and native font journeys. The final CUA attempt could not bind the unbundled debug process: the native app inventory did not list it, and `getApp` rejected the app name, bundle identifier and binary path. The task-owned process was stopped.
 - Actual native macOS drag, dropdown, file chooser and visual inspection therefore remain unverified, as does a 24-hour retention soak. Browser fixture journeys and the native smoke are not substitutes for these checks. No live user database was opened.

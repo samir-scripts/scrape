@@ -51,7 +51,7 @@ export function KanbanColumn({
       aria-label={`${config.label} stage`}
       className={`flex flex-col h-full overflow-hidden border border-[var(--color-ink-mute)] bg-[var(--color-paper-2)] ${isOver ? "outline outline-2 outline-[var(--color-focus)] outline-offset-[-2px]" : ""}`}
     >
-      <header style={{ borderBottomColor: config.stageAccent, backgroundColor: `color-mix(in srgb, ${config.stageAccent} 14%, var(--color-paper-2))` }} className="min-h-12 shrink-0 px-4 py-3 border-b-4 flex items-center justify-between gap-2">
+      <header style={{ borderBottomColor: config.stageAccent }} className="min-h-12 shrink-0 px-4 py-3 border-b-2 bg-[var(--color-paper-2)] flex items-center justify-between gap-2">
         <h3 className="font-bold text-sm normal-case">
           {config.label.toLowerCase()}
         </h3>
