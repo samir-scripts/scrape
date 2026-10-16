@@ -415,7 +415,7 @@ pub struct RejectionCount {
 pub struct RejectionExample {
     pub title: String,
     pub primary: crate::matching::RejectionReason,
-    /// Includes primary; these conditions overlap and must not be added together.
+    // Includes primary; these conditions overlap and must not be added together.
     pub overlapping: Vec<crate::matching::RejectionReason>,
 }
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, TS, PartialEq)]
