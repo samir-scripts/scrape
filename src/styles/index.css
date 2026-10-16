@@ -128,10 +128,13 @@
     outline-offset: 2px;
   }
 
-  /* Native scrolling: standard properties plus WKWebView fallback. */
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
+  /* Standard scrollbar colors override WebKit pseudo-elements when non-auto.
+     Use them only where the square, explicitly sized WebKit scrollbar is unavailable. */
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
+    }
   }
 
   ::-webkit-scrollbar {
