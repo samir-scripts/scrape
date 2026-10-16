@@ -143,6 +143,37 @@ pub fn sql_like_matches(haystack: &str, pattern: &str) -> bool {
     }
 }
 
+pub(crate) fn known_all(items: impl Iterator<Item = Option<bool>>) -> Option<bool> {
+    let mut unknown = false;
+    for item in items {
+        match item {
+            Some(false) => return Some(false),
+            None => unknown = true,
+            _ => {}
+        }
+    }
+    if unknown {
+        None
+    } else {
+        Some(true)
+    }
+}
+pub(crate) fn known_any(items: impl Iterator<Item = Option<bool>>) -> Option<bool> {
+    let mut unknown = false;
+    for item in items {
+        match item {
+            Some(true) => return Some(true),
+            None => unknown = true,
+            _ => {}
+        }
+    }
+    if unknown {
+        None
+    } else {
+        Some(false)
+    }
+}
+
 impl FilterExpr {
     pub fn eval(&self, ctx: &JobFilterContext) -> bool {
         match self {
@@ -198,6 +229,39 @@ impl FilterExpr {
                 }
             }
             Self::Not(expr) => !expr.eval(ctx),
+        }
+    }
+
+    /// Three-valued evaluation: absent evidence is unresolved, including under NOT.
+    pub fn eval_known(&self, ctx: &JobFilterContext, known: &[FilterField]) -> Option<bool> {
+        match self {
+            Self::FieldMatch { field, .. } | Self::FieldIn { field, .. } => {
+                known.contains(field).then(|| self.eval(ctx))
+            }
+            Self::TextMatch { pattern, negated } => {
+                let fields = [
+                    FilterField::Title,
+                    FilterField::Description,
+                    FilterField::Location,
+                ];
+                if fields
+                    .iter()
+                    .filter(|field| known.contains(field))
+                    .any(|field| sql_like_matches(&ctx.get_field_str(*field), pattern))
+                {
+                    Some(!negated)
+                } else if fields.iter().all(|field| known.contains(field)) {
+                    Some(*negated)
+                } else {
+                    None
+                }
+            }
+            Self::And(items) => known_all(items.iter().map(|item| item.eval_known(ctx, known))),
+            Self::Or(items) if items.is_empty() => Some(true), // Preserve legacy empty-OR semantics.
+            Self::Or(items) => known_any(items.iter().map(|item| item.eval_known(ctx, known))),
+            Self::Not(item) => item.eval_known(ctx, known).map(|value| !value),
+            Self::AlwaysTrue => Some(true),
+            Self::AlwaysFalse => Some(false),
         }
     }
 
@@ -814,5 +878,72 @@ mod tests {
             role_type: RoleType::FullTime,
         };
         assert!(!expr.eval(&ctx_senior));
+    }
+}
+
+#[cfg(test)]
+mod partial_evaluation_tests {
+    use super::*;
+    #[test]
+    fn known_decisions_hold_for_every_completion_of_missing_fields() {
+        let fields = [
+            FilterField::Title,
+            FilterField::Location,
+            FilterField::Description,
+            FilterField::Company,
+            FilterField::RoleType,
+        ];
+        let queries = [
+            "title LIKE '%Engineer%'",
+            "title LIKE '%Engineer%' OR description LIKE '%Rust%'",
+            "title LIKE '%Engineer%' AND NOT (description LIKE '%Senior%')",
+            "NOT (company LIKE '%Acme%' OR location LIKE '%Remote%')",
+            "role_type = 'internship' OR description LIKE '%Rust%'",
+        ];
+        let base = JobFilterContext {
+            title: "Engineer",
+            location: "Remote",
+            description: "Rust",
+            company: "Acme",
+            role_type: RoleType::FullTime,
+        };
+        for query in queries {
+            let expression = FilterExpr::parse_query(query).unwrap();
+            for mask in 0..32 {
+                let known: Vec<_> = fields
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, field)| (mask & (1 << i) != 0).then_some(*field))
+                    .collect();
+                let decision = expression.eval_known(&base, &known);
+                if let Some(expected) = decision {
+                    for completion in 0..32 {
+                        let alternate = |index, original, other| {
+                            if mask & (1 << index) != 0 || completion & (1 << index) == 0 {
+                                original
+                            } else {
+                                other
+                            }
+                        };
+                        let candidate = JobFilterContext {
+                            title: alternate(0, "Engineer", "Sales"),
+                            location: alternate(1, "Remote", "NYC"),
+                            description: alternate(2, "Rust", "Senior"),
+                            company: alternate(3, "Acme", "Other"),
+                            role_type: if mask & 16 != 0 || completion & 16 == 0 {
+                                RoleType::FullTime
+                            } else {
+                                RoleType::Internship
+                            },
+                        };
+                        assert_eq!(
+                            expression.eval(&candidate),
+                            expected,
+                            "{query}, known mask {mask}, completion {completion}"
+                        );
+                    }
+                }
+            }
+        }
     }
 }

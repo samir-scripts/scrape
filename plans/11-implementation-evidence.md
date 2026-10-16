@@ -81,3 +81,13 @@ and reports exact saved keyword rules on failure; the isolated rerun passed.
 Native file-chooser gestures, physical pointer/IME interaction, 200% native zoom,
 and live company verification were not performed. These results do not establish
 Sections 3–8 acceptance. No user database was read or modified.
+
+## Section 3 — In progress
+
+Shared Rust partial matching now distinguishes a known rejection from unresolved
+fields, including nested OR/NOT, exclusions and multiple search fields. Complete
+matching predicates remain authoritative. Deterministic completion-property tests
+prove that any decision made from known fields holds under every tested completion
+of the missing fields. Core tests and `cargo clippy -p scrape-core --all-targets -- -D warnings`
+passed for this foundation. Adapter, outcome, migration and integration acceptance
+are still in progress; this checkpoint does not claim Section 3 completion.

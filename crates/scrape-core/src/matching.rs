@@ -35,6 +35,67 @@ pub enum RejectionReason {
     InvalidCandidate,
 }
 
+/// Adapter-declared immutable evidence. Missing fields may still be supplied by details.
+#[derive(Debug, Clone, Default)]
+pub struct MatchingEvidence {
+    pub fields: Vec<FilterField>,
+    pub posting_date: bool,
+    pub compensation: bool,
+    /// A failed/exhausted opportunity can use explicitly permitted unknown values.
+    pub opportunity_exhausted: bool,
+}
+impl MatchingEvidence {
+    pub fn complete() -> Self {
+        Self {
+            fields: vec![
+                FilterField::Title,
+                FilterField::Location,
+                FilterField::Description,
+                FilterField::Company,
+                FilterField::RoleType,
+            ],
+            posting_date: true,
+            compensation: true,
+            opportunity_exhausted: true,
+        }
+    }
+    fn knows(&self, reason: RejectionReason) -> bool {
+        let has = |field| self.fields.contains(&field);
+        match reason {
+            RejectionReason::PostingDate => self.posting_date,
+            RejectionReason::Compensation => self.compensation,
+            RejectionReason::RoleType => has(FilterField::RoleType),
+            RejectionReason::Geography | RejectionReason::Workplace => {
+                has(FilterField::Location) && has(FilterField::Description)
+            }
+            RejectionReason::Experience | RejectionReason::NewGrad => {
+                has(FilterField::Description) && has(FilterField::Title)
+            }
+            RejectionReason::Sponsorship
+            | RejectionReason::WorkAuthorization
+            | RejectionReason::Clearance => has(FilterField::Description),
+            _ => false,
+        }
+    }
+}
+#[derive(Debug, Default, PartialEq)]
+pub struct MatchingAssessment {
+    pub rejected: Vec<RejectionReason>,
+    pub unresolved: Vec<RejectionReason>,
+}
+impl MatchingAssessment {
+    fn check(&mut self, reason: RejectionReason, decision: Option<bool>) {
+        let target = match decision {
+            Some(true) => return,
+            Some(false) => &mut self.rejected,
+            None => &mut self.unresolved,
+        };
+        if !target.contains(&reason) {
+            target.push(reason);
+        }
+    }
+}
+
 /// Compiles legacy expressions once and uses the same predicates for decisions and diagnostics.
 pub struct MatchingEvaluator<'a> {
     filters: &'a crate::WorkerFilters,
@@ -90,6 +151,58 @@ impl<'a> MatchingEvaluator<'a> {
         reasons.retain(|reason| seen.insert(*reason));
         reasons
     }
+    pub fn assess(
+        &self,
+        event: &WorkerEvent,
+        started: chrono::DateTime<chrono::Utc>,
+        evidence: &MatchingEvidence,
+    ) -> MatchingAssessment {
+        let WorkerEvent::Job {
+            title,
+            location,
+            company,
+            description_text,
+            role_type,
+            salary,
+            ..
+        } = event
+        else {
+            return MatchingAssessment {
+                rejected: vec![RejectionReason::InvalidCandidate],
+                unresolved: vec![],
+            };
+        };
+        let context = JobFilterContext {
+            title,
+            location,
+            company,
+            description: description_text.as_deref().unwrap_or(""),
+            role_type: *role_type,
+        };
+        let mut assessment = MatchingAssessment::default();
+        for (reason, predicate) in &self.predicates {
+            assessment.check(*reason, predicate.eval_known(&context, &evidence.fields));
+        }
+        if let Some(rules) = &self.filters.matching {
+            let structured = rules.assess(event, started, evidence);
+            for reason in structured.rejected {
+                assessment.check(reason, Some(false));
+            }
+            for reason in structured.unresolved {
+                assessment.check(reason, None);
+            }
+        }
+        if let Some(pay) = &self.filters.compensation {
+            let matches = pay.matches(salary.as_ref().map(|s| s.ranges.as_slice()).unwrap_or(&[]));
+            let known = evidence.compensation
+                || (evidence.opportunity_exhausted && pay.include_unknown && salary.is_none());
+            assessment.check(RejectionReason::Compensation, known.then_some(matches));
+        }
+        assessment
+            .unresolved
+            .retain(|reason| !assessment.rejected.contains(reason));
+        assessment
+    }
     pub fn matches_at(&self, event: &WorkerEvent, started: chrono::DateTime<chrono::Utc>) -> bool {
         self.rejection_reasons(event, started).is_empty()
     }
@@ -132,25 +245,48 @@ impl KeywordRules {
         self.rejection_reasons(context).is_empty()
     }
     pub fn rejection_reasons(&self, context: &JobFilterContext) -> Vec<RejectionReason> {
+        self.decisions(context, &MatchingEvidence::complete().fields)
+            .into_iter()
+            .filter_map(|(reason, matches)| (matches == Some(false)).then_some(reason))
+            .collect()
+    }
+    fn decisions(
+        &self,
+        context: &JobFilterContext,
+        known: &[FilterField],
+    ) -> Vec<(RejectionReason, Option<bool>)> {
+        use crate::filter::{known_all, known_any};
+        let fields = self.fields();
         let contains = |word: &str| {
-            self.fields().iter().any(|field| {
-                context
-                    .get_field_str(*field)
-                    .to_ascii_lowercase()
-                    .contains(&word.to_ascii_lowercase())
-            })
+            known_any(fields.iter().map(|field| {
+                known.contains(field).then(|| {
+                    context
+                        .get_field_str(*field)
+                        .to_ascii_lowercase()
+                        .contains(&word.to_ascii_lowercase())
+                })
+            }))
         };
-        let mut reasons = Vec::new();
-        if !self.any.is_empty() && !self.any.iter().any(|word| contains(word)) {
-            reasons.push(RejectionReason::KeywordAny);
+        let mut decisions = Vec::new();
+        if !self.any.is_empty() {
+            decisions.push((
+                RejectionReason::KeywordAny,
+                known_any(self.any.iter().map(|word| contains(word))),
+            ));
         }
-        if !self.all.iter().all(|word| contains(word)) {
-            reasons.push(RejectionReason::KeywordAll);
+        if !self.all.is_empty() {
+            decisions.push((
+                RejectionReason::KeywordAll,
+                known_all(self.all.iter().map(|word| contains(word))),
+            ));
         }
-        if self.exclude.iter().any(|word| contains(word)) {
-            reasons.push(RejectionReason::KeywordExclusion);
+        if !self.exclude.is_empty() {
+            decisions.push((
+                RejectionReason::KeywordExclusion,
+                known_any(self.exclude.iter().map(|word| contains(word))).map(|value| !value),
+            ));
         }
-        reasons
+        decisions
     }
 }
 
@@ -406,6 +542,137 @@ impl PostingRules {
             reasons.push(RejectionReason::Geography);
         }
         reasons
+    }
+    pub fn assess(
+        &self,
+        event: &WorkerEvent,
+        started: chrono::DateTime<chrono::Utc>,
+        evidence: &MatchingEvidence,
+    ) -> MatchingAssessment {
+        let WorkerEvent::Job {
+            title,
+            company,
+            location,
+            description_text,
+            role_type,
+            date_posted,
+            salary,
+            experience,
+            sponsorship,
+            work_auth,
+            clearance,
+            locations,
+            ..
+        } = event
+        else {
+            return MatchingAssessment {
+                rejected: vec![RejectionReason::InvalidCandidate],
+                unresolved: vec![],
+            };
+        };
+        let context = JobFilterContext {
+            title,
+            company,
+            location,
+            description: description_text.as_deref().unwrap_or(""),
+            role_type: *role_type,
+        };
+        let failed = self.rejection_reasons_at(event, started);
+        let mut assessment = MatchingAssessment::default();
+        if let Some(keywords) = &self.keywords {
+            for (reason, decision) in keywords.decisions(&context, &evidence.fields) {
+                assessment.check(reason, decision);
+            }
+        }
+        let active = [
+            (RejectionReason::PostingDate, self.posting_date.is_some()),
+            (RejectionReason::Compensation, self.compensation.is_some()),
+            (RejectionReason::RoleType, !self.role_types.is_empty()),
+            (RejectionReason::Workplace, !self.workplaces.is_empty()),
+            (
+                RejectionReason::Experience,
+                self.experience_min.is_some() || self.experience_max.is_some(),
+            ),
+            (
+                RejectionReason::NewGrad,
+                matches!(self.new_grad.as_deref(), Some("only" | "exclude")),
+            ),
+            (RejectionReason::Sponsorship, !self.sponsorship.is_empty()),
+            (
+                RejectionReason::WorkAuthorization,
+                !self.work_auth.is_empty(),
+            ),
+            (RejectionReason::Clearance, !self.clearance.is_empty()),
+            (
+                RejectionReason::Geography,
+                !self.countries.is_empty() || !self.regions.is_empty(),
+            ),
+        ];
+        for (reason, active) in active {
+            if !active {
+                continue;
+            }
+            let allowed_unknown = evidence.opportunity_exhausted
+                && match reason {
+                    RejectionReason::PostingDate => {
+                        date_posted.is_none()
+                            && self
+                                .posting_date
+                                .as_ref()
+                                .is_some_and(|rule| rule.include_unknown)
+                    }
+                    RejectionReason::Compensation => {
+                        salary.is_none()
+                            && self
+                                .compensation
+                                .as_ref()
+                                .is_some_and(|rule| rule.include_unknown)
+                    }
+                    RejectionReason::Experience => {
+                        experience
+                            .as_ref()
+                            .is_none_or(|e| e.min_years.is_none() && e.max_years.is_none())
+                            && self.experience_include_unknown
+                    }
+                    RejectionReason::Sponsorship => {
+                        sponsorship
+                            .as_ref()
+                            .is_none_or(|s| s.value == TriState::Unknown)
+                            && self.sponsorship.contains(&TriState::Unknown)
+                    }
+                    RejectionReason::WorkAuthorization => {
+                        work_auth
+                            .as_ref()
+                            .is_none_or(|s| s.value == WorkAuthRequirement::Unknown)
+                            && self.work_auth.contains(&WorkAuthRequirement::Unknown)
+                    }
+                    RejectionReason::Clearance => {
+                        clearance
+                            .as_ref()
+                            .is_none_or(|s| s.value == TriState::Unknown)
+                            && self.clearance.contains(&TriState::Unknown)
+                    }
+                    RejectionReason::Geography => {
+                        !locations
+                            .iter()
+                            .any(|l| l.effective_country().is_some() || l.region_code.is_some())
+                            && self.location_include_unknown
+                    }
+                    _ => false,
+                };
+            let known_positive_geography = reason == RejectionReason::Geography
+                && evidence.fields.contains(&FilterField::Location)
+                && locations
+                    .iter()
+                    .any(|l| l.effective_country().is_some() || l.region_code.is_some())
+                && !failed.contains(&reason);
+            assessment.check(
+                reason,
+                (evidence.knows(reason) || allowed_unknown || known_positive_geography)
+                    .then(|| !failed.contains(&reason)),
+            );
+        }
+        assessment
     }
     pub fn sqlite_predicates(&self) -> (Vec<String>, Vec<Bind>) {
         self.sqlite_predicates_at(chrono::Utc::now())
@@ -696,5 +963,88 @@ mod diagnostics_tests {
                 .rejection_reasons_at(&event, started)
                 .is_empty()
         );
+    }
+}
+
+#[cfg(test)]
+mod incomplete_evidence_tests {
+    use super::*;
+    fn event(title: &str, description: Option<&str>) -> WorkerEvent {
+        serde_json::from_value(serde_json::json!({"type":"job","source_id":"fixture","external_id":"1","title":title,"company":"Fixture","location":"Remote","role_type":"full_time","url":"https://fixture.test/1","description_text":description})).unwrap()
+    }
+    #[test]
+    fn missing_description_is_unresolved_even_under_exclusion_and_not() {
+        let evidence = MatchingEvidence {
+            fields: vec![FilterField::Title, FilterField::RoleType],
+            ..Default::default()
+        };
+        for value in [
+            serde_json::json!({"matching":{"keywords":{"any":["Rust"],"fields":["description"]}}}),
+            serde_json::json!({"matching":{"keywords":{"exclude":["Senior"],"fields":["description"]}}}),
+            serde_json::json!({"query":"NOT (description LIKE '%Senior%')"}),
+            serde_json::json!({"policy":{"none":[{"description":"%Senior%"}]}}),
+        ] {
+            let filters: crate::WorkerFilters = serde_json::from_value(value).unwrap();
+            let evaluator = MatchingEvaluator::new(&filters).unwrap();
+            let result = evaluator.assess(&event("Engineer", None), chrono::Utc::now(), &evidence);
+            assert!(result.rejected.is_empty());
+            assert_eq!(result.unresolved.len(), 1);
+        }
+    }
+    #[test]
+    fn known_title_can_reject_but_or_with_an_unresolved_field_cannot() {
+        let evidence = MatchingEvidence {
+            fields: vec![FilterField::Title, FilterField::RoleType],
+            ..Default::default()
+        };
+        for (value, rejected) in [
+            (
+                serde_json::json!({"matching":{"keywords":{"any":["Engineer"],"fields":["title"]}}}),
+                true,
+            ),
+            (
+                serde_json::json!({"matching":{"keywords":{"any":["Engineer"],"fields":["title","description"]}}}),
+                false,
+            ),
+            (
+                serde_json::json!({"query":"title LIKE '%Engineer%' OR description LIKE '%Engineer%'"}),
+                false,
+            ),
+            (
+                serde_json::json!({"matching":{"role_types":["internship"]}}),
+                true,
+            ),
+        ] {
+            let filters: crate::WorkerFilters = serde_json::from_value(value).unwrap();
+            let evaluator = MatchingEvaluator::new(&filters).unwrap();
+            let result = evaluator.assess(&event("Sales", None), chrono::Utc::now(), &evidence);
+            assert_eq!(!result.rejected.is_empty(), rejected);
+        }
+    }
+    #[test]
+    fn complete_assessments_reuse_boolean_predicates_and_explicit_unknowns() {
+        let filters: crate::WorkerFilters = serde_json::from_value(serde_json::json!({"matching":{"keywords":{"any":["Engineer"],"all":["Rust"],"exclude":["Senior"],"fields":["title","description"]},"posting_date":{"last_hours":720,"timezone":"UTC","include_unknown":true},"compensation":{"min_minor":5000,"interval":"hour","currency":"USD","include_unknown":true},"role_types":["internship"],"workplaces":["remote"],"experience_min":2,"countries":["US"],"new_grad":"only","sponsorship":["yes"],"clearance":["no"],"work_auth":["citizen_only"]}})).unwrap();
+        for event in [
+            event("Senior Engineer", None),
+            event("Rust Engineer", Some("Rust")),
+            event("Sales", Some("Senior")),
+        ] {
+            let evaluator = MatchingEvaluator::new(&filters).unwrap();
+            let started = chrono::DateTime::parse_from_rfc3339("2026-10-16T00:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::Utc);
+            let assessment = evaluator.assess(&event, started, &MatchingEvidence::complete());
+            assert!(assessment.unresolved.is_empty());
+            assert_eq!(
+                assessment
+                    .rejected
+                    .into_iter()
+                    .collect::<std::collections::BTreeSet<_>>(),
+                evaluator
+                    .rejection_reasons(&event, started)
+                    .into_iter()
+                    .collect()
+            );
+        }
     }
 }
