@@ -699,7 +699,7 @@ export function CustomExtractorConfig({
             >
               {browserRuntime.available ? (
                 <div>
-                  <span className="font-bold uppercase tracking-wider text-[var(--color-signal)]">
+                  <span className="font-bold uppercase tracking-wider text-[var(--color-success)]">
                     Chromium runtime detected
                   </span>
                   <p className="text-[11px] font-mono break-all mt-0.5">
@@ -775,7 +775,7 @@ export function CustomExtractorConfig({
                 <span
                   className={`px-1.5 py-0.5 text-[10px] font-mono uppercase border ${
                     selectedSession.status === "ready"
-                      ? "border-[var(--color-signal)] text-[var(--color-signal)]"
+                      ? "border-[var(--color-success)] text-[var(--color-success)]"
                       : "border-[var(--color-warning)] text-[var(--color-warning)]"
                   }`}
                 >
@@ -1048,7 +1048,7 @@ export function CustomExtractorConfig({
             {envStatus && (
               <div className="mt-2 text-xs border border-[var(--color-border)] p-2 bg-[var(--color-paper-2)]">
                 {envStatus.available ? (
-                  <p className="text-[var(--color-signal)] font-medium">
+                  <p className="text-[var(--color-success)] font-medium">
                     Environment ready: {envStatus.executable_path} (
                     {envStatus.version})
                   </p>
@@ -1078,7 +1078,7 @@ export function CustomExtractorConfig({
           </div>
 
           {trustSuccess && (
-            <div className="border border-[var(--color-signal)] p-2 text-xs text-[var(--color-signal)] bg-[var(--color-paper)]">
+            <div className="border border-[var(--color-success)] p-2 text-xs text-[var(--color-success)] bg-[var(--color-paper)]">
               {trustSuccess}
             </div>
           )}
