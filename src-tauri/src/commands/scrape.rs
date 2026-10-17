@@ -143,8 +143,13 @@ async fn terminate_preview(
     }
 }
 
+struct PreviewHost<'a> {
+    app: &'a AppHandle,
+    pool: &'a sqlx::SqlitePool,
+}
+
 async fn execute_dry_run_worker(
-    app: &AppHandle,
+    host: PreviewHost<'_>,
     sources: Vec<WorkerSource>,
     filters: WorkerFilters,
     blocked_postings: Vec<String>,
@@ -152,6 +157,8 @@ async fn execute_dry_run_worker(
     run_cancel: Arc<AtomicBool>,
     max_jobs_per_run: Option<u32>,
 ) -> Result<Vec<WorkerEvent>> {
+    let PreviewHost { app, pool } = host;
+    crate::services::script_trust::validate_execution(pool, &sources).await?;
     let config = WorkerConfig {
         version: PROTOCOL_VERSION,
         run_started_at: Some(scrape_core::now_iso()),
@@ -302,7 +309,10 @@ pub async fn test_source_transient(
         config: input.config.unwrap_or_else(|| serde_json::json!({})),
     };
     execute_dry_run_worker(
-        &app,
+        PreviewHost {
+            app: &app,
+            pool: &state.db,
+        },
         vec![worker_source],
         filters,
         crate::db::postings::suppression_snapshot(&state.db).await?,
@@ -338,7 +348,10 @@ pub async fn test_source(
         config: source.config,
     };
     execute_dry_run_worker(
-        &app,
+        PreviewHost {
+            app: &app,
+            pool: &state.db,
+        },
         vec![worker_source],
         filters,
         crate::db::postings::suppression_snapshot(&state.db).await?,
@@ -360,6 +373,32 @@ pub async fn validate_workflow(
     spec: serde_json::Value,
 ) -> Result<crate::services::workflow::WorkflowSpec> {
     validate_workflow_spec(&state.db, spec).await
+}
+
+#[tauri::command]
+pub async fn import_workflow(
+    state: State<'_, AppState>,
+    spec: serde_json::Value,
+) -> Result<crate::services::workflow::WorkflowSpec> {
+    crate::services::script_trust::quarantine_import(validate_workflow_spec(&state.db, spec).await?)
+}
+
+#[tauri::command]
+pub async fn trust_workflow_script(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    source_id: String,
+    expected_hash: String,
+    confirmed: bool,
+) -> Result<crate::db::sources::Source> {
+    let _permit = state.runner.write_permit()?;
+    let source =
+        crate::services::script_trust::trust(&state.db, &source_id, &expected_hash, confirmed)
+            .await?;
+    use tauri::Emitter;
+    app.emit("sources://changed", &source)
+        .map_err(|error| AppError::Internal(error.to_string()))?;
+    Ok(source)
 }
 
 async fn validate_workflow_spec(
@@ -468,7 +507,10 @@ pub async fn preview_workflow(
     );
 
     let events = execute_dry_run_worker(
-        &app,
+        PreviewHost {
+            app: &app,
+            pool: &state.db,
+        },
         worker_sources,
         filters,
         crate::db::postings::suppression_snapshot(&state.db).await?,
@@ -615,108 +657,21 @@ pub async fn save_workflow(
     state: State<'_, AppState>,
     spec: serde_json::Value,
     id: Option<String>,
+    imported: Option<bool>,
 ) -> Result<crate::db::sources::Source> {
     let _permit = state.runner.write_permit()?;
     let timezone: String = SettingsRepo::get_value(&state.db, "system.timezone")
         .await?
         .unwrap_or_else(|| "UTC".into());
     let spec = validate_workflow_spec(&state.db, spec).await?;
-    let input = crate::services::workflow::source_input(&spec, &timezone)?;
-    let source = if let Some(id) = id {
-        let old = SourcesRepo::get(&state.db, &id).await?;
-        if old.kind != input.kind {
-            return Err(AppError::Validation(
-                "Create a new workflow to change the source adapter".into(),
-            ));
-        }
-        SourcesRepo::update(
-            &state.db,
-            crate::db::sources::UpdateSourceInput {
-                id: id.clone(),
-                name: Some(input.name),
-                identifier: Some(input.identifier),
-                config: input.config,
-                enabled: input.enabled,
-                cadence: input.cadence,
-                cadence_cron: input.cadence_cron,
-                retention_days: input.retention_days,
-                retention_policy: input.retention_policy,
-                filters: input.filters,
-            },
-        )
-        .await?;
-        SourcesRepo::mark_reviewed(&state.db, &id).await?
-    } else {
-        SourcesRepo::create(&state.db, input).await?
-    };
-    if spec.sources.len() > 1 {
-        let inputs = crate::services::workflow::workflow_source_inputs(&spec, &timezone)?;
-        for (idx, (s, inp)) in spec.sources.iter().zip(inputs.iter()).enumerate() {
-            if s.id == source.id {
-                continue;
-            }
-            let kind_str = match serde_json::to_value(inp.kind)? {
-                serde_json::Value::String(k) => k,
-                _ => unreachable!(),
-            };
-            let config_str = inp
-                .config
-                .as_ref()
-                .map(|c| c.to_string())
-                .unwrap_or_else(|| "{}".into());
-            let enabled_val: i64 = if s.enabled { 1 } else { 0 };
-            let cadence_str = match serde_json::to_value(source.cadence)? {
-                serde_json::Value::String(c) => c,
-                _ => "global".into(),
-            };
-            let filters_str =
-                serde_json::to_string(&source.filters).unwrap_or_else(|_| "{}".into());
-            let now = scrape_core::now_iso();
-            sqlx::query(
-                r#"
-                INSERT INTO sources (
-                    id, workflow_id, kind, name, identifier, config, enabled,
-                    employer_hint, order_index, created_at, cadence, cadence_cron,
-                    next_run_at, last_run_duration_ms, retention_days, retention_policy, filters
-                )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, NULL, ?14, ?15, ?16)
-                ON CONFLICT(id) DO UPDATE SET
-                    workflow_id = excluded.workflow_id,
-                    kind = excluded.kind,
-                    name = excluded.name,
-                    identifier = excluded.identifier,
-                    config = excluded.config,
-                    enabled = excluded.enabled,
-                    employer_hint = excluded.employer_hint,
-                    order_index = excluded.order_index,
-                    cadence = excluded.cadence,
-                    cadence_cron = excluded.cadence_cron,
-                    next_run_at = excluded.next_run_at,
-                    retention_days = excluded.retention_days,
-                    retention_policy = excluded.retention_policy,
-                    filters = excluded.filters
-                "#,
-            )
-            .bind(&s.id)
-            .bind(&source.id)
-            .bind(kind_str)
-            .bind(&s.label)
-            .bind(&inp.identifier)
-            .bind(config_str)
-            .bind(enabled_val)
-            .bind(&s.employer_hint)
-            .bind(idx as i64)
-            .bind(&now)
-            .bind(&cadence_str)
-            .bind(&source.cadence_cron)
-            .bind(&source.next_run_at)
-            .bind(source.retention_days)
-            .bind(&source.retention_policy)
-            .bind(&filters_str)
-            .execute(&state.db)
-            .await?;
-        }
-    }
+    let source = crate::services::workflow::persist(
+        &state.db,
+        spec,
+        id,
+        imported.unwrap_or(false),
+        &timezone,
+    )
+    .await?;
     use tauri::Emitter;
     let _ = app.emit("sources://changed", &source);
     Ok(source)

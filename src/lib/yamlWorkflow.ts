@@ -16,7 +16,7 @@ export type { WorkflowSchedule } from "../bindings/WorkflowSchedule";
 export type { WorkflowFilters } from "../bindings/WorkflowFilters";
 export type { WorkflowRetention } from "../bindings/WorkflowRetention";
 
-export const SAMPLE_SWE_INTERNSHIP_YAML = `version: 5
+export const SAMPLE_SWE_INTERNSHIP_YAML = `version: 6
 metadata:
   name: "Cloudflare — Software Engineering Internships"
   company: "Cloudflare"
@@ -44,7 +44,7 @@ retention:
 `;
 
 export const SAMPLE_SWE_INTERNSHIP_SPEC: WorkflowSpec = {
-  version: 5,
+  version: 6,
   metadata: {
     name: "Cloudflare — Software Engineering Internships",
     company: "Cloudflare",
@@ -189,9 +189,9 @@ export function validateWorkflowYaml(
   }
 
   // Version check
-  if (json.version !== undefined && ![1, 2, 3, 4, 5].includes(json.version)) {
+  if (json.version !== undefined && ![1, 2, 3, 4, 5, 6].includes(json.version)) {
     errors.push({
-      message: `Unsupported workflow version ${json.version}. Expected supported versions: 1–5`,
+      message: `Unsupported workflow version ${json.version}. Expected supported versions: 1–6`,
     });
   }
 
@@ -427,7 +427,7 @@ export function validateWorkflowYaml(
   return {
     isValid: true,
     errors: [],
-    parsedSpec: { ...json, version: json.version ?? 5 } as WorkflowSpec,
+    parsedSpec: { ...json, version: json.version ?? 6 } as WorkflowSpec,
   };
 }
 
@@ -496,7 +496,7 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
 
   return {
     ...snapshot,
-    version: 5,
+    version: 6,
     max_jobs_per_run: snapshot?.max_jobs_per_run ?? INGESTION_LIMITS.default,
     metadata: {
       ...snapshot?.metadata,

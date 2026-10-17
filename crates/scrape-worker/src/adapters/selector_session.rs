@@ -75,7 +75,16 @@ impl SelectorSession {
         }
         let source_deadline =
             workflow_deadline.min(Instant::now() + Duration::from_secs(config.duration_s));
-        let navigation_timeout = Duration::from_secs(limits.navigation_timeout_s);
+        let source_limits =
+            scrape_core::extraction::limits(&source.config).map_err(ClientError::Configuration)?;
+        let navigation_timeout =
+            Duration::from_secs(if source.config.get("navigation_timeout_s").is_some() {
+                limits
+                    .navigation_timeout_s
+                    .min(source_limits.navigation_timeout_s)
+            } else {
+                limits.navigation_timeout_s
+            });
         let url = page_url(&Url::parse(&source.identifier)?, &source.identifier)?;
         let (html, actual) = timeout_at(
             source_deadline.min(Instant::now() + navigation_timeout),

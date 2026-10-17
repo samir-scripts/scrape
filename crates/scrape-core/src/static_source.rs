@@ -31,24 +31,17 @@ impl StaticSourceConfig {
                 })
                 .transpose()
         };
-        let max_pages = config
-            .get("max_pages")
-            .map(|v| {
-                v.as_u64()
-                    .filter(|n| (1..=100).contains(n))
-                    .ok_or("max_pages: expected 1–100")
-            })
-            .transpose()?
-            .unwrap_or(u64::from(limits.max_pages_per_source)) as u32;
-        let duration_s = config
-            .get("max_source_duration_s")
-            .map(|v| {
-                v.as_u64()
-                    .filter(|n| (10..=600).contains(n))
-                    .ok_or("max_source_duration_s: expected 10–600")
-            })
-            .transpose()?
-            .unwrap_or(limits.max_source_duration_s);
+        let source_limits = crate::extraction::limits(config)?;
+        let max_pages = if config.get("max_pages").is_some() {
+            source_limits.max_pages_per_source
+        } else {
+            limits.max_pages_per_source
+        };
+        let duration_s = if config.get("max_source_duration_s").is_some() {
+            source_limits.max_source_duration_s
+        } else {
+            limits.max_source_duration_s
+        };
         let follow_detail = config
             .get("follow_detail")
             .map(|v| v.as_bool().ok_or("follow_detail must be true or false"))

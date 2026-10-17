@@ -13,7 +13,7 @@ export const WORKFLOW_STEPS = ["Source", "Matching", "Schedule", "Review"] as co
 export type WorkflowStep = typeof WORKFLOW_STEPS[number];
 export type WorkflowDraftChange = (next: WorkflowSpec | ((current: WorkflowSpec) => WorkflowSpec)) => void;
 const newDraft = (): WorkflowSpec => ({
-  version: 5, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true },
+  version: 6, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true },
   sources: [{ id: "source-1", label: "Career Board 1", enabled: true, extractor: { kind: "jsonld", url: "" } }],
   schedule: { cadence: "daily", time: "09:00", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, run_on_startup: false },
   filters: {}, retention: { days: 30, policy: "untracked_only" },
@@ -31,6 +31,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   const [operation, setOperation] = useState<"detect" | "preview" | "validate" | "save" | "run" | null>(null);
   const [pendingImport, setPendingImport] = useState<WorkflowSpec | null>(null);
   const [saved, setSaved] = useState<Source | null>(null), [dirty, setDirty] = useState(false);
+  const imported = useRef(false);
   const content = useRef<HTMLDivElement>(null), revision = useRef(0), request = useRef<string | null>(null);
   const draftRef = useRef(draft); draftRef.current = draft;
   const cancel = () => {
@@ -40,6 +41,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   const invalidate = () => { cancel(); setPreview(null); setPreviewRevision(null); };
   useEffect(() => {
     if (isOpen) {
+      imported.current = !!initialSpec;
       setInputSession(value => value + 1);
       invalidate();
       const initial = initialSpec || (initialSource ? sourceToWorkflowSpec(initialSource) : newDraft());
@@ -115,6 +117,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     setError("Fix the highlighted inputs before continuing."); return true;
   };
   const applyImport = (spec: WorkflowSpec) => {
+    imported.current = true;
     setInputSession(value => value + 1);
     change(spec); setDetected(spec.sources?.[0]?.extractor.url || ""); setYamlState(null); setStep("Source"); setVisited(0); setPendingImport(null);
   };
@@ -127,6 +130,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
       const validated = await importWorkflowYaml(yaml || "");
       if (revision.current !== current) return;
       setInputSession(value => value + 1);
+      imported.current = true;
       change(validated); setDetected(validated.sources?.[0]?.extractor.url || ""); setYamlState(null);
     } catch (error) { if (revision.current === current) report(error); }
     finally { if (revision.current === current) setOperation(null); }
@@ -191,7 +195,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     if (!canSave || previewRevision !== revision.current) return;
     const current = revision.current; setOperation("save"); setError("");
     try {
-      const source = await api.saveWorkflow(draft, initialSource?.id); onSourceSaved();
+      const source = await api.saveWorkflow(draft, initialSource?.id, imported.current); onSourceSaved();
       if (revision.current === current) { setSaved(source); setDirty(false); }
     } catch (error) { if (revision.current === current) report(error); }
     finally { if (revision.current === current) setOperation(null); }

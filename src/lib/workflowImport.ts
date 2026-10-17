@@ -6,5 +6,5 @@ import { api } from "./api";
 export async function importWorkflowYaml(text: string) {
   const document = parseDocument(text);
   if (document.errors.length) throw new Error(document.errors.map(error => error.message).join("; "));
-  return api.validateWorkflow(document.toJSON());
+  return api.importWorkflow(document.toJSON());
 }

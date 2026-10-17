@@ -364,6 +364,9 @@ async fn upgrade_workflow_settings_v5(pool: &SqlitePool) -> Result<()> {
                 if validated_spec.sources.len() == 1 && validated_spec.sources[0].id == "default" {
                     validated_spec.sources[0].id = id.clone();
                 }
+                // Preserve the historical v5 storage backfill. New reads/saves
+                // normalize through the current resolver without rewriting old rows.
+                validated_spec.version = 5;
                 let max_jobs = validated_spec.max_jobs_per_run.unwrap_or(20);
                 config["__workflow_spec"] = serde_json::to_value(&validated_spec)?;
                 Ok((serde_json::to_string(&config)?, max_jobs))

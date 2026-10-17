@@ -53,6 +53,10 @@ impl CoordinatorSession {
         workflow_cap: u32,
         workflow_deadline: Instant,
     ) -> Result<Self, ClientError> {
+        match scrape_core::extraction::mode(&source.config).map_err(ClientError::Configuration)? {
+            scrape_core::extraction::ExtractionMode::Static => {},
+            mode => return Err(ClientError::Configuration(format!("{mode:?} extraction is unavailable in this build; configure static extraction or install a build with the required runner"))),
+        }
         let enrichment_limits = extraction_limits.enrichment.clone().unwrap_or_default();
         let limit = if dry_run {
             workflow_cap.min(PREVIEW_MAX_JOBS)
@@ -601,6 +605,15 @@ impl SourceCoordinator {
         started: DateTime<Utc>,
     ) -> Result<Self, String> {
         config.limits.validate()?;
+        let mut limits = config.limits.clone();
+        for source in &config.sources {
+            let source_limits = scrape_core::extraction::limits(&source.config)?;
+            if source.config.get("max_workflow_duration_s").is_some() {
+                limits.max_workflow_duration_s = limits
+                    .max_workflow_duration_s
+                    .min(source_limits.max_workflow_duration_s);
+            }
+        }
         let configured_cap = match config.max_jobs_per_run {
             Some(cap) => validate_job_limit(cap)?,
             None => {
@@ -630,7 +643,7 @@ impl SourceCoordinator {
             filters_by_source: config.filters_by_source.clone(),
             blocked: config.blocked_postings.iter().cloned().collect(),
             started,
-            limits: config.limits.clone(),
+            limits,
             dry_run,
             max_jobs_per_run: cap,
             starting_source_index: config.starting_source_index.unwrap_or(0),
@@ -1079,6 +1092,38 @@ impl SourceCoordinator {
 #[cfg(test)]
 mod deadline_tests {
     use super::*;
+    #[tokio::test]
+    async fn source_workflow_override_stops_before_network_and_cannot_raise_global_bound() {
+        let mut config = WorkerConfig {
+            sources: vec![WorkerSource {
+                id: "bounded".into(),
+                kind: SourceKind::Selector,
+                name: "Fixture".into(),
+                identifier: "not-a-url".into(),
+                config: serde_json::json!({"max_workflow_duration_s":30}),
+            }],
+            limits: WorkerLimits {
+                max_workflow_duration_s: 120,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut coordinator =
+            SourceCoordinator::new(HttpClient::new(1, 0), &config, false, Utc::now()).unwrap();
+        let stats = coordinator
+            .run_at(
+                |_| Ok(()),
+                Instant::now() - std::time::Duration::from_secs(31),
+            )
+            .await
+            .unwrap();
+        assert_eq!(stats.sources[0].termination, CoverageTermination::TimeLimit);
+        assert_eq!(stats.sources[0].examined, 0);
+        config.sources[0].config["max_workflow_duration_s"] = 600.into();
+        let coordinator =
+            SourceCoordinator::new(HttpClient::new(1, 0), &config, false, Utc::now()).unwrap();
+        assert_eq!(coordinator.limits.max_workflow_duration_s, 120);
+    }
     #[tokio::test]
     async fn expired_workflow_deadline_stops_before_initializing_any_source() {
         let config = WorkerConfig {

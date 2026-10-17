@@ -212,6 +212,8 @@ pub fn run() {
             commands::scrape::test_source,
             commands::scrape::test_source_transient,
             commands::scrape::validate_workflow,
+            commands::scrape::import_workflow,
+            commands::scrape::trust_workflow_script,
             commands::scrape::preview_workflow,
             commands::scrape::save_workflow,
             commands::scrape::cancel_workflow_preview,
@@ -262,6 +264,12 @@ mod bindings_test {
         scrape_core::WorkerSource::export().unwrap();
         scrape_core::WorkerFilters::export().unwrap();
         scrape_core::WorkerLimits::export().unwrap();
+        scrape_core::extraction::ExtractionMode::export().unwrap();
+        scrape_core::extraction::ScriptRuntime::export().unwrap();
+        scrape_core::extraction::WorkflowScriptConfig::export().unwrap();
+        scrape_core::protocol::BrowserRuntimeStatus::export().unwrap();
+        scrape_core::protocol::ExtractorTestResult::export().unwrap();
+        scrape_core::protocol::ExtractorSampleCandidate::export().unwrap();
         scrape_core::WorkerEvent::export().unwrap();
         scrape_core::WorkerStats::export().unwrap();
         db::jobs::Job::export().unwrap();

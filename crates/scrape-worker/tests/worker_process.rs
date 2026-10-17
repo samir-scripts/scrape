@@ -5,6 +5,52 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 #[test]
+fn unavailable_extraction_modes_fail_explicitly_before_static_fallback() {
+    for mode in ["browser", "script"] {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+            .arg("--stdin")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let config = serde_json::json!({"version":scrape_core::PROTOCOL_VERSION,"sources":[{"id":"fixture","name":"Fixture","kind":"selector","identifier":"http://127.0.0.1:9/must-not-fetch","config":{"mode":mode,"item":"article","title":"h2","link":"a"}}]});
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(&serde_json::to_vec(&config).unwrap())
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        let events: Vec<scrape_core::WorkerEvent> = String::from_utf8(output.stdout)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert!(events.iter().any(|event| matches!(event, scrape_core::WorkerEvent::Error { message, retryable:false, .. } if message.contains("extraction is unavailable"))));
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, scrape_core::WorkerEvent::Job { .. })));
+        let done = events
+            .iter()
+            .find_map(|event| {
+                if let scrape_core::WorkerEvent::Done { stats } = event {
+                    Some(stats)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        assert_eq!(done.sources_failed, 1);
+        assert_eq!(done.sources[0].examined, 0);
+        assert_eq!(
+            done.sources[0].termination,
+            scrape_core::protocol::CoverageTermination::Failed
+        );
+    }
+}
+
+#[test]
 fn invalid_cli_job_limits_fail_before_provider_requests() {
     for limit in ["0", "10001"] {
         let output = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))

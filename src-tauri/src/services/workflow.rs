@@ -1,11 +1,13 @@
-use crate::db::sources::CreateSourceInput;
+use crate::db::sources::{CreateSourceInput, SourcesRepo};
 use crate::error::{AppError, Result};
 use scrape_core::enrich::CompensationFilter;
+pub use scrape_core::extraction::{ExtractionMode, WorkflowScriptConfig};
 use scrape_core::matching::PostingRules;
 use scrape_core::{RoleType, SourceCadence, SourceKind, WorkerFilters};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
+pub const WORKFLOW_SPEC_VERSION: u32 = 6;
 
 macro_rules! optional_fields {
     ($name:ident { $($field:ident: $kind:ty),* $(,)? }) => {
@@ -81,6 +83,72 @@ pub struct WorkflowExtractor {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub exclude_url_patterns: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub mode: Option<ExtractionMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub id_selector: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub id_regex: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub date_regex: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub description_regex: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub title_attribute: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub url_attribute: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub location_attribute: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub salary_attribute: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub description_attribute: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub date_attribute: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub id_attribute: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub detail_selector: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub next_page_selector: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub load_more_selector: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub wait_for_selector: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable, type = "number")]
+    pub navigation_timeout_s: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub max_pages: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable, type = "number")]
+    pub max_source_duration_s: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable, type = "number")]
+    pub max_workflow_duration_s: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub script: Option<WorkflowScriptConfig>,
 }
 optional_fields!(WorkflowSchedule { cadence: SourceCadence, time: String, cron: String, timezone: String, weekdays: Vec<u8>, run_on_startup: bool });
 optional_fields!(WorkflowFilters { role_types: Vec<RoleType>, include_keywords: Vec<String>, exclude_keywords: Vec<String>, locations: Vec<String>, query: String, policy: Value, compensation: CompensationFilter, matching: PostingRules, experience_min: u32, experience_max: u32 });
@@ -266,11 +334,11 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
             }
         }
         value = serde_json::json!({"version":3,"metadata":{"name":value.get("company"),"company":value.get("company")},"extractor":extractor,"schedule":{"cadence":value.pointer("/cadence/type").cloned().unwrap_or(Value::String("global".into())),"cron":value.pointer("/cadence/cron")}});
-    } else if matches!(version, 2..=5) {
-        // Will be migrated to v5 below if submitted_version <= 4
+    } else if matches!(version, 2..=6) {
+        // Legacy extractor roots become source collections before v6 decoding.
     } else {
         return Err(AppError::Validation(format!(
-            "version: unsupported workflow version {version}; supported versions are 1, 2, 3, 4, 5"
+            "version: unsupported workflow version {version}; supported versions are 1, 2, 3, 4, 5, 6"
         )));
     }
     if submitted_version <= 4 && value.get("sources").is_none() {
@@ -300,7 +368,32 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
             obj.remove("extractor");
         }
     }
-    value["version"] = Value::from(5);
+    // YAML aliases normalize to the existing selector kind; the database CHECK
+    // and provider identity vocabulary remain unchanged.
+    if let Some(sources) = value.get_mut("sources").and_then(Value::as_array_mut) {
+        for source in sources {
+            if let Some(extractor) = source.get_mut("extractor").and_then(Value::as_object_mut) {
+                if let Some(alias) = extractor
+                    .get("kind")
+                    .and_then(Value::as_str)
+                    .filter(|kind| matches!(*kind, "browser" | "script"))
+                    .map(str::to_owned)
+                {
+                    if extractor
+                        .get("mode")
+                        .is_some_and(|mode| mode != &Value::String(alias.clone()))
+                    {
+                        return Err(AppError::Validation(
+                            "extractor.mode: conflicts with extractor.kind alias".into(),
+                        ));
+                    }
+                    extractor.insert("kind".into(), Value::String("selector".into()));
+                    extractor.insert("mode".into(), Value::String(alias));
+                }
+            }
+        }
+    }
+    value["version"] = Value::from(WORKFLOW_SPEC_VERSION);
     let text = serde_json::to_string(&value)?;
     let mut deserializer = serde_json::Deserializer::from_str(&text);
     let mut spec: WorkflowSpec = serde_path_to_error::deserialize(&mut deserializer)
@@ -310,7 +403,7 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
             == Some(SourceCadence::Global)
     {
         return Err(AppError::Validation(
-            "schedule.cadence: version 4 and 5 must use an explicit workflow schedule".into(),
+            "schedule.cadence: version 4 and newer must use an explicit workflow schedule".into(),
         ));
     }
     spec.max_jobs_per_run = Some(
@@ -320,10 +413,10 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
         )
         .map_err(AppError::Validation)?,
     );
-    // Version 5 is fully explicit. These defaults apply only to fields omitted
+    // Versions 5 and 6 are fully explicit. Defaults apply only to fields omitted
     // by the submitted document; stored/imported v1-v3 values are resolved by
     // the compatibility entry point before they reach this normalizer.
-    if spec.version == 5 {
+    if spec.version == WORKFLOW_SPEC_VERSION {
         let schedule = spec.schedule.get_or_insert_with(WorkflowSchedule::default);
         schedule.cadence.get_or_insert(SourceCadence::Daily);
         schedule.time.get_or_insert_with(|| "09:00".into());
@@ -344,7 +437,7 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
             .policy
             .get_or_insert_with(|| "untracked_only".into());
     }
-    spec.version = 5;
+    spec.version = WORKFLOW_SPEC_VERSION;
     spec.metadata.enabled.get_or_insert(true);
     spec.metadata.name = spec.metadata.name.trim().into();
     if spec.metadata.name.is_empty() {
@@ -357,7 +450,7 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
             "sources: must contain at least one source".into(),
         ));
     }
-    if !spec.sources.iter().any(|s| s.enabled) {
+    if spec.metadata.enabled == Some(true) && !spec.sources.iter().any(|s| s.enabled) {
         return Err(AppError::Validation(
             "sources: at least one source must be enabled".into(),
         ));
@@ -514,7 +607,7 @@ pub fn validate_legacy_import(
         *filters = serde_json::from_value(Value::Object(merged))
             .map_err(|e| AppError::Validation(format!("workflow.filters: {e}")))?;
     }
-    spec.version = 5;
+    spec.version = WORKFLOW_SPEC_VERSION;
     let spec = validate(serde_json::to_value(spec)?, default_timezone)?;
     let input = source_input(&spec, default_timezone)?;
     crate::services::runner::resolve_worker_filters(
@@ -615,6 +708,22 @@ pub fn extract_source_input(
         ("location_regex", &extractor.location_regex),
         ("salary_regex", &extractor.salary_regex),
         ("url_pattern", &extractor.url_pattern),
+        ("id", &extractor.id_selector),
+        ("id_regex", &extractor.id_regex),
+        ("date_regex", &extractor.date_regex),
+        ("description_regex", &extractor.description_regex),
+        ("title_attribute", &extractor.title_attribute),
+        ("link_attribute", &extractor.url_attribute),
+        ("location_attribute", &extractor.location_attribute),
+        ("salary_attribute", &extractor.salary_attribute),
+        ("description_attribute", &extractor.description_attribute),
+        ("date_attribute", &extractor.date_attribute),
+        ("id_attribute", &extractor.id_attribute),
+        ("detail", &extractor.detail_selector),
+        ("next_page", &extractor.next_page_selector),
+        ("load_more", &extractor.load_more_selector),
+        ("wait_for", &extractor.wait_for_selector),
+        ("session_id", &extractor.session_id),
     ] {
         if let Some(value) = value {
             config[key] = Value::String(value.clone());
@@ -625,6 +734,27 @@ pub fn extract_source_input(
     }
     if let Some(patterns) = &extractor.exclude_url_patterns {
         config["exclude_url_patterns"] = serde_json::to_value(patterns)?;
+    }
+    for (key, value) in [
+        ("mode", serde_json::to_value(extractor.mode)?),
+        ("script", serde_json::to_value(&extractor.script)?),
+        (
+            "navigation_timeout_s",
+            serde_json::to_value(extractor.navigation_timeout_s)?,
+        ),
+        ("max_pages", serde_json::to_value(extractor.max_pages)?),
+        (
+            "max_source_duration_s",
+            serde_json::to_value(extractor.max_source_duration_s)?,
+        ),
+        (
+            "max_workflow_duration_s",
+            serde_json::to_value(extractor.max_workflow_duration_s)?,
+        ),
+    ] {
+        if !value.is_null() {
+            config[key] = value;
+        }
     }
     validate_config(extractor.kind, &config)?;
     let schedule = spec.schedule.clone().unwrap_or_default();
@@ -684,7 +814,7 @@ pub fn extract_source_input(
         name: source.label.clone(),
         identifier,
         config: Some(config),
-        enabled: Some(source.enabled),
+        enabled: Some(source.enabled && spec.metadata.enabled.unwrap_or(true)),
         cadence: Some(cadence),
         cadence_cron: schedule.cron,
         retention_days: Some(i64::from(retention.days.unwrap_or(30))),
@@ -699,6 +829,187 @@ pub fn extract_source_input(
         )?),
     })
 }
+/// Save through the same persistence path used by IPC, with import trust explicit.
+pub async fn persist(
+    pool: &sqlx::SqlitePool,
+    mut spec: WorkflowSpec,
+    id: Option<String>,
+    imported: bool,
+    timezone: &str,
+) -> Result<crate::db::sources::Source> {
+    // Never reparent a source belonging to another workflow through an import.
+    for entry in &spec.sources {
+        let owner: Option<Option<String>> =
+            sqlx::query_scalar("SELECT workflow_id FROM sources WHERE id=?")
+                .bind(&entry.id)
+                .fetch_optional(pool)
+                .await?;
+        if owner.is_some_and(|owner| owner.as_deref() != id.as_deref()) {
+            return Err(AppError::Validation(format!(
+                "sources.{}: belongs to another workflow; use a distinct source ID",
+                entry.id
+            )));
+        }
+    }
+    let primary_index = spec
+        .sources
+        .iter()
+        .position(|source| source.enabled)
+        .unwrap_or(0);
+    let input = source_input(&spec, timezone)?;
+    let source = if let Some(id) = id {
+        let old = SourcesRepo::get(pool, &id).await?;
+        if old.kind != input.kind {
+            return Err(AppError::Validation(
+                "Create a new workflow to change the source adapter".into(),
+            ));
+        }
+        SourcesRepo::update_with_origin(
+            pool,
+            crate::db::sources::UpdateSourceInput {
+                id: id.clone(),
+                name: Some(input.name),
+                identifier: Some(input.identifier),
+                config: input.config,
+                enabled: input.enabled,
+                cadence: input.cadence,
+                cadence_cron: input.cadence_cron,
+                retention_days: input.retention_days,
+                retention_policy: input.retention_policy,
+                filters: input.filters,
+            },
+            imported,
+        )
+        .await?;
+        SourcesRepo::mark_reviewed(pool, &id).await?
+    } else {
+        SourcesRepo::create(pool, input).await?
+    };
+    if spec.sources[primary_index].id != source.id {
+        if spec
+            .sources
+            .iter()
+            .enumerate()
+            .any(|(index, entry)| index != primary_index && entry.id == source.id)
+        {
+            return Err(AppError::Validation(
+                "sources: keep the parent source identity when reordering this workflow".into(),
+            ));
+        }
+        spec.sources[primary_index].id = source.id.clone();
+        let canonical = source_input(&spec, timezone)?;
+        SourcesRepo::update_with_origin(
+            pool,
+            crate::db::sources::UpdateSourceInput {
+                id: source.id.clone(),
+                name: None,
+                identifier: None,
+                config: canonical.config,
+                enabled: None,
+                cadence: None,
+                cadence_cron: None,
+                retention_days: None,
+                retention_policy: None,
+                filters: None,
+            },
+            imported,
+        )
+        .await?;
+    }
+    if spec.sources.len() > 1 {
+        let inputs = crate::services::workflow::workflow_source_inputs(&spec, timezone)?;
+        for (idx, (s, inp)) in spec.sources.iter().zip(inputs.iter()).enumerate() {
+            if s.id == source.id {
+                continue;
+            }
+            let kind_str = match serde_json::to_value(inp.kind)? {
+                serde_json::Value::String(k) => k,
+                _ => unreachable!(),
+            };
+            let config_str = inp
+                .config
+                .as_ref()
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "{}".into());
+            let enabled_val: i64 = if s.enabled { 1 } else { 0 };
+            let cadence_str = match serde_json::to_value(source.cadence)? {
+                serde_json::Value::String(c) => c,
+                _ => "global".into(),
+            };
+            let filters_str =
+                serde_json::to_string(&source.filters).unwrap_or_else(|_| "{}".into());
+            let now = scrape_core::now_iso();
+            let old: Option<(bool, Option<String>)> = sqlx::query_as(
+                "SELECT script_trusted,script_sha256 FROM sources WHERE id=? AND workflow_id=?",
+            )
+            .bind(&s.id)
+            .bind(&source.id)
+            .fetch_optional(pool)
+            .await?;
+            let (trusted, script_hash) = crate::services::script_trust::saved_state(
+                inp.config.as_ref().unwrap_or(&serde_json::Value::Null),
+                old.as_ref().is_some_and(|old| old.0),
+                old.as_ref().and_then(|old| old.1.as_deref()),
+                imported,
+            )?;
+            let needs_review = script_hash.is_some() && !trusted;
+            sqlx::query(
+                r#"
+                INSERT INTO sources (
+                    id, workflow_id, kind, name, identifier, config, enabled,
+                    employer_hint, order_index, created_at, cadence, cadence_cron,
+                    next_run_at, last_run_duration_ms, retention_days, retention_policy, filters,
+                    script_trusted, script_sha256, needs_review
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, NULL, ?14, ?15, ?16, ?17, ?18, ?19)
+                ON CONFLICT(id) DO UPDATE SET
+                    workflow_id = excluded.workflow_id,
+                    kind = excluded.kind,
+                    name = excluded.name,
+                    identifier = excluded.identifier,
+                    config = excluded.config,
+                    enabled = excluded.enabled,
+                    employer_hint = excluded.employer_hint,
+                    order_index = excluded.order_index,
+                    cadence = excluded.cadence,
+                    cadence_cron = excluded.cadence_cron,
+                    next_run_at = excluded.next_run_at,
+                    retention_days = excluded.retention_days,
+                    retention_policy = excluded.retention_policy,
+                    filters = excluded.filters,
+                    script_trusted = excluded.script_trusted,
+                    script_sha256 = excluded.script_sha256,
+                    needs_review = excluded.needs_review
+                "#,
+            )
+            .bind(&s.id)
+            .bind(&source.id)
+            .bind(kind_str)
+            .bind(&s.label)
+            .bind(&inp.identifier)
+            .bind(config_str)
+            .bind(if needs_review { 0 } else { enabled_val })
+            .bind(&s.employer_hint)
+            .bind(idx as i64)
+            .bind(&now)
+            .bind(&cadence_str)
+            .bind(&source.cadence_cron)
+            .bind(if needs_review { None } else { source.next_run_at.as_deref() })
+            .bind(source.retention_days)
+            .bind(&source.retention_policy)
+            .bind(&filters_str)
+            .bind(trusted)
+            .bind(&script_hash)
+            .bind(needs_review)
+            .execute(pool)
+            .await?;
+        }
+    }
+    crate::services::script_trust::reconcile_workflow(pool, &source.id).await?;
+    let source = SourcesRepo::get(pool, &source.id).await?;
+    Ok(source)
+}
+
 pub fn normalize_source_config(config: &Value) -> Result<Value> {
     let mut config = if config.is_null() {
         serde_json::json!({})
@@ -755,7 +1066,24 @@ pub fn validated_stored_config(kind: SourceKind, config: &Value) -> Result<Value
 }
 
 pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
+    if !config.is_object() {
+        return Err(AppError::Validation(
+            "extractor.source_config: expected mapping".into(),
+        ));
+    }
+    let mode = scrape_core::extraction::mode(config).map_err(AppError::Validation)?;
+    if kind != SourceKind::Selector && mode != ExtractionMode::Static {
+        return Err(AppError::Validation(
+            "extractor.mode: browser and script modes require kind: selector".into(),
+        ));
+    }
     let allowed = [
+        "mode",
+        "script",
+        "session_id",
+        "navigation_timeout_s",
+        "max_workflow_duration_s",
+        "load_more",
         "url",
         "item",
         "title",
@@ -818,6 +1146,60 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
             )));
         }
     }
+    if kind == SourceKind::Selector {
+        scrape_core::extraction::limits(config).map_err(AppError::Validation)?;
+        if let Some(session) = config.get("session_id") {
+            if mode == ExtractionMode::Static
+                || session.as_str().is_none_or(|id| {
+                    id.is_empty()
+                        || id.len() > 128
+                        || !id
+                            .bytes()
+                            .all(|c| c.is_ascii_alphanumeric() || b"-_".contains(&c))
+                })
+            {
+                return Err(AppError::Validation("extractor.session_id: use a saved session reference in browser or script mode; credentials and file paths are not accepted".into()));
+            }
+        }
+        if mode == ExtractionMode::Script {
+            scrape_core::extraction::script(config).map_err(AppError::Validation)?;
+            for key in [
+                "item",
+                "title",
+                "link",
+                "location",
+                "salary",
+                "description",
+                "date",
+                "id",
+                "hydration_script",
+                "hydration_pointer",
+                "hydration_fields",
+                "detail",
+                "next_page",
+                "load_more",
+                "wait_for",
+            ] {
+                if config.get(key).is_some() {
+                    return Err(AppError::Validation(format!(
+                        "extractor.{key}: DOM navigation/extraction is owned by the custom script"
+                    )));
+                }
+            }
+        }
+        if let Some(value) = config.get("load_more") {
+            if mode != ExtractionMode::Browser {
+                return Err(AppError::Validation(
+                    "extractor.load_more: requires browser mode".into(),
+                ));
+            }
+            let query = value.as_str().ok_or_else(|| {
+                AppError::Validation("extractor.load_more: expected locator string".into())
+            })?;
+            scrape_core::locator::QueryEngine::parse_elements(query)
+                .map_err(|error| AppError::Validation(format!("extractor.load_more: {error}")))?;
+        }
+    }
     if config.get("max_pages").is_some_and(|value| {
         value
             .as_u64()
@@ -827,9 +1209,11 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
             "extractor.source_config.max_pages: expected 1–100".into(),
         ));
     }
-    if kind == SourceKind::Selector {
+    if kind == SourceKind::Selector && mode != ExtractionMode::Script {
+        let mut static_config = config.clone();
+        static_config.as_object_mut().unwrap().remove("load_more");
         scrape_core::static_source::StaticSourceConfig::parse(
-            config,
+            &static_config,
             &scrape_core::WorkerLimits::default(),
         )
         .map_err(AppError::Validation)?;
@@ -871,6 +1255,7 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
         }
     }
     if kind == SourceKind::Selector
+        && mode != ExtractionMode::Script
         && hydration.is_none()
         && ["item", "title", "link"].iter().any(|key| {
             config
@@ -901,6 +1286,80 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn extraction_modes_are_versioned_lossless_and_secrets_are_rejected() {
+        let value = serde_json::json!({"version":6,"metadata":{"name":"Browser fixture"},"sources":[{"id":"fixture","label":"Fixture","enabled":true,"extractor":{"kind":"browser","url":"https://fixture.test/jobs","job_container":"//article","title_selector":".title","url_selector":"a","url_attribute":"href","id_selector":".","id_attribute":"data-id","date_regex":"(?P<value>.+)","date_selector":"time","next_page_selector":"a.next@href","load_more_selector":"button.more","wait_for_selector":"main","navigation_timeout_s":30,"max_pages":2,"max_source_duration_s":60,"max_workflow_duration_s":120,"session_id":"fixture-login"}}]});
+        let spec = validate(value.clone(), "UTC").unwrap();
+        assert_eq!(spec.version, 6);
+        assert_eq!(spec.sources[0].extractor.kind, SourceKind::Selector);
+        let config = source_input(&spec, "UTC").unwrap().config.unwrap();
+        assert_eq!(config["mode"], "browser");
+        assert_eq!(config["link_attribute"], "href");
+        assert_eq!(config["session_id"], "fixture-login");
+        assert_eq!(
+            serde_json::to_value(validate(serde_json::to_value(&spec).unwrap(), "UTC").unwrap())
+                .unwrap(),
+            serde_json::to_value(spec).unwrap()
+        );
+        for field in [
+            "cookies",
+            "headers",
+            "authorization",
+            "storage_state",
+            "token",
+        ] {
+            for nested in [false, true] {
+                let mut invalid = value.clone();
+                if nested {
+                    invalid["sources"][0]["extractor"]["source_config"] =
+                        serde_json::json!({field:"secret"});
+                } else {
+                    invalid["sources"][0]["extractor"][field] = Value::String("secret".into());
+                }
+                assert!(validate(invalid, "UTC")
+                    .unwrap_err()
+                    .to_string()
+                    .contains(field));
+            }
+        }
+        for (field, invalid_value) in [
+            ("max_pages", 101),
+            ("navigation_timeout_s", 4),
+            ("max_source_duration_s", 601),
+            ("max_workflow_duration_s", 1801),
+        ] {
+            let mut invalid = value.clone();
+            invalid["sources"][0]["extractor"][field] = invalid_value.into();
+            assert!(validate(invalid, "UTC")
+                .unwrap_err()
+                .to_string()
+                .contains(field));
+        }
+    }
+
+    #[test]
+    fn script_mode_accepts_no_dom_fields_and_rejects_invalid_execution_config() {
+        let base = serde_json::json!({"version":6,"metadata":{"name":"Script fixture"},"sources":[{"id":"script","label":"Script","enabled":true,"extractor":{"kind":"script","url":"https://fixture.test/jobs","script":{"runtime":"python","interpreter":"/usr/bin/python3","code":"print('fixture')","args":["a b","$(literal)"]}}}]});
+        let spec = validate(base.clone(), "UTC").unwrap();
+        let config = source_input(&spec, "UTC").unwrap().config.unwrap();
+        assert_eq!(config["mode"], "script");
+        for patch in [
+            serde_json::json!({"runtime":"python","code":"x"}),
+            serde_json::json!({"runtime":"js","code":"x","path":"x.js"}),
+            serde_json::json!({"runtime":"js","code":"x","timeout_s":601}),
+            serde_json::json!({"runtime":"bash","code":"x"}),
+        ] {
+            let mut invalid = base.clone();
+            invalid["sources"][0]["extractor"]["script"] = patch;
+            assert!(validate(invalid, "UTC")
+                .unwrap_err()
+                .to_string()
+                .contains("script"));
+        }
+        let mut invalid = base;
+        invalid["sources"][0]["extractor"]["mode"] = "static".into();
+        assert!(validate(invalid, "UTC").is_err());
+    }
     #[test]
     fn job_limit_defaults_validates_and_survives_stored_configuration() {
         let base = serde_json::json!({"version":3,"metadata":{"name":"Careers"},"extractor":{"kind":"lever","url":"acme"}});
@@ -1073,7 +1532,7 @@ mod tests {
     fn versions_unknown_paths_queries_and_empty_overrides_are_validated() {
         let base = serde_json::json!({"version":2,"metadata":{"name":"Acme"},"extractor":{"kind":"greenhouse","url":"https://boards.greenhouse.io/acme"},"filters":{"include_keywords":[]},"schedule":{"cadence":"daily","time":"09:00","timezone":"America/New_York","weekdays":[1,3,5]}});
         let spec = validate(base.clone(), "UTC").unwrap();
-        assert_eq!(spec.version, 5);
+        assert_eq!(spec.version, WORKFLOW_SPEC_VERSION);
         assert_eq!(
             spec.filters.as_ref().unwrap().include_keywords,
             Some(vec![])
@@ -1131,7 +1590,7 @@ mod tests {
         let resolved =
             validate_legacy_import(legacy, "America/New_York", "0 0 6 * * *", &globals, true)
                 .unwrap();
-        assert_eq!(resolved.version, 5);
+        assert_eq!(resolved.version, WORKFLOW_SPEC_VERSION);
         let schedule = resolved.schedule.unwrap();
         assert_eq!(schedule.cadence, Some(SourceCadence::Cron));
         assert_eq!(schedule.cron.as_deref(), Some("0 0 6 * * *"));
@@ -1169,7 +1628,7 @@ mod tests {
         };
         let converted =
             validate_legacy_import(legacy_v1, "UTC", "0 0 9 * * *", &globals, true).unwrap();
-        assert_eq!(converted.version, 5);
+        assert_eq!(converted.version, WORKFLOW_SPEC_VERSION);
         assert_eq!(
             converted.schedule.as_ref().unwrap().cadence,
             Some(SourceCadence::Hourly)
@@ -1192,7 +1651,7 @@ mod tests {
             "extractor":{"kind":"greenhouse", "url":"acme"}
         });
         let spec = validate(value, "America/New_York").unwrap();
-        assert_eq!(spec.version, 5);
+        assert_eq!(spec.version, WORKFLOW_SPEC_VERSION);
         assert_eq!(spec.max_jobs_per_run, Some(20));
         assert_eq!(spec.metadata.enabled, Some(true));
         assert_eq!(spec.sources.len(), 1);
@@ -1234,7 +1693,7 @@ mod tests {
             ]
         });
         let spec = validate(valid_v5, "UTC").unwrap();
-        assert_eq!(spec.version, 5);
+        assert_eq!(spec.version, WORKFLOW_SPEC_VERSION);
         assert_eq!(spec.sources.len(), 2);
         assert_eq!(spec.sources[0].label, "Cloudflare");
         assert_eq!(spec.sources[1].label, "Linear");

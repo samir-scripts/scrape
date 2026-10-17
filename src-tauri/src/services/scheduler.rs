@@ -594,6 +594,8 @@ mod tests {
             retention_policy: "untracked_only".to_string(),
             filters: serde_json::json!({}),
             needs_review: false,
+            script_trusted: false,
+            script_sha256: None,
         };
 
         // Global cadence has no independent next run

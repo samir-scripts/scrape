@@ -15,6 +15,44 @@ pub const DEFAULT_MAX_JOBS_PER_RUN: u32 = 20;
 pub const PREVIEW_MAX_JOBS: u32 = 10;
 pub const MAX_JOB_LIMIT: u32 = 10_000;
 
+/// Runtime discovery only. No installation or executable launch is implied.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct BrowserRuntimeStatus {
+    pub available: bool,
+    pub executable_path: Option<String>,
+    pub version: Option<String>,
+    pub message: Option<String>,
+}
+
+/// Raw extraction evidence; a sample is not an accepted or persisted posting.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct ExtractorSampleCandidate {
+    pub evidence_url: String,
+    pub external_id: Option<String>,
+    pub title: String,
+    pub url: String,
+    pub company: Option<String>,
+    pub location: Option<String>,
+    pub salary: Option<String>,
+    pub description: Option<String>,
+    pub date_posted: Option<String>,
+    pub employer_logo_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct ExtractorTestResult {
+    pub samples: Vec<ExtractorSampleCandidate>,
+    pub field_match_counts: std::collections::BTreeMap<String, u32>,
+    pub warnings: Vec<String>,
+    pub termination: CoverageTermination,
+}
+
 pub fn validate_job_limit(value: u32) -> Result<u32, String> {
     if (1..=MAX_JOB_LIMIT).contains(&value) {
         Ok(value)

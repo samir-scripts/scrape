@@ -29,6 +29,11 @@ pub struct Source {
     pub retention_policy: String,
     pub filters: serde_json::Value,
     pub needs_review: bool,
+    #[serde(default)]
+    pub script_trusted: bool,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub script_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -78,7 +83,7 @@ pub struct SourcesRepo;
 
 impl SourcesRepo {
     pub async fn mark_reviewed(pool: &SqlitePool, id: &str) -> Result<Source> {
-        sqlx::query("UPDATE sources SET needs_review=0 WHERE id=?")
+        sqlx::query("UPDATE sources SET needs_review=0 WHERE id=? AND (script_sha256 IS NULL OR script_trusted=1)")
             .bind(id)
             .execute(pool)
             .await?;
@@ -112,6 +117,7 @@ impl SourcesRepo {
             }
         };
         let needs_review = r.get::<i64, _>("needs_review") == 1
+            || r.try_get::<i64, _>("workflow_needs_review").unwrap_or(0) == 1
             || invalid_filters
             || config.get("__invalid_original_config").is_some();
 
@@ -138,6 +144,8 @@ impl SourcesRepo {
             retention_policy,
             filters,
             needs_review,
+            script_trusted: r.get::<i64, _>("script_trusted") == 1,
+            script_sha256: r.get("script_sha256"),
         })
     }
 
@@ -145,7 +153,8 @@ impl SourcesRepo {
         let rows = sqlx::query(
             r#"
             SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_outcome, last_error, created_at,
-                   cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters, needs_review
+                   cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters, needs_review, script_trusted, script_sha256,
+                   COALESCE((SELECT needs_review FROM workflows WHERE workflows.id=sources.id),0) AS workflow_needs_review
             FROM sources
             ORDER BY created_at DESC
             "#
@@ -165,7 +174,8 @@ impl SourcesRepo {
         let r = sqlx::query(
             r#"
             SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_outcome, last_error, created_at,
-                   cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters, needs_review
+                   cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters, needs_review, script_trusted, script_sha256,
+                   COALESCE((SELECT needs_review FROM workflows WHERE workflows.id=sources.id),0) AS workflow_needs_review
             FROM sources
             WHERE id = ?
             "#
@@ -210,11 +220,22 @@ impl SourcesRepo {
             input.kind,
             input.config.as_ref().unwrap_or(&serde_json::Value::Null),
         )?);
+        let (_, script_hash) = crate::services::script_trust::saved_state(
+            input.config.as_ref().unwrap(),
+            false,
+            None,
+            false,
+        )?;
+        let needs_review = script_hash.is_some();
         let config_str = match input.config {
             Some(ref c) => serde_json::to_string(c)?,
             None => "{}".to_string(),
         };
-        let enabled_val: i64 = if input.enabled.unwrap_or(true) { 1 } else { 0 };
+        let enabled_val: i64 = if input.enabled.unwrap_or(true) && !needs_review {
+            1
+        } else {
+            0
+        };
         let cadence = input.cadence.unwrap_or_default();
         let cadence_str = match serde_json::to_value(cadence)? {
             serde_json::Value::String(s) => s,
@@ -249,8 +270,9 @@ impl SourcesRepo {
         .unwrap_or(0)
             > 0;
 
+        let mut tx = pool.begin().await?;
         if has_workflows {
-            let _ = sqlx::query(
+            sqlx::query(
                 r#"
                 INSERT INTO workflows (
                     id, name, enabled, cadence, cadence_cron, next_run_at,
@@ -276,8 +298,8 @@ impl SourcesRepo {
             .bind(&filters_str)
             .bind(&config_str)
             .bind(&created_at)
-            .execute(pool)
-            .await;
+            .execute(&mut *tx)
+            .await?;
 
             sqlx::query(
                 r#"
@@ -298,7 +320,7 @@ impl SourcesRepo {
             .bind(retention_policy)
             .bind(filters_str)
             .bind(next_run)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
         } else {
             sqlx::query(
@@ -320,15 +342,39 @@ impl SourcesRepo {
             .bind(retention_policy)
             .bind(filters_str)
             .bind(next_run)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
         }
 
+        sqlx::query(
+            "UPDATE sources SET script_trusted=0,script_sha256=?,needs_review=? WHERE id=?",
+        )
+        .bind(&script_hash)
+        .bind(needs_review)
+        .bind(&id)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query("UPDATE workflows SET needs_review=? WHERE id=?")
+            .bind(needs_review)
+            .bind(&id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
         Self::get(pool, &id).await
     }
 
     pub async fn update(pool: &SqlitePool, input: UpdateSourceInput) -> Result<Source> {
+        Self::update_with_origin(pool, input, false).await
+    }
+
+    pub async fn update_with_origin(
+        pool: &SqlitePool,
+        input: UpdateSourceInput,
+        imported: bool,
+    ) -> Result<Source> {
         let existing = Self::get(pool, &input.id).await?;
+        let old_trust = existing.script_trusted;
+        let old_hash = existing.script_sha256.clone();
 
         let name = input.name.unwrap_or(existing.name);
         let identifier = input.identifier.unwrap_or(existing.identifier);
@@ -336,8 +382,15 @@ impl SourcesRepo {
             existing.kind,
             &input.config.unwrap_or(existing.config),
         )?;
+        let (trusted, script_hash) = crate::services::script_trust::saved_state(
+            &config,
+            old_trust,
+            old_hash.as_deref(),
+            imported,
+        )?;
+        let needs_review = script_hash.is_some() && !trusted;
         let config_str = serde_json::to_string(&config)?;
-        let enabled = input.enabled.unwrap_or(existing.enabled);
+        let enabled = input.enabled.unwrap_or(existing.enabled) && !needs_review;
         let enabled_val: i64 = if enabled { 1 } else { 0 };
         let cadence = input.cadence.unwrap_or(existing.cadence);
         let cadence_str = match serde_json::to_value(cadence)? {
@@ -360,7 +413,8 @@ impl SourcesRepo {
             Self::next_run_for_schedule(pool, cadence, cadence_cron.as_deref(), enabled, &config)
                 .await?;
 
-        let _ = sqlx::query(
+        let mut tx = pool.begin().await?;
+        sqlx::query(
             r#"
             UPDATE workflows
             SET name = ?1, config = ?2, enabled = ?3, cadence = ?4, cadence_cron = ?5,
@@ -378,8 +432,8 @@ impl SourcesRepo {
         .bind(&filters_str)
         .bind(&next_run)
         .bind(&input.id)
-        .execute(pool)
-        .await;
+        .execute(&mut *tx)
+        .await?;
 
         sqlx::query(
             r#"
@@ -400,9 +454,25 @@ impl SourcesRepo {
         .bind(filters_str)
         .bind(input.id.clone())
         .bind(next_run)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
 
+        sqlx::query(
+            "UPDATE sources SET script_trusted=?,script_sha256=?,needs_review=? WHERE id=?",
+        )
+        .bind(trusted)
+        .bind(&script_hash)
+        .bind(needs_review)
+        .bind(&input.id)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query("UPDATE workflows SET needs_review=? WHERE id=?")
+            .bind(needs_review)
+            .bind(&input.id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        crate::services::script_trust::reconcile_workflow(pool, &input.id).await?;
         Self::get(pool, &input.id).await
     }
 
@@ -490,7 +560,8 @@ impl SourcesRepo {
         let rows = sqlx::query(
             r#"
             SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_outcome, last_error, created_at,
-                   cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters, needs_review
+                   cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters, needs_review, script_trusted, script_sha256,
+                   COALESCE((SELECT needs_review FROM workflows WHERE workflows.id=sources.id),0) AS workflow_needs_review
             FROM sources
             WHERE enabled = 1
               AND cadence != 'global'

@@ -207,11 +207,11 @@ retention:
       retention_days: 60n,
       retention_policy: "untracked_only",
       filters: { include_keywords: ["Backend"] },
-      needs_review: false,
+      needs_review: false, script_trusted: false,
     };
 
     const spec = sourceToWorkflowSpec(source);
-    expect(spec.version).toBe(5);
+    expect(spec.version).toBe(6);
     expect(spec.metadata.name).toBe("Ramp");
     expect(spec.sources[0].extractor.kind).toBe("ashby");
     expect(spec.sources[0].extractor.url).toBe("https://jobs.ashbyhq.com/ramp");
@@ -402,7 +402,7 @@ filters:
           query: "title LIKE '%Intern%'",
           policy: { all: [{ field: "title", op: "like", value: "%Intern%" }] },
         },
-        needs_review: false,
+        needs_review: false, script_trusted: false,
       };
 
       const convertedSpec = sourceToWorkflowSpec(sourceRecord);

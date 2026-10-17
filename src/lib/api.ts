@@ -122,7 +122,7 @@ export const SAMPLE_SWE_SOURCE: Source = {
     exclude_keywords: ["MBA", "Sales", "Marketing"],
     locations: ["Remote", "San Francisco, CA", "Austin, TX"],
   },
-  needs_review: false,
+  needs_review: false, script_trusted: false,
 };
 
 let devSources: Source[] = (() => {
@@ -817,7 +817,7 @@ const apiImplementation = {
         retention_days: BigInt(input.retention_days ?? 30),
         retention_policy: input.retention_policy || "untracked_only",
         filters: (input.filters || {}) as any,
-        needs_review: false,
+        needs_review: false, script_trusted: false,
       };
       devSources.push(newSource);
       saveDevSources();
@@ -1154,12 +1154,25 @@ const apiImplementation = {
     if (isTauri()) return invoke("validate_workflow", { spec });
     const result = validateWorkflowYaml(workflowSpecToYaml(spec as WorkflowSpec));
     if (!result.isValid) throw new Error(result.errors.map(e => e.message).join("; "));
+    if (result.parsedSpec?.sources.some(source => {
+      const config = source.extractor.source_config;
+      const configuredMode = config && typeof config === "object" && !Array.isArray(config) ? config.mode : undefined;
+      return source.extractor.mode === "script" || source.extractor.mode === "browser" || source.extractor.script || ["script", "browser"].includes(String(configuredMode));
+    })) throw new Error("Browser and script extraction require the desktop application; executable configurations require local trust.");
     // Demonstration validates the form shape; expert syntax requires the desktop validator.
     if (result.parsedSpec?.filters?.query || result.parsedSpec?.filters?.policy) throw new Error("Expert queries and policies require desktop validation.");
-    return { ...result.parsedSpec!, version: 4, max_jobs_per_run: result.parsedSpec!.max_jobs_per_run ?? INGESTION_LIMITS.default };
+    return { ...result.parsedSpec!, version: 6, max_jobs_per_run: result.parsedSpec!.max_jobs_per_run ?? INGESTION_LIMITS.default };
   },
-  saveWorkflow: async (spec: WorkflowSpec, id?: string): Promise<Source> => {
-    if (isTauri()) return invoke("save_workflow", { spec, id: id ?? null });
+  importWorkflow: async (spec: unknown): Promise<WorkflowSpec> => {
+    if (isTauri()) return invoke("import_workflow", { spec });
+    return api.validateWorkflow(spec);
+  },
+  trustWorkflowScript: async (sourceId: string, expectedHash: string, confirmed: boolean): Promise<Source> => {
+    if (!isTauri()) throw new Error("Script trust requires the desktop application and local review.");
+    return invoke("trust_workflow_script", { sourceId, expectedHash, confirmed });
+  },
+  saveWorkflow: async (spec: WorkflowSpec, id?: string, imported = false): Promise<Source> => {
+    if (isTauri()) return invoke("save_workflow", { spec, id: id ?? null, imported });
     const validated = await api.validateWorkflow(spec);
     const input = workflowSpecToCreateInput(validated);
     return id ? api.updateSource({ ...input, id }) : api.createSource({ ...input, enabled: input.enabled ?? true, cadence: input.cadence ?? "daily" });

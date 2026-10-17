@@ -6,6 +6,7 @@
 
 pub mod branding;
 pub mod enrich;
+pub mod extraction;
 pub mod filter;
 pub mod geography;
 pub mod hydration;

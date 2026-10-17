@@ -185,9 +185,11 @@ pub async fn execute(
         // are deliberately untouched. Jobs' dependents cascade on the same tx.
         for table in [
             "employer_branding",
+            "browser_sessions",
             "scrape_logs",
             "scrape_runs",
             "sources",
+            "workflows",
             "app_notifications",
             "posting_legacy_blocks",
             "blocked_postings",
@@ -278,6 +280,7 @@ mod tests {
             "INSERT INTO blocked_postings(identity,title,company,blocked_at) VALUES('block','Title','Acme','2000')",
             "INSERT INTO posting_legacy_blocks(legacy_key,identity) VALUES('old','block')",
             "INSERT INTO deleted_jobs(dedupe_key,deleted_at) VALUES('old','2000')",
+            "INSERT INTO browser_sessions(id,label,domain,storage_relpath,created_at,updated_at) VALUES('session','Fixture','fixture.test','sessions/fixture.json','2000','2000')",
             "INSERT INTO posting_date_cache VALUES('2000','UTC','2000')",
             "INSERT INTO scrape_runs(id,trigger,status,started_at) VALUES('run','manual','success','2000')",
             "INSERT INTO scrape_logs(id,run_id,timestamp,level,message) VALUES('log','run','2000','info','Saved')",
@@ -331,8 +334,10 @@ mod tests {
             );
             for table in [
                 "sources",
+                "workflows",
                 "scrape_runs",
                 "employer_branding",
+                "browser_sessions",
                 "scrape_logs",
                 "app_notifications",
                 "blocked_postings",

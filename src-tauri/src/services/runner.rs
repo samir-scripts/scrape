@@ -828,6 +828,7 @@ impl ScrapeRunner {
         run_id: &str,
         config: WorkerConfig,
     ) -> Result<(i64, i64, HashMap<String, (String, Option<String>)>)> {
+        super::script_trust::validate_execution(&self.pool, &config.sources).await?;
         let mut budget = super::ingestion::RunPostingBudget::new(&config.sources)?;
         RunsRepo::record_config(&self.pool, run_id, &config).await?;
         let mut counts = RunCounts {
