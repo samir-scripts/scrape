@@ -26,11 +26,31 @@ pub async fn scrape_selector_with(
     source: &WorkerSource,
     sink: &mut dyn FnMut(WorkerEvent) -> bool,
 ) -> Result<(), ClientError> {
-    let base_url = Url::parse(&source.identifier)?;
-    let (html_text, actual_page) = client.fetch_text_at(base_url.as_str(), true).await?;
-    let base_url = Url::parse(&actual_page)?;
-
-    extract_jobs_with_selectors_with(&html_text, &base_url, source, sink)
+    let mut session = super::selector_session::SelectorSession::new(
+        client,
+        source,
+        &scrape_core::WorkerLimits::default(),
+        &scrape_core::protocol::EnrichmentLimits::default(),
+        tokio::time::Instant::now()
+            + std::time::Duration::from_secs(scrape_core::protocol::DEFAULT_WORKFLOW_DURATION_S),
+    )
+    .await?;
+    let started = chrono::Utc::now();
+    loop {
+        match session
+            .next(client, &scrape_core::WorkerFilters::default(), started)
+            .await?
+        {
+            super::selector_session::SelectorStep::Event(event) => {
+                if !sink(event.0) {
+                    break;
+                }
+            }
+            super::selector_session::SelectorStep::Yield => continue,
+            super::selector_session::SelectorStep::Exhausted => break,
+        }
+    }
+    Ok(())
 }
 
 pub fn glob_to_regex(pattern: &str) -> Result<regex::Regex, regex::Error> {
@@ -84,12 +104,91 @@ pub fn extract_jobs_with_selectors_with(
     source: &WorkerSource,
     sink: &mut dyn FnMut(WorkerEvent) -> bool,
 ) -> Result<(), ClientError> {
-    let patterns = UrlPatterns::parse(&source.config)?;
     let document = Html::parse_document(html_text);
+    let config = scrape_core::static_source::StaticSourceConfig::parse(
+        &source.config,
+        &scrape_core::WorkerLimits::default(),
+    )
+    .map_err(ClientError::Configuration)?;
+    extract_candidates(&document, base_url, source, &config, &mut |candidate| {
+        sink(candidate.event(source))
+    })
+}
+
+pub(crate) struct SelectorPage {
+    pub candidates: std::collections::VecDeque<SelectorCandidate>,
+    pub next_page: Option<Url>,
+    pub next_page_error: Option<String>,
+}
+pub(crate) enum SelectorCandidate {
+    Posting(Box<SelectorPosting>),
+    Invalid(Box<WorkerEvent>),
+}
+impl SelectorCandidate {
+    fn event(self, source: &WorkerSource) -> WorkerEvent {
+        match self {
+            Self::Posting(posting) => posting.event(source),
+            Self::Invalid(error) => *error,
+        }
+    }
+}
+pub(crate) fn extract_page(
+    html: &str,
+    base: &Url,
+    source: &WorkerSource,
+    config: &scrape_core::static_source::StaticSourceConfig,
+) -> Result<SelectorPage, ClientError> {
+    let document = Html::parse_document(html);
+    if config
+        .wait_for
+        .as_ref()
+        .is_some_and(|query| query.elements(&document, None).is_empty())
+    {
+        return Err(ClientError::Extraction("Static readiness locator did not match; inspect the selector or choose browser extraction".into()));
+    }
+    let mut candidates = std::collections::VecDeque::new();
+    extract_candidates(&document, base, source, config, &mut |candidate| {
+        candidates.push_back(candidate);
+        true
+    })?;
+    let navigation = config
+        .next_page
+        .as_ref()
+        .and_then(|field| field.extract(&document, None, "href"))
+        .map(|raw| page_url(base, &raw))
+        .transpose();
+    let (next_page, next_page_error) = match navigation {
+        Ok(url) => (url, None),
+        Err(error) => (None, Some(error.to_string())),
+    };
+    Ok(SelectorPage {
+        candidates,
+        next_page,
+        next_page_error,
+    })
+}
+pub(crate) fn page_url(base: &Url, raw: &str) -> Result<Url, ClientError> {
+    let mut url = base.join(raw)?;
+    if !scrape_core::branding::http_url(url.as_str()) {
+        return Err(ClientError::Extraction(
+            "Navigation requires an HTTP(S) URL without credentials".into(),
+        ));
+    }
+    url.set_fragment(None);
+    Ok(url)
+}
+fn extract_candidates(
+    document: &Html,
+    base_url: &Url,
+    source: &WorkerSource,
+    config: &scrape_core::static_source::StaticSourceConfig,
+    sink: &mut dyn FnMut(SelectorCandidate) -> bool,
+) -> Result<(), ClientError> {
+    let patterns = UrlPatterns::parse(&source.config)?;
     if let Some(hydration) = scrape_core::hydration::HydrationConfig::parse(&source.config)
         .map_err(ClientError::Configuration)?
     {
-        let script = hydration.script.elements(&document, None).into_iter().next().filter(|e| e.value().name() == "script")
+        let script = hydration.script.elements(document, None).into_iter().next().filter(|e| e.value().name() == "script")
             .ok_or_else(|| ClientError::Extraction("Hydration script was not found; inspect hydration_script or choose browser extraction".into()))?;
         let payload: serde_json::Value = serde_json::from_str(&script.text().collect::<String>())
             .map_err(|e| {
@@ -97,7 +196,7 @@ pub fn extract_jobs_with_selectors_with(
         })?;
         let jobs = payload.pointer(&hydration.pointer).and_then(serde_json::Value::as_array).ok_or_else(|| ClientError::Extraction("hydration_pointer did not select a candidate array; flattened/reference-encoded state must be decoded by a custom script".into()))?;
         let logo = super::branding::resolve_document(
-            &document,
+            document,
             base_url.as_str(),
             &super::branding::employer_name(source),
             source.config.get("employer_logo").and_then(|v| v.as_str()),
@@ -117,11 +216,11 @@ pub fn extract_jobs_with_selectors_with(
                         continue;
                     }
                     match url {
-                        Some(url) if !hydration.fields.contains_key("id") || get("id").is_some() => SelectorPosting {
-                            title, external_id: get("id").unwrap_or_else(|| url.to_string()), url: url.into(), location: get("location").unwrap_or_default(),
+                        Some(url) if !hydration.fields.contains_key("id") || get("id").is_some() => SelectorCandidate::Posting(Box::new(SelectorPosting {
+                            detail_url: config.has_details().then(|| url.to_string()), title, external_id: get("id").unwrap_or_else(|| url.to_string()), url: url.into(), location: get("location").unwrap_or_default(),
                             salary_text: get("salary"), description_source: get("description"), description_format: Some(if hydration.description_is_text { DescriptionFormat::PlainText } else { DescriptionFormat::Html }),
                             date_posted: get("date").filter(|raw| scrape_core::posting_date::posting_instant(raw,"UTC").is_some()), company_logo: logo.clone(),
-                        }.event(source),
+                        })),
                         _ => invalid_candidate(source, "Hydration candidate has an invalid HTTP(S) destination or missing configured ID"),
                     }
                 }
@@ -161,14 +260,14 @@ pub fn extract_jobs_with_selectors_with(
     let id_sel = field("id", None)?;
 
     let company_logo = super::branding::resolve_document(
-        &document,
+        document,
         base_url.as_str(),
         &super::branding::employer_name(source),
         source.config.get("employer_logo").and_then(|v| v.as_str()),
     );
 
-    for item in item_sel.elements(&document, None) {
-        let Some(title) = title_sel.extract(&document, Some(item), "text") else {
+    for item in item_sel.elements(document, None) {
+        let Some(title) = title_sel.extract(document, Some(item), "text") else {
             if !sink(invalid_candidate(
                 source,
                 "Required title locator or regex did not produce a value",
@@ -177,7 +276,7 @@ pub fn extract_jobs_with_selectors_with(
             }
             continue;
         };
-        let Some(clean_href) = link_sel.extract(&document, Some(item), "href").or_else(|| {
+        let Some(clean_href) = link_sel.extract(document, Some(item), "href").or_else(|| {
             // Legacy CSS cards can themselves be the destination anchor.
             if source
                 .config
@@ -205,12 +304,12 @@ pub fn extract_jobs_with_selectors_with(
         let job_url = match base_url.join(&clean_href) {
             Ok(u) if matches!(u.scheme(), "http" | "https") => u.to_string(),
             _ => {
-                if !sink(WorkerEvent::Error {
+                if !sink(SelectorCandidate::Invalid(Box::new(WorkerEvent::Error {
                     invalid_posting: Some(true),
                     source_id: source.id.clone(),
                     message: format!("Posting '{title}' has an invalid HTTP(S) destination"),
                     retryable: false,
-                }) {
+                }))) {
                     break;
                 }
                 continue;
@@ -223,14 +322,14 @@ pub fn extract_jobs_with_selectors_with(
 
         let location = loc_sel
             .as_ref()
-            .and_then(|field| field.extract(&document, Some(item), "text"))
+            .and_then(|field| field.extract(document, Some(item), "text"))
             .unwrap_or_default();
         let salary_text = sal_sel
             .as_ref()
-            .and_then(|field| field.extract(&document, Some(item), "text"));
+            .and_then(|field| field.extract(document, Some(item), "text"));
         let description_source = desc_sel
             .as_ref()
-            .and_then(|field| field.extract(&document, Some(item), "html"));
+            .and_then(|field| field.extract(document, Some(item), "html"));
         let description_format = desc_sel.as_ref().map(|field| {
             if field.extracts_html() {
                 DescriptionFormat::Html
@@ -240,10 +339,10 @@ pub fn extract_jobs_with_selectors_with(
         });
         let date_posted = date_sel
             .as_ref()
-            .and_then(|field| field.extract(&document, Some(item), "date"))
+            .and_then(|field| field.extract(document, Some(item), "date"))
             .filter(|raw| scrape_core::posting_date::posting_instant(raw, "UTC").is_some());
         let external_id = match &id_sel {
-            Some(field) => match field.extract(&document, Some(item), "text") {
+            Some(field) => match field.extract(document, Some(item), "text") {
                 Some(id) => id,
                 None => {
                     if !sink(invalid_candidate(
@@ -258,20 +357,23 @@ pub fn extract_jobs_with_selectors_with(
             None => job_url.clone(),
         };
 
-        if !sink(
-            SelectorPosting {
-                title,
-                url: job_url,
-                external_id,
-                location,
-                salary_text,
-                description_source,
-                description_format,
-                date_posted,
-                company_logo: company_logo.clone(),
-            }
-            .event(source),
-        ) {
+        if !sink(SelectorCandidate::Posting(Box::new(SelectorPosting {
+            title,
+            url: job_url.clone(),
+            external_id,
+            location,
+            salary_text,
+            description_source,
+            description_format,
+            date_posted,
+            company_logo: company_logo.clone(),
+            detail_url: match &config.detail_link {
+                Some(field) => field
+                    .extract(document, Some(item), "href")
+                    .and_then(|raw| page_url(base_url, &raw).ok().map(|u| u.to_string())),
+                None => config.follow_detail.then(|| job_url.clone()),
+            },
+        }))) {
             break;
         }
     }
@@ -335,6 +437,7 @@ pub(crate) struct SelectorPosting {
     pub description_format: Option<DescriptionFormat>,
     pub date_posted: Option<String>,
     pub company_logo: Option<scrape_core::branding::LogoEvidence>,
+    pub detail_url: Option<String>,
 }
 impl SelectorPosting {
     pub fn event(self, source: &WorkerSource) -> WorkerEvent {
@@ -433,13 +536,13 @@ impl SelectorPosting {
     }
 }
 
-fn invalid_candidate(source: &WorkerSource, message: &str) -> WorkerEvent {
-    WorkerEvent::Error {
+fn invalid_candidate(source: &WorkerSource, message: &str) -> SelectorCandidate {
+    SelectorCandidate::Invalid(Box::new(WorkerEvent::Error {
         invalid_posting: Some(true),
         source_id: source.id.clone(),
         message: message.into(),
         retryable: false,
-    }
+    }))
 }
 
 #[cfg(test)]

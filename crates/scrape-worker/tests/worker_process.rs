@@ -201,3 +201,67 @@ fn invalid_enrichment_limits_and_incompatible_protocol_fail_before_extraction() 
         );
     }
 }
+
+#[test]
+fn extraction_limits_and_protocol_are_validated_before_any_source_work() {
+    let version = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+        .arg("--protocol-version")
+        .output()
+        .unwrap();
+    assert!(version.status.success());
+    assert_eq!(
+        String::from_utf8(version.stdout).unwrap().trim(),
+        scrape_core::PROTOCOL_VERSION.to_string()
+    );
+    for (key, value) in [
+        ("max_pages_per_source", 0),
+        ("max_pages_per_source", 101),
+        ("navigation_timeout_s", 4),
+        ("navigation_timeout_s", 121),
+        ("max_source_duration_s", 9),
+        ("max_source_duration_s", 601),
+        ("max_workflow_duration_s", 29),
+        ("max_workflow_duration_s", 1801),
+        ("max_browser_processes", 2),
+        ("max_browser_contexts", 3),
+    ] {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+            .arg("--stdin")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let config = serde_json::json!({"version":scrape_core::PROTOCOL_VERSION,"sources":[],"limits":{key:value}});
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(&serde_json::to_vec(&config).unwrap())
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(!output.status.success(), "accepted {key}={value}");
+        assert!(output.stdout.is_empty());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(key),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+        .arg("--stdin")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(br#"{"version":6,"sources":[]}"#)
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Unsupported protocol version"));
+}

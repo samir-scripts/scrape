@@ -5,6 +5,19 @@ import userEvent from "@testing-library/user-event";
 import { ScanDiagnostics } from "../components/views/settings/ScanDiagnostics";
 import type { SourceScanStats } from "../bindings/SourceScanStats";
 afterEach(cleanup);
+it.each([
+  ["page_limit", "Page limit reached"],
+  ["needs_login", "Needs login"],
+] as const)("explains %s without calling the source exhausted", (termination, label) => {
+  render(<ScanDiagnostics sources={[{
+    source_id: "Bounded fixture", limit: 20, examined: 2, matched: 2, accepted: 2,
+    blocked: 0, rejected: 0, duplicates: 0, invalid: 0, unresolved: 0,
+    limit_reached: false, provider_total: null, enrichment_warnings: 0,
+    termination, outcome: "partial", rejections: [], rejection_examples: [],
+  }]} />);
+  expect(screen.getByText(new RegExp(label))).toBeTruthy();
+  expect(screen.queryByText(/Source exhausted/)).toBeNull();
+});
 it("explains primary rejection counts and explicitly overlapping examples through controls", async () => {
   const source: SourceScanStats = {
     source_id: "Authored diagnostic fixture", limit: 20, examined: 438, matched: 2,

@@ -4,6 +4,7 @@ pub mod greenhouse;
 pub mod jsonld;
 pub mod lever;
 pub mod selector;
+pub(crate) mod selector_session;
 
 use crate::client::{ClientError, HttpClient};
 use scrape_core::{SourceKind, WorkerEvent, WorkerSource};

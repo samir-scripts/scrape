@@ -13,6 +13,9 @@ use std::io::{self, Read};
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Scrape worker sidecar binary")]
 struct Cli {
+    /// Print the authoritative worker protocol version and exit.
+    #[arg(long)]
+    protocol_version: bool,
     /// Read WorkerConfig from stdin JSON
     #[arg(long)]
     stdin: bool,
@@ -50,6 +53,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let args = Cli::parse();
+    if args.protocol_version {
+        println!("{PROTOCOL_VERSION}");
+        return Ok(());
+    }
 
     if let Some(url) = args.detect {
         let client = HttpClient::new(10, 500);
@@ -157,6 +164,7 @@ async fn execute_worker(
     dry_run: bool,
     replay_origin: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    config.limits.validate()?;
     if config.limits.concurrency != 1 {
         return Err("Worker concurrency currently supports one source at a time".into());
     }

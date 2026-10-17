@@ -38,3 +38,11 @@ refresh and protected user state. Rebuild the sidecar before running host tests.
 ```bash
 cargo test -p scrape-worker
 ```
+
+Section 6A adds real-worker pagination/detail request-count tests, late matches,
+page limits, cycles, invalid navigation, required/optional unknown evidence,
+mixed paginated/single-page 7/7/6 fairness and protocol-v7 preflight bounds.
+Controlled-deadline worker unit tests cover source and workflow cutoffs.
+`src-tauri/tests/worker_repository.rs` additionally runs three listing pages
+(including an empty middle page) and two distinct detail URLs through preview,
+insert and refresh, retaining destination/ID/pay/date provenance and protected state.

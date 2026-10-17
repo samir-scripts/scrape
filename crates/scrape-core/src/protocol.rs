@@ -6,7 +6,11 @@ use crate::{RoleType, SourceKind, TriState, WorkplaceType};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 6;
+pub const PROTOCOL_VERSION: u32 = 7;
+pub const DEFAULT_NAVIGATION_TIMEOUT_S: u64 = 30;
+pub const MAX_PAGES_PER_SOURCE: u32 = 100;
+pub const DEFAULT_SOURCE_DURATION_S: u64 = 180;
+pub const DEFAULT_WORKFLOW_DURATION_S: u64 = 600;
 pub const DEFAULT_MAX_JOBS_PER_RUN: u32 = 20;
 pub const PREVIEW_MAX_JOBS: u32 = 10;
 pub const MAX_JOB_LIMIT: u32 = 10_000;
@@ -262,7 +266,7 @@ impl WorkerFilters {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[ts(export)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct WorkerLimits {
     #[serde(default)]
     #[ts(optional = nullable)]
@@ -273,16 +277,70 @@ pub struct WorkerLimits {
     pub per_host_delay_ms: u64,
     #[serde(default = "default_request_timeout_s")]
     pub request_timeout_s: u64,
+    pub max_browser_processes: u32,
+    pub max_browser_contexts: u32,
+    #[ts(type = "number")]
+    pub navigation_timeout_s: u64,
+    pub max_pages_per_source: u32,
+    #[ts(type = "number")]
+    pub max_source_duration_s: u64,
+    #[ts(type = "number")]
+    pub max_workflow_duration_s: u64,
 }
 
 impl Default for WorkerLimits {
     fn default() -> Self {
         Self {
+            max_browser_processes: 1,
+            max_browser_contexts: 2,
+            navigation_timeout_s: DEFAULT_NAVIGATION_TIMEOUT_S,
+            max_pages_per_source: MAX_PAGES_PER_SOURCE,
+            max_source_duration_s: DEFAULT_SOURCE_DURATION_S,
+            max_workflow_duration_s: DEFAULT_WORKFLOW_DURATION_S,
             enrichment: None,
             concurrency: default_concurrency(),
             per_host_delay_ms: default_per_host_delay_ms(),
             request_timeout_s: default_request_timeout_s(),
         }
+    }
+}
+
+impl WorkerLimits {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.max_browser_processes != 1 || !(1..=2).contains(&self.max_browser_contexts) {
+            return Err(
+                "limits: max_browser_processes must be 1 and max_browser_contexts must be 1–2"
+                    .into(),
+            );
+        }
+        for (name, valid) in [
+            (
+                "navigation_timeout_s",
+                (5..=120).contains(&self.navigation_timeout_s),
+            ),
+            (
+                "max_pages_per_source",
+                (1..=MAX_PAGES_PER_SOURCE).contains(&self.max_pages_per_source),
+            ),
+            (
+                "max_source_duration_s",
+                (10..=600).contains(&self.max_source_duration_s),
+            ),
+            (
+                "max_workflow_duration_s",
+                (30..=1800).contains(&self.max_workflow_duration_s),
+            ),
+        ] {
+            if !valid {
+                return Err(format!(
+                    "limits.{name}: outside the supported extraction bound"
+                ));
+            }
+        }
+        if let Some(enrichment) = &self.enrichment {
+            enrichment.validate()?;
+        }
+        Ok(())
     }
 }
 
@@ -550,7 +608,9 @@ pub enum CoverageTermination {
     Exhausted,
     JobLimit,
     RequestLimit,
+    PageLimit,
     TimeLimit,
+    NeedsLogin,
     Cancelled,
     Failed,
 }
@@ -558,6 +618,20 @@ pub enum CoverageTermination {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extraction_bounds_accept_valid_overrides_and_supply_authoritative_defaults() {
+        let limits: WorkerLimits = serde_json::from_value(
+            serde_json::json!({"max_pages_per_source":2,"navigation_timeout_s":5}),
+        )
+        .unwrap();
+        let encoded = serde_json::to_value(limits).unwrap();
+        assert_eq!(encoded["max_pages_per_source"], 2);
+        assert_eq!(encoded["max_source_duration_s"], 180);
+        assert_eq!(encoded["max_workflow_duration_s"], 600);
+        assert_eq!(encoded["max_browser_processes"], 1);
+        assert_eq!(encoded["max_browser_contexts"], 2);
+    }
 
     #[test]
     fn export_bindings_ingestion_limits() {

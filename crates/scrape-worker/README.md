@@ -171,3 +171,19 @@ ingestion across them using fair round-robin budgeting (`coordinator.rs`).
   redistributes to remaining active sources until the workflow cap is satisfied or all
   sources are exhausted.
 - Deduplication is workflow-wide across all sources based on canonical posting identity.
+
+## Static pages and details (protocol 7)
+
+Custom sources use shared CSS/XPath locators or explicit JSON-pointer hydration
+mappings. Resumable pages/details use the same matching, identity, suppression
+and acceptance coordinator as ATS sources. The default bounds are 100 pages,
+180 seconds per static source and 600 seconds per workflow. Global limits cap
+per-source overrides. Navigation is bounded to 30 seconds by default; details
+also retain the existing maximum-100-request/45-second enrichment allowance.
+Page limits, loops, readiness failures and required missing evidence remain
+visible outcomes; partial coverage retains confirmed jobs. Source and workflow
+limits apply to HTTP discovery; the browser pool is not implemented yet.
+
+See [configuration examples](../../plans/workflow-v3.md#static-pagination-and-details).
+Use `scrape-worker --protocol-version` to query the authoritative version rather
+than duplicating it in a harness. Protocol-v6 requests are rejected explicitly.

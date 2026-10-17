@@ -38,6 +38,9 @@ pub struct CoordinatorSession {
     pending_events: VecDeque<(WorkerEvent, Option<MatchingEvidence>)>,
     jsonld_links: Option<Vec<Url>>,
     jsonld_link_index: usize,
+    selector_session: Option<crate::adapters::selector_session::SelectorSession>,
+    coverage_incomplete: bool,
+    yield_after_candidate: bool,
 }
 
 impl CoordinatorSession {
@@ -45,11 +48,12 @@ impl CoordinatorSession {
         client: &HttpClient,
         source: WorkerSource,
         filters: WorkerFilters,
-        _started: DateTime<Utc>,
-        enrichment_limits: &EnrichmentLimits,
+        extraction_limits: &WorkerLimits,
         dry_run: bool,
         workflow_cap: u32,
+        workflow_deadline: Instant,
     ) -> Result<Self, ClientError> {
+        let enrichment_limits = extraction_limits.enrichment.clone().unwrap_or_default();
         let limit = if dry_run {
             workflow_cap.min(PREVIEW_MAX_JOBS)
         } else if let Ok(source_limit) = source.max_jobs_per_run() {
@@ -84,6 +88,9 @@ impl CoordinatorSession {
             pending_events: VecDeque::new(),
             jsonld_links: None,
             jsonld_link_index: 0,
+            selector_session: None,
+            coverage_incomplete: false,
+            yield_after_candidate: false,
         };
         session.stats.source_id = session.source.id.clone();
 
@@ -176,23 +183,42 @@ impl CoordinatorSession {
                 }
             }
             SourceKind::Selector => {
-                let mut events = Vec::new();
-                crate::adapters::selector::scrape_selector_with(
-                    client,
-                    &session.source,
-                    &mut |event| {
-                        events.push(event);
-                        true
-                    },
-                )
-                .await?;
-                session.candidates = events;
+                session.selector_session = Some(
+                    crate::adapters::selector_session::SelectorSession::new(
+                        client,
+                        &session.source,
+                        extraction_limits,
+                        &enrichment_limits,
+                        workflow_deadline,
+                    )
+                    .await?,
+                );
+                session.exhausted = session.selector_session.as_ref().unwrap().is_exhausted();
             }
         }
 
         Ok(session)
     }
 
+    fn has_pending(&self) -> bool {
+        !self.pending_events.is_empty()
+            || self
+                .selector_session
+                .as_ref()
+                .is_some_and(|s| s.has_pending())
+    }
+    fn workflow_timeout(&mut self) -> WorkerEvent {
+        self.exhausted = true;
+        self.coverage_incomplete = true;
+        self.stats.termination = CoverageTermination::TimeLimit;
+        WorkerEvent::Warning {
+            source_id: self.source.id.clone(),
+            message: "Workflow duration limit reached; remaining source coverage was not completed"
+                .into(),
+            eligibility_incomplete: true,
+            termination: Some(CoverageTermination::TimeLimit),
+        }
+    }
     pub fn is_finished(&self) -> bool {
         self.exhausted || self.failed
     }
@@ -210,6 +236,22 @@ impl CoordinatorSession {
             return Ok(Some(pending));
         }
 
+        if let Some(selector) = &mut self.selector_session {
+            let before = selector.pages_visited();
+            let step = selector.next(client, &self.filters, started).await?;
+            self.yield_after_candidate |= selector.pages_visited() > before;
+            return match step {
+                crate::adapters::selector_session::SelectorStep::Event(event) => {
+                    self.exhausted = selector.is_exhausted();
+                    Ok(Some(*event))
+                }
+                crate::adapters::selector_session::SelectorStep::Yield => Ok(None),
+                crate::adapters::selector_session::SelectorStep::Exhausted => {
+                    self.exhausted = true;
+                    Ok(None)
+                }
+            };
+        }
         if let Some(ref jobs) = self.greenhouse_jobs {
             let matcher =
                 MatchingEvaluator::new(&self.filters).map_err(ClientError::Configuration)?;
@@ -558,6 +600,7 @@ impl SourceCoordinator {
         dry_run: bool,
         started: DateTime<Utc>,
     ) -> Result<Self, String> {
+        config.limits.validate()?;
         let configured_cap = match config.max_jobs_per_run {
             Some(cap) => validate_job_limit(cap)?,
             None => {
@@ -594,11 +637,23 @@ impl SourceCoordinator {
         })
     }
 
-    pub async fn run<F>(&mut self, mut emit: F) -> Result<WorkerStats, Box<dyn std::error::Error>>
+    pub async fn run<F>(&mut self, emit: F) -> Result<WorkerStats, Box<dyn std::error::Error>>
     where
         F: FnMut(&WorkerEvent) -> Result<(), serde_json::Error>,
     {
-        let start_time = Instant::now();
+        self.run_at(emit, Instant::now()).await
+    }
+
+    async fn run_at<F>(
+        &mut self,
+        mut emit: F,
+        start_time: Instant,
+    ) -> Result<WorkerStats, Box<dyn std::error::Error>>
+    where
+        F: FnMut(&WorkerEvent) -> Result<(), serde_json::Error>,
+    {
+        let workflow_deadline =
+            start_time + std::time::Duration::from_secs(self.limits.max_workflow_duration_s);
         let enrichment = self.limits.enrichment.clone().unwrap_or_default();
         enrichment.validate()?;
 
@@ -611,17 +666,31 @@ impl SourceCoordinator {
                 .get(&source.id)
                 .unwrap_or(&self.filters)
                 .clone();
-            match CoordinatorSession::init(
-                &self.client,
-                source.clone(),
-                filters,
-                self.started,
-                &enrichment,
-                self.dry_run,
-                self.max_jobs_per_run,
-            )
-            .await
-            {
+            let initialized = if Instant::now() >= workflow_deadline {
+                Err(ClientError::TimeLimit(
+                    "Workflow duration reached before this source could initialize".into(),
+                ))
+            } else {
+                tokio::time::timeout_at(
+                    workflow_deadline,
+                    CoordinatorSession::init(
+                        &self.client,
+                        source.clone(),
+                        filters,
+                        &self.limits,
+                        self.dry_run,
+                        self.max_jobs_per_run,
+                        workflow_deadline,
+                    ),
+                )
+                .await
+                .unwrap_or_else(|_| {
+                    Err(ClientError::TimeLimit(
+                        "Workflow initialization reached its time limit".into(),
+                    ))
+                })
+            };
+            match initialized {
                 Ok(session) => sessions.push(session),
                 Err(error) => {
                     emit(&WorkerEvent::Error {
@@ -636,7 +705,11 @@ impl SourceCoordinator {
                     let stat = SourceScanStats {
                         source_id: source.id.clone(),
                         limit: self.max_jobs_per_run,
-                        termination: CoverageTermination::Failed,
+                        termination: if matches!(error, ClientError::TimeLimit(_)) {
+                            CoverageTermination::TimeLimit
+                        } else {
+                            CoverageTermination::Failed
+                        },
                         outcome: Some(ScanOutcome::Failed),
                         ..Default::default()
                     };
@@ -669,9 +742,38 @@ impl SourceCoordinator {
 
                     // Visit this source for at most ONE eligible unique posting in this round:
                     let mut source_yielded_in_round = false;
+                    let mut events_this_turn = 0;
+                    session.yield_after_candidate = false;
 
                     while !source_yielded_in_round && !session.is_finished() {
-                        match session.next_candidate(&self.client, self.started).await {
+                        if events_this_turn >= 32
+                            || (session.yield_after_candidate && !session.has_pending())
+                        {
+                            round_progress = true;
+                            break;
+                        }
+                        events_this_turn += 1;
+                        if Instant::now() >= workflow_deadline && !session.has_pending() {
+                            emit(&session.workflow_timeout())?;
+                            break;
+                        }
+                        let next = if session.selector_session.is_some() || session.has_pending() {
+                            session.next_candidate(&self.client, self.started).await
+                        } else {
+                            match tokio::time::timeout_at(
+                                workflow_deadline,
+                                session.next_candidate(&self.client, self.started),
+                            )
+                            .await
+                            {
+                                Ok(result) => result,
+                                Err(_) => {
+                                    emit(&session.workflow_timeout())?;
+                                    break;
+                                }
+                            }
+                        };
+                        match next {
                             Ok(Some((event, evidence))) => {
                                 match &event {
                                     WorkerEvent::SourceInfo { provider_total, .. } => {
@@ -689,8 +791,16 @@ impl SourceCoordinator {
                                         emit(&event)?;
                                         continue;
                                     }
-                                    WorkerEvent::Warning { termination, .. } => {
-                                        session.stats.enrichment_warnings += 1;
+                                    WorkerEvent::Warning {
+                                        termination,
+                                        eligibility_incomplete,
+                                        ..
+                                    } => {
+                                        // Coverage diagnostics are not detail-enrichment failures.
+                                        if !session.exhausted {
+                                            session.stats.enrichment_warnings += 1;
+                                        }
+                                        session.coverage_incomplete |= *eligibility_incomplete;
                                         if let Some(t) = termination {
                                             session.stats.termination = *t;
                                         }
@@ -801,7 +911,7 @@ impl SourceCoordinator {
                                 }
                             }
                             Ok(None) => {
-                                session.exhausted = true;
+                                round_progress |= !session.is_finished();
                                 break;
                             }
                             Err(error) => {
@@ -830,7 +940,8 @@ impl SourceCoordinator {
 
         // Finalize branding, stats, and terminations
         let mut final_stats = WorkerStats::default();
-        let logo_deadline = Instant::now() + std::time::Duration::from_secs(4);
+        let logo_deadline =
+            workflow_deadline.min(Instant::now() + std::time::Duration::from_secs(4));
 
         for mut session in sessions {
             session.stats.limit_reached = session.stats.accepted == u64::from(session.stats.limit);
@@ -838,16 +949,11 @@ impl SourceCoordinator {
                 && !session.exhausted
                 && !session.failed
             {
-                if session.stats.unresolved == 0
-                    || session.stats.termination == CoverageTermination::Exhausted
+                if !session.coverage_incomplete
+                    && (session.stats.unresolved == 0
+                        || session.stats.termination == CoverageTermination::Exhausted)
                 {
                     session.stats.termination = CoverageTermination::JobLimit;
-                }
-            } else if session.exhausted {
-                if session.stats.termination != CoverageTermination::TimeLimit
-                    && session.stats.termination != CoverageTermination::RequestLimit
-                {
-                    session.stats.termination = CoverageTermination::Exhausted;
                 }
             } else if session.failed {
                 session.stats.termination = CoverageTermination::Failed;
@@ -928,7 +1034,7 @@ impl SourceCoordinator {
                 } else {
                     ScanOutcome::Failed
                 }
-            } else if session.stats.unresolved > 0 {
+            } else if session.coverage_incomplete || session.stats.unresolved > 0 {
                 if session.stats.termination == CoverageTermination::Exhausted {
                     session.stats.termination = CoverageTermination::Failed;
                 }
@@ -967,5 +1073,45 @@ impl SourceCoordinator {
             stats: final_stats.clone(),
         })?;
         Ok(final_stats)
+    }
+}
+
+#[cfg(test)]
+mod deadline_tests {
+    use super::*;
+    #[tokio::test]
+    async fn expired_workflow_deadline_stops_before_initializing_any_source() {
+        let config = WorkerConfig {
+            sources: vec![WorkerSource {
+                id: "unvisited".into(),
+                kind: SourceKind::Selector,
+                name: "Fixture".into(),
+                identifier: "not-a-url".into(),
+                config: serde_json::json!({}),
+            }],
+            limits: WorkerLimits {
+                max_workflow_duration_s: 30,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut coordinator =
+            SourceCoordinator::new(HttpClient::new(1, 0), &config, false, Utc::now()).unwrap();
+        let mut events = Vec::new();
+        let stats = coordinator
+            .run_at(
+                |event| {
+                    events.push(event.clone());
+                    Ok(())
+                },
+                Instant::now() - std::time::Duration::from_secs(31),
+            )
+            .await
+            .unwrap();
+        assert_eq!(stats.sources.len(), 1);
+        assert_eq!(stats.sources[0].termination, CoverageTermination::TimeLimit);
+        assert_eq!(stats.sources[0].outcome, Some(ScanOutcome::Failed));
+        assert_eq!(stats.sources[0].examined, 0);
+        assert!(events.iter().any(|e|matches!(e,WorkerEvent::Error{message,..} if message.contains("before this source could initialize"))));
     }
 }

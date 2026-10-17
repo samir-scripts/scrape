@@ -767,3 +767,174 @@ fn malformed_records_are_counted_and_isolated_but_a_missing_listing_collection_f
     );
     assert!(events.iter().any(|event|matches!(event,WorkerEvent::Error{message,..} if message.contains("missing field `jobs`"))));
 }
+
+#[test]
+fn selector_pagination_reaches_late_matches_without_enriching_known_rejects() {
+    let server = Server::new(|path| {
+        match path {
+        "/fixture.test/careers" => format!("{}<a class=next href='/careers?page=2'>Next</a>", (0..70).map(|id|format!("<article data-id='sales-{id}'><a class=title href='/jobs/sales-{id}'>Sales</a></article>")).collect::<String>()),
+        "/fixture.test/careers?page=2" => format!("{}<a class=next href='/unvisited'>Next</a>", (42..46).map(|id|format!("<article data-id='req-{id}'><a class=title href='/jobs/{id}?ref=original'>Original Engineer {id}</a></article>")).collect::<String>()),
+        "/fixture.test/jobs/42?ref=original" | "/fixture.test/jobs/43?ref=original" => "<h1>Changed title must not replace listing identity</h1><p class=description>Rust role</p><span class=pay>$45.25 - $55.75 per hour</span><time datetime='2026-10-15'></time>".into(),
+        _ => panic!("Unnecessary page/detail request: {path}"),
+    }
+    });
+    let src = json!({"id":"static","kind":"selector","name":"Fixture","identifier":"https://fixture.test/careers","config":{
+        "__workflow_spec":{"max_jobs_per_run":2},"item":"article","title":".title","link":"a","id":".@data-id", "next_page":"a.next", "follow_detail":true,
+        "detail_fields":{"description":".description", "salary":".pay", "date":"time"}
+    }});
+    let events = run_with_limits(
+        &server,
+        vec![src],
+        json!({"matching":{"keywords":{"any":["Engineer"],"fields":["title"]},"posting_date":{"last_hours":72,"timezone":"UTC"}},"compensation":{"min_minor":5000,"max_minor":6000,"currency":"USD","interval":"hour","include_unknown":false}}),
+        vec![],
+        false,
+        json!({"max_requests":2}),
+    );
+    assert_eq!(jobs(&events), 2);
+    let scan = &summary(&events)[0];
+    scan.validate().unwrap();
+    assert_eq!(
+        (scan.examined, scan.rejected, scan.accepted, scan.unresolved),
+        (72, 70, 2, 0)
+    );
+    assert_eq!(
+        scan.termination,
+        scrape_core::protocol::CoverageTermination::JobLimit
+    );
+    for (event, id) in events
+        .iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .zip([42, 43])
+    {
+        let WorkerEvent::Job {
+            title,
+            url,
+            external_id,
+            salary,
+            date_posted,
+            ..
+        } = event
+        else {
+            unreachable!()
+        };
+        assert_eq!(title, &format!("Original Engineer {id}"));
+        assert_eq!(external_id, &format!("req-{id}"));
+        assert_eq!(url, &format!("https://fixture.test/jobs/{id}?ref=original"));
+        assert_eq!(salary.as_ref().unwrap().ranges[0].min_minor, Some(4525));
+        assert_eq!(date_posted.as_deref(), Some("2026-10-15"));
+    }
+    assert_eq!(
+        *server.requests.lock().unwrap(),
+        [
+            "/fixture.test/robots.txt",
+            "/fixture.test/careers",
+            "/fixture.test/careers?page=2",
+            "/fixture.test/jobs/42?ref=original",
+            "/fixture.test/jobs/43?ref=original"
+        ]
+    );
+}
+
+#[test]
+fn selector_page_bounds_and_loops_are_partial_with_truthful_termination() {
+    for bounded in [false, true] {
+        let server = Server::new(|path| {
+            match path {
+            "/fixture.test/careers" => "<div class=job-item><a class=job-title href=/jobs/1>Engineer</a></div><a class=next href='/second'>Next</a>".into(),
+            "/fixture.test/second" => "<div class=job-item><a class=job-title href=/jobs/2>Engineer</a></div><a class=next href='/careers#top'>Next</a>".into(),
+            _ => panic!("Repeated/extra page: {path}"),
+        }
+        });
+        let src = json!({"id":"static","kind":"selector","name":"Fixture","identifier":"https://fixture.test/careers","config":{"next_page":"a.next","max_pages":if bounded {1}else{100}}});
+        let events = run(&server, vec![src], json!({}), vec![], false);
+        let scan = &summary(&events)[0];
+        scan.validate().unwrap();
+        assert_eq!(jobs(&events), if bounded { 1 } else { 2 });
+        assert_eq!(
+            scan.outcome,
+            Some(scrape_core::protocol::ScanOutcome::Partial)
+        );
+        assert_eq!(
+            scan.termination,
+            if bounded {
+                scrape_core::protocol::CoverageTermination::PageLimit
+            } else {
+                scrape_core::protocol::CoverageTermination::Failed
+            }
+        );
+        assert_eq!(
+            server.requests.lock().unwrap().len(),
+            if bounded { 2 } else { 3 }
+        );
+    }
+}
+
+#[test]
+fn selector_optional_details_and_required_unknowns_have_separate_outcomes() {
+    for required in [false, true] {
+        let server = Server::new(|path| {
+            match path {
+            "/fixture.test/careers" => "<div class=job-item><a class=job-title href=/jobs/1>Engineer</a></div><div class=job-item><a class=job-title href=/jobs/2>Engineer</a></div>".into(),
+            _=>panic!("No detail allowance: {path}"),
+        }
+        });
+        let src = json!({"id":"static","name":"Fixture","kind":"selector","identifier":"https://fixture.test/careers","config":{"follow_detail":true,"detail_fields":{"date":"time"}}});
+        let filters = if required {
+            json!({"matching":{"posting_date":{"last_hours":72,"timezone":"UTC"}}})
+        } else {
+            json!({})
+        };
+        let events = run_with_limits(
+            &server,
+            vec![src],
+            filters,
+            vec![],
+            false,
+            json!({"max_requests":0}),
+        );
+        let scan = &summary(&events)[0];
+        scan.validate().unwrap();
+        assert_eq!(
+            (scan.accepted, scan.unresolved),
+            if required { (0, 2) } else { (2, 0) }
+        );
+        assert_eq!(scan.enrichment_warnings, 1);
+        assert_eq!(
+            scan.outcome,
+            Some(if required {
+                scrape_core::protocol::ScanOutcome::Partial
+            } else {
+                scrape_core::protocol::ScanOutcome::SuccessWithWarnings
+            })
+        );
+        assert_eq!(server.requests.lock().unwrap().len(), 2);
+    }
+}
+
+#[test]
+fn selector_bad_next_destination_keeps_valid_jobs_and_reports_partial_coverage() {
+    let server = Server::new(|path| {
+        assert_eq!(path, "/fixture.test/careers");
+        "<div class=job-item><a class=job-title href=/jobs/1>Engineer</a></div><a class=next href='javascript:bad()'>Next</a>".into()
+    });
+    let events = run(
+        &server,
+        vec![
+            json!({"id":"static","name":"Fixture","kind":"selector","identifier":"https://fixture.test/careers","config":{"next_page":"a.next"}}),
+        ],
+        json!({}),
+        vec![],
+        false,
+    );
+    assert_eq!(jobs(&events), 1);
+    let scan = &summary(&events)[0];
+    scan.validate().unwrap();
+    assert_eq!(
+        scan.outcome,
+        Some(scrape_core::protocol::ScanOutcome::Partial)
+    );
+    assert_eq!(scan.enrichment_warnings, 0);
+    assert!(events.iter().any(
+        |e| matches!(e,WorkerEvent::Warning{message,..} if message.contains("Invalid next-page"))
+    ));
+}

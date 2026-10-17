@@ -30,6 +30,10 @@ if (live)
     identifier: "bitwarden",
     url: "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs?content=true",
   });
+const executable = `src-tauri/binaries/scrape-worker-${process.arch === "arm64" ? "aarch64" : "x86_64"}-${process.platform === "darwin" ? "apple-darwin" : "unknown-linux-gnu"}`;
+if (!existsSync(executable)) throw new Error("Build the packaged worker with npm run build:sidecar before provider verification.");
+const protocolVersion = Number(execFileSync(executable, ["--protocol-version"], { encoding: "utf8", timeout: 5000 }).trim());
+if (!Number.isInteger(protocolVersion) || protocolVersion <= 0) throw new Error("Worker returned an invalid protocol version");
 const report = {
   mode: live ? "live provider" : "recorded HTTP replay",
   timestamp: new Date().toISOString(),
@@ -81,7 +85,7 @@ for (const provider of providers) {
     origin = `http://127.0.0.1:${server.address().port}`;
   }
   const config = {
-    version: 6,
+    version: protocolVersion,
     sources: [
       {
         id: "recorded-" + provider.identifier,
@@ -108,8 +112,6 @@ for (const provider of providers) {
   };
   try {
     const output = await new Promise((resolve, reject) => {
-      const executable = `src-tauri/binaries/scrape-worker-${process.arch === "arm64" ? "aarch64" : "x86_64"}-${process.platform === "darwin" ? "apple-darwin" : "unknown-linux-gnu"}`;
-      if (!existsSync(executable)) throw new Error("Build the packaged worker with npm run build:sidecar before provider verification.");
       const child = spawn(
         executable,
         ["--stdin", ...(origin ? ["--replay-origin", origin] : [])],

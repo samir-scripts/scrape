@@ -182,6 +182,7 @@ async fn preview_single_global_identity_and_native_pay_survive_persistence_and_b
             request_timeout_s: 3,
             per_host_delay_ms: 0,
             concurrency: 1,
+            ..Default::default()
         },
         ..Default::default()
     };
@@ -382,6 +383,7 @@ async fn recorded_lever_response_survives_actual_worker_and_repository() {
             request_timeout_s: 3,
             per_host_delay_ms: 0,
             concurrency: 1,
+            ..Default::default()
         },
         ..Default::default()
     };
@@ -568,6 +570,7 @@ async fn remote_us_eligibility_survives_greenhouse_worker_persistence_and_restar
             request_timeout_s: 3,
             per_host_delay_ms: 0,
             concurrency: 1,
+            ..Default::default()
         },
         ..Default::default()
     };
@@ -1124,13 +1127,17 @@ async fn late_greenhouse_matches_refresh_with_provenance_and_protected_state() {
 
 #[tokio::test]
 async fn mixed_xpath_css_fields_survive_worker_preview_refresh_and_persistence() {
-    verify_static_worker_persistence(false).await;
+    verify_static_worker_persistence(false, false).await;
 }
 #[tokio::test]
 async fn hydration_fields_survive_worker_preview_refresh_and_persistence() {
-    verify_static_worker_persistence(true).await;
+    verify_static_worker_persistence(true, false).await;
 }
-async fn verify_static_worker_persistence(hydration: bool) {
+#[tokio::test]
+async fn paginated_static_details_survive_preview_refresh_and_persistence() {
+    verify_static_worker_persistence(false, true).await;
+}
+async fn verify_static_worker_persistence(hydration: bool, paginated: bool) {
     use serde_json::json;
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
@@ -1139,7 +1146,9 @@ async fn verify_static_worker_persistence(hydration: bool) {
         let deadline = Instant::now() + Duration::from_secs(20);
         let mut pages = 0;
         let mut robots = 0;
-        while pages < 3 && Instant::now() < deadline {
+        let mut requests = 0;
+        let expected_requests = if paginated { 18 } else { 6 };
+        while requests < expected_requests && Instant::now() < deadline {
             if let Ok((mut stream, _)) = listener.accept() {
                 stream.set_nonblocking(false).unwrap();
                 stream
@@ -1156,7 +1165,9 @@ async fn verify_static_worker_persistence(hydration: bool) {
                     }
                     "/fixture.test/careers" => {
                         pages += 1;
-                        if hydration {
+                        if paginated {
+                            "<article class='job-card' data-job-id='req-sales'><h2>Role: Sales</h2><a data-url='/jobs/sales'>Apply</a></article><a rel='next' href='/second'>Next</a>".into()
+                        } else if hydration {
                             let jobs: Vec<_> = [("sales", "Sales"), ("42", "Rust Engineer"), ("43", "Platform Engineer"), ("44", "Later Engineer")].into_iter().map(|(id,title)| json!({"id":format!("req-{id}"),"title":format!("Role: {title}"),"url":format!("/jobs/{id}?ref=original"),"pay":"Pay: $45.25 - $55.75 per hour","published":"2026-10-15","body":"Original description"})).collect();
                             format!(
                                 "<script id='__NEXT_DATA__' type='application/json'>{}</script>",
@@ -1166,6 +1177,9 @@ async fn verify_static_worker_persistence(hydration: bool) {
                             [("sales", "Sales"), ("42", "Rust Engineer"), ("43", "Platform Engineer"), ("44", "Later Engineer")].into_iter().map(|(id,title)| format!("<article class='job-card' data-job-id='req-{id}'><h2>Role: {title}</h2><a data-url='/jobs/{id}?ref=original'>Apply</a><span class='pay'>Pay: $45.25 - $55.75 per hour</span><time datetime='2026-10-15'></time><p>Original description</p></article>")).collect::<String>()
                         }
                     }
+                    "/fixture.test/second" if paginated => "<main>Empty middle page</main><a rel='next' href='/third'>Next</a>".into(),
+                    "/fixture.test/third" if paginated => format!("{}<a rel='next' href='/unvisited'>Next</a>", ["42","43","44"].into_iter().map(|id|format!("<article class='job-card' data-job-id='req-{id}'><h2>Role: {} Engineer</h2><a data-url='/jobs/{id}?ref=original'>Apply</a><a rel='detail' href='/evidence/{id}'>Details</a></article>",if id=="42" {"Rust"}else{"Platform"})).collect::<String>()),
+                    "/fixture.test/evidence/42" | "/fixture.test/evidence/43" if paginated => "<h1>Changed title must be ignored</h1><main><p class=description>Original description</p><span class=pay>Pay: $45.25 - $55.75 per hour</span><time datetime='2026-10-15'></time></main>".into(),
                     _ => panic!("Unexpected extraction request: {path}"),
                 };
                 write!(
@@ -1175,17 +1189,18 @@ async fn verify_static_worker_persistence(hydration: bool) {
                     body
                 )
                 .unwrap();
+                requests += 1;
             } else {
                 std::thread::sleep(Duration::from_millis(5));
             }
         }
-        assert_eq!((pages, robots), (3, 3));
+        assert_eq!((pages, robots, requests), (3, 3, expected_requests));
     });
     let directory = tempfile::tempdir().unwrap();
     let pool = scrape_lib::db::init_db(&directory.path().join("locators.db"))
         .await
         .unwrap();
-    let extraction = if hydration {
+    let mut extraction = if hydration {
         json!({
             "hydration_pointer":"/props/jobs",
             "hydration_fields":{"title":"/title","link":"/url","id":"/id","salary":"/pay","date":"/published","description":"/body"},
@@ -1199,6 +1214,13 @@ async fn verify_static_worker_persistence(hydration: bool) {
             "salary":".pay", "salary_regex":"Pay: (?P<value>.+)"
         })
     };
+    if paginated {
+        extraction["next_page"] = "xpath:(//a[@rel='next'])[1]/@href".into();
+        extraction["detail"] = "xpath:.//a[@rel='detail']/@href".into();
+        extraction["detail_container"] = "main".into();
+        extraction["detail_fields"] = json!({"description":".description","description_attribute":"text","salary":".pay","salary_regex":"Pay: (?P<value>.+)","date":"time"});
+        extraction["wait_for"] = "body".into();
+    }
     let spec = scrape_lib::services::workflow::validate(json!({
         "version":5,"metadata":{"name":"Mixed locator fixture"},"max_jobs_per_run":2,
         "sources":[{"id":"fixture", "label":"Fixture", "employer_hint":"Fixture", "extractor":{
@@ -1206,6 +1228,13 @@ async fn verify_static_worker_persistence(hydration: bool) {
         }}],
         "schedule":{"cadence":"manual"}, "filters":{"matching":{"keywords":{"any":["Engineer"],"fields":["title"]}}}
     }), "UTC").unwrap();
+    let mut spec = spec;
+    if paginated {
+        let mut value = serde_json::to_value(&spec).unwrap();
+        value["filters"]["matching"]["posting_date"] = json!({"last_hours":72,"timezone":"UTC"});
+        value["filters"]["compensation"] = json!({"min_minor":5000,"max_minor":6000,"currency":"USD","interval":"hour","include_unknown":false});
+        spec = scrape_lib::services::workflow::validate(value, "UTC").unwrap();
+    }
     let source = SourcesRepo::create(
         &pool,
         scrape_lib::services::workflow::source_input(&spec, "UTC").unwrap(),

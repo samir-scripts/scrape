@@ -96,9 +96,8 @@ and `tbody` elements. Unsupported expressions, namespaces, unions and functions
 fail explicitly; this is a subset of [XPath 1.0](https://www.w3.org/TR/1999/REC-xpath-19991116/).
 The shared parser enforces 4096 bytes, 64 steps and 32 predicates per step.
 
-This checkpoint implements locators/transforms only. Selector hydration,
-resumable pagination/detail enrichment, browser sessions and executable scripts
-remain pending in [the Section 6 blueprint](11-section-6-browser-and-script-extraction.md).
+Static locators, hydration and resumable pagination/detail enrichment are implemented.
+Browser sessions and executable scripts remain pending in [the Section 6 blueprint](11-section-6-browser-and-script-extraction.md).
 
 ### Embedded hydration JSON
 
@@ -133,5 +132,49 @@ mixed. Destination URL patterns and authoritative matching still apply.
 Missing scripts, malformed JSON and pointers that do not select an array fail
 explicitly. Invalid candidates are isolated. No script code is executed, and
 flattened/reference-encoded hydration formats are not decoded automatically.
-Unknown compensation/date values remain unknown. Hydration alone does not add
-pagination or detail fetching.
+Unknown compensation/date values remain unknown. Hydration uses the same page/detail coordinator when explicitly configured.
+
+## Static pagination and details
+
+Add static navigation and detail extraction inside `extractor.source_config`:
+
+```yaml
+next_page: "xpath:(//a[@rel='next'])[1]/@href"
+max_pages: 20
+max_source_duration_s: 60
+wait_for: "main.jobs"
+detail: "a.details@href"
+detail_container: "main"
+detail_fields:
+  description: ".description"
+  description_attribute: text
+  salary: ".pay"
+  salary_regex: "Pay: (?P<value>.+)"
+  date: "time"
+  date_attribute: datetime
+```
+
+`next_page` resolves relative destinations against the actual fetched page and
+prevents URL/redirect cycles (fragments are ignored). `wait_for` verifies static
+HTML presence; it does not execute JavaScript or wait for DOM changes. Load-more
+clicking requires the browser mode planned in 6C and fails explicitly in static
+mode. Missing/unsafe next-page destinations and bounded or failed coverage retain
+already processed jobs with an actionable partial outcome.
+
+`detail` selects a per-candidate detail URL. Alternatively use
+`follow_detail: true` to fetch the original candidate destination (also supported
+by hydration sources). Details require explicit `detail_fields` for location,
+salary, description and/or publication date; field attributes and Rust regexes
+work identically to listing extraction. `detail_container` optionally scopes those
+locators. Title, ID, company and destination cannot be changed by detail fields.
+Only missing evidence is filled; valid listing evidence remains authoritative.
+Details for known rejects and duplicate destinations are skipped. Missing required
+evidence produces partial coverage; optional enrichment failures are warnings.
+
+Default/hard page bound is 100 (source range 1–100). Source duration defaults to
+180 seconds (range 10–600); workflow duration defaults to 600 (range 30–1800).
+Worker limits cap source overrides. Navigation defaults to 30 seconds (range
+5–120), with HTTP client timeout, robots/pacing and the existing 100-request /
+45-second detail allowance retained. No page/detail work is scheduled after the
+shared matching cap. Exhausted sources, page/time limits, loops and job limits
+have distinct diagnostics. Browser/session/script execution is still pending.

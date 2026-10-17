@@ -11,6 +11,8 @@ const USER_AGENT: &str = "Scrape/0.1.0 (local job tracker)";
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
+    #[error("Extraction time limit reached: {0}")]
+    TimeLimit(String),
     #[error("Source extraction failed: {0}")]
     Extraction(String),
     #[error("Invalid extraction configuration: {0}")]

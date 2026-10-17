@@ -33,7 +33,7 @@ The `crates/scrape-core/src` directory contains the core source modules that def
 - **Behavior**: CSS and a documented XPath 1.0 location-path subset operate on the same `scraper::Html` tree. Supports relative/absolute paths, child/self/parent/following-sibling steps, descendant shorthand, attribute/text tests, positional predicates, field attributes and named regex captures. Unsupported syntax fails explicitly. XPath is bounded to 4096 bytes, 64 steps and 32 predicates per step; this is not a full XPath implementation.
 
 ### [`protocol.rs`](protocol.rs)
-- **Role**: Versioned IPC message contracts (`PROTOCOL_VERSION = 6`) exchanged between the Tauri host (`src-tauri`) and the scraper sidecar (`scrape-worker`).
+- **Role**: Versioned IPC message contracts (`PROTOCOL_VERSION = 7`) exchanged between the Tauri host (`src-tauri`) and the scraper sidecar (`scrape-worker`).
 - **Key Types**:
   - `WorkerConfig`: JSON payload sent via `stdin` to configure a scrape run (protocol version, sources, limits, filters, suppression keys).
   - `WorkerLimits` & `EnrichmentLimits`: Concurrency caps, per-host request delays, global timeouts, and bounded detail enrichment limits (`max_requests` 0–100, `timeout_ms` 1–45,000).
@@ -98,3 +98,10 @@ The `crates/scrape-core/src` directory contains the core source modules that def
 ### [`hydration.rs`](hydration.rs)
 
 Validates explicit hydration-script locators, RFC 6901 JSON pointers, posting-field maps and regex transforms for both host configuration and static worker extraction. Numeric IDs are preserved; optional unknowns remain unknown. No script execution or automatic decoding of reference-encoded payloads.
+
+### [`static_source.rs`](static_source.rs)
+
+Shared validation of static next/detail locators, detail field maps, readiness,
+page/source bounds and identity immutability. Global `WorkerLimits` in protocol
+v7 owns default/hard maxima; source settings can lower them. Browser limit
+configuration is published, but browser-process/context enforcement awaits 6C.

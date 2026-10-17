@@ -4,7 +4,7 @@
 
 The `crates/scrape-worker/src/adapters` directory contains specialized parsers that ingest job listings from diverse web formats and Applicant Tracking Systems (ATS). Each adapter fetches raw data (via REST API endpoints or HTML documents), parses the platform's specific schema, applies the enrichment heuristics from `scrape-core::enrich`, and produces standardized `WorkerEvent::Job` events.
 
-Production dispatch uses `scrape_source_with_evidence` and a stopping candidate sink. Greenhouse supplies partial evidence to the shared Rust matching evaluator, skips conclusive rejects/duplicates before bounded details, and fills missing fields without replacing listing identity. Optional enrichment failures emit warnings; missing required evidence remains unresolved. Selector sources now accept mixed CSS/XPath locators with shared Rust field transforms; other adapters retain their complete extraction path. Compatibility `scrape_source_with` and collecting entry points wrap the same dispatch. `PostingGate` owns matching, canonical identity deduplication, the suppression snapshot, and the per-workflow acceptance budget (20 by default; Preview/Test at most 10). All five adapters stop record processing when the sink returns false. Greenhouse stops additional detail enrichment; JSON-LD stops recursive extraction and followed-page requests. Existing vector-returning entry points collect this same path for raw adapter tests. Whole-board JSON response downloads/deserialization can be unavoidable; the cap does not imply provider-side pagination support.
+Production uses `coordinator.rs` resumable sessions and shared matching/budgeting; compatibility dispatch uses `scrape_source_with_evidence` and a stopping candidate sink. Greenhouse supplies partial evidence to the shared Rust matching evaluator, skips conclusive rejects/duplicates before bounded details, and fills missing fields without replacing listing identity. Optional enrichment failures emit warnings; missing required evidence remains unresolved. Selector sources now accept mixed CSS/XPath locators with shared Rust field transforms; other adapters retain their complete extraction path. Compatibility `scrape_source_with` and collecting entry points wrap the same dispatch. `PostingGate` owns matching, canonical identity deduplication, the suppression snapshot, and the per-workflow acceptance budget (20 by default; Preview/Test at most 10). All five adapters stop record processing when the sink returns false. Greenhouse stops additional detail enrichment; JSON-LD stops recursive extraction and followed-page requests. Existing vector-returning entry points collect this same path for raw adapter tests. Whole-board JSON response downloads/deserialization can be unavoidable; the cap does not imply provider-side pagination support.
 
 `branding.rs` extracts employer-labelled images and `JobPosting.hiringOrganization.logo`, resolving relative URLs and accepting only HTTP(S) assets without credentials. Greenhouse, Lever and Ashby make at most one branding-page lookup per source/run, using the first provider-supplied posting URL with robots checks and a four-second total deadline. The resulting logo is reused only for that same employer. JSON-LD and selector sources use metadata already in their fetched HTML. A missing, blocked or failed image remains unknown; platform favicons and guessed company domains are not company branding. Saved postings acquire missing logos through normal rescraping, preserving existing images when no replacement is supplied.
 
@@ -20,7 +20,7 @@ Production dispatch uses `scrape_source_with_evidence` and a stopping candidate 
 | [`lever.rs`](lever.rs) | Lever | JSON REST API | Fetches `https://api.lever.co/v0/postings/{company}`. Parses commitment categories, workplace types, salary ranges, and plain-text descriptions. |
 | [`ashby.rs`](ashby.rs) | Ashby | JSON REST API | Fetches `https://api.ashbyhq.com/posting-api/job-board/{board}`. Normalizes compensation tiers, remote/hybrid status, and multi-location lists. |
 | [`jsonld.rs`](jsonld.rs) | Schema.org Semantic Web | Embedded HTML `<script>` | Scrapes HTML pages containing `<script type="application/ld+json">` tags. Recursively parses Schema.org `JobPosting` objects, supporting both direct objects and `@graph` array collections. |
-| [`selector.rs`](selector.rs) | Custom Web Pages | CSS Selectors + Regex | Configurable engine for arbitrary career websites. Extracts job items, titles, URLs, locations, and salaries using configurable CSS selectors, regex captures, and URL glob filters (`url_pattern`, `exclude_url_patterns`). |
+| [`selector.rs`](selector.rs), [`selector_session.rs`](selector_session.rs) | Custom Web Pages | CSS/XPath, hydration JSON, bounded HTTP pages/details | Configurable engine for arbitrary career websites. Extracts job items, titles, URLs, locations, and salaries using configurable CSS selectors, regex captures, and URL glob filters (`url_pattern`, `exclude_url_patterns`). |
 
 ---
 
@@ -49,7 +49,7 @@ Geography uses the shared Rust country/subdivision catalog and bounded alias rul
                       WorkerEvent::Job
 ```
 
-## Static locator extraction (Section 6A, first checkpoint)
+## Static extraction (Section 6A)
 
 `selector.rs` compiles locators and regexes before traversing one HTML5 tree,
 reusing that tree for employer branding. CSS containers can use XPath fields and
@@ -60,7 +60,13 @@ URL patterns, enrichment and the coordinator's acceptance gate remain in use.
 
 The parser lives in `scrape-core::{locator,xpath}` so the host validates exactly
 the syntax the worker executes. See [configuration examples](../../../../plans/workflow-v3.md#static-custom-locators-section-6a).
-Resumable selector pagination/details, hydration extraction and browser/script
-execution are still pending; this checkpoint does not make selector loading lazy.
+`selector_session.rs` retains candidate/page position across coordinator turns,
+fetches at most one new page per turn, and skips details for conclusive rejects.
+Details fill missing evidence without changing listing title, destination or ID.
+Source/page/workflow limits, cycles and malformed navigation produce truthful
+partial coverage, retaining valid jobs. No new requests are scheduled after the
+acceptance cap. A source with many rejects yields after 32 events; healthy
+paginated and single-page sources retain the shared 7/7/6 distribution at cap 20.
+Browser/script execution remains pending.
 
 Hydration extraction now uses `scrape-core::hydration` for shared JSON-pointer, field-map and regex validation, with the same raw posting normalizer as DOM extraction. No embedded scripts are executed. See [configuration](../../../../plans/workflow-v3.md#embedded-hydration-json).

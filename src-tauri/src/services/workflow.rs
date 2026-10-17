@@ -767,6 +767,17 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
         "employer_logo",
         "follow_links",
         "max_pages",
+        "max_source_duration_s",
+        "next_page",
+        "next_page_attribute",
+        "next_page_regex",
+        "follow_detail",
+        "detail",
+        "detail_attribute",
+        "detail_regex",
+        "detail_fields",
+        "detail_container",
+        "wait_for",
         "title_regex",
         "link_regex",
         "location_regex",
@@ -798,10 +809,7 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
             SourceKind::Jsonld => {
                 ["url", "follow_links", "max_pages", "employer_logo"].contains(&key.as_str())
             }
-            SourceKind::Selector => {
-                allowed.contains(&key.as_str())
-                    && !["follow_links", "max_pages"].contains(&key.as_str())
-            }
+            SourceKind::Selector => allowed.contains(&key.as_str()) && key != "follow_links",
             _ => key == "url",
         };
         if !implemented {
@@ -818,6 +826,13 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
         return Err(AppError::Validation(
             "extractor.source_config.max_pages: expected 1–100".into(),
         ));
+    }
+    if kind == SourceKind::Selector {
+        scrape_core::static_source::StaticSourceConfig::parse(
+            config,
+            &scrape_core::WorkerLimits::default(),
+        )
+        .map_err(AppError::Validation)?;
     }
     let hydration = if kind == SourceKind::Selector {
         scrape_core::hydration::HydrationConfig::parse(config).map_err(AppError::Validation)?
@@ -1032,6 +1047,26 @@ mod tests {
             );
         }
         assert!(validate_config(SourceKind::Greenhouse, &config).is_err());
+    }
+
+    #[test]
+    fn static_navigation_and_detail_settings_validate_without_weakening_identity() {
+        let config = serde_json::json!({"item":".job","title":"h2","link":"a","next_page":"xpath://a[@rel='next']/@href","max_pages":3,"max_source_duration_s":10,"detail":"a.detail@href","detail_container":"main","detail_fields":{"date":"time","salary":".pay","salary_regex":"(?P<value>.+)"},"wait_for":"body"});
+        validate_config(SourceKind::Selector, &config).unwrap();
+        for (key, value) in [
+            ("max_pages", serde_json::json!(0)),
+            ("max_source_duration_s", serde_json::json!(601)),
+            ("detail_fields", serde_json::json!({"title":"h1"})),
+            ("detail_fields", serde_json::json!({"salary":"["})),
+            ("wait_for", serde_json::json!("xpath://a/text()")),
+        ] {
+            let mut invalid = config.clone();
+            invalid[key] = value;
+            assert!(
+                validate_config(SourceKind::Selector, &invalid).is_err(),
+                "accepted {key}"
+            );
+        }
     }
 
     #[test]

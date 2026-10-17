@@ -14,6 +14,7 @@ const reasons: Record<RejectionReason, string> = {
 };
 const terminations: Record<SourceScanStats["termination"], string> = {
   exhausted: "Source exhausted", job_limit: "Matching job limit reached",
+  page_limit: "Page limit reached", needs_login: "Needs login",
   request_limit: "Request limit reached", time_limit: "Time limit reached",
   cancelled: "Cancelled", failed: "Source processing failed",
 };

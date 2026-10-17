@@ -17,6 +17,7 @@ pub mod xpath;
 pub use identity::PostingIdentity;
 pub mod protocol;
 mod role;
+pub mod static_source;
 mod types;
 
 pub use filter::{FilterExpr, FilterField, FilterOp, JobFilterContext};

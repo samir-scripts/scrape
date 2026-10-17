@@ -477,3 +477,44 @@ fn workflow_wide_canonical_deduplication_does_not_count_duplicate_towards_round_
         "Source B must yield unique-b after skipping the duplicate"
     );
 }
+
+#[test]
+fn healthy_paginated_and_single_page_sources_keep_round_robin_7_7_6_distribution() {
+    verify_paginated_fairness(false);
+}
+#[test]
+fn optional_detail_warnings_do_not_cost_a_paginated_source_its_round() {
+    verify_paginated_fairness(true);
+}
+fn verify_paginated_fairness(optional_warnings: bool) {
+    let server = Server::new(|path| {
+        if path.contains("/jobs/") {
+            return "<p>Detail container unavailable</p>".into();
+        }
+        let (path, page) = path.split_once("?page=").unwrap();
+        let board = path.rsplit('/').next().unwrap();
+        let page: usize = page.parse().unwrap();
+        assert!((1..=7).contains(&page));
+        if board != "a" {
+            return (1..=20).map(|id| format!("<div class=job-item><a class=job-title href='/jobs/{board}-{id}'>Engineer {board} {id}</a></div>")).collect();
+        }
+        format!("<div class=job-item><a class=job-title href='/jobs/{board}-{page}'>Engineer {board} {page}</a></div><a class=next href='/{board}?page={}'>Next</a>", page+1)
+    });
+    let mut sources: Vec<Value> = ["a","b","c"].into_iter().map(|id| json!({"id":id,"name":"Fixture","kind":"selector","identifier":format!("https://fixture.test/{id}?page=1"),"config":{"next_page":"a.next"}})).collect();
+    if optional_warnings {
+        sources[0]["config"]["follow_detail"] = true.into();
+        sources[0]["config"]["detail_container"] = "main".into();
+        sources[0]["config"]["detail_fields"] = json!({"date":"time"});
+    }
+    let events = run_worker(&server, sources, 20, 0, false);
+    let counts: Vec<_> = ["a", "b", "c"]
+        .iter()
+        .map(|id| {
+            events
+                .iter()
+                .filter(|event| matches!(event,WorkerEvent::Job {source_id,..} if source_id == id))
+                .count()
+        })
+        .collect();
+    assert_eq!(counts, [7, 7, 6]);
+}
