@@ -735,6 +735,10 @@ Verification actually run in this workspace:
   worker/repository, 168 core, 31 worker unit, 8 adapter, 5 branding-process,
   3 browser-cdp-process, 6 coordinator, 17 limits-process, 4 script-runner-process,
   7 worker-process; 0 failed).
+  - **Correction (2026-10-17):** The subtotal breakdown above lists "168 core"
+    which sums to 426 rather than 424. The actual count in `crates/scrape-core`
+    was 166 (56 unit tests + 56 doc/type tests + 54 integration tests = 166),
+    matching the stated 424 total.
 - `cargo fmt --all --check` and
   `cargo clippy --workspace --all-targets -- -D warnings`: passed with 0 warnings.
 - `npm run gen:types` and `git diff --exit-code src/bindings`: passed with zero drift
@@ -838,12 +842,36 @@ Verification actually run in this workspace:
 - `cargo fmt --all --check`: passed.
 - `cargo clippy --workspace --all-targets -- -D warnings`: passed with 0 warnings.
 - `cargo test --workspace`: **424 passed** (166 host unit/migration, 11 packaged
-  worker/repository, 168 core, 31 worker unit, 8 adapter, 5 branding-process,
+  worker/repository, 166 core, 31 worker unit, 8 adapter, 5 branding-process,
   3 browser-cdp-process, 6 coordinator, 17 limits-process, 4 script-runner-process,
-  7 worker-process; 0 failed).
+  7 worker-process; 0 failed). The initial sandboxed attempt blocked local CDP socket
+  binding on 1 test and passed upon rerun with local socket access.
 - `git diff --check`: passed with zero whitespace or line ending issues.
 
 No user database/application storage was opened or mutated. No native WKWebView
 UI harness for script editing, physical pointer/IME check, or live provider crawl
 was performed in this checkpoint. Phase 6F native/visual QA and end-to-end acceptance,
 along with earlier missing-report reproduction and Sections 7–8, remain open.
+
+## Section 6E repair — Quarantined Script Workflow Snapshot Loading and Trust Gate
+
+Committed at `a92bfc8`. Repairs four defects identified in Phase 6E:
+1. **Quarantined Script Workflow Editing**: `sourceToWorkflowSpec` now distinguishes between unconvertible legacy originals (`script_sha256 === null`), which continue to ignore invalid snapshots, and quarantined script sources awaiting trust (`script_sha256 !== null && !script_trusted`), whose Rust-validated snapshot is preserved for review and editing when reopened from `SourcesSettings`.
+2. **Trust Gate Content Parity**: `CustomExtractorConfig` now stably compares draft script fields (`runtime`, `interpreter`, `path`, `code`, `args`, `timeout_s`) against the saved snapshot. Modifying the draft script disables "Trust and enable script" and shows *"Save the workflow to fingerprint your changes, then trust it."* Trusting updates local `trustedSource` state, immediately removing the trust banner and displaying *"Script trusted and enabled."*
+3. **Realistic Test Suite**: In `src/test/workflow_browser_script.test.tsx`, eliminated `fireEvent` in favor of real `userEvent.clear` + `userEvent.type` (with `[[` escaping) for XPath inputs; verified `Needs login` and `Ready` badge transitions across session selection and reset to `None (unauthenticated)` on session clear; tested script editing and trust banner disappearance using the real `initialSource` edit path; and verified that modifying draft script disables trust with the save-first message.
+4. **Evidence Reconciled**: Reconciled historical test breakdown counts in Phase 6D and 6E ledger entries (166 core tests, total 424).
+
+Verification actually run in this workspace:
+
+- `npx tsc --noEmit`: passed with 0 errors.
+- `npx vitest run src/test/yaml_workflow.test.ts src/test/workflow_browser_script.test.tsx`: **29 passed / 2 files** (24 in `yaml_workflow.test.ts`, 5 in `workflow_browser_script.test.tsx`).
+- `npx vitest run`: **472 passed / 78 files** (0 failed).
+- `node scripts/test-app-startup.mjs`: passed (Clean Vite development server initialization and shutdown).
+- `npm run build`: passed (Vite production bundle built in 5.33s).
+- `node scripts/check-style.mjs`: passed (Production style guard passed, 0 violations).
+- `git diff --check`: passed with zero whitespace or line ending issues.
+
+No user database/application storage was opened or mutated. No native WKWebView
+UI harness for script editing, physical pointer/IME check, or live provider crawl
+was performed in this repair. Phase 6F native/visual QA and Section 6 end-to-end
+acceptance remain next.
