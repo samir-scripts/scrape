@@ -10,6 +10,35 @@ import {
 import type { Source } from "../bindings/Source";
 
 describe("YAML Workflow Validator & Serializer", () => {
+  it("preserves mixed CSS/XPath locators and field transforms in YAML", () => {
+    const config = {
+      item: "//article[contains(@class, 'job-card')]",
+      title: "xpath:.//h2/text()",
+      title_regex: "Role: (?P<value>.+)",
+      link: "a@data-url",
+      id: ".",
+      id_attribute: "data-job-id",
+      date: "time",
+      date_attribute: "datetime",
+      description: "p",
+      description_attribute: "text",
+    };
+    const spec: WorkflowSpec = {
+      version: 5,
+      metadata: { name: "Locator fixture" },
+      sources: [{
+        id: "fixture", label: "Fixture", enabled: true,
+        extractor: { kind: "selector", url: "https://fixture.test/careers", source_config: config },
+      }],
+      schedule: { cadence: "manual" },
+    };
+    const result = validateWorkflowYaml(workflowSpecToYaml(spec));
+    expect(result.errors).toEqual([]);
+    expect(result.parsedSpec?.sources[0].extractor.source_config).toEqual(config);
+    // Rust performs locator validation; the YAML serializer must preserve it verbatim.
+    expect(workflowSpecToCreateInput(result.parsedSpec!).config).toMatchObject(config);
+  });
+
   const validV2Yaml = `
 version: 2
 metadata:

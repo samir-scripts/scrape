@@ -188,6 +188,15 @@ pub fn resolve_page(
     company: &str,
     configured: Option<&str>,
 ) -> Option<LogoEvidence> {
+    resolve_document(&Html::parse_document(html), page_url, company, configured)
+}
+/// Reuse the caller's HTML5 tree when a custom source already parsed this page.
+pub fn resolve_document(
+    document: &Html,
+    page_url: &str,
+    company: &str,
+    configured: Option<&str>,
+) -> Option<LogoEvidence> {
     if !scrape_core::branding::http_url(page_url)
         || company.trim().is_empty()
         || company == "Unknown company"
@@ -195,7 +204,6 @@ pub fn resolve_page(
     {
         return None;
     }
-    let document = Html::parse_document(html);
     for script in document.select(&Selector::parse("script[type='application/ld+json']").unwrap()) {
         if let Ok(value) = serde_json::from_str::<Value>(&script.inner_html()) {
             if let Some(logo) = structured_logo(&value, page_url, company) {

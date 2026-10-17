@@ -26,6 +26,13 @@ The `crates/scrape-worker/tests` directory contains offline and loopback-HTTP in
 
 ---
 
+Static locator unit tests live with `scrape-core::{locator,xpath}` and
+`adapters/selector.rs`. The packaged sidecar → temporary SQLite test
+`mixed_xpath_css_fields_survive_worker_preview_refresh_and_persistence` in
+[`worker_repository.rs`](../../../src-tauri/tests/worker_repository.rs) verifies
+preview isolation, matching/cap counters, source IDs/destinations, hourly cents,
+refresh and protected user state. Rebuild the sidecar before running host tests.
+
 ## Running Integration Tests
 
 ```bash

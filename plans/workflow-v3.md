@@ -48,3 +48,54 @@ nonzero exit, missing completion and timeout retain valid partial results while
 reporting failure. Native external opening must reach the stored local destination.
 Browser demonstration extraction remains fictional; unsupported date/expert rules
 require the desktop rather than silently broadening the fixture match.
+
+## Static custom locators (Section 6A)
+
+A v5 source with `extractor.kind: selector` accepts these settings inside
+`extractor.source_config` (the top-level extractor contract is unchanged):
+
+```yaml
+item: "//article[contains(@class, 'job-card')]"
+title: "xpath:.//h2/text()"
+title_regex: "Role: (?P<value>.+)"
+link: "a.apply@href"
+id: "."
+id_attribute: "data-job-id"
+location: "xpath:.//h2/following-sibling::span[1]"
+date: "time"
+date_attribute: "datetime"
+description: "p.description"
+description_attribute: "text"
+```
+
+`item` selects elements. Each posting field (`title`, `link`, `id`, `location`,
+`salary`, `date`, `description`) accepts CSS or `xpath:` location paths; `/`, `//`,
+`./`, `.//`, `(/` and `(//` also identify XPath. `.` selects the current container.
+CSS shorthand `a@href`, explicit `<field>_attribute`, or terminal XPath `/@href`
+extract attributes. `text` extracts text and `html` extracts serialized markup.
+Defaults are text except link (`href`), description (`html`), and date
+(`datetime` if present, otherwise text). Original IDs default to the destination
+URL when no ID locator is configured. A configured ID is required to produce a
+nonempty value.
+
+Every posting field supports `<field>_regex`. A named `value` capture takes
+priority, followed by legacy field-named captures, the first numbered capture, then
+the whole match. Regex mismatches on title/link/configured ID emit an invalid
+candidate; optional mismatches stay unknown. Regex-only optional fields retain
+full-container text extraction. Plain-text descriptions retain literal tags.
+
+Supported XPath subset: child `/`, descendant `//`, self `.`, parent `..` or
+`parent::tag`, `following-sibling::tag`, tag/wildcard/text node tests,
+`[@attr]`, `[@attr='value']`, `contains(@attr,'value')`,
+`starts-with(@attr,'value')`, `contains(text(),'value')`,
+`[normalize-space()='value']`, `[1]`/other nonnegative integers and `[last()]`.
+Grouped positional paths are supported: `//a[1]` selects the first matching
+child per parent; `(//a)[1]` selects the first match overall. Attribute tests are
+case-sensitive. Paths use the parsed HTML5 tree, including implied `html`, `body`
+and `tbody` elements. Unsupported expressions, namespaces, unions and functions
+fail explicitly; this is a subset of [XPath 1.0](https://www.w3.org/TR/1999/REC-xpath-19991116/).
+The shared parser enforces 4096 bytes, 64 steps and 32 predicates per step.
+
+This checkpoint implements locators/transforms only. Selector hydration,
+resumable pagination/detail enrichment, browser sessions and executable scripts
+remain pending in [the Section 6 blueprint](11-section-6-browser-and-script-extraction.md).

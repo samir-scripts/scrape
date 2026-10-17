@@ -4,7 +4,7 @@
 
 The `crates/scrape-worker/src/adapters` directory contains specialized parsers that ingest job listings from diverse web formats and Applicant Tracking Systems (ATS). Each adapter fetches raw data (via REST API endpoints or HTML documents), parses the platform's specific schema, applies the enrichment heuristics from `scrape-core::enrich`, and produces standardized `WorkerEvent::Job` events.
 
-Production dispatch uses `scrape_source_with_evidence` and a stopping candidate sink. Greenhouse supplies partial evidence to the shared Rust matching evaluator, skips conclusive rejects/duplicates before bounded details, and fills missing fields without replacing listing identity. Optional enrichment failures emit warnings; missing required evidence remains unresolved. Other adapters retain their complete extraction path. Compatibility `scrape_source_with` and collecting entry points wrap the same dispatch. `PostingGate` owns matching, canonical identity deduplication, the suppression snapshot, and the per-workflow acceptance budget (20 by default; Preview/Test at most 10). All five adapters stop record processing when the sink returns false. Greenhouse stops additional detail enrichment; JSON-LD stops recursive extraction and followed-page requests. Existing vector-returning entry points collect this same path for raw adapter tests. Whole-board JSON response downloads/deserialization can be unavoidable; the cap does not imply provider-side pagination support.
+Production dispatch uses `scrape_source_with_evidence` and a stopping candidate sink. Greenhouse supplies partial evidence to the shared Rust matching evaluator, skips conclusive rejects/duplicates before bounded details, and fills missing fields without replacing listing identity. Optional enrichment failures emit warnings; missing required evidence remains unresolved. Selector sources now accept mixed CSS/XPath locators with shared Rust field transforms; other adapters retain their complete extraction path. Compatibility `scrape_source_with` and collecting entry points wrap the same dispatch. `PostingGate` owns matching, canonical identity deduplication, the suppression snapshot, and the per-workflow acceptance budget (20 by default; Preview/Test at most 10). All five adapters stop record processing when the sink returns false. Greenhouse stops additional detail enrichment; JSON-LD stops recursive extraction and followed-page requests. Existing vector-returning entry points collect this same path for raw adapter tests. Whole-board JSON response downloads/deserialization can be unavoidable; the cap does not imply provider-side pagination support.
 
 `branding.rs` extracts employer-labelled images and `JobPosting.hiringOrganization.logo`, resolving relative URLs and accepting only HTTP(S) assets without credentials. Greenhouse, Lever and Ashby make at most one branding-page lookup per source/run, using the first provider-supplied posting URL with robots checks and a four-second total deadline. The resulting logo is reused only for that same employer. JSON-LD and selector sources use metadata already in their fetched HTML. A missing, blocked or failed image remains unknown; platform favicons and guessed company domains are not company branding. Saved postings acquire missing logos through normal rescraping, preserving existing images when no replacement is supplied.
 
@@ -48,3 +48,17 @@ Geography uses the shared Rust country/subdivision catalog and bounded alias rul
                                ▼
                       WorkerEvent::Job
 ```
+
+## Static locator extraction (Section 6A, first checkpoint)
+
+`selector.rs` compiles locators and regexes before traversing one HTML5 tree,
+reusing that tree for employer branding. CSS containers can use XPath fields and
+XPath containers can use CSS fields. Required title/link/configured-ID failures
+emit invalid-candidate events; missing optional values remain unknown. A regex
+mismatch never falls back to an untransformed field. Existing CSS defaults,
+URL patterns, enrichment and the coordinator's acceptance gate remain in use.
+
+The parser lives in `scrape-core::{locator,xpath}` so the host validates exactly
+the syntax the worker executes. See [configuration examples](../../../../plans/workflow-v3.md#static-custom-locators-section-6a).
+Resumable selector pagination/details, hydration extraction and browser/script
+execution are still pending; this checkpoint does not make selector loading lazy.

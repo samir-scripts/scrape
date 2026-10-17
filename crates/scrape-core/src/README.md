@@ -10,7 +10,7 @@ The `crates/scrape-core/src` directory contains the core source modules that def
 
 ### [`lib.rs`](lib.rs)
 - **Role**: Crate entry point and root module declaration.
-- **Exports**: Re-exports public submodules (`branding`, `enrich`, `filter`, `geography`, `identity`, `matching`, `posting_date`, `protocol`, `role`, `types`) and shared ingestion/protocol constants (`PROTOCOL_VERSION`, `INGESTION_LIMITS`).
+- **Exports**: Re-exports public submodules (`branding`, `enrich`, `filter`, `geography`, `identity`, `locator`, `matching`, `posting_date`, `protocol`, `role`, `types`, `xpath`) and shared ingestion/protocol constants (`PROTOCOL_VERSION`, `INGESTION_LIMITS`).
 - **Utilities**: Defines `now_iso() -> String`, generating deterministic UTC timestamps in ISO-8601 millisecond format (`YYYY-MM-DDTHH:MM:SS.sssZ`) used across event logging, run reporting, and database storage.
 
 ### [`types.rs`](types.rs)
@@ -27,6 +27,10 @@ The `crates/scrape-core/src` directory contains the core source modules that def
   - `WorkAuthRequirement`: Work authorization status (`citizen_only`, `us_person`, `open`, `unknown`).
   - `WorkplaceType`: Working arrangement (`onsite`, `hybrid`, `remote`, `unknown`).
 - **Derivations**: Derives `Serialize`, `Deserialize`, `TS` (for TypeScript bindings), and conditionally `sqlx::Type` for database storage.
+
+### [`locator.rs`](locator.rs) and [`xpath.rs`](xpath.rs)
+- **Role**: One locator/regex parser shared by workflow validation and static extraction.
+- **Behavior**: CSS and a documented XPath 1.0 location-path subset operate on the same `scraper::Html` tree. Supports relative/absolute paths, child/self/parent/following-sibling steps, descendant shorthand, attribute/text tests, positional predicates, field attributes and named regex captures. Unsupported syntax fails explicitly. XPath is bounded to 4096 bytes, 64 steps and 32 predicates per step; this is not a full XPath implementation.
 
 ### [`protocol.rs`](protocol.rs)
 - **Role**: Versioned IPC message contracts (`PROTOCOL_VERSION = 6`) exchanged between the Tauri host (`src-tauri`) and the scraper sidecar (`scrape-worker`).

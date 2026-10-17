@@ -1121,3 +1121,174 @@ async fn late_greenhouse_matches_refresh_with_provenance_and_protected_state() {
     );
     pool.close().await;
 }
+
+#[tokio::test]
+async fn mixed_xpath_css_fields_survive_worker_preview_refresh_and_persistence() {
+    use serde_json::json;
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let server = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut pages = 0;
+        let mut robots = 0;
+        while pages < 3 && Instant::now() < deadline {
+            if let Ok((mut stream, _)) = listener.accept() {
+                stream.set_nonblocking(false).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                let mut buffer = [0; 4096];
+                let n = stream.read(&mut buffer).unwrap();
+                let request = String::from_utf8_lossy(&buffer[..n]);
+                let path = request.split_whitespace().nth(1).unwrap();
+                let body = match path {
+                    "/fixture.test/robots.txt" => {
+                        robots += 1;
+                        "User-agent: *\nAllow: /".to_string()
+                    }
+                    "/fixture.test/careers" => {
+                        pages += 1;
+                        [("sales", "Sales"), ("42", "Rust Engineer"), ("43", "Platform Engineer"), ("44", "Later Engineer")].into_iter().map(|(id,title)| format!("<article class='job-card' data-job-id='req-{id}'><h2>Role: {title}</h2><a data-url='/jobs/{id}?ref=original'>Apply</a><span class='pay'>Pay: $45.25 - $55.75 per hour</span><time datetime='2026-10-15'></time><p>Original description</p></article>")).collect::<String>()
+                    }
+                    _ => panic!("Unexpected extraction request: {path}"),
+                };
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                )
+                .unwrap();
+            } else {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+        assert_eq!((pages, robots), (3, 3));
+    });
+    let directory = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&directory.path().join("locators.db"))
+        .await
+        .unwrap();
+    let spec = scrape_lib::services::workflow::validate(json!({
+        "version":5,"metadata":{"name":"Mixed locator fixture"},"max_jobs_per_run":2,
+        "sources":[{"id":"fixture", "label":"Fixture", "employer_hint":"Fixture", "extractor":{
+            "kind":"selector", "url":"https://fixture.test/careers", "source_config":{
+                "item":"//article[contains(@class,'job-card')]", "title":"xpath:.//h2/text()", "title_regex":"Role: (?P<value>.+)",
+                "link":"a@data-url", "id":".", "id_attribute":"data-job-id", "id_regex":"req-(?P<value>.+)",
+                "date":"time", "date_attribute":"datetime", "description":"p", "description_attribute":"text",
+                "salary":".pay", "salary_regex":"Pay: (?P<value>.+)"
+            }
+        }}],
+        "schedule":{"cadence":"manual"}, "filters":{"matching":{"keywords":{"any":["Engineer"],"fields":["title"]}}}
+    }), "UTC").unwrap();
+    let source = SourcesRepo::create(
+        &pool,
+        scrape_lib::services::workflow::source_input(&spec, "UTC").unwrap(),
+    )
+    .await
+    .unwrap();
+    let config = WorkerConfig {
+        version: PROTOCOL_VERSION,
+        max_jobs_per_run: Some(2),
+        sources: vec![WorkerSource {
+            id: source.id.clone(),
+            kind: source.kind,
+            name: source.name.clone(),
+            identifier: source.identifier.clone(),
+            config: source.config.clone(),
+        }],
+        filters: scrape_lib::services::runner::resolve_worker_filters(
+            &source.filters,
+            WorkerFilters::default(),
+        )
+        .unwrap(),
+        run_started_at: Some("2026-10-16T00:00:00Z".into()),
+        limits: WorkerLimits {
+            per_host_delay_ms: 0,
+            request_timeout_s: 3,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut protected_id = None;
+    for pass in 0..3 {
+        let events = invoke_replay(&config, pass == 0, Some(&format!("http://{address}")));
+        let WorkerEvent::Done { stats } = events.last().unwrap() else {
+            panic!("missing completion")
+        };
+        let scan = &stats.sources[0];
+        scan.validate().unwrap();
+        assert_eq!((scan.examined, scan.rejected, scan.accepted), (3, 1, 2));
+        assert_eq!(
+            scan.termination,
+            scrape_core::protocol::CoverageTermination::JobLimit
+        );
+        let batch: Vec<_> = events
+            .into_iter()
+            .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+            .map(|e| scraped_job_from_event(e).unwrap())
+            .collect();
+        assert_eq!(
+            batch
+                .iter()
+                .map(|j| j.external_id.as_deref())
+                .collect::<Vec<_>>(),
+            [Some("42"), Some("43")]
+        );
+        assert_eq!(batch[0].title, "Rust Engineer");
+        assert_eq!(batch[0].url, "https://fixture.test/jobs/42?ref=original");
+        assert_eq!(batch[0].date_posted.as_deref(), Some("2026-10-15"));
+        assert_eq!(
+            batch[0].description_text.as_deref(),
+            Some("Original description")
+        );
+        if pass == 0 {
+            assert_eq!(
+                JobsRepo::list(&pool, JobFilter::default())
+                    .await
+                    .unwrap()
+                    .total,
+                0
+            );
+            continue;
+        }
+        let result = JobsRepo::upsert_scraped(&pool, &batch).await.unwrap();
+        assert_eq!(
+            (result.inserted, result.updated),
+            if pass == 1 { (2, 0) } else { (0, 2) }
+        );
+        let saved = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+        assert_eq!(saved.total, 2);
+        let pay_json: String =
+            sqlx::query_scalar("SELECT compensation_json FROM jobs WHERE external_id='42'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let pay: serde_json::Value = serde_json::from_str(&pay_json).unwrap();
+        assert_eq!(pay[0]["min_minor"], 4525);
+        assert_eq!(pay[0]["max_minor"], 5575);
+        assert_eq!(pay[0]["interval"], "hour");
+        if pass == 1 {
+            let id = saved.items[0].id.clone();
+            sqlx::query(
+                "UPDATE jobs SET notes='Keep locator note',favorited=1,status='applied' WHERE id=?",
+            )
+            .bind(&id)
+            .execute(&pool)
+            .await
+            .unwrap();
+            protected_id = Some(id);
+        } else {
+            let state: (String, bool, String) =
+                sqlx::query_as("SELECT notes,favorited,status FROM jobs WHERE id=?")
+                    .bind(protected_id.as_ref().unwrap())
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(state, ("Keep locator note".into(), true, "applied".into()));
+        }
+    }
+    server.join().unwrap();
+    pool.close().await;
+}

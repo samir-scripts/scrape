@@ -4,8 +4,9 @@ use scrape_core::enrich::{
     extract_experience, location as loc_enrich, normalize_description_with_format,
     DescriptionFormat, Salary,
 };
+use scrape_core::locator::{FieldLocator, QueryEngine};
 use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource};
-use scraper::{Html, Selector};
+use scraper::Html;
 use url::Url;
 
 pub async fn scrape_selector(
@@ -30,26 +31,6 @@ pub async fn scrape_selector_with(
     let base_url = Url::parse(&actual_page)?;
 
     extract_jobs_with_selectors_with(&html_text, &base_url, source, sink)
-}
-
-fn apply_regex_capture(re: &regex::Regex, text: &str) -> Option<String> {
-    re.captures(text).map(|caps| {
-        if let Some(m) = caps
-            .name("value")
-            .or_else(|| caps.name("title"))
-            .or_else(|| caps.name("link"))
-            .or_else(|| caps.name("location"))
-            .or_else(|| caps.name("salary"))
-        {
-            m.as_str().trim().to_string()
-        } else if let Some(m) = caps.get(1) {
-            m.as_str().trim().to_string()
-        } else if let Some(m) = caps.get(0) {
-            m.as_str().trim().to_string()
-        } else {
-            text.trim().to_string()
-        }
-    })
 }
 
 pub fn glob_to_regex(pattern: &str) -> Result<regex::Regex, regex::Error> {
@@ -103,47 +84,29 @@ pub fn extract_jobs_with_selectors_with(
     source: &WorkerSource,
     sink: &mut dyn FnMut(WorkerEvent) -> bool,
 ) -> Result<(), ClientError> {
-    let item_sel_str = source
-        .config
-        .get("item")
-        .and_then(|v| v.as_str())
-        .unwrap_or(".job-item");
-
-    let title_sel_str = source
-        .config
-        .get("title")
-        .and_then(|v| v.as_str())
-        .unwrap_or(".job-title");
-
-    let link_sel_str = source
-        .config
-        .get("link")
-        .and_then(|v| v.as_str())
-        .unwrap_or("a");
-
-    let loc_sel_str = source.config.get("location").and_then(|v| v.as_str());
-    let sal_sel_str = source.config.get("salary").and_then(|v| v.as_str());
-    let desc_sel_str = source.config.get("description").and_then(|v| v.as_str());
-
-    let parse_re = |key: &str| -> Result<Option<regex::Regex>, ClientError> {
-        match source.config.get(key).and_then(|v| v.as_str()) {
-            Some(s) if !s.trim().is_empty() => {
-                let re = regex::Regex::new(s).map_err(|e| {
-                    ClientError::HttpStatus(
-                        reqwest::StatusCode::BAD_REQUEST,
-                        format!("Invalid regex for '{key}': {e}"),
-                    )
-                })?;
-                Ok(Some(re))
-            }
-            _ => Ok(None),
-        }
+    let config_string = |key: &str| -> Result<Option<&str>, ClientError> {
+        source
+            .config
+            .get(key)
+            .map(|value| {
+                value
+                    .as_str()
+                    .ok_or_else(|| ClientError::Configuration(format!("{key} must be a string")))
+            })
+            .transpose()
     };
-
-    let title_re = parse_re("title_regex")?;
-    let link_re = parse_re("link_regex")?;
-    let loc_re = parse_re("location_regex")?;
-    let sal_re = parse_re("salary_regex")?;
+    let item_sel = QueryEngine::parse_elements(config_string("item")?.unwrap_or(".job-item"))
+        .map_err(ClientError::Configuration)?;
+    let field = |key: &str, default: Option<&str>| {
+        FieldLocator::from_config(&source.config, key, default).map_err(ClientError::Configuration)
+    };
+    let title_sel = field("title", Some(".job-title"))?.unwrap();
+    let link_sel = field("link", Some("a"))?.unwrap();
+    let loc_sel = field("location", None)?;
+    let sal_sel = field("salary", None)?;
+    let desc_sel = field("description", None)?;
+    let date_sel = field("date", None)?;
+    let id_sel = field("id", None)?;
 
     let mut include_patterns = Vec::new();
     if let Some(pat) = source.config.get("url_pattern").and_then(|v| v.as_str()) {
@@ -191,85 +154,50 @@ pub fn extract_jobs_with_selectors_with(
         }
     }
 
-    let item_sel = Selector::parse(item_sel_str)
-        .map_err(|e| ClientError::HttpStatus(reqwest::StatusCode::BAD_REQUEST, e.to_string()))?;
-    let title_sel = Selector::parse(title_sel_str)
-        .map_err(|e| ClientError::HttpStatus(reqwest::StatusCode::BAD_REQUEST, e.to_string()))?;
-    let link_sel = Selector::parse(link_sel_str)
-        .map_err(|e| ClientError::HttpStatus(reqwest::StatusCode::BAD_REQUEST, e.to_string()))?;
-    let optional_selector = |key: &str, value: Option<&str>| {
-        value.map(Selector::parse).transpose().map_err(|e| {
-            ClientError::HttpStatus(
-                reqwest::StatusCode::BAD_REQUEST,
-                format!("Invalid {key} selector: {e}"),
-            )
-        })
-    };
-    let loc_sel = optional_selector("location", loc_sel_str)?;
-    let sal_sel = optional_selector("salary", sal_sel_str)?;
-    let desc_sel = optional_selector("description", desc_sel_str)?;
-    let date_sel = optional_selector("date", source.config.get("date").and_then(|v| v.as_str()))?;
-
     let document = Html::parse_document(html_text);
-    let company_logo = super::branding::resolve_page(
-        html_text,
+    let company_logo = super::branding::resolve_document(
+        &document,
         base_url.as_str(),
         &super::branding::employer_name(source),
         source.config.get("employer_logo").and_then(|v| v.as_str()),
     );
     let company_icon_url = company_logo.as_ref().map(|e| e.url.clone());
 
-    for item in document.select(&item_sel) {
-        let item_full_text = item.text().collect::<Vec<_>>().join(" ");
-
-        let raw_title = match item.select(&title_sel).next() {
-            Some(t) => t.text().collect::<Vec<_>>().join(" ").trim().to_string(),
-            None => {
-                if title_re.is_some() {
-                    item_full_text.trim().to_string()
-                } else {
-                    continue;
-                }
+    for item in item_sel.elements(&document, None) {
+        let Some(title) = title_sel.extract(&document, Some(item), "text") else {
+            if !sink(invalid_candidate(
+                source,
+                "Required title locator or regex did not produce a value",
+            )) {
+                break;
             }
-        };
-
-        let title = if let Some(ref re) = title_re {
-            match apply_regex_capture(re, &raw_title) {
-                Some(val) if !val.is_empty() => val,
-                _ => raw_title,
-            }
-        } else {
-            raw_title
-        };
-
-        if title.is_empty() {
             continue;
-        }
-
-        let href = match item
-            .select(&link_sel)
-            .next()
-            .and_then(|l| l.value().attr("href"))
-            .or_else(|| {
-                if item.value().name() == "a" {
-                    item.value().attr("href")
-                } else {
-                    None
-                }
-            }) {
-            Some(h) => h,
-            None => continue,
         };
-
-        let clean_href = if let Some(ref re) = link_re {
-            match apply_regex_capture(re, href) {
-                Some(val) if !val.is_empty() => val,
-                _ => href.to_string(),
+        let Some(clean_href) = link_sel.extract(&document, Some(item), "href").or_else(|| {
+            // Legacy CSS cards can themselves be the destination anchor.
+            if source
+                .config
+                .get("link")
+                .and_then(|v| v.as_str())
+                .unwrap_or("a")
+                == "a"
+                && item.value().name() == "a"
+                && link_sel.regex.is_none()
+                && link_sel.attribute.is_none()
+            {
+                item.value().attr("href").map(str::to_string)
+            } else {
+                None
             }
-        } else {
-            href.to_string()
+        }) else {
+            if !sink(invalid_candidate(
+                source,
+                &format!("Posting '{title}' has no destination from its link locator or regex"),
+            )) {
+                break;
+            }
+            continue;
         };
-
         let job_url = match base_url.join(&clean_href) {
             Ok(u) if matches!(u.scheme(), "http" | "https") => u.to_string(),
             _ => {
@@ -296,47 +224,31 @@ pub fn extract_jobs_with_selectors_with(
             continue;
         }
 
-        let raw_location = if let Some(ref l_sel) = loc_sel {
-            item.select(l_sel)
-                .next()
-                .map(|l| l.text().collect::<Vec<_>>().join(" ").trim().to_string())
-                .unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        let location = if let Some(ref re) = loc_re {
-            let target_text = if !raw_location.is_empty() {
-                &raw_location
-            } else {
-                &item_full_text
-            };
-            apply_regex_capture(re, target_text).unwrap_or(raw_location)
-        } else {
-            raw_location
-        };
-
+        let location = loc_sel
+            .as_ref()
+            .and_then(|field| field.extract(&document, Some(item), "text"))
+            .unwrap_or_default();
         let role_type = RoleType::infer(&title, None);
-
-        let raw_salary_text = sal_sel.as_ref().and_then(|s| {
-            item.select(s)
-                .next()
-                .map(|el| el.text().collect::<Vec<_>>().join(" ").trim().to_string())
-        });
-
-        let salary_text = if let Some(ref re) = sal_re {
-            let target_text = raw_salary_text.as_deref().unwrap_or(&item_full_text);
-            apply_regex_capture(re, target_text).or(raw_salary_text)
-        } else {
-            raw_salary_text
-        };
-
+        let salary_text = sal_sel
+            .as_ref()
+            .and_then(|field| field.extract(&document, Some(item), "text"));
         let description_source = desc_sel
             .as_ref()
-            .and_then(|s| item.select(s).next().map(|el| el.html()));
-        let description = description_source
-            .as_deref()
-            .map(|html| normalize_description_with_format(html, DescriptionFormat::Html, 32768));
+            .and_then(|field| field.extract(&document, Some(item), "html"));
+        let description_format = desc_sel.as_ref().map(|field| {
+            if field.extracts_html() {
+                DescriptionFormat::Html
+            } else {
+                DescriptionFormat::PlainText
+            }
+        });
+        let description = description_source.as_deref().map(|html| {
+            normalize_description_with_format(
+                html,
+                description_format.unwrap_or(DescriptionFormat::Html),
+                32768,
+            )
+        });
         let desc_text = description.as_ref().map(|d| d.plain_text.clone());
 
         let mut salary = salary_text.as_deref().and_then(|t| {
@@ -385,19 +297,27 @@ pub fn extract_jobs_with_selectors_with(
 
         let date_posted = date_sel
             .as_ref()
-            .and_then(|selector| item.select(selector).next())
-            .and_then(|element| {
-                let raw = element
-                    .value()
-                    .attr("datetime")
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| element.text().collect::<String>().trim().to_owned());
-                scrape_core::posting_date::posting_instant(&raw, "UTC").map(|_| raw)
-            });
+            .and_then(|field| field.extract(&document, Some(item), "date"))
+            .filter(|raw| scrape_core::posting_date::posting_instant(raw, "UTC").is_some());
+        let external_id = match &id_sel {
+            Some(field) => match field.extract(&document, Some(item), "text") {
+                Some(id) => id,
+                None => {
+                    if !sink(invalid_candidate(
+                        source,
+                        &format!("Posting '{title}' has no configured original ID"),
+                    )) {
+                        break;
+                    }
+                    continue;
+                }
+            },
+            None => job_url.clone(),
+        };
 
         if !sink(WorkerEvent::Job {
             source_id: source.id.clone(),
-            external_id: job_url.clone(),
+            external_id,
             title,
             company: super::branding::employer_name(source),
             role_type,
@@ -416,7 +336,7 @@ pub fn extract_jobs_with_selectors_with(
             is_new_grad,
             description_text: desc_text,
             description,
-            description_format: description_source.as_ref().map(|_| DescriptionFormat::Html),
+            description_format: description_source.as_ref().and(description_format),
             description_source,
             company_icon_url: company_icon_url.clone(),
             company_logo: company_logo.clone(),
@@ -428,10 +348,129 @@ pub fn extract_jobs_with_selectors_with(
     Ok(())
 }
 
+fn invalid_candidate(source: &WorkerSource, message: &str) -> WorkerEvent {
+    WorkerEvent::Error {
+        invalid_posting: Some(true),
+        source_id: source.id.clone(),
+        message: message.into(),
+        retryable: false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use scrape_core::{SourceKind, WorkplaceType};
+
+    #[test]
+    fn mixed_locators_extract_original_id_attributes_and_regex() {
+        let source = WorkerSource {
+            id: "mixed".into(),
+            kind: SourceKind::Selector,
+            name: "Fixture".into(),
+            identifier: "https://fixture.test/careers".into(),
+            config: serde_json::json!({
+                "item": ".job-card", "title": "xpath:.//h2/text()",
+                "title_regex": "Role: (?P<value>.+)", "link": "xpath:.//a[1]/@href",
+                "id": ".", "id_attribute": "data-job-id", "id_regex": "req-(?P<value>[0-9]+)",
+                "location": "xpath:.//h2/following-sibling::span[1]",
+                "date": "time", "date_attribute": "datetime",
+            }),
+        };
+        let html = "<article class='job-card' data-job-id='req-42'><h2>Role: Rust Engineer</h2><span>Remote - US</span><a href='/jobs/42'>Apply</a><time datetime='2026-10-15'></time></article>";
+        let events =
+            extract_jobs_with_selectors(html, &Url::parse(&source.identifier).unwrap(), &source)
+                .unwrap();
+        match &events[0] {
+            WorkerEvent::Job {
+                title,
+                external_id,
+                location,
+                url,
+                date_posted,
+                ..
+            } => {
+                assert_eq!(title, "Rust Engineer");
+                assert_eq!(external_id, "42");
+                assert_eq!(location, "Remote - US");
+                assert_eq!(url, "https://fixture.test/jobs/42");
+                assert_eq!(date_posted.as_deref(), Some("2026-10-15"));
+            }
+            other => panic!("Expected original extracted candidate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn xpath_containers_mix_css_fields_and_keep_optional_unknowns() {
+        let source = WorkerSource {
+            id: "mixed".into(),
+            kind: SourceKind::Selector,
+            name: "Fixture".into(),
+            identifier: "https://fixture.test/careers".into(),
+            config: serde_json::json!({
+                "item": "//article[contains(@class,'job-card')]", "title": "h2@data-title",
+                "link": "a@data-url", "salary": "span", "salary_regex": "Pay: (?P<value>.+)",
+                "description": "p", "description_attribute": "text", "description_regex": "Description: (?P<value>.+)",
+                "date": "time", "date_attribute": "data-published", "date_regex": "Published: (?P<value>.+)",
+            }),
+        };
+        let html = "<article class='job-card'><h2 data-title='Rust Engineer'></h2><a data-url='/jobs/42'></a><span>Unknown pay</span><p>Description: Literal &lt;b&gt; text</p><time data-published='Published: 2026-10-15'></time></article>";
+        let events =
+            extract_jobs_with_selectors(html, &Url::parse(&source.identifier).unwrap(), &source)
+                .unwrap();
+        match &events[0] {
+            WorkerEvent::Job {
+                salary,
+                description_text,
+                description_format,
+                date_posted,
+                ..
+            } => {
+                assert!(salary.is_none());
+                assert_eq!(description_text.as_deref(), Some("Literal <b> text"));
+                assert_eq!(*description_format, Some(DescriptionFormat::PlainText));
+                assert_eq!(date_posted.as_deref(), Some("2026-10-15"));
+            }
+            other => panic!("Expected Job, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn failed_required_field_transforms_are_invalid_candidates() {
+        for (field, regex) in [
+            ("title", "Missing (.+)"),
+            ("link", "missing/(.+)"),
+            ("id", "missing-(.+)"),
+        ] {
+            let mut source = WorkerSource {
+                id: "required".into(),
+                kind: SourceKind::Selector,
+                name: "Fixture".into(),
+                identifier: "https://fixture.test/careers".into(),
+                config: serde_json::json!({"item":"article", "title":"h2", "link":"a", "id":"article@data-id"}),
+            };
+            source.config["id"] = serde_json::json!(".@data-id");
+            source.config[format!("{field}_regex")] = regex.into();
+            let events = extract_jobs_with_selectors(
+                "<article data-id='req-42'><h2>Engineer</h2><a href='/jobs/42'>Apply</a></article>",
+                &Url::parse(&source.identifier).unwrap(),
+                &source,
+            )
+            .unwrap();
+            assert_eq!(events.len(), 1);
+            assert!(
+                matches!(
+                    &events[0],
+                    WorkerEvent::Error {
+                        invalid_posting: Some(true),
+                        ..
+                    }
+                ),
+                "{field}: {:?}",
+                events[0]
+            );
+        }
+    }
 
     #[test]
     fn test_extract_jobs_with_selectors() {

@@ -771,6 +771,17 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
         "link_regex",
         "location_regex",
         "salary_regex",
+        "date_regex",
+        "description_regex",
+        "id_regex",
+        "id",
+        "title_attribute",
+        "link_attribute",
+        "location_attribute",
+        "salary_attribute",
+        "description_attribute",
+        "date_attribute",
+        "id_attribute",
         "url_pattern",
         "url_patterns",
         "exclude_url_patterns",
@@ -805,23 +816,34 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
             "extractor.source_config.max_pages: expected 1–100".into(),
         ));
     }
-    for key in [
-        "item",
-        "title",
-        "link",
-        "location",
-        "salary",
-        "description",
-        "date",
-        "employer_logo",
-        "follow_links",
-    ] {
+    if kind == SourceKind::Selector {
+        if let Some(value) = config.get("item") {
+            let query = value.as_str().ok_or_else(|| {
+                AppError::Validation("extractor.item: expected locator string".into())
+            })?;
+            scrape_core::locator::QueryEngine::parse_elements(query)
+                .map_err(|error| AppError::Validation(format!("extractor.item: {error}")))?;
+        }
+        for key in [
+            "title",
+            "link",
+            "location",
+            "salary",
+            "description",
+            "date",
+            "id",
+        ] {
+            scrape_core::locator::FieldLocator::from_config(config, key, None)
+                .map_err(|error| AppError::Validation(format!("extractor.{error}")))?;
+        }
+    }
+    for key in ["employer_logo", "follow_links"] {
         if let Some(value) = config.get(key) {
             let selector = value.as_str().ok_or_else(|| {
-                AppError::Validation(format!("extractor.{key}: expected selector string"))
+                AppError::Validation(format!("extractor.{key}: expected CSS selector string"))
             })?;
-            scraper::Selector::parse(selector).map_err(|e| {
-                AppError::Validation(format!("extractor.{key}: invalid selector {e}"))
+            scraper::Selector::parse(selector).map_err(|error| {
+                AppError::Validation(format!("extractor.{key}: invalid CSS selector {error}"))
             })?;
         }
     }
@@ -836,19 +858,6 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
         return Err(AppError::Validation(
             "extractor: selector sources require item, title and link selectors".into(),
         ));
-    }
-    for key in [
-        "title_regex",
-        "link_regex",
-        "location_regex",
-        "salary_regex",
-    ] {
-        if let Some(value) = config.get(key) {
-            regex::Regex::new(value.as_str().ok_or_else(|| {
-                AppError::Validation(format!("extractor.{key}: expected regex string"))
-            })?)
-            .map_err(|e| AppError::Validation(format!("extractor.{key}: {e}")))?;
-        }
     }
     for key in ["url_patterns", "exclude_url_patterns"] {
         if let Some(value) = config.get(key) {
@@ -960,6 +969,36 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("ignored_option"));
+    }
+
+    #[test]
+    fn custom_locators_validate_and_survive_workflow_round_trips() {
+        let config = serde_json::json!({"item":"//article[@data-id]", "title":"h2@data-title", "link":"xpath:.//a[1]/@href", "id":".", "id_attribute":"data-id", "date":"time", "date_attribute":"datetime", "date_regex":"(?P<value>[0-9-]+)", "description":"p", "description_attribute":"text", "description_regex":"(?P<value>.+)"});
+        let spec = validate(serde_json::json!({"version":5,"metadata":{"name":"Locator fixture"},"sources":[{"id":"fixture","label":"Fixture","extractor":{"kind":"selector","url":"https://fixture.test/careers","source_config":config}}],"schedule":{"cadence":"manual"}}), "UTC").unwrap();
+        let encoded = serde_json::to_string(&spec).unwrap();
+        let decoded: Value = serde_json::from_str(&encoded).unwrap();
+        let reopened = validate(decoded, "UTC").unwrap();
+        assert_eq!(spec, reopened);
+        let input = source_input(&reopened, "UTC").unwrap();
+        for (key, value) in config.as_object().unwrap() {
+            assert_eq!(&input.config.as_ref().unwrap()[key], value);
+        }
+        for (key, bad_value) in [
+            ("item", "//article/text()"),
+            ("item", "//article/@id"),
+            ("title", "xpath:.//h2[unsupported()]"),
+            ("title", "a@"),
+            ("description_regex", "["),
+            ("date_attribute", "bad attribute"),
+        ] {
+            let mut invalid = config.clone();
+            invalid[key] = bad_value.into();
+            assert!(
+                validate_config(SourceKind::Selector, &invalid).is_err(),
+                "accepted {key}: {bad_value}"
+            );
+        }
+        assert!(validate_config(SourceKind::Greenhouse, &config).is_err());
     }
 
     #[test]
