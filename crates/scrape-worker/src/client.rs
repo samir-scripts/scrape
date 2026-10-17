@@ -17,6 +17,10 @@ pub enum ClientError {
     Extraction(String),
     #[error("Invalid extraction configuration: {0}")]
     Configuration(String),
+    #[error("{0}")]
+    NeedsLogin(String),
+    #[error("{0}")]
+    BrowserRuntimeMissing(String),
     #[error("Network error: {0}")]
     Reqwest(#[from] reqwest::Error),
     #[error("Invalid URL: {0}")]
@@ -88,6 +92,42 @@ impl HttpClient {
         } else {
             Ok(parsed)
         }
+    }
+
+    pub async fn prepare_navigation(
+        &self,
+        url: &str,
+        check_robots: bool,
+    ) -> Result<Url, ClientError> {
+        let parsed_url = Url::parse(url)?;
+        let host = parsed_url.host_str().unwrap_or("").to_string();
+        if check_robots
+            && (self.replay_origin.is_some() || std::env::var_os("SCRAPE_CDP_WS_URL").is_none())
+        {
+            self.check_robots(&parsed_url).await?;
+        }
+        let _guard = self.rate_limit(&host).await;
+        self.transport_url(url)
+    }
+
+    pub fn canonical_url(&self, requested: &str, actual: &str) -> String {
+        if actual.trim().is_empty() {
+            return requested.to_owned();
+        }
+        if let Some(origin) = &self.replay_origin {
+            let origin_prefix = origin.as_str().trim_end_matches('/');
+            if let Some(rest) = actual.strip_prefix(origin_prefix) {
+                let rest = rest.trim_start_matches('/');
+                if !rest.is_empty() {
+                    let scheme = Url::parse(requested)
+                        .map(|u| u.scheme().to_string())
+                        .unwrap_or_else(|_| "https".to_string());
+                    return format!("{scheme}://{rest}");
+                }
+                return requested.to_owned();
+            }
+        }
+        actual.to_owned()
     }
 
     async fn get_host_lock(&self, host: &str) -> Arc<Mutex<Instant>> {

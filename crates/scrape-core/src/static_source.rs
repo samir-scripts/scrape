@@ -14,11 +14,15 @@ pub struct StaticSourceConfig {
     pub detail_fields: BTreeMap<String, FieldLocator>,
     pub detail_container: Option<QueryEngine>,
     pub wait_for: Option<QueryEngine>,
+    pub load_more: Option<QueryEngine>,
+    pub load_more_raw: Option<String>,
+    pub navigation_timeout_s: u64,
     pub max_pages: u32,
     pub duration_s: u64,
 }
 impl StaticSourceConfig {
     pub fn parse(config: &Value, limits: &WorkerLimits) -> Result<Self, String> {
+        let mode = crate::extraction::mode(config)?;
         let locator = |key| FieldLocator::from_config(config, key, None);
         let query = |key: &str| {
             config
@@ -32,6 +36,11 @@ impl StaticSourceConfig {
                 .transpose()
         };
         let source_limits = crate::extraction::limits(config)?;
+        let navigation_timeout_s = if config.get("navigation_timeout_s").is_some() {
+            source_limits.navigation_timeout_s
+        } else {
+            limits.navigation_timeout_s
+        };
         let max_pages = if config.get("max_pages").is_some() {
             source_limits.max_pages_per_source
         } else {
@@ -91,11 +100,16 @@ impl StaticSourceConfig {
         if config.get("detail_container").is_some() && !follow_detail && detail_link.is_none() {
             return Err("detail_container requires enabled detail fetching".into());
         }
-        if config.get("load_more").is_some() {
+        if config.get("load_more").is_some() && mode == crate::extraction::ExtractionMode::Static {
             return Err(
                 "load_more requires browser extraction; static HTTP cannot click controls".into(),
             );
         }
+        let load_more = query("load_more")?;
+        let load_more_raw = config
+            .get("load_more")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string());
         Ok(Self {
             next_page: locator("next_page")?,
             detail_link,
@@ -103,6 +117,9 @@ impl StaticSourceConfig {
             detail_fields,
             detail_container: query("detail_container")?,
             wait_for: query("wait_for")?,
+            load_more,
+            load_more_raw,
+            navigation_timeout_s: navigation_timeout_s.min(limits.navigation_timeout_s),
             max_pages: max_pages.min(limits.max_pages_per_source),
             duration_s: duration_s.min(limits.max_source_duration_s),
         })

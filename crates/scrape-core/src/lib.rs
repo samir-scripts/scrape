@@ -5,6 +5,7 @@
 //! exported to TypeScript always agree.
 
 pub mod branding;
+pub mod browser;
 pub mod enrich;
 pub mod extraction;
 pub mod filter;
@@ -23,8 +24,9 @@ mod types;
 
 pub use filter::{FilterExpr, FilterField, FilterOp, JobFilterContext};
 pub use protocol::{
-    WorkerConfig, WorkerEvent, WorkerFilters, WorkerLimits, WorkerSource, WorkerStats,
-    PROTOCOL_VERSION,
+    BrowserRuntimeStatus, BrowserSessionStatus, BrowserSessionSummary, ExtractorSampleCandidate,
+    ExtractorTestResult, WorkerConfig, WorkerEvent, WorkerFilters, WorkerLimits, WorkerSource,
+    WorkerStats, PROTOCOL_VERSION,
 };
 pub use types::{
     ClearanceLevel, JobStatus, RoleType, SalaryInterval, SalarySource, SourceCadence, SourceKind,

@@ -1142,13 +1142,26 @@ impl ScrapeRunner {
                                         stats.sources.iter().map(|scan| scan.rejected as i64).sum();
                                     counts.sources = Some(stats.sources.clone());
                                     counts.examination_incomplete = Some(false);
+                                    let session_dir =
+                                        super::browser_session::session_dir_for_app(app).ok();
                                     for scan in stats.sources {
-                                        if !config.sources.iter().any(|s| s.id == scan.source_id) {
+                                        let Some(worker_source) =
+                                            config.sources.iter().find(|s| s.id == scan.source_id)
+                                        else {
                                             sidecar_err = Some(
                                                 "Worker summary contains an unknown workflow ID"
                                                     .into(),
                                             );
                                             continue;
+                                        };
+                                        if let Some(ref session_dir) = session_dir {
+                                            let _ = super::browser_session::reconcile_source_session_after_scan(
+                                                &self.pool,
+                                                session_dir,
+                                                &worker_source.config,
+                                                Some(scan.termination),
+                                            )
+                                            .await;
                                         }
                                         let outcome =
                                             scan.outcome.expect("Validated source outcome");

@@ -1,8 +1,11 @@
 //! Resumable static pages: one candidate per call; page boundaries yield to peers.
 use super::selector::{extract_page, page_url, SelectorCandidate, SelectorPage, SelectorPosting};
+use crate::browser::{resolve_source_session_cookies, BrowserPool};
 use crate::client::{ClientError, HttpClient};
 use chrono::{DateTime, Utc};
 use scrape_core::{
+    browser::BrowserCookie,
+    extraction::ExtractionMode,
     matching::{MatchingEvaluator, MatchingEvidence},
     protocol::{CoverageTermination, EnrichmentLimits},
     static_source::StaticSourceConfig,
@@ -11,6 +14,7 @@ use scrape_core::{
 use scraper::Html;
 use std::{
     collections::{HashSet, VecDeque},
+    sync::Arc,
     time::Duration,
 };
 use tokio::time::{timeout_at, Instant};
@@ -23,11 +27,15 @@ pub(crate) enum SelectorStep {
 }
 pub(crate) struct SelectorSession {
     source: WorkerSource,
+    mode: ExtractionMode,
+    browser: Option<Arc<BrowserPool>>,
+    session_cookies: Vec<BrowserCookie>,
     config: StaticSourceConfig,
     page: SelectorPage,
     visited: HashSet<String>,
     seen: HashSet<String>,
     pages_visited: u32,
+    page_limit_reached: bool,
     source_deadline: Instant,
     detail_deadline: Instant,
     navigation_timeout: Duration,
@@ -40,11 +48,14 @@ pub(crate) struct SelectorSession {
 impl SelectorSession {
     pub async fn new(
         client: &HttpClient,
+        browser: Option<Arc<BrowserPool>>,
         source: &WorkerSource,
         limits: &WorkerLimits,
         enrichment: &EnrichmentLimits,
         workflow_deadline: Instant,
     ) -> Result<Self, ClientError> {
+        let mode =
+            scrape_core::extraction::mode(&source.config).map_err(ClientError::Configuration)?;
         let config = StaticSourceConfig::parse(&source.config, limits)
             .map_err(ClientError::Configuration)?;
         // Compile all posting locators/mappings before any source request.
@@ -75,25 +86,48 @@ impl SelectorSession {
         }
         let source_deadline =
             workflow_deadline.min(Instant::now() + Duration::from_secs(config.duration_s));
-        let source_limits =
-            scrape_core::extraction::limits(&source.config).map_err(ClientError::Configuration)?;
-        let navigation_timeout =
-            Duration::from_secs(if source.config.get("navigation_timeout_s").is_some() {
-                limits
-                    .navigation_timeout_s
-                    .min(source_limits.navigation_timeout_s)
-            } else {
-                limits.navigation_timeout_s
-            });
+        let navigation_timeout = Duration::from_secs(config.navigation_timeout_s);
         let url = page_url(&Url::parse(&source.identifier)?, &source.identifier)?;
-        let (html, actual) = timeout_at(
-            source_deadline.min(Instant::now() + navigation_timeout),
-            client.fetch_text_at(url.as_str(), true),
-        )
-        .await
-        .map_err(|_| {
-            ClientError::TimeLimit("Static source initial navigation reached its time limit".into())
-        })??;
+
+        let (html, actual, pages_visited, page_limit_reached, session_cookies) =
+            if mode == ExtractionMode::Browser {
+                let cookies = resolve_source_session_cookies(&source.config, &url)?;
+                let pool = browser.as_ref().ok_or_else(|| {
+                    ClientError::Configuration("Browser pool was not initialized".into())
+                })?;
+                let rendered = pool
+                    .fetch_rendered_page(
+                        client,
+                        &url,
+                        source,
+                        &config,
+                        &cookies,
+                        config.max_pages,
+                        navigation_timeout,
+                        source_deadline,
+                    )
+                    .await?;
+                (
+                    rendered.html,
+                    rendered.actual_url,
+                    rendered.pages_consumed,
+                    rendered.page_limit_reached,
+                    cookies,
+                )
+            } else {
+                let (html, actual) = timeout_at(
+                    source_deadline.min(Instant::now() + navigation_timeout),
+                    client.fetch_text_at(url.as_str(), true),
+                )
+                .await
+                .map_err(|_| {
+                    ClientError::TimeLimit(
+                        "Static source initial navigation reached its time limit".into(),
+                    )
+                })??;
+                (html, actual, 1, false, Vec::new())
+            };
+
         let actual = page_url(&url, &actual)?;
         let page = extract_page(&html, &actual, source, &config)?;
         let mut visited = HashSet::new();
@@ -102,11 +136,15 @@ impl SelectorSession {
         // Redirect aliases must also prevent loops, without counting as another page.
         let session = Self {
             source: source.clone(),
+            mode,
+            browser,
+            session_cookies,
             config,
             page,
             visited,
             seen: HashSet::new(),
-            pages_visited: 1,
+            pages_visited,
+            page_limit_reached,
             source_deadline,
             detail_deadline: Instant::now() + Duration::from_millis(enrichment.timeout_ms),
             navigation_timeout,
@@ -137,6 +175,13 @@ impl SelectorSession {
         let candidate = if let Some(candidate) = self.page.candidates.pop_front() {
             candidate
         } else {
+            if self.page_limit_reached {
+                self.page_limit_reached = false;
+                return Ok(self.stop(
+                    "Static page limit reached; remaining pages were not visited",
+                    CoverageTermination::PageLimit,
+                ));
+            }
             if let Some(error) = self.page.next_page_error.take() {
                 return Ok(self.stop(
                     &format!("Invalid next-page destination: {error}"),
@@ -159,25 +204,71 @@ impl SelectorSession {
                     CoverageTermination::PageLimit,
                 ));
             }
-            let result = timeout_at(
-                self.source_deadline
-                    .min(Instant::now() + self.navigation_timeout),
-                client.fetch_text_at(url.as_str(), true),
-            )
-            .await;
-            let (html, actual) = match result {
-                Ok(Ok(page)) => page,
-                Ok(Err(error)) => {
+            let (html, actual, pages_consumed, limit_hit) = if self.mode == ExtractionMode::Browser
+            {
+                let Some(pool) = self.browser.as_ref() else {
                     return Ok(self.stop(
-                        &format!("Next page {url} unavailable: {error}"),
+                        "Browser pool unavailable for pagination",
                         CoverageTermination::Failed,
-                    ))
+                    ));
+                };
+                let remaining = self.config.max_pages.saturating_sub(self.pages_visited);
+                match pool
+                    .fetch_rendered_page(
+                        client,
+                        &url,
+                        &self.source,
+                        &self.config,
+                        &self.session_cookies,
+                        remaining,
+                        self.navigation_timeout,
+                        self.source_deadline,
+                    )
+                    .await
+                {
+                    Ok(rendered) => (
+                        rendered.html,
+                        rendered.actual_url,
+                        rendered.pages_consumed,
+                        rendered.page_limit_reached,
+                    ),
+                    Err(ClientError::TimeLimit(_)) => {
+                        return Ok(self.stop(
+                            "Browser pagination navigation reached its time limit",
+                            CoverageTermination::TimeLimit,
+                        ))
+                    }
+                    Err(ClientError::NeedsLogin(msg)) => {
+                        return Ok(self.stop(&msg, CoverageTermination::NeedsLogin))
+                    }
+                    Err(error) => {
+                        return Ok(self.stop(
+                            &format!("Next page {url} unavailable: {error}"),
+                            CoverageTermination::Failed,
+                        ))
+                    }
                 }
-                Err(_) => {
-                    return Ok(self.stop(
-                        "Static pagination navigation reached its time limit",
-                        CoverageTermination::TimeLimit,
-                    ))
+            } else {
+                let result = timeout_at(
+                    self.source_deadline
+                        .min(Instant::now() + self.navigation_timeout),
+                    client.fetch_text_at(url.as_str(), true),
+                )
+                .await;
+                match result {
+                    Ok(Ok((h, a))) => (h, a, 1, false),
+                    Ok(Err(error)) => {
+                        return Ok(self.stop(
+                            &format!("Next page {url} unavailable: {error}"),
+                            CoverageTermination::Failed,
+                        ))
+                    }
+                    Err(_) => {
+                        return Ok(self.stop(
+                            "Static pagination navigation reached its time limit",
+                            CoverageTermination::TimeLimit,
+                        ))
+                    }
                 }
             };
             let actual = page_url(&url, &actual)?;
@@ -189,7 +280,8 @@ impl SelectorSession {
             }
             self.visited.insert(url.into());
             self.visited.insert(actual.to_string());
-            self.pages_visited += 1;
+            self.pages_visited += pages_consumed;
+            self.page_limit_reached = limit_hit;
             self.page = match extract_page(&html, &actual, &self.source, &self.config) {
                 Ok(page) => page,
                 Err(e) => {
@@ -242,11 +334,38 @@ impl SelectorSession {
             }
         } else if let Some(url) = posting.detail_url.clone() {
             self.detail_requests += 1;
+            let detail_fetch = async {
+                if self.mode == ExtractionMode::Browser {
+                    let pool = self.browser.as_ref().ok_or_else(|| {
+                        ClientError::Configuration("Browser pool unavailable".into())
+                    })?;
+                    let parsed_detail = Url::parse(&url)?;
+                    let mut detail_cfg = self.config.clone();
+                    detail_cfg.load_more = None;
+                    detail_cfg.load_more_raw = None;
+                    detail_cfg.wait_for = self.config.detail_container.clone();
+                    let rendered = pool
+                        .fetch_rendered_page(
+                            client,
+                            &parsed_detail,
+                            &self.source,
+                            &detail_cfg,
+                            &self.session_cookies,
+                            1,
+                            self.navigation_timeout,
+                            self.source_deadline.min(self.detail_deadline),
+                        )
+                        .await?;
+                    Ok::<(String, String), ClientError>((rendered.html, rendered.actual_url))
+                } else {
+                    client.fetch_text_at(&url, true).await
+                }
+            };
             match timeout_at(
                 self.source_deadline
                     .min(self.detail_deadline)
                     .min(Instant::now() + self.navigation_timeout),
-                client.fetch_text_at(&url, true),
+                detail_fetch,
             )
             .await
             {
@@ -308,7 +427,8 @@ impl SelectorSession {
             || (self.pending.is_empty()
                 && self.page.candidates.is_empty()
                 && self.page.next_page.is_none()
-                && self.page.next_page_error.is_none())
+                && self.page.next_page_error.is_none()
+                && !self.page_limit_reached)
     }
     fn stop(&mut self, message: &str, termination: CoverageTermination) -> SelectorStep {
         self.exhausted = true;
@@ -481,11 +601,15 @@ mod tests {
         .unwrap();
         let mut session = SelectorSession {
             source,
+            mode: ExtractionMode::Static,
+            browser: None,
+            session_cookies: Vec::new(),
             config,
             page,
             visited: HashSet::new(),
             seen: HashSet::new(),
             pages_visited: 1,
+            page_limit_reached: false,
             source_deadline: Instant::now() - Duration::from_secs(1),
             detail_deadline: Instant::now() + Duration::from_secs(45),
             navigation_timeout: Duration::from_secs(30),

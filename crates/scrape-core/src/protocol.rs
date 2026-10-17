@@ -26,6 +26,41 @@ pub struct BrowserRuntimeStatus {
     pub message: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(feature = "sqlx", sqlx(rename_all = "snake_case"))]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum BrowserSessionStatus {
+    #[default]
+    Ready,
+    NeedsLogin,
+    Expired,
+}
+
+impl BrowserSessionStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::NeedsLogin => "needs_login",
+            Self::Expired => "expired",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct BrowserSessionSummary {
+    pub id: String,
+    pub label: String,
+    pub domain: String,
+    pub status: BrowserSessionStatus,
+    pub created_at: String,
+    pub updated_at: String,
+    pub last_verified_at: Option<String>,
+}
+
 /// Raw extraction evidence; a sample is not an accepted or persisted posting.
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(deny_unknown_fields)]

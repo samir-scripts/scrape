@@ -1,3 +1,4 @@
+pub mod browser_session;
 pub mod calendar;
 pub mod runner;
 pub mod scheduler;

@@ -264,6 +264,23 @@ async fn execute_dry_run_worker(
                                 {
                                     failure.get_or_insert_with(|| "Worker preview completion has missing or inconsistent source summaries".into());
                                 }
+                                if let Ok(session_dir) =
+                                    crate::services::browser_session::session_dir_for_app(app)
+                                {
+                                    for scan in &stats.sources {
+                                        if let Some(worker_source) =
+                                            config.sources.iter().find(|s| s.id == scan.source_id)
+                                        {
+                                            let _ = crate::services::browser_session::reconcile_source_session_after_scan(
+                                                pool,
+                                                &session_dir,
+                                                &worker_source.config,
+                                                Some(scan.termination),
+                                            )
+                                            .await;
+                                        }
+                                    }
+                                }
                             }
                             done = matches!(event, WorkerEvent::Done { .. });
                             events.push(event);
@@ -685,4 +702,209 @@ pub fn cancel_workflow_preview(request_id: String) -> bool {
     } else {
         false
     }
+}
+
+#[tauri::command]
+pub fn detect_browser_runtime() -> Result<scrape_core::protocol::BrowserRuntimeStatus> {
+    Ok(crate::services::browser_session::detect_browser_runtime())
+}
+
+#[tauri::command]
+pub async fn list_browser_sessions(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Vec<scrape_core::protocol::BrowserSessionSummary>> {
+    let session_dir = crate::services::browser_session::session_dir_for_app(&app)?;
+    crate::services::browser_session::list_browser_sessions(&state.db, &session_dir).await
+}
+
+#[tauri::command]
+pub async fn open_browser_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    label: String,
+    login_url: String,
+) -> Result<scrape_core::protocol::BrowserSessionSummary> {
+    let _permit = state.runner.write_permit()?;
+    let session_dir = crate::services::browser_session::session_dir_for_app(&app)?;
+    crate::services::browser_session::open_browser_session(
+        &state.db,
+        &session_dir,
+        &label,
+        &login_url,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn save_browser_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<scrape_core::protocol::BrowserSessionSummary> {
+    let _permit = state.runner.write_permit()?;
+    let session_dir = crate::services::browser_session::session_dir_for_app(&app)?;
+    crate::services::browser_session::save_browser_session(&state.db, &session_dir, &session_id)
+        .await
+}
+
+#[tauri::command]
+pub async fn clear_browser_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<()> {
+    let _permit = state.runner.write_permit()?;
+    let session_dir = crate::services::browser_session::session_dir_for_app(&app)?;
+    crate::services::browser_session::clear_browser_session(&state.db, &session_dir, &session_id)
+        .await
+}
+
+#[tauri::command]
+pub async fn test_extractor(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    extractor: crate::services::workflow::WorkflowExtractor,
+) -> Result<scrape_core::protocol::ExtractorTestResult> {
+    let _guard = state.runner.try_acquire_lock()?;
+    let spec = crate::services::workflow::WorkflowSpec {
+        version: crate::services::workflow::WORKFLOW_SPEC_VERSION,
+        metadata: crate::services::workflow::WorkflowMetadata {
+            name: "Extractor Test".into(),
+            company: None,
+            enabled: Some(true),
+        },
+        sources: vec![crate::services::workflow::WorkflowSourceSpec {
+            id: "extractor-test".into(),
+            label: "Extractor Test".into(),
+            employer_hint: None,
+            enabled: true,
+            extractor: extractor.clone(),
+        }],
+        schedule: None,
+        filters: None,
+        retention: None,
+        max_jobs_per_run: Some(scrape_core::protocol::PREVIEW_MAX_JOBS),
+    };
+    let input = crate::services::workflow::extract_source_input(&spec, &spec.sources[0], "UTC")?;
+    let worker_source = WorkerSource {
+        id: "extractor-test".into(),
+        kind: input.kind,
+        name: "Extractor Test".into(),
+        identifier: input.identifier,
+        config: input.config.unwrap_or_else(|| serde_json::json!({})),
+    };
+    let events = execute_dry_run_worker(
+        PreviewHost {
+            app: &app,
+            pool: &state.db,
+        },
+        vec![worker_source],
+        scrape_core::WorkerFilters::default(),
+        Vec::new(),
+        None,
+        state.runner.cancellation_flag(),
+        Some(scrape_core::protocol::PREVIEW_MAX_JOBS),
+    )
+    .await?;
+
+    let mut samples = Vec::new();
+    let mut field_match_counts = std::collections::BTreeMap::new();
+    for key in [
+        "title",
+        "url",
+        "location",
+        "salary",
+        "description",
+        "date",
+        "id",
+        "employer_logo",
+    ] {
+        field_match_counts.insert(key.to_string(), 0);
+    }
+    let mut warnings = Vec::new();
+    let mut termination = scrape_core::protocol::CoverageTermination::Exhausted;
+
+    for event in events {
+        match event {
+            WorkerEvent::Job {
+                external_id,
+                title,
+                company,
+                location,
+                url,
+                date_posted,
+                salary,
+                description_text,
+                company_icon_url,
+                company_logo,
+                ..
+            } => {
+                if !title.trim().is_empty() {
+                    *field_match_counts.entry("title".into()).or_insert(0) += 1;
+                }
+                if !url.trim().is_empty() {
+                    *field_match_counts.entry("url".into()).or_insert(0) += 1;
+                }
+                if !location.trim().is_empty() {
+                    *field_match_counts.entry("location".into()).or_insert(0) += 1;
+                }
+                if salary.is_some() {
+                    *field_match_counts.entry("salary".into()).or_insert(0) += 1;
+                }
+                if description_text
+                    .as_deref()
+                    .is_some_and(|text| !text.trim().is_empty())
+                {
+                    *field_match_counts.entry("description".into()).or_insert(0) += 1;
+                }
+                if date_posted
+                    .as_deref()
+                    .is_some_and(|date| !date.trim().is_empty())
+                {
+                    *field_match_counts.entry("date".into()).or_insert(0) += 1;
+                }
+                if !external_id.trim().is_empty() {
+                    *field_match_counts.entry("id".into()).or_insert(0) += 1;
+                }
+                let logo_url =
+                    company_icon_url.or_else(|| company_logo.map(|evidence| evidence.url));
+                if logo_url.is_some() {
+                    *field_match_counts
+                        .entry("employer_logo".into())
+                        .or_insert(0) += 1;
+                }
+                if samples.len() < 5 {
+                    samples.push(scrape_core::protocol::ExtractorSampleCandidate {
+                        evidence_url: extractor.url.clone(),
+                        external_id: Some(external_id).filter(|id| !id.trim().is_empty()),
+                        title,
+                        url,
+                        company: Some(company).filter(|c| !c.trim().is_empty()),
+                        location: Some(location).filter(|l| !l.trim().is_empty()),
+                        salary: salary.map(|s| s.raw),
+                        description: description_text,
+                        date_posted,
+                        employer_logo_url: logo_url,
+                    });
+                }
+            }
+            WorkerEvent::Warning { message, .. } | WorkerEvent::Error { message, .. } => {
+                warnings.push(message);
+            }
+            WorkerEvent::Done { stats } => {
+                if let Some(scan) = stats.sources.first() {
+                    termination = scan.termination;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(scrape_core::protocol::ExtractorTestResult {
+        samples,
+        field_match_counts,
+        warnings,
+        termination,
+    })
 }

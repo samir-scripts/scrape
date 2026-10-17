@@ -26,8 +26,10 @@ pub async fn scrape_selector_with(
     source: &WorkerSource,
     sink: &mut dyn FnMut(WorkerEvent) -> bool,
 ) -> Result<(), ClientError> {
+    let browser = Some(std::sync::Arc::new(crate::browser::BrowserPool::new(2)));
     let mut session = super::selector_session::SelectorSession::new(
         client,
+        browser,
         source,
         &scrape_core::WorkerLimits::default(),
         &scrape_core::protocol::EnrichmentLimits::default(),

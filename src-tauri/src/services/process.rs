@@ -30,15 +30,26 @@ pub fn worker_command(
     app: &tauri::AppHandle,
 ) -> crate::error::Result<tauri_plugin_shell::process::Command> {
     use tauri_plugin_shell::ShellExt;
-    if let Some(directory) = super::native_smoke::directory() {
+    let cmd = if let Some(directory) = super::native_smoke::directory() {
         let fixture = directory.join("worker-fixture");
         if fixture.is_file() {
-            return Ok(app.shell().command(fixture));
+            app.shell().command(fixture)
+        } else {
+            app.shell().sidecar("scrape-worker").map_err(|error| {
+                crate::error::AppError::Internal(format!("Failed to find sidecar: {error}"))
+            })?
+        }
+    } else {
+        app.shell().sidecar("scrape-worker").map_err(|error| {
+            crate::error::AppError::Internal(format!("Failed to find sidecar: {error}"))
+        })?
+    };
+    if std::env::var_os("SCRAPE_SESSION_DIR").is_none() {
+        if let Ok(session_dir) = super::browser_session::session_dir_for_app(app) {
+            return Ok(cmd.env("SCRAPE_SESSION_DIR", session_dir));
         }
     }
-    app.shell().sidecar("scrape-worker").map_err(|error| {
-        crate::error::AppError::Internal(format!("Failed to find sidecar: {error}"))
-    })
+    Ok(cmd)
 }
 
 pub fn execution_seconds(default: u64) -> u64 {

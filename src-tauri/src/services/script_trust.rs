@@ -136,8 +136,47 @@ pub async fn validate_execution(
         crate::services::workflow::validated_stored_config(source.kind, &source.config)?;
         require_trusted(pool, &source.id, &source.config).await?;
         match scrape_core::extraction::mode(&source.config).map_err(AppError::Validation)? {
-            scrape_core::extraction::ExtractionMode::Static => {},
-            mode => return Err(AppError::Validation(format!("{mode:?} extraction is configured but its runner is not installed in this application build. Browser execution follows in Phase 6C; custom script execution follows in Phase 6D."))),
+            scrape_core::extraction::ExtractionMode::Static => {}
+            scrape_core::extraction::ExtractionMode::Browser => {
+                if let Some(session_id) = source
+                    .config
+                    .get("session_id")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                {
+                    let valid_id =
+                        scrape_core::browser::StoredBrowserSession::validate_session_id(session_id)
+                            .map_err(AppError::Validation)?;
+                    let status: Option<String> =
+                        sqlx::query_scalar("SELECT status FROM browser_sessions WHERE id = ?")
+                            .bind(&valid_id)
+                            .fetch_optional(pool)
+                            .await?;
+                    match status.as_deref() {
+                        Some("ready") => {}
+                        Some(_) => {
+                            return Err(AppError::Validation(format!(
+                                "Browser session '{valid_id}' requires login. Open and save the login session before running."
+                            )));
+                        }
+                        None => {
+                            return Err(AppError::Validation(format!(
+                                "Browser session '{valid_id}' does not exist. Open and save the login session before running."
+                            )));
+                        }
+                    }
+                }
+                if std::env::var_os("SCRAPE_CDP_WS_URL").is_none() {
+                    scrape_core::browser::resolve_browser_runtime()
+                        .map_err(AppError::Validation)?;
+                }
+            }
+            scrape_core::extraction::ExtractionMode::Script => {
+                return Err(AppError::Validation(
+                    "Script extraction is configured but its runner is not installed in this application build. Custom script execution follows in Phase 6D.".into(),
+                ));
+            }
         }
     }
     Ok(())
@@ -221,16 +260,26 @@ mod tests {
                 .to_string()
                 .contains("runner is not installed")
         );
-        worker_source.config =
-            serde_json::json!({"mode":"browser","item":"article","title":"h2","link":"a"});
+        worker_source.config = serde_json::json!({
+            "mode":"browser",
+            "session_id":"missing-session",
+            "item":"article",
+            "title":"h2",
+            "link":"a"
+        });
         assert!(
             validate_execution(&pool, std::slice::from_ref(&worker_source))
                 .await
                 .unwrap_err()
                 .to_string()
-                .contains("runner is not installed")
+                .contains("Browser session 'missing-session' does not exist")
         );
         worker_source.config.as_object_mut().unwrap().remove("mode");
+        worker_source
+            .config
+            .as_object_mut()
+            .unwrap()
+            .remove("session_id");
         validate_execution(&pool, &[worker_source]).await.unwrap();
         let unchanged = SourcesRepo::update(&pool, update(&source.id, source.config.clone()))
             .await

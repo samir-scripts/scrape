@@ -9,6 +9,8 @@ fn unavailable_extraction_modes_fail_explicitly_before_static_fallback() {
     for mode in ["browser", "script"] {
         let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
             .arg("--stdin")
+            .env("SCRAPE_BROWSER_PATH", "/nonexistent-scrape-browser")
+            .env_remove("SCRAPE_CDP_WS_URL")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -27,7 +29,12 @@ fn unavailable_extraction_modes_fail_explicitly_before_static_fallback() {
             .lines()
             .map(|line| serde_json::from_str(line).unwrap())
             .collect();
-        assert!(events.iter().any(|event| matches!(event, scrape_core::WorkerEvent::Error { message, retryable:false, .. } if message.contains("extraction is unavailable"))));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            scrape_core::WorkerEvent::Error { message, retryable: false, .. }
+                if message.contains("extraction is unavailable")
+                    || message.contains("No compatible Chromium browser found")
+        )));
         assert!(!events
             .iter()
             .any(|event| matches!(event, scrape_core::WorkerEvent::Job { .. })));

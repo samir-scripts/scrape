@@ -218,6 +218,14 @@ pub async fn execute(
             .fetch_optional(&mut *tx)
             .await?;
     tx.commit().await?;
+    if reset {
+        if let Some(app_dir) = backup.parent().and_then(|p| p.parent()) {
+            let session_dir = app_dir.join("browser_sessions");
+            if session_dir.exists() {
+                let _ = tokio::fs::remove_dir_all(&session_dir).await;
+            }
+        }
+    }
     Ok(CleanupResult {
         counts,
         backup_path: backup.to_string_lossy().into_owned(),

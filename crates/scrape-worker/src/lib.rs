@@ -1,4 +1,5 @@
 pub mod adapters;
+pub mod browser;
 pub mod client;
 pub mod coordinator;
 pub mod detect;

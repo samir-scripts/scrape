@@ -24,3 +24,30 @@ it("sends explicit confirmation and the reviewed fingerprint without inferring a
   await expect(api.trustWorkflowScript("fixture", "reviewed-hash", true)).rejects.toThrow("desktop application");
   expect(native.invoke).toHaveBeenCalledTimes(1);
 });
+
+it("routes browser runtime, session lifecycle, and extractor test commands to desktop IPC", async () => {
+  const runtimeStatus = { available: true, executable_path: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", version: "130.0", message: null };
+  const sessionSummary = { id: "session-1", label: "Workday", domain: "workday.example.com", status: "ready" as const, created_at: "2026-10-17T00:00:00Z", updated_at: "2026-10-17T00:00:00Z", last_verified_at: "2026-10-17T00:00:00Z" };
+  const testResult = { samples: [], field_match_counts: { title: 0 }, warnings: [], termination: "exhausted" as const };
+  native.invoke
+    .mockResolvedValueOnce(runtimeStatus)
+    .mockResolvedValueOnce([sessionSummary])
+    .mockResolvedValueOnce(sessionSummary)
+    .mockResolvedValueOnce(sessionSummary)
+    .mockResolvedValueOnce(undefined)
+    .mockResolvedValueOnce(testResult);
+
+  expect(await api.detectBrowserRuntime()).toEqual(runtimeStatus);
+  expect(await api.listBrowserSessions()).toEqual([sessionSummary]);
+  expect(await api.openBrowserSession("Workday", "https://workday.example.com/login")).toEqual(sessionSummary);
+  expect(await api.saveBrowserSession("session-1")).toEqual(sessionSummary);
+  await api.clearBrowserSession("session-1");
+  expect(await api.testExtractor({ kind: "selector", url: "https://workday.example.com/jobs", mode: "browser" })).toEqual(testResult);
+
+  expect(native.invoke).toHaveBeenNthCalledWith(1, "detect_browser_runtime");
+  expect(native.invoke).toHaveBeenNthCalledWith(2, "list_browser_sessions");
+  expect(native.invoke).toHaveBeenNthCalledWith(3, "open_browser_session", { label: "Workday", loginUrl: "https://workday.example.com/login" });
+  expect(native.invoke).toHaveBeenNthCalledWith(4, "save_browser_session", { sessionId: "session-1" });
+  expect(native.invoke).toHaveBeenNthCalledWith(5, "clear_browser_session", { sessionId: "session-1" });
+  expect(native.invoke).toHaveBeenNthCalledWith(6, "test_extractor", { extractor: { kind: "selector", url: "https://workday.example.com/jobs", mode: "browser" } });
+});

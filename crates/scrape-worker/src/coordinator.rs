@@ -44,8 +44,10 @@ pub struct CoordinatorSession {
 }
 
 impl CoordinatorSession {
+    #[allow(clippy::too_many_arguments)]
     pub async fn init(
         client: &HttpClient,
+        browser: Option<std::sync::Arc<crate::browser::BrowserPool>>,
         source: WorkerSource,
         filters: WorkerFilters,
         extraction_limits: &WorkerLimits,
@@ -54,8 +56,19 @@ impl CoordinatorSession {
         workflow_deadline: Instant,
     ) -> Result<Self, ClientError> {
         match scrape_core::extraction::mode(&source.config).map_err(ClientError::Configuration)? {
-            scrape_core::extraction::ExtractionMode::Static => {},
-            mode => return Err(ClientError::Configuration(format!("{mode:?} extraction is unavailable in this build; configure static extraction or install a build with the required runner"))),
+            scrape_core::extraction::ExtractionMode::Static => {}
+            scrape_core::extraction::ExtractionMode::Browser => {
+                if source.kind != SourceKind::Selector {
+                    return Err(ClientError::Configuration(
+                        "Browser extraction is only supported for selector sources".into(),
+                    ));
+                }
+            }
+            mode => {
+                return Err(ClientError::Configuration(format!(
+                    "{mode:?} extraction is unavailable in this build; configure static extraction or install a build with the required runner"
+                )))
+            }
         }
         let enrichment_limits = extraction_limits.enrichment.clone().unwrap_or_default();
         let limit = if dry_run {
@@ -190,6 +203,7 @@ impl CoordinatorSession {
                 session.selector_session = Some(
                     crate::adapters::selector_session::SelectorSession::new(
                         client,
+                        browser,
                         &session.source,
                         extraction_limits,
                         &enrichment_limits,
@@ -586,6 +600,7 @@ impl CoordinatorSession {
 
 pub struct SourceCoordinator {
     pub client: HttpClient,
+    pub browser: Option<std::sync::Arc<crate::browser::BrowserPool>>,
     pub sources: Vec<WorkerSource>,
     pub filters: WorkerFilters,
     pub filters_by_source: HashMap<String, WorkerFilters>,
@@ -636,8 +651,13 @@ impl SourceCoordinator {
             configured_cap
         };
 
+        let browser = Some(std::sync::Arc::new(crate::browser::BrowserPool::new(
+            limits.max_browser_contexts as usize,
+        )));
+
         Ok(Self {
             client,
+            browser,
             sources: config.sources.clone(),
             filters: config.filters.clone(),
             filters_by_source: config.filters_by_source.clone(),
@@ -688,6 +708,7 @@ impl SourceCoordinator {
                     workflow_deadline,
                     CoordinatorSession::init(
                         &self.client,
+                        self.browser.clone(),
                         source.clone(),
                         filters,
                         &self.limits,
@@ -718,10 +739,10 @@ impl SourceCoordinator {
                     let stat = SourceScanStats {
                         source_id: source.id.clone(),
                         limit: self.max_jobs_per_run,
-                        termination: if matches!(error, ClientError::TimeLimit(_)) {
-                            CoverageTermination::TimeLimit
-                        } else {
-                            CoverageTermination::Failed
+                        termination: match error {
+                            ClientError::TimeLimit(_) => CoverageTermination::TimeLimit,
+                            ClientError::NeedsLogin(_) => CoverageTermination::NeedsLogin,
+                            _ => CoverageTermination::Failed,
                         },
                         outcome: Some(ScanOutcome::Failed),
                         ..Default::default()
@@ -929,6 +950,11 @@ impl SourceCoordinator {
                             }
                             Err(error) => {
                                 session.failed = true;
+                                if matches!(error, ClientError::NeedsLogin(_)) {
+                                    session.stats.termination = CoverageTermination::NeedsLogin;
+                                } else if matches!(error, ClientError::TimeLimit(_)) {
+                                    session.stats.termination = CoverageTermination::TimeLimit;
+                                }
                                 emit(&WorkerEvent::Error {
                                     invalid_posting: Some(false),
                                     source_id: session.source.id.clone(),
@@ -968,7 +994,12 @@ impl SourceCoordinator {
                 {
                     session.stats.termination = CoverageTermination::JobLimit;
                 }
-            } else if session.failed {
+            } else if session.failed
+                && !matches!(
+                    session.stats.termination,
+                    CoverageTermination::NeedsLogin | CoverageTermination::TimeLimit
+                )
+            {
                 session.stats.termination = CoverageTermination::Failed;
             }
 
@@ -1041,7 +1072,12 @@ impl SourceCoordinator {
             }
 
             let outcome = if session.failed || session.had_errors {
-                session.stats.termination = CoverageTermination::Failed;
+                if !matches!(
+                    session.stats.termination,
+                    CoverageTermination::NeedsLogin | CoverageTermination::TimeLimit
+                ) {
+                    session.stats.termination = CoverageTermination::Failed;
+                }
                 if session.stats.examined > session.stats.invalid {
                     ScanOutcome::Partial
                 } else {
@@ -1051,7 +1087,13 @@ impl SourceCoordinator {
                 if session.stats.termination == CoverageTermination::Exhausted {
                     session.stats.termination = CoverageTermination::Failed;
                 }
-                ScanOutcome::Partial
+                if session.stats.termination == CoverageTermination::NeedsLogin
+                    && session.stats.examined == 0
+                {
+                    ScanOutcome::Failed
+                } else {
+                    ScanOutcome::Partial
+                }
             } else if session.stats.enrichment_warnings > 0 {
                 ScanOutcome::SuccessWithWarnings
             } else {
@@ -1073,6 +1115,9 @@ impl SourceCoordinator {
 
             final_stats.sources.push(session.stats);
         }
+
+        // Explicitly drop the shared BrowserPool so Browser.close is sent and processes are reaped.
+        let _ = self.browser.take();
 
         for stat in failed_sources {
             final_stats.sources_failed += 1;

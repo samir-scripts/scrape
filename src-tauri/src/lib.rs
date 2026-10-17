@@ -217,6 +217,12 @@ pub fn run() {
             commands::scrape::preview_workflow,
             commands::scrape::save_workflow,
             commands::scrape::cancel_workflow_preview,
+            commands::scrape::detect_browser_runtime,
+            commands::scrape::list_browser_sessions,
+            commands::scrape::open_browser_session,
+            commands::scrape::save_browser_session,
+            commands::scrape::clear_browser_session,
+            commands::scrape::test_extractor,
             commands::metrics::get_metrics,
             commands::notifications::create_notification,
             commands::notifications::list_notifications,
@@ -268,6 +274,8 @@ mod bindings_test {
         scrape_core::extraction::ScriptRuntime::export().unwrap();
         scrape_core::extraction::WorkflowScriptConfig::export().unwrap();
         scrape_core::protocol::BrowserRuntimeStatus::export().unwrap();
+        scrape_core::protocol::BrowserSessionStatus::export().unwrap();
+        scrape_core::protocol::BrowserSessionSummary::export().unwrap();
         scrape_core::protocol::ExtractorTestResult::export().unwrap();
         scrape_core::protocol::ExtractorSampleCandidate::export().unwrap();
         scrape_core::WorkerEvent::export().unwrap();

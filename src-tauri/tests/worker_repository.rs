@@ -1345,3 +1345,250 @@ async fn verify_static_worker_persistence(hydration: bool, paginated: bool) {
     server.join().unwrap();
     pool.close().await;
 }
+
+#[tokio::test]
+async fn browser_cdp_extraction_and_session_persistence_survive_repository_ingestion() {
+    use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+    use sha1::{Digest, Sha1};
+
+    let ws_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let ws_addr = ws_listener.local_addr().unwrap();
+    let ws_server = std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = ws_listener.accept() {
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut buf = Vec::new();
+            let mut byte = [0u8; 1];
+            while !buf.ends_with(b"\r\n\r\n") {
+                stream.read_exact(&mut byte).unwrap();
+                buf.push(byte[0]);
+            }
+            let req = String::from_utf8_lossy(&buf);
+            let key = req
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    if name.trim().eq_ignore_ascii_case("sec-websocket-key") {
+                        Some(value.trim().to_string())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap();
+            let mut sha1 = Sha1::new();
+            sha1.update(key.as_bytes());
+            sha1.update(b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+            let accept = BASE64.encode(sha1.finalize());
+            let resp = format!(
+                "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
+            );
+            stream.write_all(resp.as_bytes()).unwrap();
+
+            loop {
+                let mut header = [0u8; 2];
+                if stream.read_exact(&mut header).is_err() {
+                    break;
+                }
+                if (header[0] & 0x0f) == 0x8 {
+                    break;
+                }
+                let masked = (header[1] & 0x80) != 0;
+                let mut len = (header[1] & 0x7f) as usize;
+                if len == 126 {
+                    let mut ext = [0u8; 2];
+                    stream.read_exact(&mut ext).unwrap();
+                    len = u16::from_be_bytes(ext) as usize;
+                }
+                let mut mask = [0u8; 4];
+                if masked {
+                    stream.read_exact(&mut mask).unwrap();
+                }
+                let mut payload = vec![0u8; len];
+                stream.read_exact(&mut payload).unwrap();
+                if masked {
+                    for (i, b) in payload.iter_mut().enumerate() {
+                        *b ^= mask[i % 4];
+                    }
+                }
+                let msg: serde_json::Value = serde_json::from_slice(&payload).unwrap();
+                let id = msg.get("id").and_then(|v| v.as_u64()).unwrap_or(1);
+                let method = msg.get("method").and_then(|v| v.as_str()).unwrap_or("");
+                let session_id = msg
+                    .get("sessionId")
+                    .and_then(|v| v.as_str())
+                    .map(ToString::to_string);
+                let result = match method {
+                    "Target.createBrowserContext" => {
+                        serde_json::json!({ "browserContextId": "ctx-repo" })
+                    }
+                    "Target.createTarget" => serde_json::json!({ "targetId": "target-repo" }),
+                    "Target.attachToTarget" => serde_json::json!({ "sessionId": "sess-repo" }),
+                    "Network.setCookies" => serde_json::json!({ "success": true }),
+                    "Runtime.evaluate" => {
+                        let snapshot = serde_json::json!({
+                            "readyState": "complete",
+                            "href": "https://portal.fixture.test/careers",
+                            "title": "Careers",
+                            "hasPassword": false,
+                            "html": r#"<html><body>
+                                <article class="job" data-job-id="cdp-900">
+                                  <h2>Staff Distributed Systems Engineer</h2>
+                                  <a class="apply" href="https://portal.fixture.test/jobs/cdp-900">Apply</a>
+                                  <span class="loc">Seattle, WA</span>
+                                  <span class="pay">$190,000 - $220,000 a year</span>
+                                  <p class="desc">Build resilient Rust consensus services in US locations.</p>
+                                </article>
+                            </body></html>"#
+                        });
+                        serde_json::json!({
+                            "result": {
+                                "type": "string",
+                                "value": snapshot.to_string()
+                            }
+                        })
+                    }
+                    _ => serde_json::json!({}),
+                };
+                let mut reply = serde_json::json!({ "id": id, "result": result });
+                if let Some(sid) = session_id {
+                    reply["sessionId"] = serde_json::Value::String(sid);
+                }
+                let out_bytes = serde_json::to_vec(&reply).unwrap();
+                let mut frame = vec![0x81];
+                if out_bytes.len() <= 125 {
+                    frame.push(out_bytes.len() as u8);
+                } else {
+                    frame.push(126);
+                    frame.extend_from_slice(&(out_bytes.len() as u16).to_be_bytes());
+                }
+                frame.extend_from_slice(&out_bytes);
+                let _ = stream.write_all(&frame);
+            }
+        }
+    });
+
+    let dir = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&dir.path().join("jobs.db"))
+        .await
+        .unwrap();
+    let session_dir = dir.path().join("browser_sessions");
+    std::fs::create_dir_all(&session_dir).unwrap();
+    let session = scrape_core::browser::StoredBrowserSession {
+        id: "workday_repo".into(),
+        domain: "portal.fixture.test".into(),
+        saved_at: "2026-10-17T00:00:00Z".into(),
+        cookies: vec![scrape_core::browser::BrowserCookie {
+            name: "sid".into(),
+            value: "token-repo".into(),
+            domain: ".portal.fixture.test".into(),
+            path: "/".into(),
+            secure: true,
+            http_only: true,
+            same_site: None,
+            expires: None,
+        }],
+    };
+    std::fs::write(
+        session_dir.join("workday_repo.json"),
+        serde_json::to_vec(&session).unwrap(),
+    )
+    .unwrap();
+
+    let source = SourcesRepo::create(
+        &pool,
+        CreateSourceInput {
+            kind: SourceKind::Selector,
+            name: "Portal Browser Fixture".into(),
+            identifier: "https://portal.fixture.test/careers".into(),
+            config: Some(serde_json::json!({
+                "url": "https://portal.fixture.test/careers",
+                "mode": "browser",
+                "session_id": "workday_repo",
+                "wait_for": "article.job",
+                "item": "article.job",
+                "id": ".",
+                "id_attribute": "data-job-id",
+                "title": "h2",
+                "link": "a.apply",
+                "location": ".loc",
+                "salary": ".pay",
+                "description": ".desc"
+            })),
+            enabled: Some(true),
+            cadence: Some(scrape_core::SourceCadence::Manual),
+            cadence_cron: None,
+            retention_days: Some(30),
+            retention_policy: Some("untracked_only".into()),
+            filters: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let config = WorkerConfig {
+        version: PROTOCOL_VERSION,
+        sources: vec![WorkerSource {
+            id: source.id.clone(),
+            kind: source.kind,
+            name: source.name.clone(),
+            identifier: source.identifier.clone(),
+            config: source.config.clone(),
+        }],
+        filters: WorkerFilters::default(),
+        limits: WorkerLimits {
+            per_host_delay_ms: 0,
+            request_timeout_s: 3,
+            navigation_timeout_s: 5,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let mut command = Command::new(worker());
+    command
+        .arg("--stdin")
+        .env(
+            "SCRAPE_CDP_WS_URL",
+            format!("ws://{ws_addr}/devtools/browser/repo"),
+        )
+        .env("SCRAPE_SESSION_DIR", &session_dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(&serde_json::to_vec(&config).unwrap())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let events: Vec<WorkerEvent> = String::from_utf8(out.stdout)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let jobs: Vec<_> = events
+        .into_iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .map(|e| scraped_job_from_event(e).unwrap())
+        .collect();
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].external_id.as_deref(), Some("cdp-900"));
+    assert_eq!(jobs[0].title, "Staff Distributed Systems Engineer");
+
+    let stats = JobsRepo::upsert_scraped(&pool, &jobs).await.unwrap();
+    assert_eq!(stats.inserted, 1);
+    let saved = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+    assert_eq!(saved.total, 1);
+    assert_eq!(saved.items[0].title, "Staff Distributed Systems Engineer");
+
+    let _ = ws_server.join();
+    pool.close().await;
+}

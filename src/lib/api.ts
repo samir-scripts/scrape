@@ -33,6 +33,10 @@ import type { CreateNotificationInput } from "../bindings/CreateNotificationInpu
 import type { UpdateCheckResult } from "../bindings/UpdateCheckResult";
 import type { WorkplaceType } from "../bindings/WorkplaceType";
 import type { RetentionStatus } from "../bindings/RetentionStatus";
+import type { BrowserRuntimeStatus } from "../bindings/BrowserRuntimeStatus";
+import type { BrowserSessionSummary } from "../bindings/BrowserSessionSummary";
+import type { WorkflowExtractor } from "../bindings/WorkflowExtractor";
+import type { ExtractorTestResult } from "../bindings/ExtractorTestResult";
 
 export interface DetectResult {
   kind: string;
@@ -1436,6 +1440,78 @@ const apiImplementation = {
     }
     return invoke<void>("open_terminal_console");
   },
+
+  detectBrowserRuntime: (): Promise<BrowserRuntimeStatus> => {
+    if (!isTauri()) {
+      return Promise.resolve({
+        available: false,
+        executable_path: null,
+        version: null,
+        message:
+          "Browser extraction requires the desktop application and a local Chrome, Chromium, Brave, or Edge installation.",
+      });
+    }
+    return invoke<BrowserRuntimeStatus>("detect_browser_runtime");
+  },
+
+  listBrowserSessions: (): Promise<BrowserSessionSummary[]> => {
+    if (!isTauri()) {
+      return Promise.resolve([]);
+    }
+    return invoke<BrowserSessionSummary[]>("list_browser_sessions");
+  },
+
+  openBrowserSession: (
+    label: string,
+    loginUrl: string,
+  ): Promise<BrowserSessionSummary> => {
+    if (!isTauri()) {
+      return Promise.reject(
+        new Error(
+          "Browser login sessions require the desktop application.",
+        ),
+      );
+    }
+    return invoke<BrowserSessionSummary>("open_browser_session", {
+      label,
+      loginUrl,
+    });
+  },
+
+  saveBrowserSession: (sessionId: string): Promise<BrowserSessionSummary> => {
+    if (!isTauri()) {
+      return Promise.reject(
+        new Error(
+          "Browser login sessions require the desktop application.",
+        ),
+      );
+    }
+    return invoke<BrowserSessionSummary>("save_browser_session", { sessionId });
+  },
+
+  clearBrowserSession: (sessionId: string): Promise<void> => {
+    if (!isTauri()) {
+      return Promise.reject(
+        new Error(
+          "Browser login sessions require the desktop application.",
+        ),
+      );
+    }
+    return invoke<void>("clear_browser_session", { sessionId });
+  },
+
+  testExtractor: (
+    extractor: WorkflowExtractor,
+  ): Promise<ExtractorTestResult> => {
+    if (!isTauri()) {
+      return Promise.reject(
+        new Error(
+          "Extractor testing requires the desktop application.",
+        ),
+      );
+    }
+    return invoke<ExtractorTestResult>("test_extractor", { extractor });
+  },
 };
 
 
@@ -1444,7 +1520,7 @@ export const api: typeof apiImplementation = new Proxy(apiImplementation, {
   get(target, key: keyof typeof apiImplementation) {
     const method = target[key];
     return (...args: unknown[]) => {
-      if (isRecordedMode() && ["runSourceNow", "runScrapeNow", "previewWorkflow", "dryRunSource", "detectSource", "previewSource", "testSource", "testSourceTransient"].includes(String(key))) return Promise.reject(new Error("Recorded examples cannot execute a scrape. Open the desktop application to test a live source."));
+      if (isRecordedMode() && ["runSourceNow", "runScrapeNow", "previewWorkflow", "dryRunSource", "detectSource", "previewSource", "testSource", "testSourceTransient", "testExtractor"].includes(String(key))) return Promise.reject(new Error("Recorded examples cannot execute a scrape. Open the desktop application to test a live source."));
       if (needsDesktop()) return Promise.reject(new Error(
         "This action requires the desktop application. Open ?demo=1 for recorded provider examples."
       ));
