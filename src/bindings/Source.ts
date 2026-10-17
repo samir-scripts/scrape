@@ -4,4 +4,4 @@ import type { ScanOutcome } from "./ScanOutcome";
 import type { SourceCadence } from "./SourceCadence";
 import type { SourceKind } from "./SourceKind";
 
-export type Source = { id: string, kind: SourceKind, name: string, identifier: string, config: JsonValue, enabled: boolean, last_run_at: string | null, last_status: string | null, last_outcome?: ScanOutcome | null, last_error: string | null, created_at: string, cadence: SourceCadence, cadence_cron: string | null, next_run_at: string | null, last_run_duration_ms: bigint | null, retention_days: bigint, retention_policy: string, filters: JsonValue, needs_review: boolean, };
+export type Source = { id: string, kind: SourceKind, name: string, identifier: string, config: JsonValue, enabled: boolean, last_run_at: string | null, last_status: string | null, last_outcome?: ScanOutcome | null, last_error: string | null, created_at: string, cadence: SourceCadence, cadence_cron: string | null, next_run_at: string | null, last_run_duration_ms: bigint | null, retention_days: bigint, retention_policy: string, filters: JsonValue, needs_review: boolean, script_trusted: boolean, script_sha256?: string | null, };
