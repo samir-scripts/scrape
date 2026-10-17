@@ -554,4 +554,168 @@ sources:
       expect(result.errors.some((e) => e.message.includes(".label: must not be blank"))).toBe(true);
     });
   });
+
+  describe("sourceToWorkflowSpec review states", () => {
+    it("preserves snapshot and script extractor for script sources awaiting trust", () => {
+      const scriptSource: Source = {
+        id: "src-script-quarantine",
+        kind: "selector",
+        name: "Quarantined Script",
+        identifier: "https://example.com/jobs",
+        config: {
+          __workflow_spec: {
+            version: 6,
+            metadata: { name: "Quarantined Script Workflow", enabled: false },
+            sources: [
+              {
+                id: "src-script-quarantine",
+                label: "Custom Python Scraper",
+                enabled: false,
+                extractor: {
+                  kind: "selector",
+                  mode: "script",
+                  url: "https://example.com/jobs",
+                  script: {
+                    runtime: "python",
+                    interpreter: "/usr/bin/python3",
+                    path: "./scripts/custom_scraper.py",
+                    args: ["--limit", "50"],
+                    timeout_s: 45,
+                  },
+                },
+              },
+            ],
+          },
+        },
+        enabled: false,
+        last_run_at: null,
+        last_status: null,
+        last_error: null,
+        created_at: "2026-10-17T00:00:00Z",
+        cadence: "daily",
+        cadence_cron: null,
+        next_run_at: null,
+        last_run_duration_ms: null,
+        retention_days: 30n,
+        retention_policy: "untracked_only",
+        filters: {},
+        needs_review: true,
+        script_trusted: false,
+        script_sha256: "abc123sha256fingerprint",
+      };
+
+      const spec = sourceToWorkflowSpec(scriptSource);
+      expect(spec.sources.length).toBe(1);
+      expect(spec.sources[0].label).toBe("Custom Python Scraper");
+      expect(spec.sources[0].extractor.mode).toBe("script");
+      expect(spec.sources[0].extractor.script?.runtime).toBe("python");
+      expect(spec.sources[0].extractor.script?.path).toBe("./scripts/custom_scraper.py");
+      expect(spec.sources[0].extractor.script?.timeout_s).toBe(45);
+    });
+
+    it("ignores snapshot for unconvertible legacy original without fingerprint (negative case)", () => {
+      const legacyBrokenSource: Source = {
+        id: "src-unconvertible",
+        kind: "selector",
+        name: "Legacy Broken Source",
+        identifier: "https://legacy.example.com",
+        config: {
+          item: "div.old-card",
+          title: "h1",
+          link: "a",
+          __workflow_spec: {
+            version: 6,
+            metadata: { name: "Corrupted Snapshot", enabled: true },
+            sources: [
+              {
+                id: "src-unconvertible",
+                label: "Snapshot Label That Must Be Ignored",
+                enabled: true,
+                extractor: {
+                  kind: "selector",
+                  url: "https://corrupted.example.com",
+                },
+              },
+            ],
+          },
+        },
+        enabled: false,
+        last_run_at: null,
+        last_status: null,
+        last_error: null,
+        created_at: "2026-10-17T00:00:00Z",
+        cadence: "manual",
+        cadence_cron: null,
+        next_run_at: null,
+        last_run_duration_ms: null,
+        retention_days: 30n,
+        retention_policy: "untracked_only",
+        filters: {},
+        needs_review: true,
+        script_trusted: false,
+        script_sha256: null,
+      };
+
+      const spec = sourceToWorkflowSpec(legacyBrokenSource);
+      // Because needs_review is true and script_sha256 is null (unconvertible original),
+      // the snapshot must be ignored and fallback to source.name
+      expect(spec.sources[0].label).toBe("Legacy Broken Source");
+      expect(spec.metadata.name).toBe("Legacy Broken Source");
+      expect(spec.sources[0].label).not.toBe("Snapshot Label That Must Be Ignored");
+    });
+
+    it("preserves snapshot for trusted script source", () => {
+      const trustedScriptSource: Source = {
+        id: "src-trusted-script",
+        kind: "selector",
+        name: "Trusted Script",
+        identifier: "https://example.com/trusted",
+        config: {
+          __workflow_spec: {
+            version: 6,
+            metadata: { name: "Trusted Workflow", enabled: true },
+            sources: [
+              {
+                id: "src-trusted-script",
+                label: "Trusted Node Scraper",
+                enabled: true,
+                extractor: {
+                  kind: "selector",
+                  mode: "script",
+                  url: "https://example.com/trusted",
+                  script: {
+                    runtime: "js",
+                    interpreter: "node",
+                    path: "./scripts/trusted.js",
+                    args: [],
+                    timeout_s: 30,
+                  },
+                },
+              },
+            ],
+          },
+        },
+        enabled: true,
+        last_run_at: null,
+        last_status: null,
+        last_error: null,
+        created_at: "2026-10-17T00:00:00Z",
+        cadence: "daily",
+        cadence_cron: null,
+        next_run_at: null,
+        last_run_duration_ms: null,
+        retention_days: 30n,
+        retention_policy: "untracked_only",
+        filters: {},
+        needs_review: false,
+        script_trusted: true,
+        script_sha256: "trustedsha256fingerprint",
+      };
+
+      const spec = sourceToWorkflowSpec(trustedScriptSource);
+      expect(spec.sources[0].label).toBe("Trusted Node Scraper");
+      expect(spec.sources[0].extractor.mode).toBe("script");
+      expect(spec.sources[0].extractor.script?.path).toBe("./scripts/trusted.js");
+    });
+  });
 });

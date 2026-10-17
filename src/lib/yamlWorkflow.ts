@@ -443,7 +443,12 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
       ? source.config
       : {}
   ) as Record<string, unknown>;
-  const snapshot = source.needs_review
+  // needs_review covers two states. Unconvertible originals (no fingerprint)
+  // keep ignoring their possibly invalid snapshot. Script sources awaiting trust
+  // have a fingerprint written only after Rust validation, so their snapshot is
+  // authoritative and must be editable and reviewable.
+  const awaitingScriptTrust = !!source.script_sha256 && !source.script_trusted;
+  const snapshot = source.needs_review && !awaitingScriptTrust
     ? undefined
     : (config.__workflow_spec as WorkflowSpec | undefined);
   const sourceConfig = Object.fromEntries(

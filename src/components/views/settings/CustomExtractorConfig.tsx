@@ -7,6 +7,8 @@ import type { BrowserRuntimeStatus } from "../../../bindings/BrowserRuntimeStatu
 import type { BrowserSessionSummary } from "../../../bindings/BrowserSessionSummary";
 import type { ScriptEnvironmentStatus } from "../../../bindings/ScriptEnvironmentStatus";
 import type { Source } from "../../../bindings/Source";
+import type { WorkflowSpec } from "../../../bindings/WorkflowSpec";
+import type { WorkflowScriptConfig } from "../../../bindings/WorkflowScriptConfig";
 import { Select } from "../../ui/Select";
 import { Input } from "../../ui/Input";
 import { Button } from "../../ui/Button";
@@ -75,6 +77,38 @@ export function CustomExtractorConfig({
   const [trustBusy, setTrustBusy] = useState(false);
   const [trustSuccess, setTrustSuccess] = useState<string | null>(null);
   const [trustError, setTrustError] = useState<string | null>(null);
+  const [trustedSource, setTrustedSource] = useState<Source | null>(null);
+
+  const savedWorkflowSpec =
+    initialSource?.config &&
+    typeof initialSource.config === "object" &&
+    !Array.isArray(initialSource.config)
+      ? ((initialSource.config as Record<string, unknown>).__workflow_spec as WorkflowSpec | undefined)
+      : undefined;
+  const savedSource = savedWorkflowSpec?.sources?.find((s) => s.id === source.id);
+  const savedScript = savedSource?.extractor?.script;
+
+  const isScriptEqual = (
+    a?: WorkflowScriptConfig | null,
+    b?: WorkflowScriptConfig | null
+  ) => {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    const norm = (v: string | null | undefined) => (v ?? "").trim();
+    if (a.runtime !== b.runtime) return false;
+    if (norm(a.interpreter) !== norm(b.interpreter)) return false;
+    if (norm(a.path) !== norm(b.path)) return false;
+    if (norm(a.code) !== norm(b.code)) return false;
+    if ((a.timeout_s ?? 30) !== (b.timeout_s ?? 30)) return false;
+    const argsA = a.args || [];
+    const argsB = b.args || [];
+    if (argsA.length !== argsB.length) return false;
+    for (let i = 0; i < argsA.length; i++) {
+      if (argsA[i] !== argsB[i]) return false;
+    }
+    return true;
+  };
+  const scriptDirty = !isScriptEqual(savedScript, extractor.script);
 
   // Load browser runtime and sessions when entering browser mode
   useEffect(() => {
@@ -197,11 +231,12 @@ export function CustomExtractorConfig({
     setTrustBusy(true);
     setTrustError(null);
     try {
-      await api.trustWorkflowScript(
+      const updated = await api.trustWorkflowScript(
         initialSource.id,
         initialSource.script_sha256,
         true
       );
+      setTrustedSource(updated);
       setTrustSuccess("Script trusted and enabled.");
       if (onTrustChanged) onTrustChanged();
     } catch (err) {
@@ -1042,8 +1077,15 @@ export function CustomExtractorConfig({
             </p>
           </div>
 
+          {trustSuccess && (
+            <div className="border border-[var(--color-signal)] p-2 text-xs text-[var(--color-signal)] bg-[var(--color-paper)]">
+              {trustSuccess}
+            </div>
+          )}
+
           {/* Trust Banner for Untrusted / Imported Scripts */}
-          {(initialSource?.needs_review || !initialSource?.script_trusted) && (
+          {((trustedSource ?? initialSource)?.needs_review ||
+            !(trustedSource ?? initialSource)?.script_trusted) && (
             <div
               role="alert"
               className="border border-[var(--color-warning)] p-3 grid gap-2 text-xs bg-[var(--color-paper)]"
@@ -1054,36 +1096,38 @@ export function CustomExtractorConfig({
               </p>
 
               {initialSource?.id && initialSource?.script_sha256 ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="inverted"
-                    aria-label="Trust and enable script"
-                    disabled={trustBusy}
-                    onClick={handleTrustScript}
-                  >
-                    {trustBusy ? "Trusting…" : "Trust and enable script"}
-                  </Button>
-                  {trustSuccess && (
-                    <span className="text-[var(--color-signal)] font-medium">
-                      {trustSuccess}
-                    </span>
-                  )}
-                  {trustError && (
-                    <span className="text-[var(--color-danger)]">
-                      {trustError}
-                    </span>
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="inverted"
+                      aria-label="Trust and enable script"
+                      disabled={trustBusy || scriptDirty}
+                      onClick={handleTrustScript}
+                    >
+                      {trustBusy ? "Trusting…" : "Trust and enable script"}
+                    </Button>
+                    {trustError && (
+                      <span className="text-[var(--color-danger)]">
+                        {trustError}
+                      </span>
+                    )}
+                  </div>
+                  {scriptDirty && (
+                    <p className="text-[var(--color-ink-mute)]">
+                      Save the workflow to fingerprint your changes, then trust it.
+                    </p>
                   )}
                 </div>
               ) : (
                 <p className="text-[var(--color-ink-mute)]">
-                  Save the workflow first to establish a content fingerprint,
-                  then review and trust it before running or scheduling.
+                  Save the workflow to fingerprint your changes, then trust it.
                 </p>
               )}
             </div>
           )}
+
         </div>
       )}
     </div>

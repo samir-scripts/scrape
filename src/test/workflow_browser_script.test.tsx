@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AddSourceModal } from "../components/views/settings/AddSourceModal";
 import { api, SAMPLE_SWE_SOURCE } from "../lib/api";
@@ -107,12 +107,14 @@ describe("Workflow Editor — Custom Extractor, Browser Sessions, & Script Trust
     expect((containerInput as HTMLInputElement).value).toBe("div.job-item");
 
     // Enter XPath locators
-    fireEvent.change(containerInput, { target: { value: "xpath://article[@data-job-id]" } });
-    expect((containerInput as HTMLInputElement).value).toBe("xpath://article[@data-job-id]");
+    await user.clear(containerInput);
+    await user.type(containerInput, "xpath://article[[@data-job-id]");
+    expect(containerInput).toHaveProperty("value", "xpath://article[@data-job-id]");
 
     const titleInput = screen.getByRole("textbox", { name: /Title locator/i });
-    fireEvent.change(titleInput, { target: { value: "xpath:.//h3[contains(@class, 'title')]" } });
-    expect((titleInput as HTMLInputElement).value).toBe("xpath:.//h3[contains(@class, 'title')]");
+    await user.clear(titleInput);
+    await user.type(titleInput, "xpath:.//h3[[contains(@class, 'title')]");
+    expect(titleInput).toHaveProperty("value", "xpath:.//h3[contains(@class, 'title')]");
   });
 
   it("runs Test extractor and displays sample candidates and field match counts", async () => {
@@ -244,6 +246,16 @@ describe("Workflow Editor — Custom Extractor, Browser Sessions, & Script Trust
     // Session controls are available
     expect(screen.getByText(/Greenhouse Admin Login/i)).toBeTruthy();
 
+    // Verify session badge transitions between Needs login and Ready
+    const sessionTrigger = screen.getByRole("button", { name: /Source 1 Browser session/i });
+    await user.click(sessionTrigger);
+    await user.click(await screen.findByRole("option", { name: /Expired SSO Session/i }));
+    expect(screen.getByText("Needs login")).toBeTruthy();
+
+    await user.click(sessionTrigger);
+    await user.click(await screen.findByRole("option", { name: /Greenhouse Admin Login/i }));
+    expect(screen.getByText("Ready")).toBeTruthy();
+
     // Browser bounds inputs are present
     expect(screen.getByRole("spinbutton", { name: /Navigation timeout/i })).toBeTruthy();
     expect(screen.getByRole("spinbutton", { name: /Max pages/i })).toBeTruthy();
@@ -264,6 +276,7 @@ describe("Workflow Editor — Custom Extractor, Browser Sessions, & Script Trust
     const clearBtn = screen.getByRole("button", { name: "Clear session" });
     await user.click(clearBtn);
     expect(clearSpy).toHaveBeenCalledWith("sess-new");
+    expect(screen.getByText(/None \(unauthenticated\)/i)).toBeTruthy();
   });
 
   it("handles Custom Script mode, environment checks, truthful disclosure, and explicit trust gate", async () => {
@@ -288,7 +301,6 @@ describe("Workflow Editor — Custom Extractor, Browser Sessions, & Script Trust
     render(
       <AddSourceModal
         isOpen
-        initialSpec={sampleScriptWorkflow}
         initialSource={sampleScriptSource}
         onClose={vi.fn()}
         onSourceSaved={vi.fn()}
@@ -325,5 +337,39 @@ describe("Workflow Editor — Custom Extractor, Browser Sessions, & Script Trust
         true
       );
     });
+
+    expect(screen.getByText("Script trusted and enabled.")).toBeTruthy();
+    expect(
+      screen.queryByText(/This script configuration requires review and explicit trust/i)
+    ).toBeNull();
+  });
+
+  it("disables trust button and displays save-first message when draft script is modified", async () => {
+    const user = userEvent.setup({ delay: null });
+
+    const trustSpy = vi.spyOn(api, "trustWorkflowScript");
+
+    render(
+      <AddSourceModal
+        isOpen
+        initialSource={sampleScriptSource}
+        onClose={vi.fn()}
+        onSourceSaved={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+
+    const pathInput = screen.getByRole("textbox", { name: /Script file path/i });
+    await user.clear(pathInput);
+    await user.type(pathInput, "./scripts/modified_scraper.py");
+
+    // The trust button should be disabled / hidden with save-first message
+    expect(
+      screen.getByText(/Save the workflow to fingerprint your changes, then trust it/i)
+    ).toBeTruthy();
+    const trustBtn = screen.getByRole("button", { name: "Trust and enable script" });
+    expect((trustBtn as HTMLButtonElement).disabled).toBe(true);
+    expect(trustSpy).not.toHaveBeenCalled();
   });
 });
