@@ -185,6 +185,25 @@ mod tests {
         assert!(!source.enabled && source.needs_review && !source.script_trusted);
         assert!(source.next_run_at.is_none());
         let hash = source.script_sha256.clone().unwrap();
+        let mut worker_source = scrape_core::WorkerSource {
+            id: source.id.clone(),
+            kind: source.kind,
+            name: source.name.clone(),
+            identifier: source.identifier.clone(),
+            config: source.config.clone(),
+        };
+        assert!(validate_execution(&pool, &[])
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("Enable at least one source"));
+        assert!(
+            validate_execution(&pool, std::slice::from_ref(&worker_source))
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("untrusted")
+        );
         assert!(require_trusted(&pool, &source.id, &source.config)
             .await
             .is_err());
@@ -195,6 +214,24 @@ mod tests {
         require_trusted(&pool, &source.id, &source.config)
             .await
             .unwrap();
+        assert!(
+            validate_execution(&pool, std::slice::from_ref(&worker_source))
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("runner is not installed")
+        );
+        worker_source.config =
+            serde_json::json!({"mode":"browser","item":"article","title":"h2","link":"a"});
+        assert!(
+            validate_execution(&pool, std::slice::from_ref(&worker_source))
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("runner is not installed")
+        );
+        worker_source.config.as_object_mut().unwrap().remove("mode");
+        validate_execution(&pool, &[worker_source]).await.unwrap();
         let unchanged = SourcesRepo::update(&pool, update(&source.id, source.config.clone()))
             .await
             .unwrap();
