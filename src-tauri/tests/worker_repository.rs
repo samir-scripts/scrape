@@ -1876,3 +1876,350 @@ if (!input.continuation) {
     let _ = http_server.join();
     pool.close().await;
 }
+
+#[tokio::test]
+async fn recorded_provider_company_verification_matrix_persists_to_sqlite() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let bitwarden_payload =
+        std::fs::read_to_string(root.join("fixtures/providers/greenhouse/bitwarden.json")).unwrap();
+    let google_payload =
+        std::fs::read_to_string(root.join("fixtures/providers/selector/google.html")).unwrap();
+    let apple_payload =
+        std::fs::read_to_string(root.join("fixtures/providers/selector/apple.html")).unwrap();
+    let meta_payload =
+        std::fs::read_to_string(root.join("fixtures/providers/meta/meta.html")).unwrap();
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    listener.set_nonblocking(true).unwrap();
+
+    let running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let running_clone = running.clone();
+
+    let server = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while running_clone.load(std::sync::atomic::Ordering::Relaxed) && Instant::now() < deadline
+        {
+            if let Ok((mut stream, _)) = listener.accept() {
+                stream.set_nonblocking(false).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                let mut buffer = [0; 4096];
+                let n = match stream.read(&mut buffer) {
+                    Ok(n) if n > 0 => n,
+                    _ => continue,
+                };
+                let req = String::from_utf8_lossy(&buffer[..n]);
+                let path = req.split_whitespace().nth(1).unwrap_or("");
+                let (ctype, body) = if path.contains("bitwarden") {
+                    ("application/json", bitwarden_payload.as_str())
+                } else if path.contains("careers/applications") || path.contains("google") {
+                    ("text/html; charset=utf-8", google_payload.as_str())
+                } else if path.contains("apple") {
+                    ("text/html; charset=utf-8", apple_payload.as_str())
+                } else if path.contains("metacareers") || path.contains("meta") {
+                    ("text/html; charset=utf-8", meta_payload.as_str())
+                } else {
+                    ("text/plain", "User-agent: *\nAllow: /")
+                };
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(resp.as_bytes());
+            } else {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+    });
+
+    let directory = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&directory.path().join("providers_matrix.db"))
+        .await
+        .unwrap();
+
+    // 1. Bitwarden (Greenhouse ATS)
+    let bitwarden_src = SourcesRepo::create(
+        &pool,
+        CreateSourceInput {
+            kind: SourceKind::Greenhouse,
+            name: "Bitwarden".into(),
+            identifier: "bitwarden".into(),
+            config: None,
+            enabled: Some(true),
+            cadence: Some(scrape_core::SourceCadence::Manual),
+            cadence_cron: None,
+            retention_days: None,
+            retention_policy: None,
+            filters: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let bw_config = WorkerConfig {
+        version: PROTOCOL_VERSION,
+        max_jobs_per_run: Some(100),
+        sources: vec![WorkerSource {
+            id: bitwarden_src.id.clone(),
+            kind: bitwarden_src.kind,
+            name: bitwarden_src.name.clone(),
+            identifier: bitwarden_src.identifier.clone(),
+            config: serde_json::json!({
+                "__workflow_spec": { "max_jobs_per_run": 50 }
+            }),
+        }],
+        filters: WorkerFilters::default(),
+        limits: WorkerLimits {
+            enrichment: Some(scrape_core::protocol::EnrichmentLimits {
+                max_requests: 0,
+                timeout_ms: 5000,
+            }),
+            per_host_delay_ms: 0,
+            request_timeout_s: 3,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let bw_events = invoke_replay(&bw_config, false, Some(&format!("http://{address}")));
+    let bw_jobs: Vec<_> = bw_events
+        .into_iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .map(|e| scraped_job_from_event(e).unwrap())
+        .collect();
+    assert_eq!(bw_jobs.len(), 39);
+    let bw_stats = JobsRepo::upsert_scraped(&pool, &bw_jobs).await.unwrap();
+    assert_eq!(bw_stats.inserted, 39);
+
+    // Verify canonical identity format on saved jobs
+    let bw_saved = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+    assert_eq!(bw_saved.total, 39);
+    for job in &bw_saved.items {
+        let id_str = job.posting_identity.as_ref().unwrap();
+        assert!(id_str.contains("\"greenhouse\"") && id_str.contains("\"bitwarden\""));
+    }
+
+    // 2. Google Careers (Static Selector)
+    let google_src = SourcesRepo::create(
+        &pool,
+        CreateSourceInput {
+            kind: SourceKind::Selector,
+            name: "Google".into(),
+            identifier: "https://www.google.com/about/careers/applications/jobs/results/".into(),
+            config: Some(serde_json::json!({
+                "mode": "static",
+                "item": "li.lLd3Je",
+                "title": "h3.QJPWVe",
+                "link": "a[href*='jobs/results/']",
+                "location": "span.r0wTof",
+            })),
+            enabled: Some(true),
+            cadence: Some(scrape_core::SourceCadence::Manual),
+            cadence_cron: None,
+            retention_days: None,
+            retention_policy: None,
+            filters: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let google_config = WorkerConfig {
+        version: PROTOCOL_VERSION,
+        sources: vec![WorkerSource {
+            id: google_src.id.clone(),
+            kind: google_src.kind,
+            name: google_src.name.clone(),
+            identifier: google_src.identifier.clone(),
+            config: google_src.config.clone(),
+        }],
+        filters: WorkerFilters::default(),
+        limits: WorkerLimits {
+            per_host_delay_ms: 0,
+            request_timeout_s: 3,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let g_events = invoke_replay(&google_config, false, Some(&format!("http://{address}")));
+    let g_jobs: Vec<_> = g_events
+        .into_iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .map(|e| scraped_job_from_event(e).unwrap())
+        .collect();
+    assert_eq!(g_jobs.len(), 20);
+    let g_stats = JobsRepo::upsert_scraped(&pool, &g_jobs).await.unwrap();
+    assert_eq!(g_stats.inserted, 20);
+
+    // 3. Apple Jobs (Static Selector)
+    let apple_src = SourcesRepo::create(
+        &pool,
+        CreateSourceInput {
+            kind: SourceKind::Selector,
+            name: "Apple".into(),
+            identifier: "https://jobs.apple.com/en-us/search".into(),
+            config: Some(serde_json::json!({
+                "mode": "static",
+                "item": "ul#search-job-list > li.rc-accordion-item",
+                "title": "h3 a.link-inline",
+                "link": "a.link-inline",
+                "location": "span.table--advanced-search__location-sub",
+                "date": "span.job-posted-date",
+            })),
+            enabled: Some(true),
+            cadence: Some(scrape_core::SourceCadence::Manual),
+            cadence_cron: None,
+            retention_days: None,
+            retention_policy: None,
+            filters: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let apple_config = WorkerConfig {
+        version: PROTOCOL_VERSION,
+        sources: vec![WorkerSource {
+            id: apple_src.id.clone(),
+            kind: apple_src.kind,
+            name: apple_src.name.clone(),
+            identifier: apple_src.identifier.clone(),
+            config: apple_src.config.clone(),
+        }],
+        filters: WorkerFilters::default(),
+        limits: WorkerLimits {
+            per_host_delay_ms: 0,
+            request_timeout_s: 3,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let a_events = invoke_replay(&apple_config, false, Some(&format!("http://{address}")));
+    let a_jobs: Vec<_> = a_events
+        .into_iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .map(|e| scraped_job_from_event(e).unwrap())
+        .collect();
+    assert_eq!(a_jobs.len(), 20);
+    let a_stats = JobsRepo::upsert_scraped(&pool, &a_jobs).await.unwrap();
+    assert_eq!(a_stats.inserted, 20);
+
+    // 4. Netflix (Versioned Script Extractor)
+    let netflix_extractor_path = root
+        .join("crates/scrape-worker/examples/extractors/netflix_extractor.js")
+        .to_string_lossy()
+        .to_string();
+    let netflix_fixture_path = root
+        .join("fixtures/providers/script/netflix.json")
+        .to_string_lossy()
+        .to_string();
+
+    let netflix_src = SourcesRepo::create(
+        &pool,
+        CreateSourceInput {
+            kind: SourceKind::Selector,
+            name: "Netflix".into(),
+            identifier: "https://explore.jobs.netflix.net/api/apply/v2/jobs".into(),
+            config: Some(serde_json::json!({
+                "mode": "script",
+                "script": {
+                    "runtime": "js",
+                    "interpreter": "node",
+                    "path": netflix_extractor_path,
+                    "args": [netflix_fixture_path]
+                }
+            })),
+            enabled: Some(true),
+            cadence: Some(scrape_core::SourceCadence::Manual),
+            cadence_cron: None,
+            retention_days: None,
+            retention_policy: None,
+            filters: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let nf_hash = netflix_src.script_sha256.as_deref().unwrap();
+    scrape_lib::services::script_trust::trust(&pool, &netflix_src.id, nf_hash, true)
+        .await
+        .unwrap();
+
+    let nf_config = WorkerConfig {
+        version: PROTOCOL_VERSION,
+        sources: vec![WorkerSource {
+            id: netflix_src.id.clone(),
+            kind: netflix_src.kind,
+            name: netflix_src.name.clone(),
+            identifier: netflix_src.identifier.clone(),
+            config: netflix_src.config.clone(),
+        }],
+        filters: WorkerFilters::default(),
+        limits: WorkerLimits {
+            per_host_delay_ms: 0,
+            request_timeout_s: 3,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let nf_events = invoke(&nf_config, false);
+    let nf_jobs: Vec<_> = nf_events
+        .into_iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .map(|e| scraped_job_from_event(e).unwrap())
+        .collect();
+    assert_eq!(nf_jobs.len(), 10);
+    for job in &nf_jobs {
+        assert_eq!(job.company, "Netflix");
+    }
+    let nf_stats = JobsRepo::upsert_scraped(&pool, &nf_jobs).await.unwrap();
+    assert_eq!(nf_stats.inserted, 10);
+
+    // 5. Meta (Truthful acceptance gap / empty DOM shell)
+    let meta_config = WorkerConfig {
+        version: PROTOCOL_VERSION,
+        sources: vec![WorkerSource {
+            id: "meta-test".into(),
+            kind: SourceKind::Selector,
+            name: "Meta".into(),
+            identifier: "https://www.metacareers.com/jobs".into(),
+            config: serde_json::json!({
+                "mode": "static",
+                "item": ".job-item",
+                "title": ".job-title",
+                "link": "a",
+                "__workflow_spec": { "max_jobs_per_run": 20 }
+            }),
+        }],
+        filters: WorkerFilters::default(),
+        limits: WorkerLimits {
+            per_host_delay_ms: 0,
+            request_timeout_s: 3,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let meta_events = invoke_replay(&meta_config, false, Some(&format!("http://{address}")));
+    let meta_jobs: Vec<_> = meta_events
+        .into_iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .collect();
+    assert_eq!(meta_jobs.len(), 0, "Meta returns 0 jobs from static DOM");
+
+    // Total jobs in SQLite: 39 (Bitwarden) + 20 (Google) + 20 (Apple) + 10 (Netflix) = 89
+    let total_saved = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+    assert_eq!(total_saved.total, 89);
+
+    running.store(false, std::sync::atomic::Ordering::Relaxed);
+    let _ = server.join();
+    pool.close().await;
+}

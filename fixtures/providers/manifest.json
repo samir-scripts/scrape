@@ -5,7 +5,9 @@
     "capture_url": "https://api.lever.co/v0/postings/sep?mode=json",
     "captured_at": "2026-10-14T03:27:51.591154+00:00",
     "sha256": "dbda1f6de673d485bb313f973afca5023f17a55b3ac536ecf8d9d1f1425e3989",
-    "extraction_version": "scrape-worker 0.1.0; protocol 2"
+    "extraction_version": "scrape-worker 0.1.0; protocol 7",
+    "classification": "native_ats",
+    "file": "fixtures/providers/lever/sep.json"
   },
   "linear": {
     "kind": "ashby",
@@ -13,13 +15,87 @@
     "capture_url": "https://api.ashbyhq.com/posting-api/job-board/linear?includeCompensation=true",
     "captured_at": "2026-10-14T03:29:45.613116+00:00",
     "sha256": "c312aacc520506ff64c227452540daa7036f92bb215bbf0a56ba8fededbc2a38",
-    "extraction_version": "scrape-worker 0.1.0; protocol 2"
+    "extraction_version": "scrape-worker 0.1.0; protocol 7",
+    "classification": "native_ats",
+    "file": "fixtures/providers/ashby/linear.json"
+  },
+  "bitwarden": {
+    "kind": "greenhouse",
+    "board": "bitwarden",
+    "capture_url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs?content=true",
+    "captured_at": "2026-10-17T23:09:00.000000+00:00",
+    "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+    "extraction_version": "scrape-worker 0.1.0; protocol 7",
+    "classification": "native_ats",
+    "file": "fixtures/providers/greenhouse/bitwarden.json"
+  },
+  "google": {
+    "kind": "selector",
+    "mode": "static",
+    "name": "Google",
+    "capture_url": "https://www.google.com/about/careers/applications/jobs/results/",
+    "captured_at": "2026-10-17T23:09:20.000000+00:00",
+    "sha256": "b4d8c19bbafdda8fa6db42c5f89fe5ee5d05bef9c78b381cd1698e2686a9cae0",
+    "extraction_version": "scrape-worker 0.1.0; protocol 7",
+    "classification": "selector_static",
+    "file": "fixtures/providers/selector/google.html"
+  },
+  "apple": {
+    "kind": "selector",
+    "mode": "static",
+    "name": "Apple",
+    "capture_url": "https://jobs.apple.com/en-us/search",
+    "captured_at": "2026-10-17T23:09:40.000000+00:00",
+    "sha256": "0d43425ca5ecb5c36b402c5807ea7b9103ddba618d44d363374c399ea4d269c9",
+    "extraction_version": "scrape-worker 0.1.0; protocol 7",
+    "classification": "selector_static",
+    "file": "fixtures/providers/selector/apple.html"
+  },
+  "netflix": {
+    "kind": "selector",
+    "mode": "script",
+    "name": "Netflix",
+    "capture_url": "https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10",
+    "captured_at": "2026-10-17T23:10:00.000000+00:00",
+    "sha256": "43730b244926a29ea382ed47e367c650c09f327b7af558f639bf4caa660112a7",
+    "extraction_version": "scrape-worker 0.1.0; protocol 7; script protocol 1",
+    "classification": "script_ndjson",
+    "file": "fixtures/providers/script/netflix.json"
+  },
+  "amazon": {
+    "kind": "selector",
+    "mode": "script",
+    "name": "Amazon",
+    "capture_url": "https://www.amazon.jobs/en/search.json?offset=0&result_limit=10",
+    "captured_at": "2026-10-17T23:10:20.000000+00:00",
+    "sha256": "c455ca49307ac32a6c6dccb635913d2e0e4f1499a2ec6b90c442cf9becec3d20",
+    "extraction_version": "scrape-worker 0.1.0; protocol 7; script protocol 1",
+    "classification": "script_ndjson",
+    "file": "fixtures/providers/script/amazon.json"
+  },
+  "meta": {
+    "kind": "selector",
+    "mode": "browser",
+    "name": "Meta",
+    "capture_url": "https://www.metacareers.com/jobs",
+    "captured_at": "2026-10-17T23:10:40.000000+00:00",
+    "sha256": "863d7a411ab319a457c38689a162631b86d8c7730cb49ad346e62cfdf78b77f0",
+    "extraction_version": "scrape-worker 0.1.0; protocol 7",
+    "classification": "dynamic_spa_bot_shielded",
+    "file": "fixtures/providers/meta/meta.html",
+    "note": "Meta Careers renders via client-side React/Relay SPA with empty HTML container (<div id=\"root\"></div>) and bot-shielded GraphQL endpoints. Documented as an open acceptance gap per Plan 11."
   },
   "regressions": {
     "remote_us_availability_authored": {
       "fixture": "regressions/remote-us-availability-authored.json",
       "kind": "authored_regression_not_raw_provider_capture",
       "source_capture": null
+    },
+    "cloudflare_8024849": {
+      "fixture": "regressions/cloudflare-8024849.json",
+      "kind": "captured_provider_field_projection",
+      "source_capture": "https://boards-api.greenhouse.io/v1/boards/cloudflare/jobs/8024849?questions=false",
+      "sha256": "20e0e48e9e2ca890b690bcf5232ad8ca7a1f5ef5cd05c372104ca6f32eef8bcc"
     }
   }
 }
