@@ -50,6 +50,7 @@ Additional forward migrations:
 | 0023 | Employer branding registry and saved-posting relationship references; one local image, separate last-attempt diagnostics, no source-delete cascade. |
 | 0024 | Parent workflow ownership and multi-source allocation; creates workflows table, backfills workflow_id across sources, jobs, and scrape_runs, preserves user state, schedules, and historical checksums. |
 | 0025 | Forward employer-branding `asset_data` checkpoint shared with the recognized six-column historical variant of migration 23. |
+| 0026 | Isolated browser-session metadata and additive per-source script trust/hash columns; no source-kind CHECK changes or table rebuilds. Stores session references and paths, never cookies or credentials. |
 
 The Rust backfills preserve source identities, uncertain legacy salary values and
 unresolved suppression keys. Populated upgrade tests preserve all tracked states,

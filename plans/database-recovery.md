@@ -1,5 +1,22 @@
 # Database recovery
 
+## Browser/session and script trust upgrade (migration 26)
+
+Migration 26 adds `browser_sessions` metadata (label, domain, relative storage
+reference, status and verification times), plus `sources.script_trusted` (default
+false) and `sources.script_sha256` (default unknown). It does not rebuild tables,
+change the five source kinds, rewrite workflows, or place session credentials in
+SQLite or exported YAML. Session material management follows in Phase 6C.
+
+The normal read-only history check and consistent pre-upgrade snapshot apply.
+Populated version-25 fixtures compare every historical table/column and migration
+record before/after upgrade, including branding bytes, notes, favorites, tracking
+history, suppression, runs, schedules and workflow ownership. Injected migration
+failure rolls back both new schema objects and columns; retry and restart preserve
+the original checksums. Restore the compatible pre-migration backup to roll back;
+reverting code alone does not undo a database upgrade. No live database is used by
+these tests.
+
 Applied SQL and migration checksums are immutable. Startup refuses unknown, failed,
 modified, or incomplete migration histories. Never UPDATE `_sqlx_migrations` to
 make an error disappear. The old checksum-rewriting behavior is removed.

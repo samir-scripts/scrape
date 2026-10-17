@@ -5,6 +5,8 @@ use std::path::Path;
 use std::time::Duration;
 
 pub mod branding;
+#[cfg(test)]
+mod browser_upgrade_tests;
 pub mod cleanup;
 pub mod compensation;
 mod history;
