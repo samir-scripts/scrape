@@ -18,8 +18,11 @@ immediate tab/context teardown, resource/tracker blocking, pre-document stealth,
 script runner (`SCRIPT_PROTOCOL_VERSION = 1`) with structured `argv`, process-group
 isolation (`process_group(0)` + `kill_on_drop(true)`), 16 KiB secret-redacted stderr,
 round-robin coordinator integration, environment diagnostics (`check_script_environment`),
-and the explicit trust gate. Phases 6E–6F remain open; Workflow Editor extraction/session/trust
-controls are unavailable. See [implementation evidence](11-implementation-evidence.md#section-6d--versioned-stdinndjson-script-extraction-engine-and-trust-gate).
+and the explicit trust gate. Phase 6E adds the Workflow Editor custom extraction controls
+(`CustomExtractorConfig`), mode switching, CSS/XPath locators, `test_extractor` preview,
+browser runtime detection, isolated browser session controls (`Open`/`Save`/`Clear`),
+script environment checks, truthful privilege disclosure, and the explicit trust gate.
+Phase 6F native/visual QA and end-to-end acceptance remain open. See [implementation evidence](11-implementation-evidence.md#section-6e--workflow-editor-custom-extraction-browser-sessions-and-script-trust).
 
 ---
 

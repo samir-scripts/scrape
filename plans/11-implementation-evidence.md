@@ -758,3 +758,92 @@ UI harness for script editing, physical pointer/IME check, or live provider craw
 was performed in this checkpoint. Workflow Editor UI controls for extraction
 modes/sessions/trust (Phase 6E), and Section 6 end-to-end acceptance (Phase 6F),
 along with earlier missing-report reproduction and Sections 7–8, remain open.
+
+## Section 6E — Workflow Editor Custom Extractor, Browser Sessions, and Script Trust
+
+Phase 6E exposes Section 6 extraction modes, browser session management, and script
+trust controls inside the single-draft Workflow Editor (`src/components/views/settings/`).
+Phase 6F native/visual QA and Section 6 end-to-end acceptance remain open.
+
+- `src/components/views/settings/CustomExtractorConfig.tsx`:
+  - Created modular NieR brutalist extractor configuration component with 0 rounded
+    or shadow classes, using semantic theme tokens (`--color-paper`, `--color-ink`,
+    `--color-surface`, `--color-border`, `--color-signal`, `--color-warning`, `--color-danger`).
+  - **Extraction Mode Selector**: Themed `Select` switching between `Static HTML · CSS & XPath`,
+    `Headless Browser · CDP`, and `Custom Script · Stdin/NDJSON`.
+  - **Locators & Regex Transforms**:
+    - Required fields: `Job container locator *` (`job_container`), `Title locator *`
+      (`title_selector`), and `URL / link locator *` (`url_selector`). Supports standard
+      CSS and XPath expressions (`xpath://...` or `xpath:.//...`).
+    - Optional fields in collapsible section: `Location locator`, `Compensation locator`,
+      `Description locator`, `Date posted locator`, `External ID locator`, and `Employer logo locator`.
+    - Attributes and Regex Transforms: expandable section allowing custom attribute overrides
+      (`text`, `href`, `src`, `@data-*`) and Rust regex captures (`(?P<value>...)`) for title,
+      URL, location, and salary fields.
+    - Dynamic and Navigation Locators: `Detail page link locator` (`detail_selector`),
+      `Next page locator` (`next_page_selector`), `Load more locator` (`load_more_selector`,
+      browser mode), `Readiness wait locator` (`wait_for_selector`, browser mode), and
+      `URL match pattern (glob)` (`url_pattern`).
+    - Interactive **`Test extractor`**: runs `api.testExtractor` with live progress indicator,
+      displays sample candidate cards (title, external ID, compensation, location, date posted),
+      `CoverageTermination` badges, field match counts (`title: 1`, `url: 1`, ...), and actionable
+      warnings/errors.
+  - **Browser Runtime & Isolated Sessions Panel**:
+    - Chromium runtime status indicator displaying detected binary path and version
+      via `api.detectBrowserRuntime` (or actionable installation guidance if missing).
+    - Hard bounds inputs: `Navigation timeout (s)` (default 30s), `Max pages` (default 100),
+      and `Max duration (s)` (default 180s).
+    - Isolated Session selector with `Ready` / `Needs login` badges.
+    - Lifecycle action buttons: `Open login session` (launches Chromium window via
+      `api.openBrowserSession`), `Save session` (`api.saveBrowserSession`), and
+      `Clear session` (`api.clearBrowserSession`).
+    - Explanatory disclosure noting YAML exports store only the session reference ID,
+      never credentials or cookie bytes.
+  - **Custom Script & Trust Panel**:
+    - Script runtime selector (`js`, `python`, `custom`), interpreter path input,
+      structured arguments, timeout (s), script file path, and inline script code editor.
+    - **`Check environment`**: invokes `api.checkScriptEnvironment` to report detected
+      interpreter version or missing dependencies.
+    - **Truthful Privilege & Security Disclosure**: *"Custom scripts execute with your local
+      user account privileges. Scrape enforces timeouts, structured arguments, and output
+      validation, but does not provide OS sandboxing or guaranteed bot-challenge bypass."*
+    - **Script Trust Gate**: Prominent warning banner rendered when `needs_review || !script_trusted`
+      with an explicit `Trust and enable script` action calling `api.trustWorkflowScript`
+      with the persisted content SHA256 fingerprint.
+- `src/components/views/settings/WorkflowSections.tsx`:
+  - Delegates custom extractor configuration to `CustomExtractorConfig` when source adapter
+    is `selector`. Passes `initialSource` and `onTrustChanged` callback.
+- `src/components/views/settings/AddSourceModal.tsx`:
+  - Summarizes active custom extraction settings (`kind === "selector"`, `mode`, `session_id`,
+    `script`) in the collapsed advanced settings line.
+  - Passes `initialSource` and `onTrustChanged={() => model.invalidate()}` down to `WorkflowSections`.
+  - Reflects extraction mode and adapter kind in the Review step source list.
+- `src/hooks/useWorkflowDraft.ts`:
+  - Exports `invalidate` in the draft controller return interface.
+- `src/test/workflow_browser_script.test.tsx`:
+  - Added 4 comprehensive Vitest interaction tests:
+    1. Mode switching, CSS and XPath locator entry.
+    2. Test extractor execution with candidate samples and field match counts.
+    3. Headless Browser CDP mode, runtime detection, and session lifecycle (`Open` -> `Save` -> `Clear`).
+    4. Custom Script mode, environment diagnostics, truthful disclosure, and explicit trust gate.
+
+Verification actually run in this workspace:
+
+- `npx tsc --noEmit`: passed with 0 errors.
+- `npx vitest run src/test/workflow_browser_script.test.tsx`: **4 passed** (0 failed).
+- `npx vitest run --maxWorkers=1`: **468 passed / 78 files** (0 failed).
+- `node scripts/check-style.mjs`: passed (Production style guard passed, 0 violations).
+- `npm run gen:types && git diff --exit-code src/bindings`: passed with zero drift.
+- `npm run build`: passed (Vite production bundle built in 5.76s).
+- `cargo fmt --all --check`: passed.
+- `cargo clippy --workspace --all-targets -- -D warnings`: passed with 0 warnings.
+- `cargo test --workspace`: **424 passed** (166 host unit/migration, 11 packaged
+  worker/repository, 168 core, 31 worker unit, 8 adapter, 5 branding-process,
+  3 browser-cdp-process, 6 coordinator, 17 limits-process, 4 script-runner-process,
+  7 worker-process; 0 failed).
+- `git diff --check`: passed with zero whitespace or line ending issues.
+
+No user database/application storage was opened or mutated. No native WKWebView
+UI harness for script editing, physical pointer/IME check, or live provider crawl
+was performed in this checkpoint. Phase 6F native/visual QA and end-to-end acceptance,
+along with earlier missing-report reproduction and Sections 7–8, remain open.

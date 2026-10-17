@@ -207,5 +207,5 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     catch (error) { report(error); return false; }
     finally { setOperation(null); }
   };
-  return { draft, change, commitInputs, inputSession, step, visited, navigate, next, advanced, setAdvanced, yaml, setYaml, detected, preview, error, errorStep, setError, operation, busy: !!operation, saved, content, cancel, detect, applyYaml, runPreview, save, canSave, replaceImport, pendingImport, confirmImport, cancelImport, runSaved };
+  return { draft, change, commitInputs, inputSession, step, visited, navigate, next, advanced, setAdvanced, yaml, setYaml, detected, preview, error, errorStep, setError, operation, busy: !!operation, saved, content, cancel, invalidate, detect, applyYaml, runPreview, save, canSave, replaceImport, pendingImport, confirmImport, cancelImport, runSaved };
 }

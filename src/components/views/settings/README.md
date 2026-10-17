@@ -4,10 +4,10 @@ Settings provides Appearance, System, Removed & blocked jobs, and Data managemen
 System contains the application-wide automatic-scraping pause. Scraper provides workflow configuration.
 
 `AddSourceModal` and `WorkflowSections` share one draft across `Sources → Matching → Schedule → Review`, Advanced controls, and
-YAML. In `Sources`, users can add, edit, enable/disable, reorder, and remove sources, with independent per-source ATS detection and duplicate normalized endpoint validation. Review runs or refreshes the live preview before Save, with an explicit
+YAML. In `Sources`, users can add, edit, enable/disable, reorder, and remove sources, with independent per-source ATS detection and duplicate normalized endpoint validation. Sources configured with `selector` adapter render `CustomExtractorConfig` exposing three extraction modes: (1) `Static HTML · CSS & XPath` with required container/title/URL locators, optional field selectors, expandable attributes/regexes, navigation & pagination locators, and interactive `Test extractor` candidate previews; (2) `Headless Browser · CDP` with Chromium runtime detection, bounds controls (`navigation_timeout_s`, `max_pages`, `max_source_duration_s`), and isolated session lifecycle actions (`Open login session`, `Save session`, `Clear session`); and (3) `Custom Script · Stdin/NDJSON` with script runtime selector (`js`, `python`, `custom`), environment diagnostics (`Check environment`), truthful local user privilege disclosure, and an explicit `Trust and enable script` gate for untrusted or modified scripts. Review runs or refreshes the live preview before Save, with an explicit
 Run now action afterward. Advanced settings remain intact and are summarized in Simple
-mode. Source configuration and YAML use the canonical desktop v5 validator, with
-v1–v4 compatibility conversion at import.
+mode. Source configuration and YAML use the canonical desktop v6 validator, with
+v1–v5 compatibility conversion at import.
 
 `KeywordInput` keeps unfinished text separate from committed chips. Enter, Add,
 comma and newline commit terms; multi-term paste preserves phrases, ignores empty

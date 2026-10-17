@@ -54,6 +54,9 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
     draft.sources?.some(
       (s) =>
         s.extractor.kind === "selector" ||
+        s.extractor.mode != null ||
+        s.extractor.script != null ||
+        s.extractor.session_id != null ||
         Object.keys(s.extractor.source_config || {}).some(
           (key) => key !== "url",
         ),
@@ -107,9 +110,9 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
         <fieldset disabled={locked} className={yaml != null ? "hidden" : "min-w-0 grid gap-4"}>
           {(["Source", "Matching", "Schedule"] as const).map(section => <section key={section} data-workflow-step={section} hidden={step !== section} className={step === section ? "grid gap-3" : "hidden"}>
             <h3 className="text-base font-bold normal-case">{section === "Matching" ? "Matching (optional)" : section}</h3>
-            <WorkflowSections key={`${section}:${model.inputSession}`} draft={draft} change={change} advanced={advanced} section={section} />
+            <WorkflowSections key={`${section}:${model.inputSession}`} draft={draft} change={change} advanced={advanced} section={section} initialSource={initialSource} onTrustChanged={() => model.invalidate()} />
             {section === "Source" && <p aria-live="polite" className="text-[var(--color-ink-mute)]">{model.operation === "detect" ? "Detecting source…" : detected ? `Sources: ${draft.sources?.map(s => `${s.extractor.kind} (${s.label})`).join(", ") || "None"}` : "Paste a careers URL. Continue to detect its source, or configure an adapter in Advanced settings."}</p>}
-            {section === "Schedule" && <details><summary className="cursor-pointer min-h-9">Retention</summary><WorkflowSections draft={draft} change={change} advanced section="Retention" /></details>}
+            {section === "Schedule" && <details><summary className="cursor-pointer min-h-9">Retention</summary><WorkflowSections draft={draft} change={change} advanced section="Retention" initialSource={initialSource} onTrustChanged={() => model.invalidate()} /></details>}
           </section>)}
         </fieldset>
         {step === "Review" && yaml == null && <section data-workflow-step="Review" className="grid gap-3">
@@ -120,7 +123,7 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
             <ul className="list-disc pl-5">
               {draft.sources?.map((s) => (
                 <li key={s.id} className="break-words">
-                  {s.label} ({s.extractor.kind}) · {s.extractor.url} {s.enabled ? "" : "[Disabled]"}
+                  {s.label} ({s.extractor.kind}{s.extractor.mode ? ` · ${s.extractor.mode}` : ""}) · {s.extractor.url || s.extractor.script?.path || "Custom script"} {s.enabled ? "" : "[Disabled]"}
                 </li>
               ))}
             </ul>

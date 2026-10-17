@@ -10,6 +10,8 @@ import { Input } from "../../ui/Input";
 import { Select } from "../../ui/Select";
 import { Button } from "../../ui/Button";
 import { JobLimitInput } from "./JobLimitInput";
+import { CustomExtractorConfig } from "./CustomExtractorConfig";
+import type { Source } from "../../../bindings/Source";
 import { api } from "../../../lib/api";
 import { canonicalizeAtsUrl, normalizedEndpoint } from "../../../lib/yamlWorkflow";
 
@@ -41,12 +43,16 @@ export function WorkflowSections({
   advanced,
   section,
   onSourceBlur,
+  initialSource,
+  onTrustChanged,
 }: {
   onSourceBlur?: () => void;
   draft: WorkflowSpec;
   change: WorkflowDraftChange;
   advanced: boolean;
   section: "Source" | "Matching" | "Schedule" | "Retention";
+  initialSource?: Source | null;
+  onTrustChanged?: () => void;
 }) {
   const filters = draft.filters || {};
   const rules = { ...emptyRules(), ...filters.matching };
@@ -335,41 +341,19 @@ export function WorkflowSections({
                       />
                     </label>
 
-                    {source.extractor.kind === "selector" &&
-                      [
-                        "job_container",
-                        "title_selector",
-                        "url_selector",
-                        "location_selector",
-                        "salary_selector",
-                        "description_selector",
-                        "date_selector",
-                        "employer_logo_selector",
-                        "title_regex",
-                        "link_regex",
-                        "location_regex",
-                        "salary_regex",
-                        "url_pattern",
-                      ].map((key) => (
-                        <label key={key} className="flex flex-col gap-1 text-sm">
-                          {key.replaceAll("_", " ")}
-                          <Input
-                            aria-label={`Source ${index + 1} ${key.replaceAll("_", " ")}`}
-                            value={String(source.extractor[key as keyof typeof source.extractor] || "")}
-                            onChange={(e) => {
-                              const nextSources = [...draft.sources];
-                              nextSources[index] = {
-                                ...source,
-                                extractor: {
-                                  ...source.extractor,
-                                  [key]: e.target.value || undefined,
-                                },
-                              };
-                              change({ ...draft, sources: nextSources });
-                            }}
-                          />
-                        </label>
-                      ))}
+                    {source.extractor.kind === "selector" && (
+                      <CustomExtractorConfig
+                        source={source}
+                        sourceIndex={index}
+                        initialSource={initialSource}
+                        onTrustChanged={onTrustChanged}
+                        onSourceChange={(updatedSource) => {
+                          const nextSources = [...draft.sources];
+                          nextSources[index] = updatedSource;
+                          change({ ...draft, sources: nextSources });
+                        }}
+                      />
+                    )}
                   </div>
                 )}
               </div>
