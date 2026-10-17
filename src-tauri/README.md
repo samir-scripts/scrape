@@ -83,7 +83,12 @@ src-tauri/
 | [`migrations/`](migrations/README.md) | Versioned forward-only SQL migrations establishing the local SQLite database schema. |
 | [`src/`](src/README.md) | Rust application entry points, state containers, error types, commands, and services. |
 
-Phase 6B uses WorkflowSpec v6 and migration 26. The host exposes `import_workflow`
-and `trust_workflow_script`, stores executable trust separately from exported
-configuration, and rejects unavailable browser/script execution explicitly.
-Session metadata exists; session material management and runners follow in 6C/6D.
+Phase 6B–6C uses WorkflowSpec v6 and migration 26. The host exposes `import_workflow`,
+`trust_workflow_script`, `detect_browser_runtime`, `list_browser_sessions`,
+`open_browser_session`, `save_browser_session`, `clear_browser_session`, and
+`test_extractor`. It stores executable trust separately from exported configuration,
+persists domain-scoped browser session cookies in `<app_data_dir>/browser_sessions/<session_id>.json`
+with `0700` directory and `0600` file permissions on Unix, passes `SCRAPE_SESSION_DIR`
+to the worker sidecar, reconciles `CoverageTermination::NeedsLogin` scan outcomes back
+to `browser_sessions`, removes session files on full data reset, and rejects unavailable
+custom script execution explicitly until Phase 6D.

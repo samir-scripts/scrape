@@ -6,13 +6,17 @@
 
 **Implementation status:** Phase 6A static extraction is implemented: shared
 CSS/XPath fields/regexes, explicit hydration JSON, resumable pagination, bounded
-detail enrichment, readiness and preserved identity/branding. Static load-more
-controls fail explicitly until browser mode exists. Protocol v7 termination/limits
-were pulled forward from 6B to report/enforce 6A coverage correctly. Phase 6B
-now adds migration 26, WorkflowSpec v6 with legacy conversion, browser/test
-contracts and persisted local script trust/import quarantine. Phases 6C–6F remain
-open; browser/session/script runners and their editor controls are unavailable. See
-[implementation evidence](11-implementation-evidence.md#section-6b--contracts-migration-26-and-local-script-trust).
+detail enrichment, readiness and preserved identity/branding. Protocol v7
+termination/limits were pulled forward from 6B to report/enforce 6A coverage
+correctly. Phase 6B adds migration 26, WorkflowSpec v6 with legacy conversion,
+browser/test contracts and persisted local script trust/import quarantine. Phase
+6C adds the direct Rust CDP browser engine (`max_processes = 1`, `max_contexts = 2`,
+immediate tab/context teardown, resource/tracker blocking, pre-document stealth,
+`wait_for`/`load_more`/`next_page` traversal, domain-scoped session cookies, and
+`NeedsLogin` termination) plus isolated host browser session lifecycle commands
+(`Open`/`Save`/`Clear`) and `test_extractor`. Phases 6D–6F remain open; the custom
+script runner and Workflow Editor extraction/session/trust controls are unavailable.
+See [implementation evidence](11-implementation-evidence.md#section-6c--direct-rust-cdp-browser-engine-and-isolated-sessions).
 
 ---
 

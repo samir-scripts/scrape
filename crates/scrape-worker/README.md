@@ -188,6 +188,22 @@ See [configuration examples](../../plans/workflow-v3.md#static-pagination-and-de
 Use `scrape-worker --protocol-version` to query the authoritative version rather
 than duplicating it in a harness. Protocol-v6 requests are rejected explicitly.
 
-Configured browser/script modes fail explicitly before HTTP discovery while their
-runners are pending in 6C/6D. They never fall back to static scraping. Source
-navigation and workflow-duration overrides use the shared validated bounds.
+Configured script mode fails explicitly before HTTP discovery while its runner is
+pending in Phase 6D. It never falls back to static scraping. Source navigation and
+workflow-duration overrides use the shared validated bounds.
+
+## Direct Rust CDP browser engine and isolated sessions (Phase 6C)
+
+Sources with `mode: "browser"` use the direct Rust Chrome DevTools Protocol (CDP)
+engine (`src/browser/{mod,discovery,cdp,stealth}.rs`). A lazy shared `BrowserPool`
+spawns at most one headless Chromium-family process per run (`max_processes = 1`)
+with up to two concurrent isolated browser contexts (`max_contexts = 2`) and
+immediate tab/context teardown (`Target.closeTarget` / `Target.disposeBrowserContext`)
+at the end of each round-robin turn. Before navigation, CDP intercepts and blocks
+`Image`, `Media`, `Font`, `Stylesheet` and analytics/tracker domains, injects
+pre-document stealth overrides (`Page.addScriptToEvaluateOnNewDocument`), and
+injects domain-scoped cookies from `<SCRAPE_SESSION_DIR>/<session_id>.json`.
+Wait-for selectors (`wait_for`), repeated `load_more` clicks with DOM-growth
+detection, `next_page` links, bounded detail-page rendering, and login-wall
+detection (`CoverageTermination::NeedsLogin`) feed into the same authoritative
+`SelectorAdapter` and matching pipeline as static extraction.

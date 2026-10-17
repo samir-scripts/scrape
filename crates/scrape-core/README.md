@@ -71,7 +71,10 @@ annual equivalents remain compatibility analytics and have explicitly named
 `salary_annual_min`/`salary_annual_max` fields at the job boundary. Text without
 unit evidence retains an unknown interval. Multiple ranges are never blended.
 
-Phase 6B exports browser-runtime and extractor-test contracts from `protocol.rs`
-and extraction/script contracts from `extraction.rs`. Rust owns validation and
-fingerprints; `npm run gen:types` generates their TypeScript representations.
-These contracts do not provide browser or script execution yet.
+Phase 6B–6C exports browser-runtime, isolated session (`BrowserSessionStatus`,
+`BrowserSessionSummary`), and extractor-test contracts from `protocol.rs`, shared
+browser runtime discovery / private session cookie validation / RFC 6455 CDP
+WebSocket JSON-RPC client from `browser.rs`, and extraction/script contracts from
+`extraction.rs`. Rust owns validation and fingerprints; `npm run gen:types`
+generates their TypeScript representations. Custom script execution follows in
+Phase 6D.

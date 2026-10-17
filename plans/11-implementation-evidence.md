@@ -592,3 +592,83 @@ live-provider/FAANG or RAM/CPU verification was performed in this phase. No visu
 baseline was changed. Session material handling, actual runners, trust controls
 and disabled-script saving through the editor remain for 6C–6F. Earlier missing
 report reproduction and Sections 7–8 remain open.
+
+## Section 6C — Direct Rust CDP browser engine and isolated sessions
+
+Implemented 2026-10-17. Commits: `29b5437` (direct Rust CDP browser engine,
+stealth/resource-blocking pipeline, and isolated session lifecycle), `e56580a`
+(generated TypeScript contracts for `BrowserSessionStatus` and
+`BrowserSessionSummary`). Phase 6C is complete; Tier 3 stdin/NDJSON script
+execution, Workflow Editor extraction/session/trust controls, and final native
+acceptance remain open in Phases 6D–6F.
+
+- `crates/scrape-core/src/browser.rs` adds local Chromium-family runtime
+  discovery (`SCRAPE_CHROME_PATH` override and platform binary probes without
+  ever auto-downloading a browser), domain-scoped cookie storage
+  (`StoredBrowserSession`, `BrowserCookie`, `BrowserSessionSummary`,
+  `BrowserSessionStatus`), restrictive external session storage (`0700`
+  directory / `0600` file permissions on Unix), login-wall redirect/DOM heuristics
+  (`detect_login_wall`), and a pure-Rust RFC 6455 WebSocket CDP client
+  (`CdpWsClient`) shared by worker and host session management.
+- `crates/scrape-worker/src/browser/` implements the Tier 2 `BrowserEngine`
+  enforcing `max_processes = 1` (single lazy headless browser process per worker
+  run with `--headless=new --disable-gpu --disable-dev-shm-usage --disable-extensions --disable-background-networking --disable-sync --no-first-run --no-default-browser-check --mute-audio --js-flags=--max-old-space-size=128`
+  and temporary profile cleanup on `Drop`), `max_contexts = 2` (bounded by a
+  Tokio semaphore), immediate `Target.closeTarget` and
+  `Target.disposeBrowserContext` teardown after every page turn, pre-navigation
+  `Network.setBlockedURLs` resource/tracker blocking (images, media, fonts,
+  stylesheets, and analytics domains), `Emulation.setUserAgentOverride` +
+  `Page.addScriptToEvaluateOnNewDocument` stealth patches, `wait_for` readiness
+  polling, `load_more` clicks, `next_page` traversal, bounded detail-page
+  rendering, domain-scoped session cookie injection, and `NeedsLogin`
+  termination on login redirects or password walls.
+- `src-tauri/src/services/browser_session.rs` implements host session lifecycle
+  commands (`detect_browser_runtime`, `list_browser_sessions`,
+  `open_browser_session`, `save_browser_session`, `clear_browser_session`),
+  reconciles `NeedsLogin` worker outcomes into `needs_login` session status in
+  SQLite (`runner.rs` and `execute_dry_run_worker`), passes `SCRAPE_SESSION_DIR`
+  to the sidecar (`process.rs`), enforces ready/domain-matching session checks in
+  `script_trust::validate_execution` before launching a worker, removes external
+  `browser_sessions/` files during `ResetAll` cleanup (`cleanup.rs`), and exposes
+  `test_extractor` for bounded static/browser sample testing (`commands/scrape.rs`).
+- `crates/scrape-worker/tests/browser_cdp_process.rs` exercises the packaged
+  worker over a local WebSocket CDP server: verifying resource-blocking patterns,
+  pre-document stealth injection, `wait_for` readiness polling, `load_more`
+  interaction, `next_page` pagination, immediate target/context teardown,
+  `PageLimit` and `TimeLimit` (`navigation_timeout_s`) bounds, domain-scoped
+  cookie injection, and `NeedsLogin` termination on login walls.
+- `src-tauri/tests/worker_repository.rs`
+  (`browser_cdp_extraction_and_session_persistence_survive_repository_ingestion`)
+  verifies the end-to-end packaged sidecar → CDP WebSocket + external session
+  cookie injection → NDJSON → repository ingestion → SQLite persistence boundary.
+
+Verification actually run in this workspace:
+
+- `npm run build:sidecar`: passed (built release `scrape-worker-aarch64-apple-darwin`
+  before host and repository integration tests).
+- `cargo test --workspace`: **415 passed** (165 host unit/migration, 10 packaged
+  worker/repository, 163 core, 31 worker unit, 8 adapter, 5 branding-process,
+  3 browser-cdp-process, 6 coordinator, 17 limits-process, 7 worker-process;
+  0 failed).
+- `cargo fmt --all --check` and
+  `cargo clippy --workspace --all-targets -- -D warnings`: passed with 0 warnings.
+- `npm run gen:types` (56 host + 55 core binding exports) and
+  `git diff --exit-code src/bindings`: passed with zero drift after staging
+  `BrowserSessionStatus.ts` and `BrowserSessionSummary.ts`.
+- `npx vitest run --maxWorkers=1`: **464 passed / 77 files**, including browser
+  runtime/session and extractor-test IPC wrapper coverage in
+  `src/test/script_trust_ipc.test.ts`.
+- `npx tsc --noEmit`, `npm run build`, `node scripts/check-style.mjs`,
+  `node scripts/test-app-startup.mjs`, and `git diff --check`: passed.
+- `npm run test:providers`: **2/2 recorded HTTP → worker replays passed**
+  (SEP/Lever: 8 fetched, 8 verified, 0 errors; Linear/Ashby: 31 fetched,
+  31 verified, 0 errors), repeated after `29b5437` so the report provenance
+  records `29b5437bb51563020d2e0f72575fe676ae570302`.
+
+No desktop app was launched and no user database/application storage was opened
+or migrated. No native WKWebView UI harness, Playwright browser journey,
+physical pointer/IME check, live provider/FAANG crawl, or live Chromium RAM/CPU
+benchmark was performed in this checkpoint. Tier 3 custom script execution
+(Phase 6D), Workflow Editor UI controls for extraction modes/sessions/trust
+(Phase 6E), and Section 6 end-to-end acceptance (Phase 6F), along with earlier
+missing-report reproduction and Sections 7–8, remain open.
