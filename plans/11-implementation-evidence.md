@@ -762,7 +762,7 @@ along with earlier missing-report reproduction and Sections 7–8, remain open.
 ## Section 6E — Workflow Editor Custom Extractor, Browser Sessions, and Script Trust
 
 Phase 6E exposes Section 6 extraction modes, browser session management, and script
-trust controls inside the single-draft Workflow Editor (`src/components/views/settings/`).
+trust controls inside the single-draft Workflow Editor (`src/components/views/settings/`), committed at `03298d3`.
 Phase 6F native/visual QA and Section 6 end-to-end acceptance remain open.
 
 - `src/components/views/settings/CustomExtractorConfig.tsx`:
