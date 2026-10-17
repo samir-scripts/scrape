@@ -51,9 +51,12 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
     (rules?.new_grad && rules.new_grad !== "any")
       ? "additional matching rules"
       : null,
-    draft.extractor.kind === "selector" ||
-    Object.keys(draft.extractor.source_config || {}).some(
-      (key) => key !== "url",
+    draft.sources?.some(
+      (s) =>
+        s.extractor.kind === "selector" ||
+        Object.keys(s.extractor.source_config || {}).some(
+          (key) => key !== "url",
+        ),
     )
       ? "custom extraction"
       : null,
@@ -105,14 +108,23 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
           {(["Source", "Matching", "Schedule"] as const).map(section => <section key={section} data-workflow-step={section} hidden={step !== section} className={step === section ? "grid gap-3" : "hidden"}>
             <h3 className="text-base font-bold normal-case">{section === "Matching" ? "Matching (optional)" : section}</h3>
             <WorkflowSections key={`${section}:${model.inputSession}`} draft={draft} change={change} advanced={advanced} section={section} />
-            {section === "Source" && <p aria-live="polite" className="text-[var(--color-ink-mute)]">{model.operation === "detect" ? "Detecting source…" : detected ? `Source: ${draft.extractor.kind} · ${draft.metadata.company || draft.metadata.name}` : "Paste a careers URL. Continue to detect its source, or configure an adapter in Advanced settings."}</p>}
+            {section === "Source" && <p aria-live="polite" className="text-[var(--color-ink-mute)]">{model.operation === "detect" ? "Detecting source…" : detected ? `Sources: ${draft.sources?.map(s => `${s.extractor.kind} (${s.label})`).join(", ") || "None"}` : "Paste a careers URL. Continue to detect its source, or configure an adapter in Advanced settings."}</p>}
             {section === "Schedule" && <details><summary className="cursor-pointer min-h-9">Retention</summary><WorkflowSections draft={draft} change={change} advanced section="Retention" /></details>}
           </section>)}
         </fieldset>
         {step === "Review" && yaml == null && <section data-workflow-step="Review" className="grid gap-3">
           <h3 className="font-bold text-base">Review {draft.metadata.name}</h3>
           <p>Maximum {draft.max_jobs_per_run ?? INGESTION_LIMITS.default} matching jobs per run; preview accepts at most {Math.min(draft.max_jobs_per_run ?? INGESTION_LIMITS.default, INGESTION_LIMITS.preview)}.</p>
-          <p className="break-words">{draft.extractor.kind} · {draft.extractor.url}</p>
+          <div className="grid gap-1">
+            <span className="font-semibold">Sources ({draft.sources?.length || 0}):</span>
+            <ul className="list-disc pl-5">
+              {draft.sources?.map((s) => (
+                <li key={s.id} className="break-words">
+                  {s.label} ({s.extractor.kind}) · {s.extractor.url} {s.enabled ? "" : "[Disabled]"}
+                </li>
+              ))}
+            </ul>
+          </div>
           <p>{draft.metadata.enabled === false ? "Disabled" : "Enabled"} · {draft.schedule?.cadence || "daily"} {draft.schedule?.time || ""} · {draft.schedule?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}</p>
           <p>Retention: {draft.retention?.days ?? 30} days. Tracked jobs, notes and favorites are protected.</p>
           <details><summary className="cursor-pointer min-h-9">All configured rules</summary><pre className="font-code whitespace-pre-wrap break-words text-xs">{workflowSpecToYaml(draft)}</pre></details>

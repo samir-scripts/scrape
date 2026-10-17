@@ -3,11 +3,11 @@
 Settings provides Appearance, System, Removed & blocked jobs, and Data management.
 System contains the application-wide automatic-scraping pause. Scraper provides workflow configuration.
 
-`AddSourceModal` and `WorkflowSections` share one draft across `Source → Matching → Schedule → Review`, Advanced controls, and
-YAML. Review runs or refreshes the live preview before Save, with an explicit
+`AddSourceModal` and `WorkflowSections` share one draft across `Sources → Matching → Schedule → Review`, Advanced controls, and
+YAML. In `Sources`, users can add, edit, enable/disable, reorder, and remove sources, with independent per-source ATS detection and duplicate normalized endpoint validation. Review runs or refreshes the live preview before Save, with an explicit
 Run now action afterward. Advanced settings remain intact and are summarized in Simple
-mode. Source configuration and YAML use the canonical desktop v4 validator, with
-v1–v3 compatibility conversion at import.
+mode. Source configuration and YAML use the canonical desktop v5 validator, with
+v1–v4 compatibility conversion at import.
 
 `KeywordInput` keeps unfinished text separate from committed chips. Enter, Add,
 comma and newline commit terms; multi-term paste preserves phrases, ignores empty

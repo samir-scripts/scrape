@@ -289,3 +289,52 @@ No user database, physical native gestures, full native screenshot/zoom review o
 live career-site verification was used. Original-report reproduction and Sections
 5–8 remain incomplete. Employer logos requiring external SVG resources/fonts or
 unsupported formats produce explicit optional diagnostics rather than guessed art.
+
+
+## Section 5 — Multi-source workflow ownership and fair budgeting
+
+Implementation: Authoritative `WorkflowSpec` v5 defines workflows owning nonempty `sources[]` (`id`, `label`, `enabled`, `employer_hint`, `extractor`). Ingestion budgeting (`max_jobs_per_run`), retention policy, matching rules, and schedules are owned strictly at the workflow level; per-source matching overrides are eliminated. Spec validation rejects blank source IDs, duplicate source IDs, and duplicate normalized endpoints (case-insensitive, trailing slash, protocol-insensitive host/path comparisons). Backward-compatible migration transparently normalizes legacy v1–v4 single-source specs into v5 workflows with one source entry, preserving existing configs. Internal persistence metadata (`__source_id`, `__starting_source_index`) is cleanly stripped on round-trips.
+
+Forward-only migration 24 (`0024_multi_source_workflows.sql`) establishes relational parent workflow ownership:
+- Introduces `workflows` parent table with `spec_version`, `raw_yaml`, `needs_review`, `schedule`, and audit timestamps.
+- Adds `workflow_id` (foreign key to `workflows`), `employer_hint`, and `order_index` to `sources`.
+- Adds `workflow_id` to `jobs` and `scrape_runs` with covering indices (`idx_jobs_workflow`, `idx_scrape_runs_workflow`, `idx_sources_workflow`).
+- Migrates existing legacy sources into parent `workflows` records, backfilling foreign keys while strictly preserving existing source IDs, job IDs, user state (notes, tags, favorites, applied/tracking history), suppression, run metrics, and schedules. Invalid originals stay preserved with `needs_review = 1`.
+- Populated historical upgrade and rollback/retry tests (`test_populated_migration_0024_multi_source_workflows`) verify round-trip persistence and integrity across migrations.
+
+Fair round-robin budgeting and multi-source coordination:
+- Implemented `coordinator.rs` in `scrape-worker` and integrated it with `WorkerConfig` (`max_jobs_per_run`, `starting_source_index`).
+- The coordinator visits sources in round-robin turns, accepting at most 1 eligible unique candidate per source per round, distributing budget fairly across active sources (e.g. exactly a 7/7/6 split across 3 healthy sources at a total cap of 20).
+- Dynamically redistributes capacity when sources are slow, failed, or exhausted until the workflow cap is satisfied or all sources are exhausted.
+- Deduplication is canonical and workflow-wide, preventing redundant candidate ingestion across overlapping sources.
+- Rotates the persisted `starting_source_index` on actual scrape runs to prevent starvation of downstream sources over time; previews and dry-runs do NOT rotate the starting source index.
+- Run all enforces exactly one ingestion cap per workflow.
+
+Sources UI editor in Settings (`WorkflowSections.tsx`):
+- Features an accessible, NieR-styled multi-source editor with source cards displaying kind badges, source labels, URLs, employer hints, enabled/disabled checkboxes, move up/down reorder buttons, and source removal.
+- Independent per-source "Detect" triggers ATS detection and updates the source's kind/label independently.
+- Warns clearly when duplicate endpoints are entered or when all sources are disabled, blocking save until resolved.
+- Removing a source stops ingestion from that endpoint while preserving all previously saved jobs, history, and retention records.
+
+Validation actually run:
+
+- `cargo test --workspace`: **365 passed** (153 host, 6 worker_repository, 148 core, 23 worker, 8 adapters, 5 branding, 4 coordinator, 13 limits, 5 worker_process).
+  Tests cover multi-source round-robin 7/7/6 distribution at cap 20, rotation across consecutive runs, preview non-rotation, capacity redistribution on exhausted sources, duplicate normalized endpoint rejection, Spec v5 validation, and populated migration 24 upgrade/preservation.
+- `cargo fmt --all --check` & `cargo clippy --workspace --all-targets -- -D warnings`: passed with 0 warnings.
+- `npm run gen:types && git diff --exit-code src/bindings`: passed with 0 drift across generated TypeScript boundary contracts (`WorkerConfig.ts`, `WorkflowSpec.ts`, `WorkflowSourceSpec.ts`).
+- `npx tsc --noEmit`: passed with 0 type errors.
+- `npm test`: **458 passed / 76 test files passed** + Vite startup smoke passed. Tests cover Sources editor interactions (add, edit, reorder, remove, enable/disable, duplicate detection), YAML v5 parsing/validation, draft state management, and scraper ergonomics.
+- `npm run build`: Production bundle built cleanly (with known large-chunk advisory).
+- `node scripts/check-style.mjs`: Style guard passed (strict NieR brutalism: no rounded-* or shadow-*).
+- `git diff --check`: Clean (0 whitespace errors).
+- `npm run test:providers`: 2/2 providers verified against recorded fixtures (SEP Lever & Linear Ashby).
+- `cargo build -p scrape && npm run test:native`: Passed in isolated WKWebView storage with real sidecar execution, cancellation, and IPC persistence.
+  Artifacts: `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-ezzSqZ`.
+- `SCRAPE_STARTUP_MODES=fresh,current19,unknown19 npm run test:native-startup`: All 3 native startup modes passed; recognized history upgraded with saved state retained, unknown checksum history refused without file mutation.
+  Artifacts:
+  `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-nfA2Ay`,
+  `.../scrape-native-smoke-uv3y5x`, and
+  `.../scrape-native-smoke-lmwolH`.
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/workflows.pw.ts`: 3/3 journeys passed.
+
+No live career-site verification, physical native gestures, native 200% zoom acceptance, or original 438/436/2 reconstruction was performed. Sections 6–8 remain open. Existing plan 06–09 domain, data, and retention protections remain authoritative.

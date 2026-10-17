@@ -4,10 +4,14 @@ import { GeographyMatching } from "./GeographyMatching";
 import { INGESTION_LIMITS } from "../../../bindings/ingestionLimits";
 import { SalaryRangeFilter } from "../../filters/SalaryRangeFilter";
 import type { WorkflowSpec } from "../../../bindings/WorkflowSpec";
+import type { WorkflowSourceSpec } from "../../../bindings/WorkflowSourceSpec";
 import type { PostingRules } from "../../../bindings/PostingRules";
 import { Input } from "../../ui/Input";
 import { Select } from "../../ui/Select";
+import { Button } from "../../ui/Button";
 import { JobLimitInput } from "./JobLimitInput";
+import { api } from "../../../lib/api";
+import { canonicalizeAtsUrl, normalizedEndpoint } from "../../../lib/yamlWorkflow";
 
 export const emptyRules = (): PostingRules => ({
   keywords: null,
@@ -71,99 +75,310 @@ export function WorkflowSections({
       />
     </label>
   );
-  if (section === "Source")
+  if (section === "Source") {
+    const endpointMap = new Map<string, number>();
+    (draft.sources || []).forEach((s) => {
+      if (s.extractor?.url?.trim()) {
+        const ep = normalizedEndpoint(s.extractor.kind, s.extractor.url);
+        endpointMap.set(ep, (endpointMap.get(ep) || 0) + 1);
+      }
+    });
+    const hasDuplicates = Array.from(endpointMap.values()).some((c) => c > 1);
+    const allDisabled = (draft.sources?.length ?? 0) > 0 && !draft.sources.some((s) => s.enabled);
+
     return (
-      <div className="grid gap-3">
-        <label className="grid gap-2 text-sm">
-          Source URL or board identifier
-          <Input
-            aria-label="Source URL or board identifier"
-            value={draft.extractor.url}
-            placeholder="https://boards.greenhouse.io/company"
-            onBlur={onSourceBlur}
-            onChange={(e) =>
-              change({
-                ...draft,
-                extractor: { ...draft.extractor, url: e.target.value },
-              })
-            }
-          />
-        </label>
+      <div className="grid gap-4">
         {field("Workflow name", draft.metadata.name, (name) =>
           change({ ...draft, metadata: { ...draft.metadata, name } }),
         )}
-        {advanced && (
-          <>
-            <label>
-              Adapter
-              <Select
-                aria-label="Adapter"
-                value={draft.extractor.kind}
-                options={[
-                  "greenhouse",
-                  "lever",
-                  "ashby",
-                  "jsonld",
-                  "selector",
-                ].map((value) => ({ value, label: value }))}
-                onChange={(kind) =>
-                  change({
-                    ...draft,
-                    extractor: {
-                      ...draft.extractor,
-                      kind: kind as WorkflowSpec["extractor"]["kind"],
-                    },
-                  })
-                }
-              />
-            </label>
-            {field(
-              "Company hint (used when source does not provide one)",
-              draft.metadata.company || "",
-              (company) =>
-                change({
-                  ...draft,
-                  metadata: {
-                    ...draft.metadata,
-                    company: company || undefined,
-                  },
-                }),
-            )}
-            {draft.extractor.kind === "selector" &&
-              [
-                "job_container",
-                "title_selector",
-                "url_selector",
-                "location_selector",
-                "salary_selector",
-                "description_selector",
-                "date_selector",
-                "employer_logo_selector",
-                "title_regex",
-                "link_regex",
-                "location_regex",
-                "salary_regex",
-                "url_pattern",
-              ].map((key) =>
-                field(
-                  key.replaceAll("_", " "),
-                  String(
-                    draft.extractor[key as keyof typeof draft.extractor] || "",
-                  ),
-                  (value) =>
-                    change({
-                      ...draft,
-                      extractor: {
-                        ...draft.extractor,
-                        [key]: value || undefined,
-                      },
-                    }),
-                ),
-              )}
-          </>
+        {field(
+          "Company hint (optional)",
+          draft.metadata.company || "",
+          (company) =>
+            change({
+              ...draft,
+              metadata: {
+                ...draft.metadata,
+                company: company || undefined,
+              },
+            }),
         )}
+
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-[var(--color-border)]">
+          <h4 className="font-bold text-sm">
+            Sources ({draft.sources?.length ?? 0})
+          </h4>
+          <Button
+            type="button"
+            size="sm"
+            aria-label="Add source"
+            onClick={() => {
+              const newId = `source-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+              const count = (draft.sources?.length ?? 0) + 1;
+              const newSource: WorkflowSourceSpec = {
+                id: newId,
+                label: `Source ${count}`,
+                enabled: true,
+                extractor: { kind: "jsonld", url: "" },
+              };
+              change({
+                ...draft,
+                sources: [...(draft.sources ?? []), newSource],
+              });
+            }}
+          >
+            + Add source
+          </Button>
+        </div>
+
+        {hasDuplicates && (
+          <div role="alert" className="border border-[var(--color-danger)] p-2 text-xs text-[var(--color-danger)] bg-[var(--color-paper)]">
+            Duplicate source endpoint detected. Each source in this workflow must have a distinct normalized endpoint.
+          </div>
+        )}
+        {allDisabled && (
+          <div role="alert" className="border border-[var(--color-warning)] p-2 text-xs text-[var(--color-warning)] bg-[var(--color-paper)]">
+            At least one source must be enabled for this workflow to run.
+          </div>
+        )}
+
+        <div className="grid gap-3">
+          {(draft.sources || []).map((source, index) => (
+            <div
+              key={source.id}
+              data-source-index={index}
+              className="border border-[var(--color-border)] p-3 grid gap-3 bg-[var(--color-surface)]"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--color-border)] pb-2">
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs font-semibold uppercase">
+                    <input
+                      type="checkbox"
+                      aria-label={`Enable ${source.label || `Source ${index + 1}`}`}
+                      checked={source.enabled}
+                      onChange={(e) => {
+                        const nextSources = [...draft.sources];
+                        nextSources[index] = { ...source, enabled: e.target.checked };
+                        change({ ...draft, sources: nextSources });
+                      }}
+                    />
+                    Enabled
+                  </label>
+                  <span className="px-1.5 py-0.5 border border-[var(--color-border)] text-xs uppercase bg-[var(--color-paper)]">
+                    {source.extractor.kind}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    aria-label={`Move source ${source.label || index + 1} up`}
+                    disabled={index === 0}
+                    onClick={() => {
+                      if (index === 0) return;
+                      const nextSources = [...draft.sources];
+                      const [moved] = nextSources.splice(index, 1);
+                      nextSources.splice(index - 1, 0, moved);
+                      change({ ...draft, sources: nextSources });
+                    }}
+                  >
+                    ↑
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    aria-label={`Move source ${source.label || index + 1} down`}
+                    disabled={index === draft.sources.length - 1}
+                    onClick={() => {
+                      if (index === draft.sources.length - 1) return;
+                      const nextSources = [...draft.sources];
+                      const [moved] = nextSources.splice(index, 1);
+                      nextSources.splice(index + 1, 0, moved);
+                      change({ ...draft, sources: nextSources });
+                    }}
+                  >
+                    ↓
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="danger"
+                    aria-label={`Remove source ${source.label || index + 1}`}
+                    disabled={draft.sources.length <= 1}
+                    onClick={() => {
+                      if (draft.sources.length <= 1) return;
+                      const nextSources = draft.sources.filter((_, i) => i !== index);
+                      change({ ...draft, sources: nextSources });
+                    }}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-3">
+                <label className="flex flex-col gap-1 text-sm">
+                  Source label
+                  <Input
+                    aria-label={index === 0 ? "Source label" : `Source ${index + 1} label`}
+                    value={source.label}
+                    placeholder="e.g. Cloudflare Greenhouse"
+                    onChange={(e) => {
+                      const nextSources = [...draft.sources];
+                      nextSources[index] = { ...source, label: e.target.value };
+                      change({ ...draft, sources: nextSources });
+                    }}
+                  />
+                </label>
+
+                <div className="flex flex-col gap-1 text-sm">
+                  Source URL or board identifier
+                  <div className="flex gap-2">
+                    <Input
+                      aria-label={index === 0 ? "Source URL or board identifier" : `Source ${index + 1} URL or board identifier`}
+                      value={source.extractor.url}
+                      placeholder="https://boards.greenhouse.io/company"
+                      onBlur={() => {
+                        if (index === 0 && onSourceBlur) onSourceBlur();
+                      }}
+                      onChange={(e) => {
+                        const nextSources = [...draft.sources];
+                        nextSources[index] = {
+                          ...source,
+                          extractor: { ...source.extractor, url: e.target.value },
+                        };
+                        change({ ...draft, sources: nextSources });
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      aria-label={`Detect source ${index + 1}`}
+                      onClick={async () => {
+                        if (!source.extractor.url.trim()) return;
+                        try {
+                          const res = await api.detectSource(source.extractor.url);
+                          const url = canonicalizeAtsUrl(res.kind, res.identifier);
+                          const isDefault = !source.label || source.label.startsWith("Source ") || source.label.startsWith("Career Board");
+                          const nextSources = [...draft.sources];
+                          nextSources[index] = {
+                            ...source,
+                            label: isDefault && res.name ? res.name : source.label,
+                            employer_hint: source.employer_hint || res.name || undefined,
+                            extractor: {
+                              ...source.extractor,
+                              kind: res.kind as WorkflowSourceSpec["extractor"]["kind"],
+                              url,
+                            },
+                          };
+                          change({
+                            ...draft,
+                            metadata: {
+                              ...draft.metadata,
+                              name: draft.metadata.name || res.name,
+                              company: draft.metadata.company || res.name,
+                            },
+                            sources: nextSources,
+                          });
+                        } catch {
+                          // ignore or let user configure manually
+                        }
+                      }}
+                    >
+                      Detect
+                    </Button>
+                  </div>
+                </div>
+
+                <label className="flex flex-col gap-1 text-sm">
+                  Employer hint (used for branding if unlabelled)
+                  <Input
+                    aria-label={`Source ${index + 1} employer hint`}
+                    value={source.employer_hint || ""}
+                    placeholder="e.g. Acme Corp"
+                    onChange={(e) => {
+                      const nextSources = [...draft.sources];
+                      nextSources[index] = {
+                        ...source,
+                        employer_hint: e.target.value || undefined,
+                      };
+                      change({ ...draft, sources: nextSources });
+                    }}
+                  />
+                </label>
+
+                {advanced && (
+                  <div className="grid gap-3 border-t border-[var(--color-border)] pt-2">
+                    <label className="flex flex-col gap-1 text-sm">
+                      Adapter
+                      <Select
+                        aria-label={`Source ${index + 1} adapter`}
+                        value={source.extractor.kind}
+                        options={[
+                          "greenhouse",
+                          "lever",
+                          "ashby",
+                          "jsonld",
+                          "selector",
+                        ].map((value) => ({ value, label: value }))}
+                        onChange={(kind) => {
+                          const nextSources = [...draft.sources];
+                          nextSources[index] = {
+                            ...source,
+                            extractor: {
+                              ...source.extractor,
+                              kind: kind as WorkflowSourceSpec["extractor"]["kind"],
+                            },
+                          };
+                          change({ ...draft, sources: nextSources });
+                        }}
+                      />
+                    </label>
+
+                    {source.extractor.kind === "selector" &&
+                      [
+                        "job_container",
+                        "title_selector",
+                        "url_selector",
+                        "location_selector",
+                        "salary_selector",
+                        "description_selector",
+                        "date_selector",
+                        "employer_logo_selector",
+                        "title_regex",
+                        "link_regex",
+                        "location_regex",
+                        "salary_regex",
+                        "url_pattern",
+                      ].map((key) => (
+                        <label key={key} className="flex flex-col gap-1 text-sm">
+                          {key.replaceAll("_", " ")}
+                          <Input
+                            aria-label={`Source ${index + 1} ${key.replaceAll("_", " ")}`}
+                            value={String(source.extractor[key as keyof typeof source.extractor] || "")}
+                            onChange={(e) => {
+                              const nextSources = [...draft.sources];
+                              nextSources[index] = {
+                                ...source,
+                                extractor: {
+                                  ...source.extractor,
+                                  [key]: e.target.value || undefined,
+                                },
+                              };
+                              change({ ...draft, sources: nextSources });
+                            }}
+                          />
+                        </label>
+                      ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
+  }
   if (section === "Matching")
     return (
       <div className="grid gap-3">

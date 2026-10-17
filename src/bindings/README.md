@@ -59,7 +59,7 @@ The `src/bindings` directory contains TypeScript type definitions and interfaces
 | [`UpsertStats.ts`](UpsertStats.ts) | `UpsertStats` | Statistics on inserted, updated, and skipped jobs during crawl ingestion. |
 | [`WorkAuthRequirement.ts`](WorkAuthRequirement.ts) | `WorkAuthRequirement` | Work authorization enum (`citizen_only`, `us_person`, `open`, `unknown`). |
 | [`WorkerConfig.ts`](WorkerConfig.ts), [`WorkerEvent.ts`](WorkerEvent.ts), [`WorkerFilters.ts`](WorkerFilters.ts), [`WorkerLimits.ts`](WorkerLimits.ts), [`WorkerSource.ts`](WorkerSource.ts), [`WorkerStats.ts`](WorkerStats.ts) | `Worker*` | Subprocess NDJSON protocol v6 configuration, streaming events, filters, limits, and completion stats. |
-| [`WorkflowExtractor.ts`](WorkflowExtractor.ts), [`WorkflowFilters.ts`](WorkflowFilters.ts), [`WorkflowMetadata.ts`](WorkflowMetadata.ts), [`WorkflowRetention.ts`](WorkflowRetention.ts), [`WorkflowSchedule.ts`](WorkflowSchedule.ts), [`WorkflowSpec.ts`](WorkflowSpec.ts) | `Workflow*` | Authoritative `WorkflowSpec` v4 structure shared across form editing, YAML import/export, preview, and execution. |
+| [`WorkflowExtractor.ts`](WorkflowExtractor.ts), [`WorkflowFilters.ts`](WorkflowFilters.ts), [`WorkflowMetadata.ts`](WorkflowMetadata.ts), [`WorkflowRetention.ts`](WorkflowRetention.ts), [`WorkflowSchedule.ts`](WorkflowSchedule.ts), [`WorkflowSourceSpec.ts`](WorkflowSourceSpec.ts), [`WorkflowSpec.ts`](WorkflowSpec.ts) | `Workflow*` | Authoritative `WorkflowSpec` v5 structure shared across form editing, YAML import/export, preview, and execution. |
 | [`WorkplaceType.ts`](WorkplaceType.ts) | `WorkplaceType` | Workplace arrangement enum (`onsite`, `hybrid`, `remote`, `unknown`). |
 
 ---

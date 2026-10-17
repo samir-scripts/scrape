@@ -454,6 +454,8 @@ mod tests {
             run_started_at: Some(run.started_at.clone()),
             limits: Default::default(),
             blocked_postings: vec![],
+            max_jobs_per_run: None,
+            starting_source_index: None,
         };
         let counts = RunCounts {
             fetched: 12,

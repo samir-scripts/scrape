@@ -178,3 +178,22 @@ upgrade/restart and injected transaction-failure tests verify preserved state,
 unchanged old checksums, rollback of both new schema objects, and safe retry.
 Restore a consistent compatible backup to roll back; Git revert alone is not a
 database rollback. Never edit applied SQL/checksums.
+
+
+## Multi-source workflow ownership upgrade (migration 24)
+
+Migration 24 introduces multi-source workflow ownership. It creates the parent
+`workflows` table and adds `workflow_id` foreign keys to `sources`, `jobs`, and
+`scrape_runs`. Backfill converts existing `sources` records into parent workflow
+records while preserving original source/job IDs, user state (notes, favorites,
+application stages, status history), suppression, run logs, and schedules. Invalid
+originals stay preserved with `needs_review = 1`. Deletion of a single child source
+stops ingestion from that endpoint while preserving all saved jobs, notes, history,
+and retention ownership at the parent workflow level.
+
+The normal pre-migration snapshot is created before migration. Populated version-23
+upgrade tests verify preserved user state, parent/child foreign key backfill,
+retention pruning by workflow, unchanged previous checksums, rollback after an
+injected transaction failure, and idempotent restart. To roll back, restore the
+consistent pre-migration snapshot with a compatible application build; Git revert
+alone is not a database rollback. Never edit applied SQL or checksums.

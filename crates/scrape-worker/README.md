@@ -44,6 +44,7 @@ scrape-worker/
 ├── src/            # Core worker modules and binary entry point
 │   ├── adapters/   # Target-specific parsers (Greenhouse, Lever, Ashby, JSON-LD, Selector)
 │   ├── client.rs   # Rate-limited HTTP client with robots.txt enforcement
+│   ├── coordinator.rs # Multi-source round-robin coordinator and fair budget manager
 │   ├── detect.rs   # ATS auto-detection from arbitrary URLs
 │   ├── filter.rs   # Worker-side job pre-filtering
 │   ├── lib.rs      # Library exports for testing and integration
@@ -51,6 +52,7 @@ scrape-worker/
 └── tests/          # Integration tests and ATS fixture responses
     ├── adapter_tests.rs    # Offline adapter and auto-detection verification
     ├── branding_process.rs # Subprocess tests for employer branding evidence & decoding
+    ├── coordinator_tests.rs # Multi-source round-robin ingestion & budget tests
     ├── limit_process.rs    # Subprocess tests for bounded ingestion & detail enrichment
     ├── worker_process.rs   # Subprocess protocol, diagnostics & error handling tests
     └── fixtures/           # Mock payloads and branding fixtures from real ATS platforms
@@ -154,3 +156,18 @@ reference through local IPC once, and retains the last verified asset during a
 failed refresh. Source deletion preserves artwork for saved postings; full reset
 clears the registry and frontend cache. No logo is inferred for historical records
 without evidence. Refresh supplies new evidence without changing user annotations.
+
+
+## Multi-source round-robin coordination
+
+When a workflow defines multiple sources (`sources[]`), `scrape-worker` coordinates
+ingestion across them using fair round-robin budgeting (`coordinator.rs`).
+- The total workflow budget `max_jobs_per_run` is distributed evenly across healthy sources.
+- For example, a cap of 20 across 3 healthy sources yields a 7/7/6 split.
+- The starting source index rotates across consecutive actual runs (`starting_source_index`)
+  so no single source starves downstream boards over time.
+- Previews and dry runs do NOT advance the starting source index.
+- If a source is exhausted or yields fewer postings than its share, its unused capacity
+  redistributes to remaining active sources until the workflow cap is satisfied or all
+  sources are exhausted.
+- Deduplication is workflow-wide across all sources based on canonical posting identity.

@@ -183,6 +183,7 @@ async fn preview_single_global_identity_and_native_pay_survive_persistence_and_b
             per_host_delay_ms: 0,
             concurrency: 1,
         },
+        ..Default::default()
     };
     let mut identities = vec![];
     for mode in 0..3 {
@@ -382,6 +383,7 @@ async fn recorded_lever_response_survives_actual_worker_and_repository() {
             per_host_delay_ms: 0,
             concurrency: 1,
         },
+        ..Default::default()
     };
     let events = invoke_replay(&config, false, Some(&format!("http://{address}")));
     assert!(!events
@@ -567,6 +569,7 @@ async fn remote_us_eligibility_survives_greenhouse_worker_persistence_and_restar
             per_host_delay_ms: 0,
             concurrency: 1,
         },
+        ..Default::default()
     };
     let origin = format!("http://{address}");
     let events = invoke_replay(&config, false, Some(&origin));
@@ -685,6 +688,7 @@ async fn bounded_worker_refresh_preview_and_lower_override_preserve_saved_state(
             identifier: source.identifier,
             config: source.config,
         }],
+        ..Default::default()
     };
     let batch = |events: Vec<WorkerEvent>| {
         events
@@ -852,6 +856,7 @@ async fn keyword_geography_decisions_and_diagnostics_match_worker_and_sql() {
             identifier: source.identifier,
             config: source.config,
         }],
+        ..Default::default()
     };
     let origin = format!("http://{address}");
     let unfiltered = invoke_replay(&config, false, Some(&origin));
@@ -1044,6 +1049,7 @@ async fn late_greenhouse_matches_refresh_with_provenance_and_protected_state() {
             ..Default::default()
         },
         blocked_postings: vec![],
+        ..Default::default()
     };
     let mut protected = None;
     for pass in 0..2 {

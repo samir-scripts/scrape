@@ -153,6 +153,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     let (manifest, _) = checked_manifest(pool).await?;
     manifest.run(pool).await?;
     upgrade_workflow_settings_v4(pool).await?;
+    upgrade_workflow_settings_v5(pool).await?;
     postings::backfill(pool).await?;
     compensation::backfill(pool).await?;
     Ok(())
@@ -297,11 +298,17 @@ async fn upgrade_workflow_settings_v4(pool: &SqlitePool) -> Result<()> {
         })();
         match converted {
             Ok((config, filters, cron, cadence, next_run_at)) => {
+                let _ = sqlx::query("UPDATE workflows SET config=?, filters=?, cadence=?, cadence_cron=?, next_run_at=?, needs_review=0 WHERE id=?")
+                    .bind(&config).bind(&filters).bind(&cadence).bind(&cron).bind(&next_run_at).bind(&id).execute(&mut *tx).await;
                 sqlx::query("UPDATE sources SET config=?, filters=?, cadence=?, cadence_cron=?, next_run_at=?, needs_review=0 WHERE id=?")
                     .bind(config).bind(filters).bind(cadence).bind(cron).bind(next_run_at).bind(id).execute(&mut *tx).await?;
             }
             Err(error) => {
                 tracing::warn!(source_id=%id, %error, "Workflow requires review after settings upgrade");
+                let _ = sqlx::query("UPDATE workflows SET needs_review=1 WHERE id=?")
+                    .bind(&id)
+                    .execute(&mut *tx)
+                    .await;
                 sqlx::query("UPDATE sources SET needs_review=1 WHERE id=?")
                     .bind(id)
                     .execute(&mut *tx)
@@ -311,6 +318,101 @@ async fn upgrade_workflow_settings_v4(pool: &SqlitePool) -> Result<()> {
     }
     sqlx::query("INSERT INTO app_settings(key,value,updated_at) VALUES('migration.workflow_settings_v4','true',datetime('now')) ON CONFLICT(key) DO UPDATE SET value='true', updated_at=datetime('now')")
         .execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn upgrade_workflow_settings_v5(pool: &SqlitePool) -> Result<()> {
+    use serde_json::Value;
+
+    let done: Option<bool> =
+        crate::db::settings::SettingsRepo::get_value(pool, "migration.workflow_settings_v5")
+            .await?;
+    if done.is_some() {
+        return Ok(());
+    }
+
+    let timezone: String = crate::db::settings::SettingsRepo::get_value(pool, "system.timezone")
+        .await?
+        .unwrap_or_else(|| "UTC".into());
+
+    let mut tx = pool.begin().await?;
+    let rows: Vec<(String, String, i64, String)> = sqlx::query_as(
+        "SELECT w.id, COALESCE(s.config, w.config), w.retention_days, w.retention_policy FROM workflows w LEFT JOIN sources s ON s.id = w.id ORDER BY w.id",
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+
+    for (id, config_text, retention_days, retention_policy) in rows {
+        let converted = (|| -> Result<(String, u32)> {
+            let mut config: Value = serde_json::from_str(&config_text)?;
+            if let Some(mut spec_val) = config.get("__workflow_spec").cloned() {
+                if let Some(spec_obj) = spec_val.as_object_mut() {
+                    if spec_obj.get("retention").is_none() {
+                        spec_obj.insert(
+                            "retention".into(),
+                            serde_json::json!({
+                                "days": retention_days.max(0),
+                                "policy": retention_policy,
+                            }),
+                        );
+                    }
+                }
+                let mut validated_spec = crate::services::workflow::validate(spec_val, &timezone)?;
+                if validated_spec.sources.len() == 1 && validated_spec.sources[0].id == "default" {
+                    validated_spec.sources[0].id = id.clone();
+                }
+                let max_jobs = validated_spec.max_jobs_per_run.unwrap_or(20);
+                config["__workflow_spec"] = serde_json::to_value(&validated_spec)?;
+                Ok((serde_json::to_string(&config)?, max_jobs))
+            } else {
+                Ok((config_text.clone(), 20))
+            }
+        })();
+
+        match converted {
+            Ok((new_config, max_jobs)) => {
+                let _ = sqlx::query(
+                    "UPDATE workflows SET config = ?, max_jobs_per_run = ?, needs_review = 0 WHERE id = ?",
+                )
+                .bind(&new_config)
+                .bind(max_jobs as i64)
+                .bind(&id)
+                .execute(&mut *tx)
+                .await;
+
+                let _ = sqlx::query(
+                    "UPDATE sources SET config = ?, needs_review = 0 WHERE workflow_id = ? OR id = ?",
+                )
+                .bind(&new_config)
+                .bind(&id)
+                .bind(&id)
+                .execute(&mut *tx)
+                .await;
+            }
+            Err(err) => {
+                tracing::warn!(workflow_id=%id, %err, "Workflow requires review after v5 upgrade");
+                let _ = sqlx::query("UPDATE workflows SET needs_review = 1 WHERE id = ?")
+                    .bind(&id)
+                    .execute(&mut *tx)
+                    .await;
+                let _ = sqlx::query(
+                    "UPDATE sources SET needs_review = 1 WHERE workflow_id = ? OR id = ?",
+                )
+                .bind(&id)
+                .bind(&id)
+                .execute(&mut *tx)
+                .await;
+            }
+        }
+    }
+
+    sqlx::query(
+        "INSERT INTO app_settings(key,value,updated_at) VALUES('migration.workflow_settings_v5','true',datetime('now')) ON CONFLICT(key) DO UPDATE SET value='true', updated_at=datetime('now')",
+    )
+    .execute(&mut *tx)
+    .await?;
+
     tx.commit().await?;
     Ok(())
 }
@@ -482,7 +584,7 @@ mod tests {
         assert_eq!(cadence, "cron");
         assert_eq!(needs_review, 0);
         let config: Value = serde_json::from_str(&config).unwrap();
-        assert_eq!(config["__workflow_spec"]["version"], 4);
+        assert_eq!(config["__workflow_spec"]["version"], 5);
         assert_eq!(config["__workflow_spec"]["retention"]["days"], 60);
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT max(version) FROM _sqlx_migrations")
@@ -1582,5 +1684,254 @@ mod execution_outcome_upgrade_tests {
             );
             restarted.close().await;
         }
+    }
+
+    #[tokio::test]
+    async fn test_populated_migration_0024_multi_source_workflows() {
+        use crate::db::jobs::JobsRepo;
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("populated_24.db");
+        let old = SqlitePoolOptions::new()
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(&path)
+                    .create_if_missing(true),
+            )
+            .await
+            .unwrap();
+
+        // Run migrations up to 23
+        let mut historical = sqlx::migrate!("./migrations");
+        historical.migrations = historical
+            .iter()
+            .filter(|m| m.version <= 23)
+            .cloned()
+            .collect::<Vec<_>>()
+            .into();
+        historical.run(&old).await.unwrap();
+
+        // Populate v4 valid source
+        let v4_config = serde_json::json!({
+            "url": "https://boards.greenhouse.io/acme",
+            "__company": "Acme Corp",
+            "__workflow_spec": {
+                "version": 4,
+                "metadata": {
+                    "name": "Acme Engineering",
+                    "company": "Acme Corp"
+                },
+                "extractor": {
+                    "kind": "greenhouse",
+                    "url": "https://boards.greenhouse.io/acme"
+                },
+                "schedule": {
+                    "cadence": "daily",
+                    "time": "09:00",
+                    "timezone": "UTC"
+                },
+                "filters": {
+                    "include_keywords": ["engineer"],
+                    "exclude_keywords": ["senior"]
+                },
+                "retention": {
+                    "days": 45,
+                    "policy": "untracked_only"
+                },
+                "max_jobs_per_run": 25
+            }
+        });
+        sqlx::query(
+                "INSERT INTO sources (id, kind, name, identifier, config, enabled, created_at, cadence, cadence_cron, retention_days, retention_policy, filters)
+                 VALUES ('acme-source', 'greenhouse', 'Acme Engineering', 'acme', ?, 1, '2026-10-01T00:00:00Z', 'daily', NULL, 45, 'untracked_only', '{}')"
+            )
+            .bind(v4_config.to_string())
+            .execute(&old)
+            .await
+            .unwrap();
+
+        // Populate an invalid source to test needs_review preservation
+        let broken_config = serde_json::json!({
+            "__workflow_spec": {
+                "version": 4,
+                "metadata": {
+                    "name": ""
+                },
+                "extractor": {
+                    "kind": "greenhouse",
+                    "url": "https://boards.greenhouse.io/broken"
+                }
+            }
+        });
+        sqlx::query(
+                "INSERT INTO sources (id, kind, name, identifier, config, enabled, created_at, cadence, cadence_cron, retention_days, retention_policy, filters)
+                 VALUES ('broken-source', 'greenhouse', 'Broken Source', 'broken', ?, 1, '2026-10-01T00:00:00Z', 'daily', NULL, 30, 'untracked_only', '{}')"
+            )
+            .bind(broken_config.to_string())
+            .execute(&old)
+            .await
+            .unwrap();
+
+        // Populate jobs under acme-source
+        sqlx::query(
+                "INSERT INTO jobs (id, dedupe_key, source_id, external_id, title, company, url, date_added, last_seen_at, status, status_changed_at, notes, favorited)
+                 VALUES ('job-1', 'acme:1', 'acme-source', '1', 'Software Engineer', 'Acme Corp', 'https://boards.greenhouse.io/acme/jobs/1', '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z', 'scraped', '2026-10-01T00:00:00Z', 'My favorite note', 1)"
+            )
+            .execute(&old)
+            .await
+            .unwrap();
+
+        sqlx::query(
+                "INSERT INTO jobs (id, dedupe_key, source_id, external_id, title, company, url, date_added, last_seen_at, status, status_changed_at, notes, favorited)
+                 VALUES ('job-2', 'acme:2', 'acme-source', '2', 'Product Manager', 'Acme Corp', 'https://boards.greenhouse.io/acme/jobs/2', '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z', 'applied', '2026-10-01T00:00:00Z', NULL, 0)"
+            )
+            .execute(&old)
+            .await
+            .unwrap();
+
+        // Populate scrape_runs
+        sqlx::query(
+                "INSERT INTO scrape_runs (id, trigger, status, started_at, finished_at, jobs_found, jobs_new, source_id)
+                 VALUES ('run-1', 'single_source', 'success', '2026-10-01T00:00:00Z', '2026-10-01T00:05:00Z', 10, 2, 'acme-source')"
+            )
+            .execute(&old)
+            .await
+            .unwrap();
+
+        // 1. Failure injection on migration 24: verify rollback
+        let mut failing = sqlx::migrate!("./migrations");
+        failing.migrations = failing
+            .iter()
+            .map(|m| {
+                if m.version == 24 {
+                    sqlx::migrate::Migration::new(
+                        24,
+                        m.description.clone(),
+                        m.migration_type,
+                        format!("{}\nSELECT syntax_error FROM nonexistent_table;", m.sql).into(),
+                        false,
+                    )
+                } else {
+                    m.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .into();
+
+        assert!(failing.run(&old).await.is_err());
+
+        // Verify failure rollback: workflows table does not exist, max migration is 23
+        let workflows_table_exists: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='workflows'",
+        )
+        .fetch_one(&old)
+        .await
+        .unwrap();
+        assert_eq!(workflows_table_exists, 0);
+
+        let max_v: i64 = sqlx::query_scalar("SELECT max(version) FROM _sqlx_migrations")
+            .fetch_one(&old)
+            .await
+            .unwrap();
+        assert_eq!(max_v, 23);
+
+        old.close().await;
+
+        // 2. Real upgrade via init_db (runs migrations + upgrade_workflow_settings_v5)
+        let upgraded = init_db(&path).await.unwrap();
+
+        // Verify migration 24 applied
+        let current_v: i64 = sqlx::query_scalar("SELECT max(version) FROM _sqlx_migrations")
+            .fetch_one(&upgraded)
+            .await
+            .unwrap();
+        assert_eq!(current_v, 24);
+
+        // Verify parent workflows table exists and contains acme-source and broken-source
+        let workflow_count: i64 = sqlx::query_scalar("SELECT count(*) FROM workflows")
+            .fetch_one(&upgraded)
+            .await
+            .unwrap();
+        assert_eq!(workflow_count, 2);
+
+        // Verify acme workflow
+        let (w_name, w_max_jobs, w_spec_str, w_needs_review): (String, i64, String, i64) =
+                sqlx::query_as("SELECT name, max_jobs_per_run, config, needs_review FROM workflows WHERE id='acme-source'")
+                    .fetch_one(&upgraded)
+                    .await
+                    .unwrap();
+        assert_eq!(w_name, "Acme Engineering");
+        assert_eq!(w_max_jobs, 25);
+        assert_eq!(w_needs_review, 0);
+        let w_cfg: serde_json::Value = serde_json::from_str(&w_spec_str).unwrap();
+        assert_eq!(w_cfg["__workflow_spec"]["version"], 5);
+        assert_eq!(w_cfg["__workflow_spec"]["sources"][0]["id"], "acme-source");
+        assert_eq!(
+            w_cfg["__workflow_spec"]["sources"][0]["label"],
+            "Acme Engineering"
+        );
+
+        // Verify broken workflow preserved as needs_review = 1
+        let broken_needs_review: i64 =
+            sqlx::query_scalar("SELECT needs_review FROM workflows WHERE id='broken-source'")
+                .fetch_one(&upgraded)
+                .await
+                .unwrap();
+        assert_eq!(broken_needs_review, 1);
+
+        // Verify sources table ownership and fields
+        let (src_wf_id, src_needs_review): (String, i64) =
+            sqlx::query_as("SELECT workflow_id, needs_review FROM sources WHERE id='acme-source'")
+                .fetch_one(&upgraded)
+                .await
+                .unwrap();
+        assert_eq!(src_wf_id, "acme-source");
+        assert_eq!(src_needs_review, 0);
+
+        // Verify jobs ownership and user state preservation
+        let (j1_wf_id, j1_notes, j1_fav, j1_status): (Option<String>, Option<String>, i64, String) =
+            sqlx::query_as(
+                "SELECT workflow_id, notes, favorited, status FROM jobs WHERE id='job-1'",
+            )
+            .fetch_one(&upgraded)
+            .await
+            .unwrap();
+        assert_eq!(j1_wf_id.as_deref(), Some("acme-source"));
+        assert_eq!(j1_notes.as_deref(), Some("My favorite note"));
+        assert_eq!(j1_fav, 1);
+        assert_eq!(j1_status, "scraped");
+
+        let (j2_wf_id, j2_status): (Option<String>, String) =
+            sqlx::query_as("SELECT workflow_id, status FROM jobs WHERE id='job-2'")
+                .fetch_one(&upgraded)
+                .await
+                .unwrap();
+        assert_eq!(j2_wf_id.as_deref(), Some("acme-source"));
+        assert_eq!(j2_status, "applied");
+
+        // Verify scrape_runs ownership
+        let run_wf_id: Option<String> =
+            sqlx::query_scalar("SELECT workflow_id FROM scrape_runs WHERE id='run-1'")
+                .fetch_one(&upgraded)
+                .await
+                .unwrap();
+        assert_eq!(run_wf_id.as_deref(), Some("acme-source"));
+
+        // Verify retention pruning by workflow
+        let pruned =
+            JobsRepo::prune_expired_by_source(&upgraded, "acme-source", 1, "untracked_only")
+                .await
+                .unwrap();
+        assert_eq!(pruned, 0);
+
+        upgraded.close().await;
+
+        // 3. Idempotent restart
+        let restarted = init_db(&path).await.unwrap();
+        let restarted_wf_count: i64 = sqlx::query_scalar("SELECT count(*) FROM workflows")
+            .fetch_one(&restarted)
+            .await
+            .unwrap();
+        assert_eq!(restarted_wf_count, 2);
+        restarted.close().await;
     }
 }

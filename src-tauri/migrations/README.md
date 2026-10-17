@@ -48,6 +48,7 @@ Additional forward migrations:
 | 0021 | Explicit workflow configuration review state and transactional compatibility conversion. |
 | 0022 | Additive run/source outcome columns; preserve coarse historical statuses and every existing row. |
 | 0023 | Employer branding registry and saved-posting relationship references; one local image, separate last-attempt diagnostics, no source-delete cascade. |
+| 0024 | Parent workflow ownership and multi-source allocation; creates workflows table, backfills workflow_id across sources, jobs, and scrape_runs, preserves user state, schedules, and historical checksums. |
 
 The Rust backfills preserve source identities, uncertain legacy salary values and
 unresolved suppression keys. Populated upgrade tests preserve all tracked states,

@@ -25,8 +25,8 @@ describe("Sample Workflow Suite: Software Engineering Internships", () => {
     expect(spec.metadata.company).toBe("Cloudflare");
     expect(spec.metadata.enabled).toBe(true);
 
-    expect(spec.extractor.kind).toBe("greenhouse");
-    expect(spec.extractor.url).toBe("https://boards.greenhouse.io/cloudflare");
+    expect(spec.sources[0].extractor.kind).toBe("greenhouse");
+    expect(spec.sources[0].extractor.url).toBe("https://boards.greenhouse.io/cloudflare");
 
     expect(spec.schedule?.cadence).toBe("daily");
     expect(spec.schedule?.cron).toBe("0 0 9 * * *");

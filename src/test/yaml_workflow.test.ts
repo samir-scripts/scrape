@@ -42,8 +42,8 @@ retention:
     const spec = result.parsedSpec!;
     expect(spec.version).toBe(2);
     expect(spec.metadata.name).toBe("Stripe — Core Infrastructure");
-    expect(spec.extractor.kind).toBe("greenhouse");
-    expect(spec.extractor.url).toBe("https://boards.greenhouse.io/stripe");
+    expect(spec.sources[0].extractor.kind).toBe("greenhouse");
+    expect(spec.sources[0].extractor.url).toBe("https://boards.greenhouse.io/stripe");
     expect(spec.schedule?.cadence).toBe("daily");
     expect(spec.retention?.days).toBe(30);
     expect(spec.retention?.policy).toBe("untracked_only");
@@ -134,9 +134,16 @@ retention:
 
   it("converts WorkflowSpec to CreateSourceInput", () => {
     const spec: WorkflowSpec = {
-      version: 2,
+      version: 5,
       metadata: { name: "Stripe Infra", enabled: true },
-      extractor: { kind: "greenhouse", url: "https://boards.greenhouse.io/stripe" },
+      sources: [
+        {
+          id: "source-1",
+          label: "Stripe Infra",
+          enabled: true,
+          extractor: { kind: "greenhouse", url: "https://boards.greenhouse.io/stripe" },
+        },
+      ],
       schedule: { cadence: "every_12h" },
       filters: { role_types: ["full_time"], include_keywords: ["Rust"] },
       retention: { days: 14, policy: "untracked_only" },
@@ -175,10 +182,10 @@ retention:
     };
 
     const spec = sourceToWorkflowSpec(source);
-    expect(spec.version).toBe(4);
+    expect(spec.version).toBe(5);
     expect(spec.metadata.name).toBe("Ramp");
-    expect(spec.extractor.kind).toBe("ashby");
-    expect(spec.extractor.url).toBe("https://jobs.ashbyhq.com/ramp");
+    expect(spec.sources[0].extractor.kind).toBe("ashby");
+    expect(spec.sources[0].extractor.url).toBe("https://jobs.ashbyhq.com/ramp");
     expect(spec.schedule?.cadence).toBe("daily");
     expect(spec.retention?.days).toBe(60);
     expect(spec.filters?.include_keywords).toEqual(["Backend"]);
@@ -210,7 +217,7 @@ extractor:
 `;
       const ghResult = validateWorkflowYaml(greenhouseSlugYaml);
       expect(ghResult.isValid).toBe(true);
-      expect(ghResult.parsedSpec?.extractor.url).toBe("stripe");
+      expect(ghResult.parsedSpec?.sources[0].extractor.url).toBe("stripe");
 
       const leverSlugYaml = `
 version: 2
@@ -222,7 +229,7 @@ extractor:
 `;
       const leverResult = validateWorkflowYaml(leverSlugYaml);
       expect(leverResult.isValid).toBe(true);
-      expect(leverResult.parsedSpec?.extractor.url).toBe("figma");
+      expect(leverResult.parsedSpec?.sources[0].extractor.url).toBe("figma");
 
       const ashbySlugYaml = `
 version: 2
@@ -234,7 +241,7 @@ extractor:
 `;
       const ashbyResult = validateWorkflowYaml(ashbySlugYaml);
       expect(ashbyResult.isValid).toBe(true);
-      expect(ashbyResult.parsedSpec?.extractor.url).toBe("ramp");
+      expect(ashbyResult.parsedSpec?.sources[0].extractor.url).toBe("ramp");
     });
   });
 
@@ -308,9 +315,16 @@ filters:
 
     it("round-trips filters.query and filters.policy through spec conversion and YAML", () => {
       const spec: WorkflowSpec = {
-        version: 2,
+        version: 5,
         metadata: { name: "Policy Test", enabled: true },
-        extractor: { kind: "lever", url: "https://jobs.lever.co/figma" },
+        sources: [
+          {
+            id: "source-1",
+            label: "Policy Test",
+            enabled: true,
+            extractor: { kind: "lever", url: "https://jobs.lever.co/figma" },
+          },
+        ],
         filters: {
           query: "title LIKE '%Intern%' AND location LIKE '%Remote%'",
           policy: {
@@ -365,6 +379,150 @@ filters:
       const convertedSpec = sourceToWorkflowSpec(sourceRecord);
       expect(convertedSpec.filters?.query).toBe("title LIKE '%Intern%'");
       expect(convertedSpec.filters?.policy).toBeDefined();
+    });
+  });
+
+  describe("Multi-source Workflow Validation & Ownership (Section 5)", () => {
+    it("validates a multi-source v5 YAML workflow with multiple distinct sources", () => {
+      const multiSourceYaml = `
+version: 5
+metadata:
+  name: "Multi-Source SWE Workflow"
+  company: "Various"
+sources:
+  - id: "src-cf"
+    label: "Cloudflare"
+    enabled: true
+    employer_hint: "Cloudflare"
+    extractor:
+      kind: greenhouse
+      url: "https://boards.greenhouse.io/cloudflare"
+  - id: "src-figma"
+    label: "Figma"
+    enabled: true
+    employer_hint: "Figma"
+    extractor:
+      kind: lever
+      url: "https://jobs.lever.co/figma"
+  - id: "src-ramp"
+    label: "Ramp"
+    enabled: false
+    employer_hint: "Ramp"
+    extractor:
+      kind: ashby
+      url: "https://jobs.ashbyhq.com/ramp"
+filters:
+  include_keywords: ["Software", "Engineer"]
+schedule:
+  cadence: daily
+`;
+      const result = validateWorkflowYaml(multiSourceYaml);
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+      expect(result.parsedSpec?.sources).toHaveLength(3);
+      expect(result.parsedSpec?.sources[0].id).toBe("src-cf");
+      expect(result.parsedSpec?.sources[0].enabled).toBe(true);
+      expect(result.parsedSpec?.sources[1].id).toBe("src-figma");
+      expect(result.parsedSpec?.sources[2].id).toBe("src-ramp");
+      expect(result.parsedSpec?.sources[2].enabled).toBe(false);
+      expect(result.parsedSpec?.filters?.include_keywords).toEqual(["Software", "Engineer"]);
+    });
+
+    it("rejects duplicate normalized endpoints across different sources in the same workflow", () => {
+      const duplicateEndpointYaml = `
+version: 5
+metadata:
+  name: "Duplicate Endpoint Workflow"
+sources:
+  - id: "source-1"
+    label: "Stripe Full URL"
+    enabled: true
+    extractor:
+      kind: greenhouse
+      url: "https://boards.greenhouse.io/stripe"
+  - id: "source-2"
+    label: "Stripe Slug"
+    enabled: true
+    extractor:
+      kind: greenhouse
+      url: "stripe"
+`;
+      const result = validateWorkflowYaml(duplicateEndpointYaml);
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some((e) => e.message.includes("Duplicate source endpoint"))).toBe(true);
+    });
+
+    it("rejects workflows with no enabled sources", () => {
+      const allDisabledYaml = `
+version: 5
+metadata:
+  name: "All Disabled"
+sources:
+  - id: "src-1"
+    label: "Source 1"
+    enabled: false
+    extractor:
+      kind: greenhouse
+      url: "https://boards.greenhouse.io/stripe"
+`;
+      const result = validateWorkflowYaml(allDisabledYaml);
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some((e) => e.message.includes("at least one source must be enabled"))).toBe(true);
+    });
+
+    it("rejects workflows with empty sources list", () => {
+      const emptySourcesYaml = `
+version: 5
+metadata:
+  name: "Empty Sources"
+sources: []
+`;
+      const result = validateWorkflowYaml(emptySourcesYaml);
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some((e) => e.message.includes("must contain at least one source"))).toBe(true);
+    });
+
+    it("rejects duplicate source IDs in the same workflow", () => {
+      const duplicateIdsYaml = `
+version: 5
+metadata:
+  name: "Duplicate IDs"
+sources:
+  - id: "dup-id"
+    label: "Source 1"
+    enabled: true
+    extractor:
+      kind: greenhouse
+      url: "https://boards.greenhouse.io/stripe"
+  - id: "dup-id"
+    label: "Source 2"
+    enabled: true
+    extractor:
+      kind: lever
+      url: "https://jobs.lever.co/figma"
+`;
+      const result = validateWorkflowYaml(duplicateIdsYaml);
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some((e) => e.message.includes("duplicate source ID 'dup-id'"))).toBe(true);
+    });
+
+    it("rejects blank source ID and blank source label", () => {
+      const blankIdYaml = `
+version: 5
+metadata:
+  name: "Blank ID"
+sources:
+  - id: "   "
+    label: "   "
+    enabled: true
+    extractor:
+      kind: greenhouse
+      url: "https://boards.greenhouse.io/stripe"
+`;
+      const result = validateWorkflowYaml(blankIdYaml);
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some((e) => e.message.includes(".id: must not be blank"))).toBe(true);
+      expect(result.errors.some((e) => e.message.includes(".label: must not be blank"))).toBe(true);
     });
   });
 });

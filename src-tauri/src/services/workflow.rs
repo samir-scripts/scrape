@@ -9,13 +9,13 @@ use ts_rs::TS;
 
 macro_rules! optional_fields {
     ($name:ident { $($field:ident: $kind:ty),* $(,)? }) => {
-        #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+        #[derive(Debug, Clone, Default, Serialize, Deserialize, TS, PartialEq)]
         #[serde(deny_unknown_fields)]
         #[ts(export)]
         pub struct $name { $(#[serde(default, skip_serializing_if="Option::is_none")] #[ts(optional = nullable)] pub $field: Option<$kind>),* }
     };
 }
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct WorkflowMetadata {
@@ -27,7 +27,7 @@ pub struct WorkflowMetadata {
     #[ts(optional = nullable)]
     pub enabled: Option<bool>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct WorkflowExtractor {
@@ -88,7 +88,26 @@ optional_fields!(WorkflowRetention {
     days: u32,
     policy: String
 });
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct WorkflowSourceSpec {
+    pub id: String,
+    pub label: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub employer_hint: Option<String>,
+    pub extractor: WorkflowExtractor,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct WorkflowSpec {
@@ -97,7 +116,7 @@ pub struct WorkflowSpec {
     #[ts(optional = nullable)]
     pub max_jobs_per_run: Option<u32>,
     pub metadata: WorkflowMetadata,
-    pub extractor: WorkflowExtractor,
+    pub sources: Vec<WorkflowSourceSpec>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub schedule: Option<WorkflowSchedule>,
@@ -247,23 +266,51 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
             }
         }
         value = serde_json::json!({"version":3,"metadata":{"name":value.get("company"),"company":value.get("company")},"extractor":extractor,"schedule":{"cadence":value.pointer("/cadence/type").cloned().unwrap_or(Value::String("global".into())),"cron":value.pointer("/cadence/cron")}});
-    } else if matches!(version, 2..=4) {
-        value["version"] = Value::from(4);
+    } else if matches!(version, 2..=5) {
+        // Will be migrated to v5 below if submitted_version <= 4
     } else {
         return Err(AppError::Validation(format!(
-            "version: unsupported workflow version {version}; supported versions are 1, 2, 3, 4"
+            "version: unsupported workflow version {version}; supported versions are 1, 2, 3, 4, 5"
         )));
     }
+    if submitted_version <= 4 && value.get("sources").is_none() {
+        let extractor = value.get("extractor").cloned().unwrap_or(Value::Null);
+        let name = value
+            .pointer("/metadata/name")
+            .and_then(Value::as_str)
+            .unwrap_or("Default source")
+            .to_string();
+        let enabled = value
+            .pointer("/metadata/enabled")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        let employer_hint = value
+            .pointer("/metadata/company")
+            .and_then(Value::as_str)
+            .map(ToString::to_string);
+        let source_id = "default".to_string();
+        value["sources"] = serde_json::json!([{
+            "id": source_id,
+            "label": name,
+            "enabled": enabled,
+            "employer_hint": employer_hint,
+            "extractor": extractor,
+        }]);
+        if let Some(obj) = value.as_object_mut() {
+            obj.remove("extractor");
+        }
+    }
+    value["version"] = Value::from(5);
     let text = serde_json::to_string(&value)?;
     let mut deserializer = serde_json::Deserializer::from_str(&text);
     let mut spec: WorkflowSpec = serde_path_to_error::deserialize(&mut deserializer)
         .map_err(|e| AppError::Validation(format!("{}: {}", e.path(), e.inner())))?;
-    if submitted_version == 4
+    if submitted_version >= 4
         && spec.schedule.as_ref().and_then(|schedule| schedule.cadence)
             == Some(SourceCadence::Global)
     {
         return Err(AppError::Validation(
-            "schedule.cadence: version 4 must use an explicit workflow schedule".into(),
+            "schedule.cadence: version 4 and 5 must use an explicit workflow schedule".into(),
         ));
     }
     spec.max_jobs_per_run = Some(
@@ -273,10 +320,10 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
         )
         .map_err(AppError::Validation)?,
     );
-    // Version 4 is fully explicit. These defaults apply only to fields omitted
+    // Version 5 is fully explicit. These defaults apply only to fields omitted
     // by the submitted document; stored/imported v1-v3 values are resolved by
     // the compatibility entry point before they reach this normalizer.
-    if spec.version == 4 {
+    if spec.version == 5 {
         let schedule = spec.schedule.get_or_insert_with(WorkflowSchedule::default);
         schedule.cadence.get_or_insert(SourceCadence::Daily);
         schedule.time.get_or_insert_with(|| "09:00".into());
@@ -297,13 +344,44 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
             .policy
             .get_or_insert_with(|| "untracked_only".into());
     }
-    spec.version = 4;
+    spec.version = 5;
     spec.metadata.enabled.get_or_insert(true);
     spec.metadata.name = spec.metadata.name.trim().into();
     if spec.metadata.name.is_empty() {
         return Err(AppError::Validation(
             "metadata.name: must not be blank".into(),
         ));
+    }
+    if spec.sources.is_empty() {
+        return Err(AppError::Validation(
+            "sources: must contain at least one source".into(),
+        ));
+    }
+    if !spec.sources.iter().any(|s| s.enabled) {
+        return Err(AppError::Validation(
+            "sources: at least one source must be enabled".into(),
+        ));
+    }
+    let mut seen_ids = std::collections::HashSet::new();
+    let mut seen_endpoints = std::collections::HashSet::new();
+    for source in &spec.sources {
+        let trimmed_id = source.id.trim();
+        if trimmed_id.is_empty() {
+            return Err(AppError::Validation("sources.id: must not be blank".into()));
+        }
+        if !seen_ids.insert(trimmed_id.to_string()) {
+            return Err(AppError::Validation(format!(
+                "sources: duplicate source ID {}",
+                source.id
+            )));
+        }
+        let endpoint = normalized_source_endpoint(&source.extractor)?;
+        if !seen_endpoints.insert(endpoint.clone()) {
+            return Err(AppError::Validation(format!(
+                "sources: duplicate source endpoint {} within workflow",
+                endpoint
+            )));
+        }
     }
     let mut filters = spec.filters.clone().unwrap_or_default();
     if filters.experience_min.is_some() || filters.experience_max.is_some() {
@@ -316,15 +394,69 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
         }
         spec.filters = Some(filters);
     }
-    let input = source_input(&spec, default_timezone)?;
-    crate::services::runner::resolve_worker_filters(
-        input.filters.as_ref().unwrap_or(&Value::Null),
-        WorkerFilters::default(),
-    )?;
+    for source in &spec.sources {
+        let input = extract_source_input(&spec, source, default_timezone)?;
+        crate::services::runner::resolve_worker_filters(
+            input.filters.as_ref().unwrap_or(&Value::Null),
+            WorkerFilters::default(),
+        )?;
+    }
     Ok(spec)
 }
 
-/// Resolve legacy inheritance once at the import boundary. Version 4 never
+pub fn normalized_source_endpoint(extractor: &WorkflowExtractor) -> Result<String> {
+    if extractor.kind.expects_url() {
+        let normalized = scrape_core::identity::normalized_detail_url(&extractor.url)
+            .map_err(AppError::Validation)?;
+        Ok(format!("{:?}:{}", extractor.kind, normalized))
+    } else if !extractor.url.contains("://") {
+        let slug = extractor.url.trim().to_lowercase();
+        if slug.is_empty()
+            || !slug
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
+        {
+            return Err(AppError::Validation(
+                "extractor.url: invalid ATS account identifier".into(),
+            ));
+        }
+        Ok(format!("{:?}:{}", extractor.kind, slug))
+    } else {
+        let url = url::Url::parse(&extractor.url)
+            .map_err(|e| AppError::Validation(format!("extractor.url: {e}")))?;
+        let valid = match extractor.kind {
+            SourceKind::Greenhouse => matches!(
+                url.host_str(),
+                Some("boards.greenhouse.io" | "job-boards.greenhouse.io")
+            ),
+            SourceKind::Lever => url.host_str() == Some("jobs.lever.co"),
+            SourceKind::Ashby => url.host_str() == Some("jobs.ashbyhq.com"),
+            _ => false,
+        };
+        if !valid {
+            return Err(AppError::Validation(
+                "extractor.url: use a supported board URL/identifier or run URL detection".into(),
+            ));
+        }
+        let slug = url
+            .path_segments()
+            .and_then(|mut segments| segments.next())
+            .unwrap_or("")
+            .to_lowercase();
+        if slug.is_empty()
+            || !slug
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
+        {
+            return Err(AppError::Validation(
+                "extractor.url: invalid ATS account identifier".into(),
+            ));
+        }
+        Ok(format!("{:?}:{}", extractor.kind, slug))
+    }
+}
+
+/// Resolve legacy inheritance once at the import boundary. Version 5 never
 /// consults application matching or calendar settings after this conversion.
 pub fn validate_legacy_import(
     value: Value,
@@ -382,7 +514,7 @@ pub fn validate_legacy_import(
         *filters = serde_json::from_value(Value::Object(merged))
             .map_err(|e| AppError::Validation(format!("workflow.filters: {e}")))?;
     }
-    spec.version = 4;
+    spec.version = 5;
     let spec = validate(serde_json::to_value(spec)?, default_timezone)?;
     let input = source_input(&spec, default_timezone)?;
     crate::services::runner::resolve_worker_filters(
@@ -393,12 +525,36 @@ pub fn validate_legacy_import(
 }
 
 pub fn source_input(spec: &WorkflowSpec, timezone: &str) -> Result<CreateSourceInput> {
+    let source = spec
+        .sources
+        .iter()
+        .find(|s| s.enabled)
+        .or_else(|| spec.sources.first())
+        .ok_or_else(|| AppError::Validation("sources: must contain at least one source".into()))?;
+    extract_source_input(spec, source, timezone)
+}
+
+pub fn workflow_source_inputs(
+    spec: &WorkflowSpec,
+    timezone: &str,
+) -> Result<Vec<CreateSourceInput>> {
+    spec.sources
+        .iter()
+        .map(|s| extract_source_input(spec, s, timezone))
+        .collect()
+}
+
+pub fn extract_source_input(
+    spec: &WorkflowSpec,
+    source: &WorkflowSourceSpec,
+    timezone: &str,
+) -> Result<CreateSourceInput> {
     scrape_core::protocol::validate_job_limit(
         spec.max_jobs_per_run
             .unwrap_or(scrape_core::protocol::DEFAULT_MAX_JOBS_PER_RUN),
     )
     .map_err(AppError::Validation)?;
-    let extractor = &spec.extractor;
+    let extractor = &source.extractor;
     let identifier = if extractor.kind.expects_url() {
         scrape_core::identity::normalized_detail_url(&extractor.url)
             .map_err(AppError::Validation)?;
@@ -514,16 +670,21 @@ pub fn source_input(spec: &WorkflowSpec, timezone: &str) -> Result<CreateSourceI
         ));
     }
     config["__workflow_spec"] = serde_json::to_value(spec)?;
+    config["__source_id"] = Value::String(source.id.clone());
     config["__run_on_startup"] = Value::Bool(schedule.run_on_startup.unwrap_or(false));
-    if let Some(company) = &spec.metadata.company {
+    if let Some(company) = source
+        .employer_hint
+        .as_ref()
+        .or(spec.metadata.company.as_ref())
+    {
         config["__company"] = Value::String(company.clone());
     }
     Ok(CreateSourceInput {
         kind: extractor.kind,
-        name: spec.metadata.name.clone(),
+        name: source.label.clone(),
         identifier,
         config: Some(config),
-        enabled: Some(spec.metadata.enabled.unwrap_or(true)),
+        enabled: Some(source.enabled),
         cadence: Some(cadence),
         cadence_cron: schedule.cron,
         retention_days: Some(i64::from(retention.days.unwrap_or(30))),
@@ -566,6 +727,8 @@ pub fn validated_stored_config(kind: SourceKind, config: &Value) -> Result<Value
         "__cron_timezone",
         "__company",
         "__run_on_startup",
+        "__source_id",
+        "__starting_source_index",
         "__invalid_original_config",
         "__invalid_original_filters",
     ] {
@@ -803,7 +966,7 @@ mod tests {
     fn versions_unknown_paths_queries_and_empty_overrides_are_validated() {
         let base = serde_json::json!({"version":2,"metadata":{"name":"Acme"},"extractor":{"kind":"greenhouse","url":"https://boards.greenhouse.io/acme"},"filters":{"include_keywords":[]},"schedule":{"cadence":"daily","time":"09:00","timezone":"America/New_York","weekdays":[1,3,5]}});
         let spec = validate(base.clone(), "UTC").unwrap();
-        assert_eq!(spec.version, 4);
+        assert_eq!(spec.version, 5);
         assert_eq!(
             spec.filters.as_ref().unwrap().include_keywords,
             Some(vec![])
@@ -861,7 +1024,7 @@ mod tests {
         let resolved =
             validate_legacy_import(legacy, "America/New_York", "0 0 6 * * *", &globals, true)
                 .unwrap();
-        assert_eq!(resolved.version, 4);
+        assert_eq!(resolved.version, 5);
         let schedule = resolved.schedule.unwrap();
         assert_eq!(schedule.cadence, Some(SourceCadence::Cron));
         assert_eq!(schedule.cron.as_deref(), Some("0 0 6 * * *"));
@@ -899,7 +1062,7 @@ mod tests {
         };
         let converted =
             validate_legacy_import(legacy_v1, "UTC", "0 0 9 * * *", &globals, true).unwrap();
-        assert_eq!(converted.version, 4);
+        assert_eq!(converted.version, 5);
         assert_eq!(
             converted.schedule.as_ref().unwrap().cadence,
             Some(SourceCadence::Hourly)
@@ -922,8 +1085,10 @@ mod tests {
             "extractor":{"kind":"greenhouse", "url":"acme"}
         });
         let spec = validate(value, "America/New_York").unwrap();
+        assert_eq!(spec.version, 5);
         assert_eq!(spec.max_jobs_per_run, Some(20));
         assert_eq!(spec.metadata.enabled, Some(true));
+        assert_eq!(spec.sources.len(), 1);
         let schedule = spec.schedule.unwrap();
         assert_eq!(schedule.cadence, Some(SourceCadence::Daily));
         assert_eq!(schedule.time.as_deref(), Some("09:00"));
@@ -937,5 +1102,103 @@ mod tests {
         let retention = spec.retention.unwrap();
         assert_eq!(retention.days, Some(30));
         assert_eq!(retention.policy.as_deref(), Some("untracked_only"));
+    }
+
+    #[test]
+    fn multi_source_workflow_validates_and_rejects_duplicates() {
+        let valid_v5 = serde_json::json!({
+            "version": 5,
+            "metadata": {"name": "Multi-Source Tech"},
+            "sources": [
+                {
+                    "id": "src-1",
+                    "label": "Cloudflare",
+                    "enabled": true,
+                    "employer_hint": "Cloudflare",
+                    "extractor": {"kind": "greenhouse", "url": "cloudflare"}
+                },
+                {
+                    "id": "src-2",
+                    "label": "Linear",
+                    "enabled": true,
+                    "employer_hint": "Linear",
+                    "extractor": {"kind": "ashby", "url": "linear"}
+                }
+            ]
+        });
+        let spec = validate(valid_v5, "UTC").unwrap();
+        assert_eq!(spec.version, 5);
+        assert_eq!(spec.sources.len(), 2);
+        assert_eq!(spec.sources[0].label, "Cloudflare");
+        assert_eq!(spec.sources[1].label, "Linear");
+
+        // Duplicate normalized endpoint (slug vs URL)
+        let dup_endpoint = serde_json::json!({
+            "version": 5,
+            "metadata": {"name": "Dup"},
+            "sources": [
+                {
+                    "id": "src-1",
+                    "label": "Cloudflare Board",
+                    "enabled": true,
+                    "extractor": {"kind": "greenhouse", "url": "https://boards.greenhouse.io/cloudflare"}
+                },
+                {
+                    "id": "src-2",
+                    "label": "Cloudflare Slug",
+                    "enabled": true,
+                    "extractor": {"kind": "greenhouse", "url": "cloudflare"}
+                }
+            ]
+        });
+        let err = validate(dup_endpoint, "UTC").unwrap_err().to_string();
+        assert!(err.contains("duplicate source endpoint"), "{err}");
+
+        // Duplicate source ID
+        let dup_id = serde_json::json!({
+            "version": 5,
+            "metadata": {"name": "Dup"},
+            "sources": [
+                {
+                    "id": "same-id",
+                    "label": "Cloudflare",
+                    "enabled": true,
+                    "extractor": {"kind": "greenhouse", "url": "cloudflare"}
+                },
+                {
+                    "id": "same-id",
+                    "label": "Linear",
+                    "enabled": true,
+                    "extractor": {"kind": "ashby", "url": "linear"}
+                }
+            ]
+        });
+        let err = validate(dup_id, "UTC").unwrap_err().to_string();
+        assert!(err.contains("duplicate source ID"), "{err}");
+
+        // Empty sources
+        let empty_sources = serde_json::json!({
+            "version": 5,
+            "metadata": {"name": "Empty"},
+            "sources": []
+        });
+        let err = validate(empty_sources, "UTC").unwrap_err().to_string();
+        assert!(err.contains("must contain at least one source"), "{err}");
+
+        // All sources disabled
+        let all_disabled = serde_json::json!({
+            "version": 5,
+            "metadata": {"name": "Disabled"},
+            "sources": [
+                {
+                    "id": "src-1",
+                    "label": "Cloudflare",
+                    "enabled": false,
+                    "extractor": {"kind": "greenhouse", "url": "cloudflare"}
+                }
+            ]
+        });
+        let err = validate(all_disabled, "UTC").unwrap_err().to_string();
+        assert!(err.contains("at least one source must be enabled"), "{err}");
     }
 }

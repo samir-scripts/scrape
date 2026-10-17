@@ -145,20 +145,23 @@ async fn terminate_preview(
 
 async fn execute_dry_run_worker(
     app: &AppHandle,
-    worker_source: WorkerSource,
+    sources: Vec<WorkerSource>,
     filters: WorkerFilters,
     blocked_postings: Vec<String>,
     cancel: Option<Arc<AtomicBool>>,
     run_cancel: Arc<AtomicBool>,
+    max_jobs_per_run: Option<u32>,
 ) -> Result<Vec<WorkerEvent>> {
     let config = WorkerConfig {
         version: PROTOCOL_VERSION,
         run_started_at: Some(scrape_core::now_iso()),
         filters_by_source: Default::default(),
-        sources: vec![worker_source],
+        sources,
         filters,
         limits: WorkerLimits::default(),
         blocked_postings,
+        max_jobs_per_run,
+        starting_source_index: Some(0),
     };
 
     let (mut rx, child) = crate::services::process::worker_command(app)?
@@ -300,11 +303,12 @@ pub async fn test_source_transient(
     };
     execute_dry_run_worker(
         &app,
-        worker_source,
+        vec![worker_source],
         filters,
         crate::db::postings::suppression_snapshot(&state.db).await?,
         None,
         state.runner.cancellation_flag(),
+        None,
     )
     .await
 }
@@ -335,11 +339,12 @@ pub async fn test_source(
     };
     execute_dry_run_worker(
         &app,
-        worker_source,
+        vec![worker_source],
         filters,
         crate::db::postings::suppression_snapshot(&state.db).await?,
         None,
         state.runner.cancellation_flag(),
+        None,
     )
     .await
 }
@@ -432,31 +437,47 @@ pub async fn preview_workflow(
         .await?
         .unwrap_or_else(|| "UTC".into());
     let spec = validate_workflow_spec(&state.db, spec).await?;
-    let source = crate::services::workflow::source_input(&spec, &timezone)?;
+    let inputs = crate::services::workflow::workflow_source_inputs(&spec, &timezone)?;
     let filters = crate::services::runner::resolve_worker_filters(
-        source.filters.as_ref().unwrap_or(&serde_json::Value::Null),
+        &serde_json::to_value(spec.filters.clone().unwrap_or_default())?,
         scrape_core::WorkerFilters::default(),
     )?;
 
+    let worker_sources: Vec<WorkerSource> = spec
+        .sources
+        .iter()
+        .zip(inputs.iter())
+        .filter(|(s, _)| s.enabled)
+        .map(|(s, input)| WorkerSource {
+            id: s.id.clone(),
+            kind: input.kind,
+            name: s
+                .employer_hint
+                .clone()
+                .or_else(|| spec.metadata.company.clone())
+                .unwrap_or_else(|| s.label.clone()),
+            identifier: input.identifier.clone(),
+            config: input.config.clone().unwrap_or(serde_json::Value::Null),
+        })
+        .collect();
+
+    let preview_limit = std::cmp::min(
+        spec.max_jobs_per_run
+            .unwrap_or(scrape_core::protocol::DEFAULT_MAX_JOBS_PER_RUN),
+        scrape_core::protocol::PREVIEW_MAX_JOBS,
+    );
+
     let events = execute_dry_run_worker(
         &app,
-        WorkerSource {
-            id: "preview".into(),
-            kind: source.kind,
-            name: spec
-                .metadata
-                .company
-                .clone()
-                .unwrap_or_else(|| "Unknown company".into()),
-            identifier: source.identifier.clone(),
-            config: source.config.clone().unwrap_or(serde_json::Value::Null),
-        },
+        worker_sources,
         filters,
         crate::db::postings::suppression_snapshot(&state.db).await?,
         Some(cancel),
         state.runner.cancellation_flag(),
+        Some(preview_limit),
     )
     .await?;
+    let primary_input = &inputs[0];
     let mut result = WorkflowPreview {
         spec: spec.clone(),
         sources: None,
@@ -470,10 +491,13 @@ pub async fn preview_workflow(
         sampled: false,
         errors: vec![],
         next_run_at: crate::services::calendar::next_for_source(
-            source.cadence.unwrap_or_default(),
-            source.cadence_cron.as_deref(),
-            source.config.as_ref().unwrap_or(&serde_json::Value::Null),
-            source.enabled.unwrap_or(true),
+            primary_input.cadence.unwrap_or_default(),
+            primary_input.cadence_cron.as_deref(),
+            primary_input
+                .config
+                .as_ref()
+                .unwrap_or(&serde_json::Value::Null),
+            primary_input.enabled.unwrap_or(true),
             &timezone,
             chrono::Utc::now(),
         )?,
@@ -483,11 +507,24 @@ pub async fn preview_workflow(
             WorkerEvent::Job {
                 ref external_id,
                 ref url,
+                ref source_id,
                 ..
             } => {
+                let source_match = spec.sources.iter().find(|s| s.id == *source_id);
+                let (source_kind, source_identifier) = source_match
+                    .map(|s| {
+                        let input =
+                            crate::services::workflow::extract_source_input(&spec, s, &timezone)
+                                .ok();
+                        (
+                            s.extractor.kind,
+                            input.map(|i| i.identifier).unwrap_or_default(),
+                        )
+                    })
+                    .unwrap_or((primary_input.kind, primary_input.identifier.clone()));
                 let identity = scrape_core::PostingIdentity::for_posting(
-                    Some(source.kind),
-                    Some(&source.identifier),
+                    Some(source_kind),
+                    Some(&source_identifier),
                     Some(external_id),
                     url,
                 )
@@ -612,6 +649,74 @@ pub async fn save_workflow(
     } else {
         SourcesRepo::create(&state.db, input).await?
     };
+    if spec.sources.len() > 1 {
+        let inputs = crate::services::workflow::workflow_source_inputs(&spec, &timezone)?;
+        for (idx, (s, inp)) in spec.sources.iter().zip(inputs.iter()).enumerate() {
+            if s.id == source.id {
+                continue;
+            }
+            let kind_str = match serde_json::to_value(inp.kind)? {
+                serde_json::Value::String(k) => k,
+                _ => unreachable!(),
+            };
+            let config_str = inp
+                .config
+                .as_ref()
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "{}".into());
+            let enabled_val: i64 = if s.enabled { 1 } else { 0 };
+            let cadence_str = match serde_json::to_value(source.cadence)? {
+                serde_json::Value::String(c) => c,
+                _ => "global".into(),
+            };
+            let filters_str =
+                serde_json::to_string(&source.filters).unwrap_or_else(|_| "{}".into());
+            let now = scrape_core::now_iso();
+            sqlx::query(
+                r#"
+                INSERT INTO sources (
+                    id, workflow_id, kind, name, identifier, config, enabled,
+                    employer_hint, order_index, created_at, cadence, cadence_cron,
+                    next_run_at, last_run_duration_ms, retention_days, retention_policy, filters
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, NULL, ?14, ?15, ?16)
+                ON CONFLICT(id) DO UPDATE SET
+                    workflow_id = excluded.workflow_id,
+                    kind = excluded.kind,
+                    name = excluded.name,
+                    identifier = excluded.identifier,
+                    config = excluded.config,
+                    enabled = excluded.enabled,
+                    employer_hint = excluded.employer_hint,
+                    order_index = excluded.order_index,
+                    cadence = excluded.cadence,
+                    cadence_cron = excluded.cadence_cron,
+                    next_run_at = excluded.next_run_at,
+                    retention_days = excluded.retention_days,
+                    retention_policy = excluded.retention_policy,
+                    filters = excluded.filters
+                "#,
+            )
+            .bind(&s.id)
+            .bind(&source.id)
+            .bind(kind_str)
+            .bind(&s.label)
+            .bind(&inp.identifier)
+            .bind(config_str)
+            .bind(enabled_val)
+            .bind(&s.employer_hint)
+            .bind(idx as i64)
+            .bind(&now)
+            .bind(&cadence_str)
+            .bind(&source.cadence_cron)
+            .bind(&source.next_run_at)
+            .bind(source.retention_days)
+            .bind(&source.retention_policy)
+            .bind(&filters_str)
+            .execute(&state.db)
+            .await?;
+        }
+    }
     use tauri::Emitter;
     let _ = app.emit("sources://changed", &source);
     Ok(source)

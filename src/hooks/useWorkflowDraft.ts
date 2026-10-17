@@ -3,16 +3,18 @@ import { INGESTION_LIMITS } from "../bindings/ingestionLimits";
 import { useEffect, useRef, useState } from "react";
 import type { Source } from "../bindings/Source";
 import type { WorkflowSpec } from "../bindings/WorkflowSpec";
+import type { WorkflowSourceSpec } from "../bindings/WorkflowSourceSpec";
 import type { WorkflowPreview } from "../bindings/WorkflowPreview";
 import { api } from "../lib/api";
 import { importWorkflowYaml } from "../lib/workflowImport";
-import { sourceToWorkflowSpec, canonicalizeAtsUrl } from "../lib/yamlWorkflow";
+import { sourceToWorkflowSpec, canonicalizeAtsUrl, normalizedEndpoint } from "../lib/yamlWorkflow";
 
 export const WORKFLOW_STEPS = ["Source", "Matching", "Schedule", "Review"] as const;
 export type WorkflowStep = typeof WORKFLOW_STEPS[number];
 export type WorkflowDraftChange = (next: WorkflowSpec | ((current: WorkflowSpec) => WorkflowSpec)) => void;
 const newDraft = (): WorkflowSpec => ({
-  version: 4, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true }, extractor: { kind: "jsonld", url: "" },
+  version: 5, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true },
+  sources: [{ id: "source-1", label: "Career Board 1", enabled: true, extractor: { kind: "jsonld", url: "" } }],
   schedule: { cadence: "daily", time: "09:00", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, run_on_startup: false },
   filters: {}, retention: { days: 30, policy: "untracked_only" },
 });
@@ -39,8 +41,10 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   useEffect(() => {
     if (isOpen) {
       setInputSession(value => value + 1);
-      invalidate(); setDraft(initialSpec || (initialSource ? sourceToWorkflowSpec(initialSource) : newDraft()));
-      setDetected(initialSpec?.extractor.url || initialSource?.identifier || "");
+      invalidate();
+      const initial = initialSpec || (initialSource ? sourceToWorkflowSpec(initialSource) : newDraft());
+      setDraft(initial);
+      setDetected(initial.sources?.[0]?.extractor.url || initialSource?.identifier || "");
       setStep("Source"); setVisited(0); setAdvanced(false); setYamlState(null); setError(""); setSaved(null); setPendingImport(null); setDirty(false);
     }
     return () => {
@@ -52,7 +56,9 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     const previous = draftRef.current;
     const next = typeof update === "function" ? update(previous) : update;
     invalidate(); setDirty(true); draftRef.current = next; setDraft(next); setError("");
-    if (next.extractor.url !== previous.extractor.url) setDetected(advanced ? next.extractor.url : "");
+    const prevUrl = previous.sources?.[0]?.extractor?.url;
+    const nextUrl = next.sources?.[0]?.extractor?.url;
+    if (nextUrl !== prevUrl) setDetected(advanced ? (nextUrl || "") : "");
   };
   const commitInputs = () => {
     content.current?.querySelectorAll("input[data-keyword-input]").forEach(input => input.dispatchEvent(new Event(COMMIT_KEYWORDS)));
@@ -63,14 +69,41 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     const message = String(value); setError(message);
     setErrorStep(/filters|query|matching|compensation|max_jobs_per_run/i.test(message) ? "Matching" : /schedule|timezone|retention/i.test(message) ? "Schedule" : /extractor|metadata|source|url/i.test(message) ? "Source" : fallback);
   };
-  const detect = async () => {
+  const detect = async (sourceIndex: number = 0) => {
     const current = ++revision.current; setOperation("detect"); setError(""); setPreview(null);
     const input = draftRef.current;
+    const targetSource = input.sources?.[sourceIndex] || input.sources?.[0];
+    if (!targetSource || !targetSource.extractor.url.trim()) {
+      report("Source URL is required.", "Source");
+      setOperation(null);
+      return;
+    }
     try {
-      const result = await api.detectSource(input.extractor.url);
+      const result = await api.detectSource(targetSource.extractor.url);
       if (revision.current !== current) return;
       const url = canonicalizeAtsUrl(result.kind, result.identifier);
-      const next: WorkflowSpec = { ...input, metadata: { ...input.metadata, name: input.metadata.name || result.name, company: input.metadata.company || result.name }, extractor: { ...input.extractor, kind: result.kind as WorkflowSpec["extractor"]["kind"], url } };
+      const isDefaultLabel = !targetSource.label || targetSource.label === "Career Board" || /^Career Board \d+$/.test(targetSource.label);
+      const updatedSource: WorkflowSourceSpec = {
+        ...targetSource,
+        label: isDefaultLabel && result.name ? result.name : (targetSource.label || result.name),
+        employer_hint: targetSource.employer_hint || result.name || undefined,
+        extractor: {
+          ...targetSource.extractor,
+          kind: result.kind as WorkflowSourceSpec["extractor"]["kind"],
+          url,
+        },
+      };
+      const nextSources = [...input.sources];
+      nextSources[sourceIndex] = updatedSource;
+      const next: WorkflowSpec = {
+        ...input,
+        metadata: {
+          ...input.metadata,
+          name: input.metadata.name || result.name,
+          company: input.metadata.company || result.name,
+        },
+        sources: nextSources,
+      };
       setDraft(next); draftRef.current = next; setDetected(url); return next;
     } catch (error) { if (revision.current === current) report(`${String(error)} Open Advanced settings to configure an adapter or selectors.`, "Source"); }
     finally { if (revision.current === current) setOperation(null); }
@@ -83,7 +116,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   };
   const applyImport = (spec: WorkflowSpec) => {
     setInputSession(value => value + 1);
-    change(spec); setDetected(spec.extractor.url); setYamlState(null); setStep("Source"); setVisited(0); setPendingImport(null);
+    change(spec); setDetected(spec.sources?.[0]?.extractor.url || ""); setYamlState(null); setStep("Source"); setVisited(0); setPendingImport(null);
   };
   const replaceImport = (spec: WorkflowSpec) => { if (dirty) setPendingImport(spec); else applyImport(spec); };
   const confirmImport = () => { if (pendingImport) applyImport(pendingImport); };
@@ -94,7 +127,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
       const validated = await importWorkflowYaml(yaml || "");
       if (revision.current !== current) return;
       setInputSession(value => value + 1);
-      change(validated); setDetected(validated.extractor.url); setYamlState(null);
+      change(validated); setDetected(validated.sources?.[0]?.extractor.url || ""); setYamlState(null);
     } catch (error) { if (revision.current === current) report(error); }
     finally { if (revision.current === current) setOperation(null); }
   };
@@ -104,10 +137,29 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     if (yaml != null) { report("Apply YAML to the form before continuing."); return; }
     if (invalidInputs()) return;
     if (step === "Source") {
-      if (!draft.extractor.url.trim()) { report("Source URL is required.", "Source"); return; }
-      const input = !advanced && !detected ? await detect() : draft;
-      if (!input) return;
-      if (!input.metadata.name.trim()) { report("Workflow name is required.", "Source"); return; }
+      if (!draft.sources || draft.sources.length === 0) { report("At least one source is required.", "Source"); return; }
+      if (!draft.sources.some(s => s.enabled)) { report("At least one source must be enabled.", "Source"); return; }
+      for (let i = 0; i < draft.sources.length; i++) {
+        const s = draft.sources[i];
+        if (!s.label.trim()) { report(`Source ${i + 1} label is required.`, "Source"); return; }
+        if (!s.extractor.url.trim()) { report(i === 0 ? "Source URL is required." : `Source '${s.label}' URL is required.`, "Source"); return; }
+      }
+      const seen = new Set<string>();
+      for (const s of draft.sources) {
+        const ep = normalizedEndpoint(s.extractor.kind, s.extractor.url);
+        if (seen.has(ep)) {
+          report(`Duplicate source endpoint: '${s.extractor.url}' conflicts with another source in this workflow.`, "Source");
+          return;
+        }
+        seen.add(ep);
+      }
+      let currentDraft = draft;
+      if (!advanced && !detected && draft.sources[0]?.extractor.url.trim()) {
+        const input = await detect(0);
+        if (!input) return;
+        currentDraft = input;
+      }
+      if (!currentDraft.metadata.name.trim()) { report("Workflow name is required.", "Source"); return; }
     }
     if (step === "Schedule") {
       const current = revision.current; setOperation("validate");
@@ -120,7 +172,11 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   const runPreview = async () => {
     if (invalidInputs()) return;
     let effective = commitInputs();
-    if (!advanced && !detected) { const result = await detect(); if (!result) return; effective = result; }
+    if (!advanced && !detected && effective.sources?.[0]?.extractor.url.trim()) {
+      const result = await detect(0);
+      if (!result) return;
+      effective = result;
+    }
     const current = ++revision.current, id = crypto.randomUUID();
     request.current = id; setOperation("preview"); setError(""); setPreview(null);
     try {

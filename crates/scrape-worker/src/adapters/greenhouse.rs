@@ -9,48 +9,48 @@ use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
-struct GreenhouseResponse {
-    meta: Option<GreenhouseMeta>,
-    jobs: Vec<serde_json::Value>,
+pub(crate) struct GreenhouseResponse {
+    pub(crate) meta: Option<GreenhouseMeta>,
+    pub(crate) jobs: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct GreenhouseMeta {
-    total: Option<u64>,
+pub(crate) struct GreenhouseMeta {
+    pub(crate) total: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct GreenhouseJob {
-    id: i64,
-    title: String,
-    absolute_url: String,
-    location: Option<GreenhouseLocation>,
-    offices: Option<Vec<GreenhouseOffice>>,
-    first_published: Option<String>,
-    updated_at: Option<String>,
-    content: Option<String>,
-    company_name: Option<String>,
-    pay_input_ranges: Option<Vec<GreenhousePayRange>>,
+pub(crate) struct GreenhouseJob {
+    pub(crate) id: i64,
+    pub(crate) title: String,
+    pub(crate) absolute_url: String,
+    pub(crate) location: Option<GreenhouseLocation>,
+    pub(crate) offices: Option<Vec<GreenhouseOffice>>,
+    pub(crate) first_published: Option<String>,
+    pub(crate) updated_at: Option<String>,
+    pub(crate) content: Option<String>,
+    pub(crate) company_name: Option<String>,
+    pub(crate) pay_input_ranges: Option<Vec<GreenhousePayRange>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct GreenhouseOffice {
-    name: Option<String>,
-    location: Option<String>,
+pub(crate) struct GreenhouseOffice {
+    pub(crate) name: Option<String>,
+    pub(crate) location: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct GreenhousePayRange {
-    min_cents: Option<i64>,
-    max_cents: Option<i64>,
-    currency_type: Option<String>,
-    title: Option<String>,
-    blurb: Option<String>,
+pub(crate) struct GreenhousePayRange {
+    pub(crate) min_cents: Option<i64>,
+    pub(crate) max_cents: Option<i64>,
+    pub(crate) currency_type: Option<String>,
+    pub(crate) title: Option<String>,
+    pub(crate) blurb: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct GreenhouseLocation {
-    name: Option<String>,
+pub(crate) struct GreenhouseLocation {
+    pub(crate) name: Option<String>,
 }
 
 pub async fn scrape_greenhouse(
@@ -119,7 +119,7 @@ pub async fn scrape_greenhouse_filtered_with(
 
 impl GreenhouseJob {
     // Listing title and URL identify the provider snapshot. Detail fields only fill gaps.
-    fn merge_detail(&mut self, detail: Self) {
+    pub(crate) fn merge_detail(&mut self, detail: Self) {
         if self
             .location
             .as_ref()
@@ -155,7 +155,7 @@ impl GreenhouseJob {
             self.content = detail.content;
         }
     }
-    fn evidence(&self) -> scrape_core::matching::MatchingEvidence {
+    pub(crate) fn evidence(&self) -> scrape_core::matching::MatchingEvidence {
         use scrape_core::FilterField;
         let mut fields = vec![FilterField::Title, FilterField::RoleType];
         if self
@@ -203,7 +203,7 @@ impl GreenhouseJob {
             opportunity_exhausted: false,
         }
     }
-    fn event(&self, source: &WorkerSource) -> Result<WorkerEvent, ClientError> {
+    pub(crate) fn event(&self, source: &WorkerSource) -> Result<WorkerEvent, ClientError> {
         let mut event = None;
         parse_greenhouse_jobs_with(vec![self.clone()], source, &mut |candidate| {
             event = Some(candidate);
@@ -452,7 +452,7 @@ fn parse_greenhouse_jobs(
     Ok(events)
 }
 
-fn parse_greenhouse_jobs_with(
+pub(crate) fn parse_greenhouse_jobs_with(
     jobs: Vec<GreenhouseJob>,
     source: &WorkerSource,
     sink: &mut dyn FnMut(WorkerEvent) -> bool,

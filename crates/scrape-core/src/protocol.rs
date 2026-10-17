@@ -56,6 +56,28 @@ pub struct WorkerConfig {
     // Canonical identities and unresolved legacy suppression keys at run start.
     #[serde(default)]
     pub blocked_postings: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub max_jobs_per_run: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub starting_source_index: Option<usize>,
+}
+
+impl Default for WorkerConfig {
+    fn default() -> Self {
+        Self {
+            version: PROTOCOL_VERSION,
+            sources: vec![],
+            filters: WorkerFilters::default(),
+            filters_by_source: std::collections::HashMap::default(),
+            run_started_at: None,
+            limits: WorkerLimits::default(),
+            blocked_postings: vec![],
+            max_jobs_per_run: None,
+            starting_source_index: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]

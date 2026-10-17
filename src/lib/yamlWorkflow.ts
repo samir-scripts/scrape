@@ -7,21 +7,28 @@ import type { CreateSourceInput } from "../bindings/CreateSourceInput";
 import type { Source } from "../bindings/Source";
 
 import type { WorkflowSpec } from "../bindings/WorkflowSpec";
+import type { WorkflowSourceSpec } from "../bindings/WorkflowSourceSpec";
 export type { WorkflowSpec } from "../bindings/WorkflowSpec";
+export type { WorkflowSourceSpec } from "../bindings/WorkflowSourceSpec";
 export type { WorkflowMetadata } from "../bindings/WorkflowMetadata";
 export type { WorkflowExtractor } from "../bindings/WorkflowExtractor";
 export type { WorkflowSchedule } from "../bindings/WorkflowSchedule";
 export type { WorkflowFilters } from "../bindings/WorkflowFilters";
 export type { WorkflowRetention } from "../bindings/WorkflowRetention";
 
-export const SAMPLE_SWE_INTERNSHIP_YAML = `version: 4
+export const SAMPLE_SWE_INTERNSHIP_YAML = `version: 5
 metadata:
   name: "Cloudflare — Software Engineering Internships"
   company: "Cloudflare"
   enabled: true
-extractor:
-  kind: greenhouse
-  url: "https://boards.greenhouse.io/cloudflare"
+sources:
+  - id: "cloudflare-swe"
+    label: "Cloudflare Greenhouse"
+    enabled: true
+    employer_hint: "Cloudflare"
+    extractor:
+      kind: greenhouse
+      url: "https://boards.greenhouse.io/cloudflare"
 schedule:
   cadence: daily
   time: "09:00"
@@ -37,16 +44,24 @@ retention:
 `;
 
 export const SAMPLE_SWE_INTERNSHIP_SPEC: WorkflowSpec = {
-  version: 4,
+  version: 5,
   metadata: {
     name: "Cloudflare — Software Engineering Internships",
     company: "Cloudflare",
     enabled: true,
   },
-  extractor: {
-    kind: "greenhouse",
-    url: "https://boards.greenhouse.io/cloudflare",
-  },
+  sources: [
+    {
+      id: "cloudflare-swe",
+      label: "Cloudflare Greenhouse",
+      enabled: true,
+      employer_hint: "Cloudflare",
+      extractor: {
+        kind: "greenhouse",
+        url: "https://boards.greenhouse.io/cloudflare",
+      },
+    },
+  ],
   schedule: {
     cadence: "daily",
     time: "09:00",
@@ -102,6 +117,34 @@ const VALID_ROLE_TYPES: RoleType[] = [
   "unknown",
 ];
 
+export function normalizedEndpoint(kind: SourceKind, urlOrSlug: string): string {
+  const trimmed = (urlOrSlug || "").trim();
+  if (["greenhouse", "lever", "ashby"].includes(kind)) {
+    if (!trimmed.includes("://")) {
+      return `${kind}:${trimmed.toLowerCase()}`;
+    }
+    try {
+      const parsed = new URL(trimmed);
+      const slug = parsed.pathname.split("/").filter(Boolean)[0] || "";
+      return `${kind}:${slug.toLowerCase()}`;
+    } catch {
+      return `${kind}:${trimmed.toLowerCase()}`;
+    }
+  }
+  try {
+    const parsed = new URL(trimmed);
+    parsed.hash = "";
+    parsed.search = "";
+    let pathname = parsed.pathname.toLowerCase();
+    while (pathname.endsWith("/") && pathname.length > 1) {
+      pathname = pathname.slice(0, -1);
+    }
+    return `${kind}:${parsed.protocol}//${parsed.host.toLowerCase()}${pathname}`;
+  } catch {
+    return `${kind}:${trimmed.toLowerCase()}`;
+  }
+}
+
 export function validateWorkflowYaml(
   yamlContent: string,
 ): YamlValidationResult {
@@ -146,9 +189,9 @@ export function validateWorkflowYaml(
   }
 
   // Version check
-  if (json.version !== undefined && ![1, 2, 3, 4].includes(json.version)) {
+  if (json.version !== undefined && ![1, 2, 3, 4, 5].includes(json.version)) {
     errors.push({
-      message: `Unsupported workflow version ${json.version}. Expected supported versions: 1–4`,
+      message: `Unsupported workflow version ${json.version}. Expected supported versions: 1–5`,
     });
   }
 
@@ -169,39 +212,99 @@ export function validateWorkflowYaml(
     }
   }
 
-  // Extractor check
-  if (!json.extractor || typeof json.extractor !== "object") {
-    errors.push({ message: "Missing required 'extractor' section" });
+  // Migrate legacy extractor to sources if present
+  const rawJson = json as Record<string, unknown>;
+  if (rawJson.extractor && (!rawJson.sources || !Array.isArray(rawJson.sources))) {
+    rawJson.sources = [
+      {
+        id: "default",
+        label: typeof json.metadata?.name === "string" && json.metadata.name.trim() ? json.metadata.name.trim() : "Default source",
+        enabled: true,
+        extractor: rawJson.extractor,
+      },
+    ];
+    delete rawJson.extractor;
+  }
+
+  // Sources check
+  if (!rawJson.sources || !Array.isArray(rawJson.sources)) {
+    errors.push({ message: "Missing required 'sources' list" });
+  } else if (rawJson.sources.length === 0) {
+    errors.push({ message: "sources: must contain at least one source" });
   } else {
-    if (!json.extractor.kind || !VALID_KINDS.includes(json.extractor.kind)) {
-      errors.push({
-        message: `extractor.kind must be one of: ${VALID_KINDS.join(", ")}`,
-      });
+    const sources = rawJson.sources as Array<Partial<WorkflowSourceSpec>>;
+    if (!sources.some(s => s.enabled !== false)) {
+      errors.push({ message: "sources: at least one source must be enabled" });
     }
-    if (
-      !json.extractor.url ||
-      typeof json.extractor.url !== "string" ||
-      !json.extractor.url.trim()
-    ) {
-      errors.push({
-        message: "extractor.url must be a valid non-empty URL string",
-      });
-    } else {
-      const isAtsKind = ["greenhouse", "lever", "ashby"].includes(
-        json.extractor.kind,
-      );
-      const isPlainSlug =
-        isAtsKind && /^[a-zA-Z0-9_\-\.]+$/.test(json.extractor.url.trim());
-      if (!isPlainSlug) {
-        try {
-          const u = new URL(json.extractor.url);
-          if (u.protocol !== "http:" && u.protocol !== "https:") {
-            errors.push({
-              message: "extractor.url must start with http:// or https://",
-            });
+    const seenIds = new Set<string>();
+    const seenEndpoints = new Set<string>();
+
+    for (let i = 0; i < sources.length; i++) {
+      const src = sources[i];
+      if (!src || typeof src !== "object") {
+        errors.push({ message: `sources[${i}]: must be an object` });
+        continue;
+      }
+      const id = typeof src.id === "string" ? src.id.trim() : "";
+      if (!id) {
+        errors.push({ message: `sources[${i}].id: must not be blank` });
+      } else if (seenIds.has(id)) {
+        errors.push({ message: `sources.id: duplicate source ID '${id}'` });
+      } else {
+        seenIds.add(id);
+      }
+
+      const label = typeof src.label === "string" ? src.label.trim() : "";
+      if (!label) {
+        errors.push({ message: `sources[${i}].label: must not be blank` });
+      }
+
+      if (!src.extractor || typeof src.extractor !== "object") {
+        errors.push({ message: `sources[${i}].extractor: missing required extractor` });
+      } else {
+        const extractor = src.extractor;
+        if (!extractor.kind || !VALID_KINDS.includes(extractor.kind)) {
+          errors.push({
+            message: `sources[${i}].extractor.kind must be one of: ${VALID_KINDS.join(", ")}`,
+          });
+        }
+        if (
+          !extractor.url ||
+          typeof extractor.url !== "string" ||
+          !extractor.url.trim()
+        ) {
+          errors.push({
+            message: `sources[${i}].extractor.url must be a valid non-empty URL string`,
+          });
+        } else {
+          const isAtsKind = ["greenhouse", "lever", "ashby"].includes(
+            extractor.kind,
+          );
+          const isPlainSlug =
+            isAtsKind && /^[a-zA-Z0-9_\-\.]+$/.test(extractor.url.trim());
+          if (!isPlainSlug) {
+            try {
+              const u = new URL(extractor.url);
+              if (u.protocol !== "http:" && u.protocol !== "https:") {
+                errors.push({
+                  message: `sources[${i}].extractor.url must start with http:// or https://`,
+                });
+              }
+            } catch {
+              errors.push({ message: `sources[${i}].extractor.url is not a valid URL` });
+            }
           }
-        } catch {
-          errors.push({ message: "extractor.url is not a valid URL" });
+
+          if (extractor.kind) {
+            const endpointKey = normalizedEndpoint(extractor.kind, extractor.url);
+            if (seenEndpoints.has(endpointKey)) {
+              errors.push({
+                message: `Duplicate source endpoint: '${extractor.url}' conflicts with another source in this workflow`,
+              });
+            } else {
+              seenEndpoints.add(endpointKey);
+            }
+          }
         }
       }
     }
@@ -324,7 +427,7 @@ export function validateWorkflowYaml(
   return {
     isValid: true,
     errors: [],
-    parsedSpec: json as WorkflowSpec,
+    parsedSpec: { ...json, version: json.version ?? 5 } as WorkflowSpec,
   };
 }
 
@@ -373,22 +476,35 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
   const calendar = config.__schedule as
     { time?: string; weekdays?: number[]; timezone?: string } | undefined;
   const runOnStartup = config.__run_on_startup;
+
+  const sources: WorkflowSourceSpec[] = snapshot?.sources?.length
+    ? snapshot.sources
+    : [
+        {
+          id: source.id,
+          label: source.name,
+          enabled: source.enabled,
+          employer_hint: (config.__company as string) || undefined,
+          extractor: {
+            ...extractedFields,
+            kind: source.kind,
+            url: String(canonicalizeAtsUrl(source.kind, source.identifier)),
+            source_config: sourceConfig as WorkflowSourceSpec["extractor"]["source_config"],
+          },
+        },
+      ];
+
   return {
     ...snapshot,
-    version: 4,
+    version: 5,
     max_jobs_per_run: snapshot?.max_jobs_per_run ?? INGESTION_LIMITS.default,
     metadata: {
       ...snapshot?.metadata,
       name: source.name,
+      company: (config.__company as string) || snapshot?.metadata?.company,
       enabled: source.enabled,
     },
-    extractor: {
-      ...snapshot?.extractor,
-      ...extractedFields,
-      kind: source.kind,
-      url: String(canonicalizeAtsUrl(source.kind, source.identifier)),
-      source_config: sourceConfig as WorkflowSpec["extractor"]["source_config"],
-    },
+    sources,
     schedule: {
       ...snapshot?.schedule,
       ...(typeof config.__cron_timezone === "string"
@@ -406,19 +522,26 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
     },
   };
 }
+
 export function workflowSpecToCreateInput(
   spec: WorkflowSpec,
 ): CreateSourceInput {
-  let identifier = spec.extractor.url;
+  const primarySource = spec.sources.find((s) => s.enabled) || spec.sources[0] || {
+    id: "default",
+    label: spec.metadata.name,
+    enabled: true,
+    extractor: { kind: "jsonld" as SourceKind, url: "" },
+  };
+  let identifier = primarySource.extractor.url;
   if (
-    ["greenhouse", "lever", "ashby"].includes(spec.extractor.kind) &&
+    ["greenhouse", "lever", "ashby"].includes(primarySource.extractor.kind) &&
     identifier.includes("://")
   )
     identifier =
       new URL(identifier).pathname.split("/").filter(Boolean)[0] || "";
   const config: Record<string, unknown> = {
-    ...((spec.extractor.source_config as Record<string, unknown>) || {}),
-    url: spec.extractor.url,
+    ...((primarySource.extractor.source_config as Record<string, unknown>) || {}),
+    url: primarySource.extractor.url,
     __workflow_spec: spec,
   };
   const mapping = {
@@ -439,7 +562,7 @@ export function workflowSpecToCreateInput(
     exclude_url_patterns: "exclude_url_patterns",
   } as const;
   for (const [field, key] of Object.entries(mapping)) {
-    const value = spec.extractor[field as keyof typeof mapping];
+    const value = primarySource.extractor[field as keyof typeof mapping];
     if (value != null) config[key] = value;
   }
   const cadence = spec.schedule?.cadence || "daily";
@@ -451,7 +574,7 @@ export function workflowSpecToCreateInput(
     };
   if (spec.metadata.company) config.__company = spec.metadata.company;
   return {
-    kind: spec.extractor.kind,
+    kind: primarySource.extractor.kind,
     name: spec.metadata.name,
     identifier,
     config: config as CreateSourceInput["config"],

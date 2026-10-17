@@ -241,27 +241,88 @@ impl SourcesRepo {
             input.filters.as_ref().unwrap_or(&serde_json::Value::Null),
             scrape_core::WorkerFilters::default(),
         )?;
-        sqlx::query(
-            r#"
-            INSERT INTO sources (id, kind, name, identifier, config, enabled, created_at, cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?13, NULL, ?10, ?11, ?12)
-            "#,
+        let has_workflows = sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='workflows'",
         )
-        .bind(&id)
-        .bind(kind_str)
-        .bind(input.name)
-        .bind(input.identifier)
-        .bind(config_str)
-        .bind(enabled_val)
-        .bind(created_at)
-        .bind(cadence_str)
-        .bind(input.cadence_cron)
-        .bind(retention_days)
-        .bind(retention_policy)
-        .bind(filters_str)
-        .bind(next_run)
-        .execute(pool)
-        .await?;
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0)
+            > 0;
+
+        if has_workflows {
+            let _ = sqlx::query(
+                r#"
+                INSERT INTO workflows (
+                    id, name, enabled, cadence, cadence_cron, next_run_at,
+                    retention_days, retention_policy, filters, config,
+                    max_jobs_per_run, starting_source_index, created_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 20, 0, ?11)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name, enabled = excluded.enabled, cadence = excluded.cadence,
+                    cadence_cron = excluded.cadence_cron, next_run_at = excluded.next_run_at,
+                    retention_days = excluded.retention_days, retention_policy = excluded.retention_policy,
+                    filters = excluded.filters, config = excluded.config
+                "#,
+            )
+            .bind(&id)
+            .bind(&input.name)
+            .bind(enabled_val)
+            .bind(&cadence_str)
+            .bind(&input.cadence_cron)
+            .bind(&next_run)
+            .bind(retention_days)
+            .bind(&retention_policy)
+            .bind(&filters_str)
+            .bind(&config_str)
+            .bind(&created_at)
+            .execute(pool)
+            .await;
+
+            sqlx::query(
+                r#"
+                INSERT INTO sources (id, workflow_id, kind, name, identifier, config, enabled, created_at, cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters)
+                VALUES (?1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?13, NULL, ?10, ?11, ?12)
+                "#,
+            )
+            .bind(&id)
+            .bind(kind_str)
+            .bind(input.name)
+            .bind(input.identifier)
+            .bind(config_str)
+            .bind(enabled_val)
+            .bind(created_at)
+            .bind(cadence_str)
+            .bind(input.cadence_cron)
+            .bind(retention_days)
+            .bind(retention_policy)
+            .bind(filters_str)
+            .bind(next_run)
+            .execute(pool)
+            .await?;
+        } else {
+            sqlx::query(
+                r#"
+                INSERT INTO sources (id, kind, name, identifier, config, enabled, created_at, cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?13, NULL, ?10, ?11, ?12)
+                "#,
+            )
+            .bind(&id)
+            .bind(kind_str)
+            .bind(input.name)
+            .bind(input.identifier)
+            .bind(config_str)
+            .bind(enabled_val)
+            .bind(created_at)
+            .bind(cadence_str)
+            .bind(input.cadence_cron)
+            .bind(retention_days)
+            .bind(retention_policy)
+            .bind(filters_str)
+            .bind(next_run)
+            .execute(pool)
+            .await?;
+        }
 
         Self::get(pool, &id).await
     }
@@ -299,6 +360,27 @@ impl SourcesRepo {
             Self::next_run_for_schedule(pool, cadence, cadence_cron.as_deref(), enabled, &config)
                 .await?;
 
+        let _ = sqlx::query(
+            r#"
+            UPDATE workflows
+            SET name = ?1, config = ?2, enabled = ?3, cadence = ?4, cadence_cron = ?5,
+                retention_days = ?6, retention_policy = ?7, filters = ?8, next_run_at = ?9
+            WHERE id = ?10
+            "#,
+        )
+        .bind(&name)
+        .bind(&config_str)
+        .bind(enabled_val)
+        .bind(&cadence_str)
+        .bind(&cadence_cron)
+        .bind(retention_days)
+        .bind(&retention_policy)
+        .bind(&filters_str)
+        .bind(&next_run)
+        .bind(&input.id)
+        .execute(pool)
+        .await;
+
         sqlx::query(
             r#"
             UPDATE sources
@@ -325,13 +407,19 @@ impl SourcesRepo {
     }
 
     pub async fn delete(pool: &SqlitePool, id: &str) -> Result<()> {
-        let rows_affected = sqlx::query("DELETE FROM sources WHERE id = ?")
+        let wf_affected = sqlx::query("DELETE FROM workflows WHERE id = ?")
+            .bind(id)
+            .execute(pool)
+            .await
+            .map(|r| r.rows_affected())
+            .unwrap_or(0);
+        let src_affected = sqlx::query("DELETE FROM sources WHERE id = ?")
             .bind(id)
             .execute(pool)
             .await?
             .rows_affected();
 
-        if rows_affected == 0 {
+        if wf_affected == 0 && src_affected == 0 {
             return Err(AppError::NotFound(format!("Source {} not found", id)));
         }
 

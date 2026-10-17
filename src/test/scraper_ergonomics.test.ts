@@ -260,11 +260,11 @@ retention:
       expect(res.isValid).toBe(true);
       expect(res.parsedSpec).not.toBeNull();
       expect(res.parsedSpec?.metadata.name).toBe("Acme Power Scraper");
-      expect(res.parsedSpec?.extractor.url_patterns).toEqual([
+      expect(res.parsedSpec?.sources[0].extractor.url_patterns).toEqual([
         "https://acme.com/jobs/*",
         "example/link/*",
       ]);
-      expect(res.parsedSpec?.extractor.exclude_url_patterns).toEqual([
+      expect(res.parsedSpec?.sources[0].extractor.exclude_url_patterns).toEqual([
         "*/archive/*",
       ]);
       expect(res.parsedSpec?.retention?.days).toBe(60);

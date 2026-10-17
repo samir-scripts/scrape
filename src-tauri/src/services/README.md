@@ -11,7 +11,7 @@ The `src-tauri/src/services` directory contains long-running background tasks, p
 | File | Service Domain | Core Responsibilities & Implementation |
 |---|---|---|
 | [`mod.rs`](mod.rs) | Service Root | Consolidates service modules and exports public service constructs. |
-| [`workflow.rs`](workflow.rs) | Authoritative Workflow Specification | Defines and validates `WorkflowSpec` (currently v4) with path-specific diagnostics, converts legacy v1–v3 configurations through a single compatibility resolver, and prepares worker execution inputs and previews. |
+| [`workflow.rs`](workflow.rs) | Authoritative Workflow Specification | Defines and validates `WorkflowSpec` (v5) with path-specific diagnostics, converts legacy v1–v4 configurations through a single compatibility resolver, and prepares worker execution inputs and previews. |
 | [`runner.rs`](runner.rs) | Worker Process Orchestration | `ScrapeRunner`: Spawns the `scrape-worker` sidecar with `PROTOCOL_VERSION = 6`, streams and revalidates NDJSON events (`Job`, `Branding`, `Warning`, `SourceCompleted`, `Completed`), enforces write coordination, and broadcasts `scrape://event` updates. |
 | [`ingestion.rs`](ingestion.rs) | Ingestion & Revalidation | Validates worker-emitted job records, source scan summaries, and employer branding reports before persisting them to SQLite. |
 | [`scheduler.rs`](scheduler.rs) | Automated Crawl Dispatcher | `SchedulerService`: Unified background dispatcher that evaluates per-workflow schedules and startup triggers, coalesces due runs, respects the global automatic-scraping pause, and coordinates with manual runs. |
@@ -44,7 +44,7 @@ Application Boot (lib.rs)
         └──► TrayService::init() (Maintains background presence)
 ```
 
-Each workflow owns an explicit `WorkflowSpec` v4 configuration (matching rules, `CalendarSchedule`, `max_jobs_per_run`, and retention policy) without global inheritance. Legacy v1–v3 workflows and imports are converted once through `workflow.rs`; invalid stored specs remain preserved and marked `needs_review` so they cannot broaden matches or run automatically. Explicit empty collections remove restrictions.
+Each workflow owns an explicit `WorkflowSpec` v5 configuration (sources collection, matching rules, `CalendarSchedule`, `max_jobs_per_run`, and retention policy) without global inheritance. Legacy v1–v4 workflows and imports are converted once through `workflow.rs`; invalid stored specs remain preserved and marked `needs_review` so they cannot broaden matches or run automatically. Explicit empty collections remove restrictions.
 
 Calendar scheduling (`calendar.rs`) computes next runs from local time, ISO weekdays, and IANA timezone across creation, edits, and post-run updates. DST gaps run at the first valid instant; overlaps use their first occurrence once. One dispatcher queue in `scheduler.rs` coalesces due workflows and waits through manual-run overlap; missed occurrences become one catch-up run before the next future date. All automatic paths share the persisted global pause flag, while explicit manual runs remain available.
 

@@ -94,7 +94,7 @@ pub fn extract_job_postings_from_html(
     events
 }
 
-fn extract_job_postings_with(
+pub(crate) fn extract_job_postings_with(
     html_text: &str,
     page_url: &str,
     source: &WorkerSource,
@@ -480,7 +480,12 @@ fn extract_location(loc_val: Option<&Value>) -> String {
     String::new()
 }
 
-fn find_links(html_text: &str, base_url: &Url, selector_str: &str, max_links: usize) -> Vec<Url> {
+pub(crate) fn find_links(
+    html_text: &str,
+    base_url: &Url,
+    selector_str: &str,
+    max_links: usize,
+) -> Vec<Url> {
     let document = Html::parse_document(html_text);
     let selector = match Selector::parse(selector_str) {
         Ok(s) => s,

@@ -268,36 +268,16 @@ impl ScrapeRunner {
         for source in &sources {
             super::workflow::validated_stored_config(source.kind, &source.config)?;
         }
-        let filters_by_source = sources
-            .iter()
-            .map(|s| {
-                Ok((
-                    s.id.clone(),
-                    resolve_worker_filters(&s.filters, scrape_core::WorkerFilters::default())?,
-                ))
-            })
-            .collect::<Result<HashMap<_, _>>>()?;
-        let enabled_sources: Vec<WorkerSource> = sources
-            .into_iter()
-            .map(|s| WorkerSource {
-                id: s.id,
-                kind: s.kind,
-                name: s
-                    .config
-                    .get("__company")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("Unknown company")
-                    .to_owned(),
-                identifier: s.identifier,
-                config: s.config,
-            })
-            .collect();
-
-        // 2. Start scrape run in DB
         let run = RunsRepo::start(&self.pool, trigger).await?;
         let _ = app.emit("scrape://started", serde_json::json!({ "run_id": run.id }));
 
-        if enabled_sources.is_empty() {
+        let tz_name: String = SettingsRepo::get_value(&self.pool, "system.timezone")
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "UTC".to_string());
+
+        if sources.is_empty() {
             tracing::info!("No enabled sources to scrape");
             let finished = RunsRepo::finish(
                 &self.pool,
@@ -312,11 +292,6 @@ impl ScrapeRunner {
                 let _ = app.emit("scrape://finished", &finished);
             });
 
-            let tz_name: String = SettingsRepo::get_value(&self.pool, "system.timezone")
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| "UTC".to_string());
             let tz: chrono_tz::Tz = tz_name.parse().unwrap_or(chrono_tz::UTC);
             let now_tz = chrono::Utc::now().with_timezone(&tz);
             let time_str = now_tz.format("%H:%M").to_string();
@@ -325,129 +300,246 @@ impl ScrapeRunner {
             return Ok(finished);
         }
 
-        let config = WorkerConfig {
-            version: PROTOCOL_VERSION,
-            run_started_at: Some(run.started_at.clone()),
-            sources: enabled_sources,
-            filters: scrape_core::WorkerFilters::default(),
-            filters_by_source,
-            limits: WorkerLimits::default(),
-            blocked_postings: crate::db::postings::suppression_snapshot(&self.pool).await?,
-        };
+        let mut total_found = 0;
+        let mut total_new = 0;
+        let mut source_statuses = HashMap::new();
 
-        // 4. Run sidecar with 10 minute timeout
-        let run_result = self.execute_sidecar(app, &run.id, config).await;
-
-        match run_result {
-            Ok((total_found, total_new, source_statuses)) => {
-                // Update source statuses
-                for (src_id, (status, err_msg)) in &source_statuses {
-                    SourcesRepo::set_last_result(&self.pool, src_id, status, err_msg.as_deref())
-                        .await?;
-                }
-
-                let final_status = aggregate_run_status(&source_statuses, total_found);
-                let err_summary = match final_status {
-                    RunStatus::Failed|RunStatus::Partial => Some("One or more sources had incomplete processing; inspect source scan details"),
-                    RunStatus::Cancelled => Some("Worker cancelled; partial results retained"),
-                    _ => None,
-                };
-
-                let finished = RunsRepo::finish(
-                    &self.pool,
-                    &run.id,
-                    final_status,
-                    total_found,
-                    total_new,
-                    err_summary,
-                )
-                .await?;
-
-                self.log_event(
-                    app,
-                    &run.id,
-                    if final_status == RunStatus::Failed {
-                        LogLevel::Error
-                    } else if final_status == RunStatus::Partial {
-                        LogLevel::Warn
-                    } else {
-                        LogLevel::Info
-                    },
-                    None,
-                    &format!(
-                        "Run finished: {:?}. Found {} postings, {} new.",
-                        final_status, total_found, total_new
+        for source in &sources {
+            if self.cancel_requested.load(Ordering::SeqCst) {
+                source_statuses.insert(
+                    source.id.clone(),
+                    (
+                        "cancelled".to_string(),
+                        Some("Run cancelled by user".to_string()),
                     ),
-                )
-                .await;
-
-                if final_status == RunStatus::Failed || final_status == RunStatus::Partial {
-                    let _ = crate::db::notifications::NotificationRepo::create(
-                        &self.pool,
-                        crate::db::notifications::CreateNotificationInput {
-                            kind: crate::db::notifications::NotificationKind::Error,
-                            title: if final_status == RunStatus::Failed {
-                                "SCRAPE RUN FAILED".to_string()
-                            } else {
-                                "SCRAPE RUN PARTIAL FAILURE".to_string()
-                            },
-                            message: err_summary
-                                .unwrap_or("One or more workflows encountered fatal scrape errors")
-                                .to_string(),
-                            action_label: Some("VIEW RUN".to_string()),
-                            action_payload: Some(run.id.clone()),
-                        },
-                    )
-                    .await;
-                }
-
-                _guard.finish(|| {
-                    let _ = app.emit("scrape://finished", &finished);
-                });
-                let _ = app.emit("jobs://changed", ());
-
-                // Send desktop notification if enabled
-                let notifications_enabled: bool =
-                    SettingsRepo::get_value(&self.pool, "notifications.enabled")
-                        .await
-                        .ok()
-                        .flatten()
-                        .unwrap_or(true);
-
-                if notifications_enabled && total_new > 0 {
-                    let _ = app
-                        .notification()
-                        .builder()
-                        .title("SCRAPE COMPLETE")
-                        .body(format!("{} NEW POSTINGS", total_new))
-                        .show();
-                }
-
-                // Update system tray label
-                let tz_name: String = SettingsRepo::get_value(&self.pool, "system.timezone")
-                    .await
-                    .ok()
-                    .flatten()
-                    .unwrap_or_else(|| "UTC".to_string());
-                let tz: chrono_tz::Tz = tz_name.parse().unwrap_or(chrono_tz::UTC);
-                let now_tz = chrono::Utc::now().with_timezone(&tz);
-                let time_str = now_tz.format("%H:%M").to_string();
-                crate::services::tray::update_last_run(app, &time_str, total_new);
-
-                Ok(finished)
+                );
+                break;
             }
-            Err(err) => {
-                let err_str = err.to_string();
-                tracing::error!("Scrape execution error: {}", err_str);
-                let finished =
-                    RunsRepo::finish(&self.pool, &run.id, RunStatus::Failed, 0, 0, Some(&err_str))
-                        .await?;
-                _guard.finish(|| {
-                    let _ = app.emit("scrape://finished", &finished);
-                });
-                Err(err)
+
+            let spec_opt: Option<super::workflow::WorkflowSpec> = source
+                .config
+                .get("__workflow_spec")
+                .and_then(|v| serde_json::from_value(v.clone()).ok());
+
+            let (worker_sources, max_jobs) = if let Some(spec) = &spec_opt {
+                let inputs = super::workflow::workflow_source_inputs(spec, &tz_name)?;
+                let w_sources: Vec<WorkerSource> = spec
+                    .sources
+                    .iter()
+                    .zip(inputs.iter())
+                    .filter(|(s, _)| s.enabled)
+                    .map(|(s, input)| WorkerSource {
+                        id: if spec.sources.len() == 1 {
+                            source.id.clone()
+                        } else {
+                            s.id.clone()
+                        },
+                        kind: input.kind,
+                        name: s
+                            .employer_hint
+                            .clone()
+                            .or_else(|| spec.metadata.company.clone())
+                            .unwrap_or_else(|| s.label.clone()),
+                        identifier: input.identifier.clone(),
+                        config: input.config.clone().unwrap_or(serde_json::Value::Null),
+                    })
+                    .collect();
+                let cap = spec
+                    .max_jobs_per_run
+                    .unwrap_or(scrape_core::protocol::DEFAULT_MAX_JOBS_PER_RUN);
+                (w_sources, Some(cap))
+            } else {
+                let single = vec![WorkerSource {
+                    id: source.id.clone(),
+                    kind: source.kind,
+                    name: source
+                        .config
+                        .get("__company")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Unknown company")
+                        .to_owned(),
+                    identifier: source.identifier.clone(),
+                    config: source.config.clone(),
+                }];
+                (single, None)
+            };
+
+            if worker_sources.is_empty() {
+                continue;
+            }
+
+            let workflow_filters =
+                resolve_worker_filters(&source.filters, scrape_core::WorkerFilters::default())?;
+            let starting_index = source
+                .config
+                .get("__starting_source_index")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0) as usize;
+
+            let config = WorkerConfig {
+                version: PROTOCOL_VERSION,
+                run_started_at: Some(run.started_at.clone()),
+                sources: worker_sources.clone(),
+                filters: workflow_filters,
+                filters_by_source: Default::default(),
+                limits: WorkerLimits::default(),
+                blocked_postings: crate::db::postings::suppression_snapshot(&self.pool).await?,
+                max_jobs_per_run: max_jobs,
+                starting_source_index: Some(starting_index),
+            };
+
+            let start_time = Instant::now();
+            let step_result = self.execute_sidecar(app, &run.id, config).await;
+            let duration_ms = start_time.elapsed().as_millis() as i64;
+            let next_run =
+                crate::services::scheduler::calculate_next_run_for_source(source, &tz_name);
+
+            match step_result {
+                Ok((found, new, statuses)) => {
+                    total_found += found;
+                    total_new += new;
+                    for (src_id, status_info) in statuses {
+                        source_statuses.insert(src_id, status_info);
+                    }
+                    if !worker_sources.is_empty() {
+                        let next_index = (starting_index + 1) % worker_sources.len();
+                        let mut updated_config = source.config.clone();
+                        updated_config["__starting_source_index"] =
+                            serde_json::Value::from(next_index as u64);
+                        let _ = sqlx::query(
+                            "UPDATE workflows SET starting_source_index = ? WHERE id = ?",
+                        )
+                        .bind(next_index as i64)
+                        .bind(&source.id)
+                        .execute(&self.pool)
+                        .await;
+                        let _ = sqlx::query("UPDATE sources SET config = ? WHERE id = ?")
+                            .bind(serde_json::to_string(&updated_config).unwrap_or_default())
+                            .bind(&source.id)
+                            .execute(&self.pool)
+                            .await;
+                    }
+                    let (status, err_msg) = source_statuses
+                        .get(&source.id)
+                        .cloned()
+                        .unwrap_or_else(|| ("ok".to_string(), None));
+                    SourcesRepo::set_run_result(
+                        &self.pool,
+                        &source.id,
+                        &status,
+                        err_msg.as_deref(),
+                        Some(duration_ms),
+                        next_run.as_deref(),
+                    )
+                    .await?;
+                }
+                Err(err) => {
+                    source_statuses.insert(
+                        source.id.clone(),
+                        ("error".to_string(), Some(err.to_string())),
+                    );
+                    SourcesRepo::set_last_result(
+                        &self.pool,
+                        &source.id,
+                        "error",
+                        Some(&err.to_string()),
+                    )
+                    .await?;
+                }
             }
         }
+
+        let final_status = aggregate_run_status(&source_statuses, total_found);
+        let err_summary = match final_status {
+            RunStatus::Failed | RunStatus::Partial => {
+                Some("One or more sources had incomplete processing; inspect source scan details")
+            }
+            RunStatus::Cancelled => Some("Worker cancelled; partial results retained"),
+            _ => None,
+        };
+
+        let finished = RunsRepo::finish(
+            &self.pool,
+            &run.id,
+            final_status,
+            total_found,
+            total_new,
+            err_summary,
+        )
+        .await?;
+
+        self.log_event(
+            app,
+            &run.id,
+            if final_status == RunStatus::Failed {
+                LogLevel::Error
+            } else if final_status == RunStatus::Partial {
+                LogLevel::Warn
+            } else {
+                LogLevel::Info
+            },
+            None,
+            &format!(
+                "Run finished: {:?}. Found {} postings, {} new.",
+                final_status, total_found, total_new
+            ),
+        )
+        .await;
+
+        if final_status == RunStatus::Failed || final_status == RunStatus::Partial {
+            let _ = crate::db::notifications::NotificationRepo::create(
+                &self.pool,
+                crate::db::notifications::CreateNotificationInput {
+                    kind: crate::db::notifications::NotificationKind::Error,
+                    title: if final_status == RunStatus::Failed {
+                        "SCRAPE RUN FAILED".to_string()
+                    } else {
+                        "SCRAPE RUN PARTIAL FAILURE".to_string()
+                    },
+                    message: err_summary
+                        .unwrap_or("One or more workflows encountered fatal scrape errors")
+                        .to_string(),
+                    action_label: Some("VIEW RUN".to_string()),
+                    action_payload: Some(run.id.clone()),
+                },
+            )
+            .await;
+        }
+
+        _guard.finish(|| {
+            let _ = app.emit("scrape://finished", &finished);
+        });
+        let _ = app.emit("jobs://changed", ());
+
+        // Send desktop notification if enabled
+        let notifications_enabled: bool =
+            SettingsRepo::get_value(&self.pool, "notifications.enabled")
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or(true);
+
+        if notifications_enabled && total_new > 0 {
+            let _ = app
+                .notification()
+                .builder()
+                .title("SCRAPE COMPLETE")
+                .body(format!("{} NEW POSTINGS", total_new))
+                .show();
+        }
+
+        // Update system tray label
+        let tz_name: String = SettingsRepo::get_value(&self.pool, "system.timezone")
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "UTC".to_string());
+        let tz: chrono_tz::Tz = tz_name.parse().unwrap_or(chrono_tz::UTC);
+        let now_tz = chrono::Utc::now().with_timezone(&tz);
+        let time_str = now_tz.format("%H:%M").to_string();
+        crate::services::tray::update_last_run(app, &time_str, total_new);
+
+        Ok(finished)
     }
 
     pub async fn trigger_single_source(
@@ -494,11 +586,46 @@ impl ScrapeRunner {
         )
         .await;
 
-        let config = WorkerConfig {
-            version: PROTOCOL_VERSION,
-            run_started_at: Some(run.started_at.clone()),
-            filters_by_source: Default::default(),
-            sources: vec![WorkerSource {
+        let tz_str: String = SettingsRepo::get_value(&self.pool, "system.timezone")
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "UTC".to_string());
+
+        let spec_opt: Option<super::workflow::WorkflowSpec> = source
+            .config
+            .get("__workflow_spec")
+            .and_then(|v| serde_json::from_value(v.clone()).ok());
+
+        let (worker_sources, max_jobs) = if let Some(spec) = &spec_opt {
+            let inputs = super::workflow::workflow_source_inputs(spec, &tz_str)?;
+            let sources: Vec<WorkerSource> = spec
+                .sources
+                .iter()
+                .zip(inputs.iter())
+                .filter(|(s, _)| s.enabled)
+                .map(|(s, input)| WorkerSource {
+                    id: if spec.sources.len() == 1 {
+                        source.id.clone()
+                    } else {
+                        s.id.clone()
+                    },
+                    kind: input.kind,
+                    name: s
+                        .employer_hint
+                        .clone()
+                        .or_else(|| spec.metadata.company.clone())
+                        .unwrap_or_else(|| s.label.clone()),
+                    identifier: input.identifier.clone(),
+                    config: input.config.clone().unwrap_or(serde_json::Value::Null),
+                })
+                .collect();
+            let cap = spec
+                .max_jobs_per_run
+                .unwrap_or(scrape_core::protocol::DEFAULT_MAX_JOBS_PER_RUN);
+            (sources, Some(cap))
+        } else {
+            let single = vec![WorkerSource {
                 id: source.id.clone(),
                 kind: source.kind,
                 name: source
@@ -509,21 +636,48 @@ impl ScrapeRunner {
                     .to_owned(),
                 identifier: source.identifier.clone(),
                 config: source.config.clone(),
-            }],
+            }];
+            (single, None)
+        };
+
+        let starting_index = source
+            .config
+            .get("__starting_source_index")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as usize;
+
+        let config = WorkerConfig {
+            version: PROTOCOL_VERSION,
+            run_started_at: Some(run.started_at.clone()),
+            filters_by_source: Default::default(),
+            sources: worker_sources.clone(),
             filters,
             limits: WorkerLimits::default(),
             blocked_postings: crate::db::postings::suppression_snapshot(&self.pool).await?,
+            max_jobs_per_run: max_jobs,
+            starting_source_index: Some(starting_index),
         };
 
         let start_time = Instant::now();
         let run_result = self.execute_sidecar(app, &run.id, config).await;
         let duration_ms = start_time.elapsed().as_millis() as i64;
 
-        let tz_str: String = SettingsRepo::get_value(&self.pool, "system.timezone")
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| "UTC".to_string());
+        if !worker_sources.is_empty() {
+            let next_index = (starting_index + 1) % worker_sources.len();
+            let mut updated_config = source.config.clone();
+            updated_config["__starting_source_index"] = serde_json::Value::from(next_index as u64);
+            let _ = sqlx::query("UPDATE workflows SET starting_source_index = ? WHERE id = ?")
+                .bind(next_index as i64)
+                .bind(source_id)
+                .execute(&self.pool)
+                .await;
+            let _ = sqlx::query("UPDATE sources SET config = ? WHERE id = ?")
+                .bind(serde_json::to_string(&updated_config).unwrap_or_default())
+                .bind(source_id)
+                .execute(&self.pool)
+                .await;
+        }
+
         let next_run = crate::services::scheduler::calculate_next_run_for_source(&source, &tz_str);
 
         match run_result {
@@ -532,10 +686,20 @@ impl ScrapeRunner {
                     .get(source_id)
                     .cloned()
                     .unwrap_or_else(|| {
-                        (
-                            "error".to_string(),
-                            Some("Worker process terminated without reporting status for this workflow".to_string()),
-                        )
+                        if !source_statuses.is_empty() {
+                            let agg = aggregate_run_status(&source_statuses, total_found);
+                            let first_err = source_statuses.values().find_map(|(_, err)| err.clone());
+                            let status_str = match agg {
+                                RunStatus::Success | RunStatus::SuccessWithWarnings | RunStatus::Partial => "ok",
+                                _ => "error",
+                            };
+                            (status_str.to_string(), first_err)
+                        } else {
+                            (
+                                "error".to_string(),
+                                Some("Worker process terminated without reporting status for this workflow".to_string()),
+                            )
+                        }
                     });
 
                 SourcesRepo::set_run_result(

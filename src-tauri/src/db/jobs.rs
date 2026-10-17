@@ -923,7 +923,7 @@ impl JobsRepo {
         }
         let query_str = r#"
             DELETE FROM jobs
-            WHERE source_id = ?1
+            WHERE (workflow_id = ?1 OR (workflow_id IS NULL AND source_id = ?1))
               AND removed_at IS NULL
               AND status IN ('scraped', 'viewed', 'ignored')
               AND favorited = 0
@@ -1100,7 +1100,8 @@ impl JobsRepo {
                     sqlx::query(
                         r#"
                         UPDATE jobs
-                        SET title = ?1, company = ?2, role_type = ?3,
+                        SET workflow_id = COALESCE(workflow_id, (SELECT id FROM workflows WHERE id = (SELECT workflow_id FROM sources WHERE id = jobs.source_id) OR id = jobs.source_id)),
+                            title = ?1, company = ?2, role_type = ?3,
                             location = ?4, url = ?5, date_posted = ?6,
                             last_seen_at = ?7,
                             salary_min = COALESCE(?8, salary_min),
@@ -1201,7 +1202,7 @@ impl JobsRepo {
                     sqlx::query(
                         r#"
                         INSERT INTO jobs (
-                            id, dedupe_key, source_id, external_id, title,
+                            id, dedupe_key, source_id, workflow_id, external_id, title,
                             company, role_type, location, url, date_posted,
                             date_added, last_seen_at, status, status_changed_at,
                             salary_min, salary_max, salary_currency, salary_interval,
@@ -1213,7 +1214,7 @@ impl JobsRepo {
                             work_auth, work_auth_evidence
                         )
                         VALUES (
-                            ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+                            ?1, ?2, ?3, (SELECT id FROM workflows WHERE id = (SELECT workflow_id FROM sources WHERE id = ?3) OR id = ?3), ?4, ?5, ?6, ?7, ?8, ?9, ?10,
                             ?11, ?12, 'scraped', ?13, ?14, ?15, ?16, ?17,
                             ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25,
                             ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33,

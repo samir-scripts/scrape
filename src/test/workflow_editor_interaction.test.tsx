@@ -106,7 +106,7 @@ describe("one workflow draft", () => {
     await user.click(screen.getByRole("button",{name:"Preview matches"}));
     await screen.findByText(/No eligible postings/);
     expect(detection).toHaveBeenCalledTimes(2);
-    expect(extraction.mock.calls[0][0].extractor.kind).toBe("greenhouse");
+    expect(extraction.mock.calls[0][0].sources[0].extractor.kind).toBe("greenhouse");
     expect(extraction.mock.calls[0][0].filters?.matching?.keywords?.any).toEqual(["Engineer"]);
     finishDetection(result);
     await waitFor(() => expect(screen.getByText(/No eligible postings/)).toBeTruthy());

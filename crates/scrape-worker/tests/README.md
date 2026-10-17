@@ -14,6 +14,7 @@ The `crates/scrape-worker/tests` directory contains offline and loopback-HTTP in
 | [`worker_process.rs`](worker_process.rs) | Subprocess protocol and diagnostic tests (`PROTOCOL_VERSION` enforcement, invalid queries/limits rejection before network access, categorized rejection reasons, overlapping rejection examples, and source scan summaries). |
 | [`limit_process.rs`](limit_process.rs) | Loopback-HTTP process tests for per-workflow job caps (`max_jobs_per_run`), bounded Greenhouse detail enrichment (skipping conclusive rejects and duplicates before detail fetches), detail request/time bounds, required vs. optional detail failures, and provenance preservation. |
 | [`branding_process.rs`](branding_process.rs) | Loopback-HTTP process tests for employer branding across all five adapters, shared logo asset caching (one fetch per source/employer per run), board-page fallback, custom CSS selectors, and explicit warning diagnostics on missing/invalid artwork. |
+| [`coordinator_tests.rs`](coordinator_tests.rs) | Integration tests for multi-source round-robin coordination: fair budget allocation (7/7/6 split across 3 healthy sources at cap 20), starting source rotation, preview non-rotation, capacity redistribution on slow or exhausted sources, and workflow-wide deduplication. |
 
 ---
 

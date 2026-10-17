@@ -63,11 +63,11 @@ Each directory in this repository contains its own dedicated `README.md` documen
   - [`src-tauri/gen/`](src-tauri/gen/README.md) — Auto-generated configuration schemas.
     - [`src-tauri/gen/schemas/`](src-tauri/gen/schemas/README.md) — JSON schemas for capabilities and desktop configuration.
   - [`src-tauri/icons/`](src-tauri/icons/README.md) — Multi-platform application and system tray icons.
-  - [`src-tauri/migrations/`](src-tauri/migrations/README.md) — Forward-only versioned SQLite migrations (0001–0023) executed via SQLx, paired with `src-tauri/historical-migrations/` for upgrade verification.
+  - [`src-tauri/migrations/`](src-tauri/migrations/README.md) — Forward-only versioned SQLite migrations (0001–0024) executed via SQLx, paired with `src-tauri/historical-migrations/` for upgrade verification.
   - [`src-tauri/src/`](src-tauri/src/README.md) — Application initialization, state management, and error handling.
     - [`src-tauri/src/commands/`](src-tauri/src/commands/README.md) — Tauri IPC command endpoints exposed to the frontend.
     - [`src-tauri/src/db/`](src-tauri/src/db/README.md) — SQLite database repositories and query implementations (`jobs`, `postings`, `sources`, `runs`, `branding`, `cleanup`, `history`, `settings`, `metrics`, `notifications`).
-    - [`src-tauri/src/services/`](src-tauri/src/services/README.md) — Background services: `workflow` (WorkflowSpec v4 validator/resolver), `runner`, `ingestion`, `scheduler`, `calendar`, `retention`, `process`, `startup`, `tray`, and `system`.
+    - [`src-tauri/src/services/`](src-tauri/src/services/README.md) — Background services: `workflow` (WorkflowSpec v5 validator/resolver), `runner`, `ingestion`, `scheduler`, `calendar`, `retention`, `process`, `startup`, `tray`, and `system`.
 
 ### 3. Specifications, Plans, Fixtures & Automation
 - [`plans/`](plans/README.md) — System specifications, architectural designs, phased blueprints, and implementation evidence ledgers.
