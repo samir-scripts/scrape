@@ -84,6 +84,58 @@ pub fn extract_jobs_with_selectors_with(
     source: &WorkerSource,
     sink: &mut dyn FnMut(WorkerEvent) -> bool,
 ) -> Result<(), ClientError> {
+    let patterns = UrlPatterns::parse(&source.config)?;
+    let document = Html::parse_document(html_text);
+    if let Some(hydration) = scrape_core::hydration::HydrationConfig::parse(&source.config)
+        .map_err(ClientError::Configuration)?
+    {
+        let script = hydration.script.elements(&document, None).into_iter().next().filter(|e| e.value().name() == "script")
+            .ok_or_else(|| ClientError::Extraction("Hydration script was not found; inspect hydration_script or choose browser extraction".into()))?;
+        let payload: serde_json::Value = serde_json::from_str(&script.text().collect::<String>())
+            .map_err(|e| {
+            ClientError::Extraction(format!("Hydration script is not JSON: {e}"))
+        })?;
+        let jobs = payload.pointer(&hydration.pointer).and_then(serde_json::Value::as_array).ok_or_else(|| ClientError::Extraction("hydration_pointer did not select a candidate array; flattened/reference-encoded state must be decoded by a custom script".into()))?;
+        let logo = super::branding::resolve_document(
+            &document,
+            base_url.as_str(),
+            &super::branding::employer_name(source),
+            source.config.get("employer_logo").and_then(|v| v.as_str()),
+        );
+        for job in jobs {
+            let get = |key| hydration.extract(job, key);
+            let event = match (get("title"), get("link")) {
+                (Some(title), Some(link)) => {
+                    let url = base_url
+                        .join(&link)
+                        .ok()
+                        .filter(|u| scrape_core::branding::http_url(u.as_str()));
+                    if url
+                        .as_ref()
+                        .is_some_and(|url| !patterns.matches(url.as_str()))
+                    {
+                        continue;
+                    }
+                    match url {
+                        Some(url) if !hydration.fields.contains_key("id") || get("id").is_some() => SelectorPosting {
+                            title, external_id: get("id").unwrap_or_else(|| url.to_string()), url: url.into(), location: get("location").unwrap_or_default(),
+                            salary_text: get("salary"), description_source: get("description"), description_format: Some(if hydration.description_is_text { DescriptionFormat::PlainText } else { DescriptionFormat::Html }),
+                            date_posted: get("date").filter(|raw| scrape_core::posting_date::posting_instant(raw,"UTC").is_some()), company_logo: logo.clone(),
+                        }.event(source),
+                        _ => invalid_candidate(source, "Hydration candidate has an invalid HTTP(S) destination or missing configured ID"),
+                    }
+                }
+                _ => invalid_candidate(
+                    source,
+                    "Hydration candidate title/link locator or regex did not produce a value",
+                ),
+            };
+            if !sink(event) {
+                break;
+            }
+        }
+        return Ok(());
+    }
     let config_string = |key: &str| -> Result<Option<&str>, ClientError> {
         source
             .config
@@ -108,60 +160,12 @@ pub fn extract_jobs_with_selectors_with(
     let date_sel = field("date", None)?;
     let id_sel = field("id", None)?;
 
-    let mut include_patterns = Vec::new();
-    if let Some(pat) = source.config.get("url_pattern").and_then(|v| v.as_str()) {
-        if !pat.trim().is_empty() {
-            include_patterns.push(glob_to_regex(pat).map_err(|error| {
-                ClientError::HttpStatus(
-                    reqwest::StatusCode::BAD_REQUEST,
-                    format!("Invalid URL pattern: {error}"),
-                )
-            })?);
-        }
-    }
-    if let Some(pats) = source.config.get("url_patterns").and_then(|v| v.as_array()) {
-        for p in pats {
-            if let Some(s) = p.as_str() {
-                if !s.trim().is_empty() {
-                    include_patterns.push(glob_to_regex(s).map_err(|error| {
-                        ClientError::HttpStatus(
-                            reqwest::StatusCode::BAD_REQUEST,
-                            format!("Invalid URL pattern: {error}"),
-                        )
-                    })?);
-                }
-            }
-        }
-    }
-
-    let mut exclude_patterns = Vec::new();
-    if let Some(pats) = source
-        .config
-        .get("exclude_url_patterns")
-        .and_then(|v| v.as_array())
-    {
-        for p in pats {
-            if let Some(s) = p.as_str() {
-                if !s.trim().is_empty() {
-                    exclude_patterns.push(glob_to_regex(s).map_err(|error| {
-                        ClientError::HttpStatus(
-                            reqwest::StatusCode::BAD_REQUEST,
-                            format!("Invalid excluded URL pattern: {error}"),
-                        )
-                    })?);
-                }
-            }
-        }
-    }
-
-    let document = Html::parse_document(html_text);
     let company_logo = super::branding::resolve_document(
         &document,
         base_url.as_str(),
         &super::branding::employer_name(source),
         source.config.get("employer_logo").and_then(|v| v.as_str()),
     );
-    let company_icon_url = company_logo.as_ref().map(|e| e.url.clone());
 
     for item in item_sel.elements(&document, None) {
         let Some(title) = title_sel.extract(&document, Some(item), "text") else {
@@ -213,14 +217,7 @@ pub fn extract_jobs_with_selectors_with(
             }
         };
 
-        if !include_patterns.is_empty() {
-            let matched = include_patterns.iter().any(|re| re.is_match(&job_url));
-            if !matched {
-                continue;
-            }
-        }
-
-        if exclude_patterns.iter().any(|re| re.is_match(&job_url)) {
+        if !patterns.matches(&job_url) {
             continue;
         }
 
@@ -228,7 +225,6 @@ pub fn extract_jobs_with_selectors_with(
             .as_ref()
             .and_then(|field| field.extract(&document, Some(item), "text"))
             .unwrap_or_default();
-        let role_type = RoleType::infer(&title, None);
         let salary_text = sal_sel
             .as_ref()
             .and_then(|field| field.extract(&document, Some(item), "text"));
@@ -242,6 +238,119 @@ pub fn extract_jobs_with_selectors_with(
                 DescriptionFormat::PlainText
             }
         });
+        let date_posted = date_sel
+            .as_ref()
+            .and_then(|field| field.extract(&document, Some(item), "date"))
+            .filter(|raw| scrape_core::posting_date::posting_instant(raw, "UTC").is_some());
+        let external_id = match &id_sel {
+            Some(field) => match field.extract(&document, Some(item), "text") {
+                Some(id) => id,
+                None => {
+                    if !sink(invalid_candidate(
+                        source,
+                        &format!("Posting '{title}' has no configured original ID"),
+                    )) {
+                        break;
+                    }
+                    continue;
+                }
+            },
+            None => job_url.clone(),
+        };
+
+        if !sink(
+            SelectorPosting {
+                title,
+                url: job_url,
+                external_id,
+                location,
+                salary_text,
+                description_source,
+                description_format,
+                date_posted,
+                company_logo: company_logo.clone(),
+            }
+            .event(source),
+        ) {
+            break;
+        }
+    }
+
+    Ok(())
+}
+
+struct UrlPatterns {
+    include: Vec<regex::Regex>,
+    exclude: Vec<regex::Regex>,
+}
+impl UrlPatterns {
+    fn parse(config: &serde_json::Value) -> Result<Self, ClientError> {
+        let mut include = Vec::new();
+        let compile = |value: &serde_json::Value| {
+            let text = value
+                .as_str()
+                .ok_or_else(|| ClientError::Configuration("URL patterns must be strings".into()))?;
+            glob_to_regex(text)
+                .map_err(|e| ClientError::Configuration(format!("Invalid URL pattern: {e}")))
+        };
+        if let Some(value) = config.get("url_pattern") {
+            if value.as_str().is_none_or(|s| !s.trim().is_empty()) {
+                include.push(compile(value)?);
+            }
+        }
+        let array = |key: &str| -> Result<Vec<regex::Regex>, ClientError> {
+            let Some(value) = config.get(key) else {
+                return Ok(Vec::new());
+            };
+            value
+                .as_array()
+                .ok_or_else(|| {
+                    ClientError::Configuration(format!("{key} must be an array of URL patterns"))
+                })?
+                .iter()
+                .filter(|v| v.as_str().is_none_or(|s| !s.trim().is_empty()))
+                .map(compile)
+                .collect()
+        };
+        include.extend(array("url_patterns")?);
+        Ok(Self {
+            include,
+            exclude: array("exclude_url_patterns")?,
+        })
+    }
+    fn matches(&self, url: &str) -> bool {
+        (self.include.is_empty() || self.include.iter().any(|p| p.is_match(url)))
+            && !self.exclude.iter().any(|p| p.is_match(url))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct SelectorPosting {
+    pub title: String,
+    pub url: String,
+    pub external_id: String,
+    pub location: String,
+    pub salary_text: Option<String>,
+    pub description_source: Option<String>,
+    pub description_format: Option<DescriptionFormat>,
+    pub date_posted: Option<String>,
+    pub company_logo: Option<scrape_core::branding::LogoEvidence>,
+}
+impl SelectorPosting {
+    pub fn event(self, source: &WorkerSource) -> WorkerEvent {
+        let Self {
+            title,
+            url,
+            external_id,
+            location,
+            salary_text,
+            description_source,
+            description_format,
+            date_posted,
+            company_logo,
+            ..
+        } = self;
+        let role_type = RoleType::infer(&title, None);
         let description = description_source.as_deref().map(|html| {
             normalize_description_with_format(
                 html,
@@ -295,34 +404,14 @@ pub fn extract_jobs_with_selectors_with(
             .map(|e| e.is_new_grad)
             .unwrap_or(TriState::Unknown);
 
-        let date_posted = date_sel
-            .as_ref()
-            .and_then(|field| field.extract(&document, Some(item), "date"))
-            .filter(|raw| scrape_core::posting_date::posting_instant(raw, "UTC").is_some());
-        let external_id = match &id_sel {
-            Some(field) => match field.extract(&document, Some(item), "text") {
-                Some(id) => id,
-                None => {
-                    if !sink(invalid_candidate(
-                        source,
-                        &format!("Posting '{title}' has no configured original ID"),
-                    )) {
-                        break;
-                    }
-                    continue;
-                }
-            },
-            None => job_url.clone(),
-        };
-
-        if !sink(WorkerEvent::Job {
+        WorkerEvent::Job {
             source_id: source.id.clone(),
             external_id,
             title,
             company: super::branding::employer_name(source),
             role_type,
             location,
-            url: job_url,
+            url,
             provider_updated_at: None,
             date_posted,
             salary,
@@ -338,14 +427,10 @@ pub fn extract_jobs_with_selectors_with(
             description,
             description_format: description_source.as_ref().and(description_format),
             description_source,
-            company_icon_url: company_icon_url.clone(),
-            company_logo: company_logo.clone(),
-        }) {
-            break;
+            company_icon_url: company_logo.as_ref().map(|logo| logo.url.clone()),
+            company_logo,
         }
     }
-
-    Ok(())
 }
 
 fn invalid_candidate(source: &WorkerSource, message: &str) -> WorkerEvent {
@@ -361,6 +446,74 @@ fn invalid_candidate(source: &WorkerSource, message: &str) -> WorkerEvent {
 mod tests {
     use super::*;
     use scrape_core::{SourceKind, WorkplaceType};
+
+    #[test]
+    fn hydration_json_pointers_use_shared_transforms_and_original_destinations() {
+        let source = WorkerSource {
+            id: "hydration".into(),
+            kind: SourceKind::Selector,
+            name: "Fixture".into(),
+            identifier: "https://fixture.test/careers".into(),
+            config: serde_json::json!({
+                "hydration_script":"#__NEXT_DATA__", "hydration_pointer":"/props/pageProps/jobs",
+                "hydration_fields":{"title":"/name", "link":"/apply", "id":"/requisition", "salary":"/pay", "description":"/body", "date":"/published"},
+                "title_regex":"Role: (?P<value>.+)", "description_attribute":"text"
+            }),
+        };
+        let html = r#"<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"jobs":[{"name":"Role: Rust Engineer","apply":"/jobs/42?ref=original","requisition":42,"pay":"$45.25 - $55.75 per hour","body":"Literal <b> text","published":"2026-10-15"},{"name":"Invalid missing link"}]}}}</script>"#;
+        let events =
+            extract_jobs_with_selectors(html, &Url::parse(&source.identifier).unwrap(), &source)
+                .unwrap();
+        assert_eq!(events.len(), 2);
+        let WorkerEvent::Job {
+            title,
+            url,
+            external_id,
+            description_text,
+            date_posted,
+            salary,
+            ..
+        } = &events[0]
+        else {
+            panic!("expected job")
+        };
+        assert_eq!(title, "Rust Engineer");
+        assert_eq!(url, "https://fixture.test/jobs/42?ref=original");
+        assert_eq!(external_id, "42");
+        assert_eq!(description_text.as_deref(), Some("Literal <b> text"));
+        assert_eq!(date_posted.as_deref(), Some("2026-10-15"));
+        assert_eq!(salary.as_ref().unwrap().ranges[0].min_minor, Some(4525));
+        assert!(matches!(
+            &events[1],
+            WorkerEvent::Error {
+                invalid_posting: Some(true),
+                ..
+            }
+        ));
+        let mut restricted = source.clone();
+        restricted.config["exclude_url_patterns"] = serde_json::json!(["*/jobs/*"]);
+        let excluded = extract_jobs_with_selectors(
+            html,
+            &Url::parse(&source.identifier).unwrap(),
+            &restricted,
+        )
+        .unwrap();
+        assert!(!excluded
+            .iter()
+            .any(|e| matches!(e, WorkerEvent::Job { .. })));
+        for invalid in [
+            "<p>No script</p>",
+            "<script id='__NEXT_DATA__'>{bad}</script>",
+            "<script id='__NEXT_DATA__'>{}</script>",
+        ] {
+            assert!(extract_jobs_with_selectors(
+                invalid,
+                &Url::parse(&source.identifier).unwrap(),
+                &source
+            )
+            .is_err());
+        }
+    }
 
     #[test]
     fn mixed_locators_extract_original_id_attributes_and_regex() {

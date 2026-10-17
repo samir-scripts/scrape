@@ -782,6 +782,9 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
         "description_attribute",
         "date_attribute",
         "id_attribute",
+        "hydration_script",
+        "hydration_pointer",
+        "hydration_fields",
         "url_pattern",
         "url_patterns",
         "exclude_url_patterns",
@@ -816,7 +819,12 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
             "extractor.source_config.max_pages: expected 1–100".into(),
         ));
     }
-    if kind == SourceKind::Selector {
+    let hydration = if kind == SourceKind::Selector {
+        scrape_core::hydration::HydrationConfig::parse(config).map_err(AppError::Validation)?
+    } else {
+        None
+    };
+    if kind == SourceKind::Selector && hydration.is_none() {
         if let Some(value) = config.get("item") {
             let query = value.as_str().ok_or_else(|| {
                 AppError::Validation("extractor.item: expected locator string".into())
@@ -848,6 +856,7 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
         }
     }
     if kind == SourceKind::Selector
+        && hydration.is_none()
         && ["item", "title", "link"].iter().any(|key| {
             config
                 .get(key)
@@ -996,6 +1005,30 @@ mod tests {
             assert!(
                 validate_config(SourceKind::Selector, &invalid).is_err(),
                 "accepted {key}: {bad_value}"
+            );
+        }
+        assert!(validate_config(SourceKind::Greenhouse, &config).is_err());
+    }
+
+    #[test]
+    fn hydration_mapping_validation_is_shared_and_does_not_require_dom_fields() {
+        let config = serde_json::json!({"hydration_pointer":"/props/jobs","hydration_fields":{"title":"/name","link":"/url","id":"/id"},"title_regex":"(?P<value>.+)"});
+        validate_config(SourceKind::Selector, &config).unwrap();
+        for (key, value) in [
+            ("hydration_pointer", serde_json::json!("missing/slash")),
+            ("hydration_fields", serde_json::json!({"title":"/name"})),
+            (
+                "hydration_fields",
+                serde_json::json!({"title":"/name","link":"/url","made_up":"/value"}),
+            ),
+            ("title_regex", serde_json::json!("[")),
+            ("title", serde_json::json!("h2")),
+        ] {
+            let mut invalid = config.clone();
+            invalid[key] = value;
+            assert!(
+                validate_config(SourceKind::Selector, &invalid).is_err(),
+                "accepted {key}"
             );
         }
         assert!(validate_config(SourceKind::Greenhouse, &config).is_err());

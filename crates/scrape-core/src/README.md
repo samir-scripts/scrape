@@ -94,3 +94,7 @@ The `crates/scrape-core/src` directory contains the core source modules that def
 | Directory | Description |
 |---|---|
 | [`enrich/`](enrich/README.md) | Natural language and heuristic parsing routines for extracting structured salary, location, eligibility, experience, workplace types, and normalized descriptions from raw job text. |
+
+### [`hydration.rs`](hydration.rs)
+
+Validates explicit hydration-script locators, RFC 6901 JSON pointers, posting-field maps and regex transforms for both host configuration and static worker extraction. Numeric IDs are preserved; optional unknowns remain unknown. No script execution or automatic decoding of reference-encoded payloads.

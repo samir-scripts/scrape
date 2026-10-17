@@ -1124,6 +1124,13 @@ async fn late_greenhouse_matches_refresh_with_provenance_and_protected_state() {
 
 #[tokio::test]
 async fn mixed_xpath_css_fields_survive_worker_preview_refresh_and_persistence() {
+    verify_static_worker_persistence(false).await;
+}
+#[tokio::test]
+async fn hydration_fields_survive_worker_preview_refresh_and_persistence() {
+    verify_static_worker_persistence(true).await;
+}
+async fn verify_static_worker_persistence(hydration: bool) {
     use serde_json::json;
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
@@ -1149,7 +1156,15 @@ async fn mixed_xpath_css_fields_survive_worker_preview_refresh_and_persistence()
                     }
                     "/fixture.test/careers" => {
                         pages += 1;
-                        [("sales", "Sales"), ("42", "Rust Engineer"), ("43", "Platform Engineer"), ("44", "Later Engineer")].into_iter().map(|(id,title)| format!("<article class='job-card' data-job-id='req-{id}'><h2>Role: {title}</h2><a data-url='/jobs/{id}?ref=original'>Apply</a><span class='pay'>Pay: $45.25 - $55.75 per hour</span><time datetime='2026-10-15'></time><p>Original description</p></article>")).collect::<String>()
+                        if hydration {
+                            let jobs: Vec<_> = [("sales", "Sales"), ("42", "Rust Engineer"), ("43", "Platform Engineer"), ("44", "Later Engineer")].into_iter().map(|(id,title)| json!({"id":format!("req-{id}"),"title":format!("Role: {title}"),"url":format!("/jobs/{id}?ref=original"),"pay":"Pay: $45.25 - $55.75 per hour","published":"2026-10-15","body":"Original description"})).collect();
+                            format!(
+                                "<script id='__NEXT_DATA__' type='application/json'>{}</script>",
+                                json!({"props":{"jobs":jobs}})
+                            )
+                        } else {
+                            [("sales", "Sales"), ("42", "Rust Engineer"), ("43", "Platform Engineer"), ("44", "Later Engineer")].into_iter().map(|(id,title)| format!("<article class='job-card' data-job-id='req-{id}'><h2>Role: {title}</h2><a data-url='/jobs/{id}?ref=original'>Apply</a><span class='pay'>Pay: $45.25 - $55.75 per hour</span><time datetime='2026-10-15'></time><p>Original description</p></article>")).collect::<String>()
+                        }
                     }
                     _ => panic!("Unexpected extraction request: {path}"),
                 };
@@ -1170,15 +1185,24 @@ async fn mixed_xpath_css_fields_survive_worker_preview_refresh_and_persistence()
     let pool = scrape_lib::db::init_db(&directory.path().join("locators.db"))
         .await
         .unwrap();
+    let extraction = if hydration {
+        json!({
+            "hydration_pointer":"/props/jobs",
+            "hydration_fields":{"title":"/title","link":"/url","id":"/id","salary":"/pay","date":"/published","description":"/body"},
+            "title_regex":"Role: (?P<value>.+)","id_regex":"req-(?P<value>.+)","salary_regex":"Pay: (?P<value>.+)","description_attribute":"text"
+        })
+    } else {
+        json!({
+            "item":"//article[contains(@class,'job-card')]", "title":"xpath:.//h2/text()", "title_regex":"Role: (?P<value>.+)",
+            "link":"a@data-url", "id":".", "id_attribute":"data-job-id", "id_regex":"req-(?P<value>.+)",
+            "date":"time", "date_attribute":"datetime", "description":"p", "description_attribute":"text",
+            "salary":".pay", "salary_regex":"Pay: (?P<value>.+)"
+        })
+    };
     let spec = scrape_lib::services::workflow::validate(json!({
         "version":5,"metadata":{"name":"Mixed locator fixture"},"max_jobs_per_run":2,
         "sources":[{"id":"fixture", "label":"Fixture", "employer_hint":"Fixture", "extractor":{
-            "kind":"selector", "url":"https://fixture.test/careers", "source_config":{
-                "item":"//article[contains(@class,'job-card')]", "title":"xpath:.//h2/text()", "title_regex":"Role: (?P<value>.+)",
-                "link":"a@data-url", "id":".", "id_attribute":"data-job-id", "id_regex":"req-(?P<value>.+)",
-                "date":"time", "date_attribute":"datetime", "description":"p", "description_attribute":"text",
-                "salary":".pay", "salary_regex":"Pay: (?P<value>.+)"
-            }
+            "kind":"selector", "url":"https://fixture.test/careers", "source_config":extraction
         }}],
         "schedule":{"cadence":"manual"}, "filters":{"matching":{"keywords":{"any":["Engineer"],"fields":["title"]}}}
     }), "UTC").unwrap();

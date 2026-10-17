@@ -62,3 +62,5 @@ The parser lives in `scrape-core::{locator,xpath}` so the host validates exactly
 the syntax the worker executes. See [configuration examples](../../../../plans/workflow-v3.md#static-custom-locators-section-6a).
 Resumable selector pagination/details, hydration extraction and browser/script
 execution are still pending; this checkpoint does not make selector loading lazy.
+
+Hydration extraction now uses `scrape-core::hydration` for shared JSON-pointer, field-map and regex validation, with the same raw posting normalizer as DOM extraction. No embedded scripts are executed. See [configuration](../../../../plans/workflow-v3.md#embedded-hydration-json).

@@ -8,6 +8,7 @@ pub mod branding;
 pub mod enrich;
 pub mod filter;
 pub mod geography;
+pub mod hydration;
 pub mod identity;
 pub mod locator;
 pub mod matching;

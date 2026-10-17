@@ -99,3 +99,39 @@ The shared parser enforces 4096 bytes, 64 steps and 32 predicates per step.
 This checkpoint implements locators/transforms only. Selector hydration,
 resumable pagination/detail enrichment, browser sessions and executable scripts
 remain pending in [the Section 6 blueprint](11-section-6-browser-and-script-extraction.md).
+
+### Embedded hydration JSON
+
+Selector sources can read a JSON array embedded in a script without launching a
+browser. Configure `hydration_pointer` (an explicit RFC 6901 pointer to that array)
+and `hydration_fields` (JSON pointers relative to each record):
+
+```yaml
+hydration_script: "#__NEXT_DATA__"
+hydration_pointer: "/props/pageProps/jobs"
+hydration_fields:
+  title: "/name"
+  link: "/applyUrl"
+  id: "/requisitionId"
+  description: "/description"
+  salary: "/compensationText"
+  date: "/published"
+title_regex: "Role: (?P<value>.+)"
+description_attribute: text
+```
+
+Omitting `hydration_script` selects `#__NEXT_DATA__, #__NUXT_DATA__` in document
+order. A custom CSS/XPath locator must select a script element. JSON pointers use
+`~0` for `~` and `~1` for `/`, as specified by [RFC 6901](https://www.rfc-editor.org/rfc/rfc6901).
+Title and link mappings are required. Other supported mappings are ID, location,
+salary text, publication date and description. Numeric IDs are preserved as
+strings; other fields require strings. Every field supports the existing Rust
+`<field>_regex`. Descriptions default to HTML; `description_attribute: text`
+preserves literal tags. DOM posting locators and JSON field mappings cannot be
+mixed. Destination URL patterns and authoritative matching still apply.
+
+Missing scripts, malformed JSON and pointers that do not select an array fail
+explicitly. Invalid candidates are isolated. No script code is executed, and
+flattened/reference-encoded hydration formats are not decoded automatically.
+Unknown compensation/date values remain unknown. Hydration alone does not add
+pagination or detail fetching.
