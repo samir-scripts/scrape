@@ -46,7 +46,7 @@ Each directory in this repository contains its own dedicated `README.md` documen
 
 ### 1. Rust Workspace Crates (`crates/`)
 - [`crates/`](crates/README.md) — Rust workspace overview and sidecar architecture.
-  - [`crates/scrape-core/`](crates/scrape-core/README.md) — Shared domain models, matching/filtering predicates, identity/geography/branding rules, IPC wire protocols (`PROTOCOL_VERSION` = 6), and TypeScript type binding generators.
+  - [`crates/scrape-core/`](crates/scrape-core/README.md) — Shared domain models, matching/filtering predicates, identity/geography/branding rules, IPC wire protocols (`PROTOCOL_VERSION` = 7), and TypeScript type binding generators.
     - [`crates/scrape-core/data/`](crates/scrape-core/data/README.md) — Pinned ISO country and subdivision catalog (`regions.json`).
     - [`crates/scrape-core/src/`](crates/scrape-core/src/README.md) — Core enums, categorized matching and rejection diagnostics, SQL filter compiler, canonical posting identity, geography, posting dates, and employer branding evidence.
     - [`crates/scrape-core/src/enrich/`](crates/scrape-core/src/enrich/README.md) — Information extraction heuristics (salary, location, workplace arrangement, eligibility, experience, HTML/description normalization).

@@ -874,4 +874,52 @@ Verification actually run in this workspace:
 No user database/application storage was opened or mutated. No native WKWebView
 UI harness for script editing, physical pointer/IME check, or live provider crawl
 was performed in this repair. Phase 6F native/visual QA and Section 6 end-to-end
-acceptance remain next.
+acceptance are recorded below.
+
+## Section 6F — Native and Visual QA and End-to-End Acceptance
+
+Committed at `f5b4d0e`. Completes Phase 6F end-to-end acceptance, native WKWebView verification, and visual regression QA for Section 6 low-resource browser and script extraction:
+1. **Visual QA & Theme Contrast**: Verified custom extractor UI surfaces in both Paper (light) and Obsidian (dark) themes across desktop (1024px) and narrow (480px) viewports. Fixed an Obsidian theme contrast defect in `CustomExtractorConfig.tsx` by replacing `--color-signal` with semantic `--color-success` (`#35602D` on Paper, `#C4DA92` on Obsidian), ensuring all status text, environment diagnostic badges, and trust confirmations meet WCAG AA 4.5:1 text contrast and 3:1 control contrast against their rendered backgrounds. Produced 8 reviewed screenshot artifacts stored under `plans/assets/11-browser-script-review/`.
+2. **Playwright E2E Verification**: Added `e2e/workflow-sources.pw.ts` covering extraction mode switching (`Static`, `Browser`, `Script`), CSS/XPath selector inputs, browser session management buttons (`Open`, `Save`, `Clear`), script environment diagnostics (`Check environment`), truthful local privilege disclosure, and dirty-script trust gating under both Paper and Obsidian themes. Verified cleanly alongside `e2e/workflows.pw.ts` with 5/5 passing tests.
+3. **End-to-End Persistence Matrix**: All 5 comprehensive test flows in `src-tauri/tests/worker_repository.rs` verified against loopback HTTP/WebSocket and mock CDP servers:
+   - Mixed XPath container + CSS field extraction surviving preview, refresh, and SQLite persistence.
+   - SPA hydration extraction (`__NEXT_DATA__` / `__NUXT_DATA__`) surviving persistence.
+   - Resumable paginated static details with bounded enrichment and robots compliance.
+   - Headless CDP browser extraction, resource/tracker blocking (`Image`, `Media`, `Font`, `Stylesheet`), and authenticated session cookie injection with `NeedsLogin` handling.
+   - Stdin/NDJSON script extraction with round-robin fair budgeting, process-group isolation, 16 KiB secret-redacted stderr, and content-fingerprinted trust gating.
+4. **Native Tauri / WKWebView Smoke Verification**: Ran isolated native harnesses:
+   - `test:native`: Isolated native IPC, window lifecycle, and sidecar communication clean.
+   - `test:native-startup`: Verified all three startup modes (`fresh`, `current19`, `unknown19`) against isolated SQLite databases and automatic backups.
+   - `native-branding.mjs`: Verified 2 sidecar asset downloads with 0 WKWebView network dependencies.
+
+Verification actually run in this workspace:
+
+- `npm run build:sidecar`: built release `scrape-worker-aarch64-apple-darwin` in 0.49s.
+- `cargo fmt --all --check`: passed with zero formatting diffs.
+- `cargo clippy --workspace --all-targets -- -D warnings`: passed with 0 warnings.
+- `cargo test --workspace`: **424 passed** (166 host unit/migration, 11 packaged worker/repository, 166 core, 31 worker unit, 8 adapter, 5 branding-process, 3 browser-cdp-process, 6 coordinator, 17 limits-process, 4 script-runner-process, 7 worker-process; 0 failed).
+- `cargo test -p scrape --test worker_repository`: **11 passed / 0 failed** in 1.05s.
+- `npm run gen:types && git diff --exit-code src/bindings`: passed with 0 drift.
+- `npm run test:providers`: **2 passed / 0 failed** (SEP/Lever: 8 fetched, 8 verified; Linear/Ashby: 31 fetched, 31 verified).
+- `npx tsc --noEmit`: passed with 0 errors.
+- `npm test` (`vitest run && node scripts/test-app-startup.mjs`): **472 passed / 78 files** in 10.39s + Vite dev server startup smoke clean.
+- `npm run build`: passed (Vite production bundle built in 4.94s).
+- `node scripts/check-style.mjs`: passed (Production style guard passed, 0 violations).
+- `git diff --check`: passed with zero whitespace or line ending issues.
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers SCRAPE_BROWSER_PORT=1430 npx playwright test e2e/workflows.pw.ts e2e/workflow-sources.pw.ts`: **5 passed / 0 failed** in 14.8s.
+- `cargo build -p scrape && npm run test:native`: passed (native artifacts: `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-xMHpo2`).
+- `SCRAPE_STARTUP_MODES=fresh,current19,unknown19 npm run test:native-startup`: all 3 modes passed (artifacts: `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-HihcHr`, `NFrb2x`, `B67POC`).
+- `node scripts/native-branding.mjs`: passed (artifacts: `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-SwWWDV`).
+
+Reviewed visual QA artifacts:
+- `plans/assets/11-browser-script-review/paper-static-1024.png` (Static CSS/XPath mode on Paper theme, 1024px)
+- `plans/assets/11-browser-script-review/obsidian-static-1024.png` (Static CSS/XPath mode on Obsidian theme, 1024px)
+- `plans/assets/11-browser-script-review/paper-browser-1024.png` (Headless Browser CDP mode on Paper theme, 1024px)
+- `plans/assets/11-browser-script-review/obsidian-browser-1024.png` (Headless Browser CDP mode on Obsidian theme, 1024px)
+- `plans/assets/11-browser-script-review/paper-script-1024.png` (Custom Script Stdin/NDJSON mode on Paper theme, 1024px)
+- `plans/assets/11-browser-script-review/obsidian-script-1024.png` (Custom Script Stdin/NDJSON mode on Obsidian theme, 1024px)
+- `plans/assets/11-browser-script-review/paper-script-480.png` (Custom Script Stdin/NDJSON mode on Paper theme, 480px narrow viewport)
+- `plans/assets/11-browser-script-review/obsidian-script-480.png` (Custom Script Stdin/NDJSON mode on Obsidian theme, 480px narrow viewport)
+
+Explicit boundaries and unperformed checks:
+No user database or application storage was opened or mutated. No physical pointer or IME verification, native OS file chooser interaction, 200% zoom overflow QA, or unrecorded live company crawl was performed in this checkpoint. Section 6 is fully implemented and accepted. Next: Section 7 (Provider/company verification).

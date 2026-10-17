@@ -4,7 +4,7 @@
 **Parent Specification:** [Reliable ingestion, multi-source workflows, and UI repair](11-reliable-ingestion-and-ui-repair.md#6-browser-and-script-extraction)  
 **Prerequisite State:** Sections 1–5 and Incident 27 (Migrations 0001–0025) implemented and verified on branch `implementation/trustworthy-scraping`.
 
-**Implementation status:** Phase 6A static extraction is implemented: shared
+**Implementation status:** Fully implemented and verified across Phases 6A–6F. Phase 6A static extraction is implemented: shared
 CSS/XPath fields/regexes, explicit hydration JSON, resumable pagination, bounded
 detail enrichment, readiness and preserved identity/branding. Protocol v7
 termination/limits were pulled forward from 6B to report/enforce 6A coverage
@@ -22,7 +22,8 @@ and the explicit trust gate. Phase 6E adds the Workflow Editor custom extraction
 (`CustomExtractorConfig`), mode switching, CSS/XPath locators, `test_extractor` preview,
 browser runtime detection, isolated browser session controls (`Open`/`Save`/`Clear`),
 script environment checks, truthful privilege disclosure, and the explicit trust gate.
-Phase 6F native/visual QA and end-to-end acceptance remain open. See [implementation evidence](11-implementation-evidence.md#section-6e--workflow-editor-custom-extraction-browser-sessions-and-script-trust).
+Phase 6F completes visual QA across themes/viewports, Playwright e2e tests, full worker-to-SQLite
+persistence test matrix, and native WKWebView harnesses. Section 6 is complete. Next: Section 7 (Provider/company verification). See [implementation evidence](11-implementation-evidence.md#section-6f--native-and-visual-qa-and-end-to-end-acceptance).
 
 ---
 
