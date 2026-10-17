@@ -172,6 +172,113 @@ pub fn limits(config: &Value) -> Result<crate::WorkerLimits, String> {
     Ok(limits)
 }
 
+pub const SCRIPT_PROTOCOL_VERSION: u32 = 1;
+
+/// Input frame written to script stdin as a single-line JSON payload before EOF.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ScriptInputFrame {
+    pub version: u32,
+    pub source_id: String,
+    pub url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuation: Option<String>,
+    pub max_candidates: u32,
+    pub timeout_ms: u64,
+    #[serde(default)]
+    pub config: serde_json::Value,
+}
+
+/// Output frames emitted by script stdout as NDJSON lines.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ScriptOutputFrame {
+    Candidate {
+        version: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        external_id: Option<String>,
+        title: String,
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        location: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        salary: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        description: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        date_posted: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        company: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        employer_logo_url: Option<String>,
+    },
+    Continuation {
+        version: u32,
+        cursor: String,
+    },
+    Diagnostic {
+        version: u32,
+        level: String,
+        message: String,
+    },
+    Complete {
+        version: u32,
+        #[serde(default)]
+        exhausted: bool,
+    },
+}
+
+impl ScriptOutputFrame {
+    pub fn version(&self) -> u32 {
+        match self {
+            Self::Candidate { version, .. }
+            | Self::Continuation { version, .. }
+            | Self::Diagnostic { version, .. }
+            | Self::Complete { version, .. } => *version,
+        }
+    }
+}
+
+/// Runtime environment status for a script interpreter.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct ScriptEnvironmentStatus {
+    pub available: bool,
+    pub runtime: ScriptRuntime,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub executable_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub missing_modules: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub message: Option<String>,
+}
+
+/// Bounded redacted stderr (max 16 KiB) with sensitive patterns masked.
+pub fn redact_script_stderr(bytes: &[u8]) -> String {
+    let truncated = bytes.len() > 16_384;
+    let slice = if truncated { &bytes[..16_384] } else { bytes };
+    let text = String::from_utf8_lossy(slice);
+    static SENSITIVE_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = SENSITIVE_RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)\b(authorization|cookie|bearer|token|api[_-]?key|secret|password)\s*(?:[:=]|\s)\s*(?:bearer\s+)?\S+",
+        )
+        .unwrap()
+    });
+    let redacted = re.replace_all(&text, "${1}=[REDACTED]");
+    if truncated {
+        format!("{redacted} [stderr truncated to 16 KiB]")
+    } else {
+        redacted.into_owned()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,5 +313,59 @@ mod tests {
             );
         }
         assert!(super::script(&serde_json::json!({"mode":"script"})).is_err());
+    }
+
+    #[test]
+    fn redact_script_stderr_masks_secrets_and_truncates_at_16kib() {
+        let raw = b"Error: Cookie: session=supersecret123\nAuthorization: Bearer mytoken456\napi_key: secret789\npassword=mypassword\nNormal log message";
+        let redacted = redact_script_stderr(raw);
+        assert!(!redacted.contains("supersecret123"));
+        assert!(!redacted.contains("mytoken456"));
+        assert!(!redacted.contains("secret789"));
+        assert!(!redacted.contains("mypassword"));
+        assert!(redacted.contains("Cookie=[REDACTED]"));
+        assert!(redacted.contains("Authorization=[REDACTED]"));
+        assert!(redacted.contains("api_key=[REDACTED]"));
+        assert!(redacted.contains("password=[REDACTED]"));
+        assert!(redacted.contains("Normal log message"));
+
+        let large = vec![b'x'; 20_000];
+        let redacted_large = redact_script_stderr(&large);
+        assert!(redacted_large.contains("[stderr truncated to 16 KiB]"));
+        assert!(redacted_large.starts_with(&"x".repeat(16_384)));
+    }
+
+    #[test]
+    fn script_frames_serialize_and_deserialize_ndjson() {
+        let frame = ScriptOutputFrame::Candidate {
+            version: 1,
+            external_id: Some("id-1".into()),
+            title: "Engineer".into(),
+            url: "https://fixture.test/job/1".into(),
+            location: Some("Remote".into()),
+            salary: Some("$150k".into()),
+            description: Some("<p>Desc</p>".into()),
+            date_posted: Some("2026-10-17".into()),
+            company: Some("Corp".into()),
+            employer_logo_url: None,
+        };
+        let serialized = serde_json::to_string(&frame).unwrap();
+        assert!(serialized.contains(r#""type":"candidate""#));
+        let deserialized: ScriptOutputFrame = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(frame, deserialized);
+        assert_eq!(deserialized.version(), 1);
+
+        let cont = ScriptOutputFrame::Continuation {
+            version: 1,
+            cursor: "page=2".into(),
+        };
+        let cont_str = serde_json::to_string(&cont).unwrap();
+        assert!(cont_str.contains(r#""type":"continuation""#));
+        let complete = ScriptOutputFrame::Complete {
+            version: 1,
+            exhausted: true,
+        };
+        let comp_str = serde_json::to_string(&complete).unwrap();
+        assert!(comp_str.contains(r#""type":"complete""#));
     }
 }

@@ -14,9 +14,12 @@ browser/test contracts and persisted local script trust/import quarantine. Phase
 immediate tab/context teardown, resource/tracker blocking, pre-document stealth,
 `wait_for`/`load_more`/`next_page` traversal, domain-scoped session cookies, and
 `NeedsLogin` termination) plus isolated host browser session lifecycle commands
-(`Open`/`Save`/`Clear`) and `test_extractor`. Phases 6D–6F remain open; the custom
-script runner and Workflow Editor extraction/session/trust controls are unavailable.
-See [implementation evidence](11-implementation-evidence.md#section-6c--direct-rust-cdp-browser-engine-and-isolated-sessions).
+(`Open`/`Save`/`Clear`) and `test_extractor`. Phase 6D adds the versioned stdin/NDJSON
+script runner (`SCRIPT_PROTOCOL_VERSION = 1`) with structured `argv`, process-group
+isolation (`process_group(0)` + `kill_on_drop(true)`), 16 KiB secret-redacted stderr,
+round-robin coordinator integration, environment diagnostics (`check_script_environment`),
+and the explicit trust gate. Phases 6E–6F remain open; Workflow Editor extraction/session/trust
+controls are unavailable. See [implementation evidence](11-implementation-evidence.md#section-6d--versioned-stdinndjson-script-extraction-engine-and-trust-gate).
 
 ---
 

@@ -1592,3 +1592,287 @@ async fn browser_cdp_extraction_and_session_persistence_survive_repository_inges
     let _ = ws_server.join();
     pool.close().await;
 }
+
+#[tokio::test]
+async fn script_extraction_trust_gate_and_sqlite_persistence() {
+    let directory = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&directory.path().join("jobs.db"))
+        .await
+        .unwrap();
+
+    // 1. Setup loopback HTTP server for Source 1 (Static selector)
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let http_server = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut served_page = false;
+        while !served_page && Instant::now() < deadline {
+            if let Ok((mut stream, _)) = listener.accept() {
+                stream.set_nonblocking(false).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                let mut buffer = [0; 4096];
+                if let Ok(n) = stream.read(&mut buffer) {
+                    let request = String::from_utf8_lossy(&buffer[..n]);
+                    let body = if request.starts_with("GET /robots.txt ") {
+                        "User-agent: *\nAllow: /\n"
+                    } else {
+                        served_page = true;
+                        r#"<!DOCTYPE html><html><body>
+                            <article data-id="static-1">
+                                <h2>Platform Engineer</h2>
+                                <a href="/jobs/platform">Apply</a>
+                                <span class="location">Remote</span>
+                                <span class="salary">$150,000</span>
+                                <div class="desc"><p>Platform infra role</p></div>
+                            </article>
+                        </body></html>"#
+                    };
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    let _ = stream.write_all(response.as_bytes());
+                }
+            } else {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+    });
+
+    let script_code = r#"
+const fs = require('fs');
+const input = JSON.parse(fs.readFileSync(0, 'utf-8'));
+
+if (!input.continuation) {
+    // Turn 1: 1 matching job + continuation
+    console.log(JSON.stringify({
+        type: 'candidate',
+        version: 1,
+        external_id: 'script-1',
+        title: 'Senior Backend Engineer',
+        url: 'https://fixture.test/jobs/backend',
+        location: 'Remote',
+        salary_text: '$180,000',
+        description: '<p>Backend microservices</p>',
+        date_posted: '2026-10-15',
+        company: 'Dynamic Systems',
+        employer_logo_url: null
+    }));
+    console.log(JSON.stringify({
+        type: 'continuation',
+        version: 1,
+        cursor: 'page=2'
+    }));
+    console.log(JSON.stringify({
+        type: 'complete',
+        version: 1,
+        exhausted: false
+    }));
+} else {
+    // Turn 2: 1 job that will be rejected by filter "Engineer" (Marketing Associate)
+    console.log(JSON.stringify({
+        type: 'candidate',
+        version: 1,
+        external_id: 'script-2',
+        title: 'Junior Marketing Associate',
+        url: 'https://fixture.test/jobs/marketing',
+        location: 'New York, NY',
+        salary_text: '$70,000',
+        description: '<p>Growth marketing</p>',
+        date_posted: '2026-10-16',
+        company: 'Dynamic Systems',
+        employer_logo_url: null
+    }));
+    console.log(JSON.stringify({
+        type: 'complete',
+        version: 1,
+        exhausted: true
+    }));
+}
+"#;
+
+    // 2. Validate and import multi-source workflow spec
+    let spec_json = serde_json::json!({
+        "version": 6,
+        "metadata": {
+            "name": "Fair Budgeting Multi-Source Spec",
+            "company": "Acme Group"
+        },
+        "sources": [
+            {
+                "id": "src-static",
+                "label": "Static Jobs",
+                "enabled": true,
+                "extractor": {
+                    "kind": "selector",
+                    "url": format!("http://{addr}/jobs"),
+                    "job_container": "article",
+                    "title_selector": "h2",
+                    "url_selector": "a"
+                }
+            },
+            {
+                "id": "src-script",
+                "label": "Script Jobs",
+                "enabled": true,
+                "extractor": {
+                    "kind": "script",
+                    "url": "https://fixture.test/jobs",
+                    "script": {
+                        "runtime": "js",
+                        "code": script_code
+                    }
+                }
+            }
+        ],
+        "filters": {
+            "include_keywords": ["Engineer"]
+        }
+    });
+
+    let spec = scrape_lib::services::workflow::validate(spec_json, "UTC").unwrap();
+    let quarantined = scrape_lib::services::script_trust::quarantine_import(spec.clone()).unwrap();
+    let parent = scrape_lib::services::workflow::persist(&pool, quarantined, None, true, "UTC")
+        .await
+        .unwrap();
+
+    // Verify imported workflow starts disabled and needs review
+    assert!(parent.needs_review);
+    assert!(!parent.enabled);
+
+    let script_child = SourcesRepo::get(&pool, "src-script").await.unwrap();
+    assert!(!script_child.script_trusted);
+    assert!(script_child.needs_review);
+    assert!(!script_child.enabled);
+
+    let static_child = SourcesRepo::get(&pool, &parent.id).await.unwrap();
+
+    let inputs = scrape_lib::services::workflow::workflow_source_inputs(&spec, "UTC").unwrap();
+    let worker_static_src = WorkerSource {
+        id: static_child.id.clone(),
+        kind: inputs[0].kind,
+        name: static_child.name.clone(),
+        identifier: inputs[0].identifier.clone(),
+        config: inputs[0].config.clone().unwrap(),
+    };
+    let worker_script_src = WorkerSource {
+        id: script_child.id.clone(),
+        kind: inputs[1].kind,
+        name: script_child.name.clone(),
+        identifier: inputs[1].identifier.clone(),
+        config: inputs[1].config.clone().unwrap(),
+    };
+
+    // 3. Attempting to execute before trusting fails explicitly
+    assert!(scrape_lib::services::script_trust::validate_execution(
+        &pool,
+        &[worker_static_src.clone(), worker_script_src.clone()]
+    )
+    .await
+    .unwrap_err()
+    .to_string()
+    .contains("untrusted"));
+
+    // 4. Explicitly trust the script
+    let hash = script_child.script_sha256.as_deref().unwrap();
+    let trusted_child =
+        scrape_lib::services::script_trust::trust(&pool, &script_child.id, hash, true)
+            .await
+            .unwrap();
+    assert!(trusted_child.script_trusted);
+    assert!(!trusted_child.needs_review);
+
+    // After trusting, validation passes
+    scrape_lib::services::script_trust::validate_execution(
+        &pool,
+        &[worker_static_src.clone(), worker_script_src.clone()],
+    )
+    .await
+    .unwrap();
+
+    // 5. Run multi-source fair budgeting execution through packaged sidecar
+    let config = WorkerConfig {
+        version: PROTOCOL_VERSION,
+        sources: vec![worker_static_src.clone(), worker_script_src.clone()],
+        filters: WorkerFilters {
+            include_keywords: vec!["Engineer".into()],
+            ..Default::default()
+        },
+        limits: WorkerLimits {
+            per_host_delay_ms: 0,
+            request_timeout_s: 3,
+            navigation_timeout_s: 5,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let events = invoke(&config, false);
+
+    // Collect matched jobs
+    let jobs: Vec<_> = events
+        .into_iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .map(|e| scraped_job_from_event(e).unwrap())
+        .collect();
+
+    // Exactly 2 jobs matched "Engineer" (1 from static source, 1 from script source)
+    assert_eq!(jobs.len(), 2, "Expected 2 jobs, got: {jobs:?}");
+    let titles: Vec<_> = jobs.iter().map(|j| j.title.as_str()).collect();
+    assert!(
+        titles.contains(&"Platform Engineer"),
+        "Missing Platform Engineer in {titles:?}"
+    );
+    assert!(
+        titles.contains(&"Senior Backend Engineer"),
+        "Missing Senior Backend Engineer in {titles:?}"
+    );
+    // Verify Marketing Associate was rejected by filter and not emitted as Job
+    assert!(!titles.contains(&"Junior Marketing Associate"));
+
+    // Persist to SQLite
+    let stats = JobsRepo::upsert_scraped(&pool, &jobs).await.unwrap();
+    assert_eq!(stats.inserted, 2);
+
+    let saved = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+    assert_eq!(saved.total, 2);
+
+    // 6. Editing script code invalidates trust
+    let mut edited_config = script_child.config.clone();
+    edited_config["script"]["code"] = "console.log('tampered')".into();
+    let edited = SourcesRepo::update(
+        &pool,
+        scrape_lib::db::sources::UpdateSourceInput {
+            id: script_child.id.clone(),
+            identifier: None,
+            name: None,
+            config: Some(edited_config),
+            enabled: Some(true),
+            cadence: None,
+            cadence_cron: None,
+            retention_days: None,
+            retention_policy: None,
+            filters: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert!(!edited.script_trusted);
+    assert!(edited.needs_review);
+    assert!(!edited.enabled);
+
+    assert!(scrape_lib::services::script_trust::require_trusted(
+        &pool,
+        &script_child.id,
+        &edited.config
+    )
+    .await
+    .is_err());
+
+    let _ = http_server.join();
+    pool.close().await;
+}

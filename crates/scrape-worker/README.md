@@ -43,19 +43,23 @@ scrape-worker/
 ├── Cargo.toml      # Sidecar dependencies (reqwest, scraper, tokio, clap, etc.)
 ├── src/            # Core worker modules and binary entry point
 │   ├── adapters/   # Target-specific parsers (Greenhouse, Lever, Ashby, JSON-LD, Selector)
+│   ├── browser/    # Direct Rust CDP browser engine (stealth, blocking, pagination)
 │   ├── client.rs   # Rate-limited HTTP client with robots.txt enforcement
 │   ├── coordinator.rs # Multi-source round-robin coordinator and fair budget manager
 │   ├── detect.rs   # ATS auto-detection from arbitrary URLs
 │   ├── filter.rs   # Worker-side job pre-filtering
 │   ├── lib.rs      # Library exports for testing and integration
-│   └── main.rs     # CLI binary entry point (stdin/stdout NDJSON loop)
+│   ├── main.rs     # CLI binary entry point (stdin/stdout NDJSON loop)
+│   └── script_runner.rs # Versioned stdin/NDJSON script subprocess runner
 └── tests/          # Integration tests and ATS fixture responses
-    ├── adapter_tests.rs    # Offline adapter and auto-detection verification
-    ├── branding_process.rs # Subprocess tests for employer branding evidence & decoding
-    ├── coordinator_tests.rs # Multi-source round-robin ingestion & budget tests
-    ├── limit_process.rs    # Subprocess tests for bounded ingestion & detail enrichment
-    ├── worker_process.rs   # Subprocess protocol, diagnostics & error handling tests
-    └── fixtures/           # Mock payloads and branding fixtures from real ATS platforms
+    ├── adapter_tests.rs       # Offline adapter and auto-detection verification
+    ├── branding_process.rs    # Subprocess tests for employer branding evidence & decoding
+    ├── browser_cdp_process.rs # Subprocess tests for direct Rust CDP browser engine
+    ├── coordinator_tests.rs   # Multi-source round-robin ingestion & budget tests
+    ├── limit_process.rs       # Subprocess tests for bounded ingestion & detail enrichment
+    ├── script_runner_process.rs # Subprocess tests for versioned stdin/NDJSON script runner
+    ├── worker_process.rs      # Subprocess protocol, diagnostics & error handling tests
+    └── fixtures/              # Mock payloads and branding fixtures from real ATS platforms
 ```
 
 ---

@@ -383,12 +383,12 @@ fn extract_candidates(
     Ok(())
 }
 
-struct UrlPatterns {
+pub(crate) struct UrlPatterns {
     include: Vec<regex::Regex>,
     exclude: Vec<regex::Regex>,
 }
 impl UrlPatterns {
-    fn parse(config: &serde_json::Value) -> Result<Self, ClientError> {
+    pub(crate) fn parse(config: &serde_json::Value) -> Result<Self, ClientError> {
         let mut include = Vec::new();
         let compile = |value: &serde_json::Value| {
             let text = value
@@ -422,7 +422,7 @@ impl UrlPatterns {
             exclude: array("exclude_url_patterns")?,
         })
     }
-    fn matches(&self, url: &str) -> bool {
+    pub(crate) fn matches(&self, url: &str) -> bool {
         (self.include.is_empty() || self.include.iter().any(|p| p.is_match(url)))
             && !self.exclude.iter().any(|p| p.is_match(url))
     }

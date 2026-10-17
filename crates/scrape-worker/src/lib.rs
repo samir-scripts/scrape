@@ -4,6 +4,7 @@ pub mod client;
 pub mod coordinator;
 pub mod detect;
 pub mod filter;
+pub mod script_runner;
 
 pub use client::{ClientError, HttpClient};
 pub use coordinator::{CoordinatorSession, SourceCoordinator};

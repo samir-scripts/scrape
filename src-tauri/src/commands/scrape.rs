@@ -908,3 +908,10 @@ pub async fn test_extractor(
         termination,
     })
 }
+
+#[tauri::command]
+pub async fn check_script_environment(
+    script: scrape_core::extraction::WorkflowScriptConfig,
+) -> Result<scrape_core::extraction::ScriptEnvironmentStatus> {
+    crate::services::script_trust::check_script_environment(&script)
+}

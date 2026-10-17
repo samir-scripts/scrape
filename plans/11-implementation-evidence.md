@@ -672,3 +672,89 @@ benchmark was performed in this checkpoint. Tier 3 custom script execution
 (Phase 6D), Workflow Editor UI controls for extraction modes/sessions/trust
 (Phase 6E), and Section 6 end-to-end acceptance (Phase 6F), along with earlier
 missing-report reproduction and Sections 7–8, remain open.
+
+## Section 6D — Versioned Stdin/NDJSON Script Extraction Engine and Trust Gate
+
+Implemented Phase 6D of Section 6 (Tier 3: Versioned Stdin/NDJSON Script Runner
+& Trust Gate). Phase 6D is complete; Workflow Editor UI controls for extraction
+modes/sessions/trust (Phase 6E) and native visual journeys / acceptance (Phase 6F)
+remain open.
+
+- `crates/scrape-core/src/extraction.rs` defines the authoritative Tier 3
+  protocol types (`SCRIPT_PROTOCOL_VERSION = 1`, `ScriptInputFrame`,
+  `ScriptOutputFrame`, `ScriptCandidateFrame`, `ScriptContinuationFrame`,
+  `ScriptDiagnosticFrame`, `ScriptCompleteFrame`, `ScriptEnvironmentStatus`),
+  as well as `redact_script_stderr` which redacts sensitive authorization,
+  cookie, token, secret, and password patterns and truncates output at 16 KiB.
+- `crates/scrape-worker/src/script_runner.rs` implements the versioned
+  stdin/NDJSON script engine:
+  - Executes scripts via structured `argv` using `tokio::process::Command` with
+    `kill_on_drop(true)` and process-group isolation (`process_group(0)` on Unix);
+    never invoking shell wrappers (`sh -c`, `bash -c`, `cmd.exe`).
+  - Serializes single-turn `ScriptInputFrame` with strict limits (`max_candidates`,
+    `timeout_ms`, `continuation`, `config`), parses streaming NDJSON frames from
+    `stdout`, buffers diagnostics, and requires an explicit `complete` frame.
+  - Enforces process-tree reaping via `kill_script_child` on timeouts, errors,
+    or drop.
+  - Extracts candidate fields into raw `WorkerEvent::Job` events with candidate
+    evidence, which are subsequently validated, regex-transformed, assigned
+    canonical `PostingIdentity`, and evaluated by `MatchingEvaluator` in
+    `coordinator.rs` identically to native adapters.
+- `crates/scrape-worker/src/coordinator.rs` integrates script sessions into the
+  multi-source fair round-robin loop:
+  - Handles `ExtractionMode::Script` alongside native and selector sources.
+  - Maintains source continuation state across rounds.
+  - Propagates all worker errors non-silently to prevent unhandled drops.
+- `src-tauri/src/services/script_trust.rs` adds `check_script_environment`
+  which inspects the host runtime (Node.js version, Python interpreter with
+  optional module checks via `importlib.util.find_spec`, or custom executables)
+  via structured commands, and updates `validate_execution` to enforce explicit
+  script trust and content hash verification before launching worker subprocesses.
+- `src-tauri/src/commands/scrape.rs` and `src-tauri/src/lib.rs` expose and
+  register the `check_script_environment` Tauri IPC command.
+- `src/lib/api.ts` adds the `checkScriptEnvironment` client method with
+  demo/recorded fallback.
+- `src/bindings/ScriptEnvironmentStatus.ts` generated via `npm run gen:types`.
+- `crates/scrape-worker/tests/script_runner_process.rs` adds 4 process-level
+  integration tests:
+  - `script_multi_turn_continuation_streams_and_matches_candidates`
+  - `script_protocol_violations_fail_explicitly`
+  - `script_subprocess_failure_with_redacted_stderr_and_truncation`
+  - `script_timeout_kills_child_process_tree`
+- `src-tauri/tests/worker_repository.rs` adds `script_extraction_trust_gate_and_sqlite_persistence`
+  verifying the end-to-end packaged worker sidecar execution: imported script
+  quarantine, explicit trust requirement, multi-source round-robin candidate
+  extraction, filter rejection, SQLite persistence, and in-place script
+  modification trust invalidation.
+
+Verification actually run in this workspace:
+
+- `npm run build:sidecar`: passed (built release `scrape-worker-aarch64-apple-darwin`
+  in 2.11s).
+- `cargo test --workspace`: **424 passed** (166 host unit/migration, 11 packaged
+  worker/repository, 168 core, 31 worker unit, 8 adapter, 5 branding-process,
+  3 browser-cdp-process, 6 coordinator, 17 limits-process, 4 script-runner-process,
+  7 worker-process; 0 failed).
+- `cargo fmt --all --check` and
+  `cargo clippy --workspace --all-targets -- -D warnings`: passed with 0 warnings.
+- `npm run gen:types` and `git diff --exit-code src/bindings`: passed with zero drift
+  after generating `ScriptEnvironmentStatus.ts`.
+- `npx vitest run --maxWorkers=1`: **464 passed / 77 files**.
+- `npx tsc --noEmit`, `npm run build`, `node scripts/check-style.mjs`,
+  `node scripts/test-app-startup.mjs`, and `git diff --check`: passed.
+- `npm run test:providers`: **2/2 recorded HTTP → worker replays passed**
+  (SEP/Lever: 8 fetched, 8 verified, 0 errors; Linear/Ashby: 31 fetched,
+  31 verified, 0 errors).
+- `cargo build -p scrape && npm run test:native`: passed (native smoke passed;
+  isolated artifacts: `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-oA7CvK`).
+- `SCRAPE_STARTUP_MODES=fresh,current19,unknown19 npm run test:native-startup`:
+  passed (all 3 modes passed; isolated artifacts:
+  `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-C7LoSg`,
+  `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-ZmAhL9`,
+  `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-OzV7XZ`).
+
+No user database/application storage was opened or migrated. No native WKWebView
+UI harness for script editing, physical pointer/IME check, or live provider crawl
+was performed in this checkpoint. Workflow Editor UI controls for extraction
+modes/sessions/trust (Phase 6E), and Section 6 end-to-end acceptance (Phase 6F),
+along with earlier missing-report reproduction and Sections 7–8, remain open.

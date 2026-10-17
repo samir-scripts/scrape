@@ -22,6 +22,10 @@ mod role;
 pub mod static_source;
 mod types;
 
+pub use extraction::{
+    ExtractionMode, ScriptEnvironmentStatus, ScriptInputFrame, ScriptOutputFrame, ScriptRuntime,
+    WorkflowScriptConfig, SCRIPT_PROTOCOL_VERSION,
+};
 pub use filter::{FilterExpr, FilterField, FilterOp, JobFilterContext};
 pub use protocol::{
     BrowserRuntimeStatus, BrowserSessionStatus, BrowserSessionSummary, ExtractorSampleCandidate,

@@ -1,6 +1,6 @@
 //! Local execution trust is database state, never authority carried by YAML.
 use crate::error::{AppError, Result};
-use scrape_core::extraction::WorkflowScriptConfig;
+use scrape_core::extraction::{ScriptEnvironmentStatus, ScriptRuntime, WorkflowScriptConfig};
 use serde_json::Value;
 use sqlx::SqlitePool;
 use std::io::Read;
@@ -173,13 +173,237 @@ pub async fn validate_execution(
                 }
             }
             scrape_core::extraction::ExtractionMode::Script => {
-                return Err(AppError::Validation(
-                    "Script extraction is configured but its runner is not installed in this application build. Custom script execution follows in Phase 6D.".into(),
-                ));
+                let script_cfg = script(&source.config)?
+                    .ok_or_else(|| AppError::Validation("Missing script configuration".into()))?;
+                let env = check_script_environment(&script_cfg)?;
+                if !env.available {
+                    return Err(AppError::Validation(format!(
+                        "Script source '{}' cannot run: {}",
+                        source.id,
+                        env.message
+                            .unwrap_or_else(|| "Script runtime unavailable".into())
+                    )));
+                }
             }
         }
     }
     Ok(())
+}
+
+fn resolve_executable_path(name: &str) -> Option<String> {
+    if name.contains('/') || name.contains('\\') {
+        let path = std::path::Path::new(name);
+        if path.exists() {
+            return Some(path.to_string_lossy().to_string());
+        }
+    }
+    if let Some(path_var) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                return Some(candidate.to_string_lossy().to_string());
+            }
+        }
+    }
+    None
+}
+
+pub fn check_script_environment(script: &WorkflowScriptConfig) -> Result<ScriptEnvironmentStatus> {
+    match script.runtime {
+        ScriptRuntime::Js => {
+            let binary = script.interpreter.as_deref().unwrap_or("node");
+            let output = std::process::Command::new(binary).arg("--version").output();
+            match output {
+                Ok(out) if out.status.success() => {
+                    let version_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    let exec_path =
+                        resolve_executable_path(binary).or_else(|| Some(binary.to_string()));
+                    Ok(ScriptEnvironmentStatus {
+                        available: true,
+                        runtime: ScriptRuntime::Js,
+                        executable_path: exec_path,
+                        version: Some(version_str),
+                        missing_modules: Vec::new(),
+                        message: None,
+                    })
+                }
+                Ok(out) => {
+                    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                    Ok(ScriptEnvironmentStatus {
+                        available: false,
+                        runtime: ScriptRuntime::Js,
+                        executable_path: Some(binary.to_string()),
+                        version: None,
+                        missing_modules: Vec::new(),
+                        message: Some(format!(
+                            "Node.js check failed with exit code {:?}: {err}",
+                            out.status.code()
+                        )),
+                    })
+                }
+                Err(e) => Ok(ScriptEnvironmentStatus {
+                    available: false,
+                    runtime: ScriptRuntime::Js,
+                    executable_path: Some(binary.to_string()),
+                    version: None,
+                    missing_modules: Vec::new(),
+                    message: Some(format!("Node.js runtime not found or not executable: {e}")),
+                }),
+            }
+        }
+        ScriptRuntime::Python => {
+            let Some(binary) = &script.interpreter else {
+                return Ok(ScriptEnvironmentStatus {
+                    available: false,
+                    runtime: ScriptRuntime::Python,
+                    executable_path: None,
+                    version: None,
+                    missing_modules: Vec::new(),
+                    message: Some(
+                        "Python runtime requires an explicit interpreter path (e.g. /usr/bin/python3 or .venv/bin/python3)".into(),
+                    ),
+                });
+            };
+            let output = std::process::Command::new(binary).arg("--version").output();
+            match output {
+                Ok(out) if out.status.success() => {
+                    let mut version_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    if version_str.is_empty() {
+                        version_str = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                    }
+
+                    // Extract imported modules
+                    let mut required_modules = Vec::new();
+                    let script_content = if let Some(code) = &script.code {
+                        Some(code.clone())
+                    } else if let Some(path) = &script.path {
+                        std::fs::read_to_string(path).ok()
+                    } else {
+                        None
+                    };
+
+                    if let Some(content) = script_content {
+                        for line in content.lines() {
+                            let trimmed = line.trim();
+                            if let Some(rest) = trimmed.strip_prefix("import ") {
+                                for part in rest.split(',') {
+                                    if let Some(mod_name) = part.split_whitespace().next() {
+                                        let root = mod_name.split('.').next().unwrap_or(mod_name);
+                                        if !required_modules.contains(&root.to_string()) {
+                                            required_modules.push(root.to_string());
+                                        }
+                                    }
+                                }
+                            } else if let Some(rest) = trimmed.strip_prefix("from ") {
+                                if let Some(mod_name) = rest.split_whitespace().next() {
+                                    let root = mod_name.split('.').next().unwrap_or(mod_name);
+                                    if !required_modules.contains(&root.to_string()) {
+                                        required_modules.push(root.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    let mut missing_modules = Vec::new();
+                    if !required_modules.is_empty() {
+                        let probe_code = format!(
+                            "import importlib.util\nfor m in {:?}:\n    if importlib.util.find_spec(m) is None:\n        print(m)",
+                            required_modules
+                        );
+                        if let Ok(probe_out) = std::process::Command::new(binary)
+                            .args(["-c", &probe_code])
+                            .output()
+                        {
+                            if probe_out.status.success() {
+                                for line in String::from_utf8_lossy(&probe_out.stdout).lines() {
+                                    let trimmed = line.trim();
+                                    if !trimmed.is_empty() {
+                                        missing_modules.push(trimmed.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    let available = missing_modules.is_empty();
+                    let message = if !available {
+                        Some(format!(
+                            "Missing required Python modules: {}",
+                            missing_modules.join(", ")
+                        ))
+                    } else {
+                        None
+                    };
+
+                    let exec_path =
+                        resolve_executable_path(binary).or_else(|| Some(binary.clone()));
+                    Ok(ScriptEnvironmentStatus {
+                        available,
+                        runtime: ScriptRuntime::Python,
+                        executable_path: exec_path,
+                        version: Some(version_str),
+                        missing_modules,
+                        message,
+                    })
+                }
+                Ok(out) => {
+                    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                    Ok(ScriptEnvironmentStatus {
+                        available: false,
+                        runtime: ScriptRuntime::Python,
+                        executable_path: Some(binary.clone()),
+                        version: None,
+                        missing_modules: Vec::new(),
+                        message: Some(format!(
+                            "Python interpreter check failed with exit code {:?}: {err}",
+                            out.status.code()
+                        )),
+                    })
+                }
+                Err(e) => Ok(ScriptEnvironmentStatus {
+                    available: false,
+                    runtime: ScriptRuntime::Python,
+                    executable_path: Some(binary.clone()),
+                    version: None,
+                    missing_modules: Vec::new(),
+                    message: Some(format!(
+                        "Python interpreter not found or not executable: {e}"
+                    )),
+                }),
+            }
+        }
+        ScriptRuntime::Custom => {
+            let Some(binary) = &script.interpreter else {
+                return Ok(ScriptEnvironmentStatus {
+                    available: false,
+                    runtime: ScriptRuntime::Custom,
+                    executable_path: None,
+                    version: None,
+                    missing_modules: Vec::new(),
+                    message: Some("Custom runtime requires an explicit executable path".into()),
+                });
+            };
+            if !std::path::Path::new(binary).exists() {
+                return Ok(ScriptEnvironmentStatus {
+                    available: false,
+                    runtime: ScriptRuntime::Custom,
+                    executable_path: Some(binary.clone()),
+                    version: None,
+                    missing_modules: Vec::new(),
+                    message: Some(format!("Custom executable does not exist at '{binary}'")),
+                });
+            }
+            Ok(ScriptEnvironmentStatus {
+                available: true,
+                runtime: ScriptRuntime::Custom,
+                executable_path: Some(binary.clone()),
+                version: None,
+                missing_modules: Vec::new(),
+                message: None,
+            })
+        }
+    }
 }
 
 /// Aggregate review state without enabling anything as a side effect of trust.
@@ -253,12 +477,38 @@ mod tests {
         require_trusted(&pool, &source.id, &source.config)
             .await
             .unwrap();
+        validate_execution(&pool, std::slice::from_ref(&worker_source))
+            .await
+            .unwrap();
+        let mut broken_input = input("broken");
+        broken_input.identifier = "https://fixture.test/broken-jobs".into();
+        broken_input.config.as_mut().unwrap()["script"] = serde_json::json!({
+            "runtime": "js",
+            "interpreter": "/nonexistent/node_binary",
+            "code": "console.log('broken')"
+        });
+        let broken_src = SourcesRepo::create(&pool, broken_input).await.unwrap();
+        trust(
+            &pool,
+            &broken_src.id,
+            broken_src.script_sha256.as_deref().unwrap(),
+            true,
+        )
+        .await
+        .unwrap();
+        let broken_worker = scrape_core::WorkerSource {
+            id: broken_src.id.clone(),
+            kind: broken_src.kind,
+            name: broken_src.name.clone(),
+            identifier: broken_src.identifier.clone(),
+            config: broken_src.config.clone(),
+        };
         assert!(
-            validate_execution(&pool, std::slice::from_ref(&worker_source))
+            validate_execution(&pool, std::slice::from_ref(&broken_worker))
                 .await
                 .unwrap_err()
                 .to_string()
-                .contains("runner is not installed")
+                .contains("cannot run")
         );
         worker_source.config = serde_json::json!({
             "mode":"browser",
@@ -443,5 +693,60 @@ mod tests {
         .await
         .is_err());
         pool.close().await;
+    }
+
+    #[test]
+    fn check_script_environment_reports_expected_diagnostics() {
+        // Node / JS
+        let js_config: WorkflowScriptConfig = serde_json::from_value(serde_json::json!({
+            "runtime": "js",
+            "code": "console.log('test')"
+        }))
+        .unwrap();
+        let js_status = check_script_environment(&js_config).unwrap();
+        // If node is installed, it is available
+        if js_status.available {
+            assert!(js_status.executable_path.is_some());
+            assert!(js_status.version.is_some());
+            assert!(js_status.missing_modules.is_empty());
+        }
+
+        // Python without interpreter path
+        let py_no_interp: WorkflowScriptConfig = serde_json::from_value(serde_json::json!({
+            "runtime": "python",
+            "code": "print('test')"
+        }))
+        .unwrap();
+        let py_no_status = check_script_environment(&py_no_interp).unwrap();
+        assert!(!py_no_status.available);
+        assert!(py_no_status
+            .message
+            .unwrap()
+            .contains("requires an explicit interpreter path"));
+
+        // Python with non-existent interpreter path
+        let py_invalid: WorkflowScriptConfig = serde_json::from_value(serde_json::json!({
+            "runtime": "python",
+            "interpreter": "/nonexistent/python_binary_xyz",
+            "code": "print('test')"
+        }))
+        .unwrap();
+        let py_status = check_script_environment(&py_invalid).unwrap();
+        assert!(!py_status.available);
+        assert!(py_status
+            .message
+            .unwrap()
+            .contains("not found or not executable"));
+
+        // Custom with non-existent executable
+        let custom_invalid: WorkflowScriptConfig = serde_json::from_value(serde_json::json!({
+            "runtime": "custom",
+            "interpreter": "/nonexistent/custom_runner_123",
+            "code": "echo test"
+        }))
+        .unwrap();
+        let custom_status = check_script_environment(&custom_invalid).unwrap();
+        assert!(!custom_status.available);
+        assert!(custom_status.message.unwrap().contains("does not exist"));
     }
 }

@@ -39,6 +39,7 @@ pub struct CoordinatorSession {
     jsonld_links: Option<Vec<Url>>,
     jsonld_link_index: usize,
     selector_session: Option<crate::adapters::selector_session::SelectorSession>,
+    script_session: Option<crate::script_runner::ScriptSession>,
     coverage_incomplete: bool,
     yield_after_candidate: bool,
 }
@@ -64,10 +65,14 @@ impl CoordinatorSession {
                     ));
                 }
             }
-            mode => {
-                return Err(ClientError::Configuration(format!(
-                    "{mode:?} extraction is unavailable in this build; configure static extraction or install a build with the required runner"
-                )))
+            scrape_core::extraction::ExtractionMode::Script => {
+                if source.kind != SourceKind::Selector {
+                    return Err(ClientError::Configuration(
+                        "Script extraction is only supported for selector sources".into(),
+                    ));
+                }
+                scrape_core::extraction::script(&source.config)
+                    .map_err(ClientError::Configuration)?;
             }
         }
         let enrichment_limits = extraction_limits.enrichment.clone().unwrap_or_default();
@@ -106,6 +111,7 @@ impl CoordinatorSession {
             jsonld_links: None,
             jsonld_link_index: 0,
             selector_session: None,
+            script_session: None,
             coverage_incomplete: false,
             yield_after_candidate: false,
         };
@@ -200,18 +206,29 @@ impl CoordinatorSession {
                 }
             }
             SourceKind::Selector => {
-                session.selector_session = Some(
-                    crate::adapters::selector_session::SelectorSession::new(
-                        client,
-                        browser,
+                let mode = scrape_core::extraction::mode(&session.source.config)
+                    .map_err(ClientError::Configuration)?;
+                if mode == scrape_core::extraction::ExtractionMode::Script {
+                    session.script_session = Some(crate::script_runner::ScriptSession::new(
                         &session.source,
                         extraction_limits,
-                        &enrichment_limits,
                         workflow_deadline,
-                    )
-                    .await?,
-                );
-                session.exhausted = session.selector_session.as_ref().unwrap().is_exhausted();
+                    )?);
+                    session.exhausted = session.script_session.as_ref().unwrap().is_exhausted();
+                } else {
+                    session.selector_session = Some(
+                        crate::adapters::selector_session::SelectorSession::new(
+                            client,
+                            browser,
+                            &session.source,
+                            extraction_limits,
+                            &enrichment_limits,
+                            workflow_deadline,
+                        )
+                        .await?,
+                    );
+                    session.exhausted = session.selector_session.as_ref().unwrap().is_exhausted();
+                }
             }
         }
 
@@ -222,6 +239,10 @@ impl CoordinatorSession {
         !self.pending_events.is_empty()
             || self
                 .selector_session
+                .as_ref()
+                .is_some_and(|s| s.has_pending())
+            || self
+                .script_session
                 .as_ref()
                 .is_some_and(|s| s.has_pending())
     }
@@ -265,6 +286,24 @@ impl CoordinatorSession {
                 }
                 crate::adapters::selector_session::SelectorStep::Yield => Ok(None),
                 crate::adapters::selector_session::SelectorStep::Exhausted => {
+                    self.exhausted = true;
+                    Ok(None)
+                }
+            };
+        }
+        if let Some(script) = &mut self.script_session {
+            let before = script.turns_run();
+            let step = script
+                .next(&self.filters, started, self.stats.limit)
+                .await?;
+            self.yield_after_candidate |= script.turns_run() > before;
+            return match step {
+                crate::script_runner::ScriptStep::Event(event) => {
+                    self.exhausted = script.is_exhausted();
+                    Ok(Some(*event))
+                }
+                crate::script_runner::ScriptStep::Yield => Ok(None),
+                crate::script_runner::ScriptStep::Exhausted => {
                     self.exhausted = true;
                     Ok(None)
                 }
@@ -791,7 +830,10 @@ impl SourceCoordinator {
                             emit(&session.workflow_timeout())?;
                             break;
                         }
-                        let next = if session.selector_session.is_some() || session.has_pending() {
+                        let next = if session.selector_session.is_some()
+                            || session.script_session.is_some()
+                            || session.has_pending()
+                        {
                             session.next_candidate(&self.client, self.started).await
                         } else {
                             match tokio::time::timeout_at(
@@ -816,11 +858,14 @@ impl SourceCoordinator {
                                         continue;
                                     }
                                     WorkerEvent::Error {
-                                        invalid_posting: Some(true),
-                                        ..
+                                        invalid_posting, ..
                                     } => {
-                                        session.stats.examined += 1;
-                                        session.stats.invalid += 1;
+                                        if invalid_posting.as_ref() == Some(&true) {
+                                            session.stats.examined += 1;
+                                            session.stats.invalid += 1;
+                                        } else {
+                                            session.failed = true;
+                                        }
                                         session.had_errors = true;
                                         emit(&event)?;
                                         continue;

@@ -37,6 +37,8 @@ import type { BrowserRuntimeStatus } from "../bindings/BrowserRuntimeStatus";
 import type { BrowserSessionSummary } from "../bindings/BrowserSessionSummary";
 import type { WorkflowExtractor } from "../bindings/WorkflowExtractor";
 import type { ExtractorTestResult } from "../bindings/ExtractorTestResult";
+import type { ScriptEnvironmentStatus } from "../bindings/ScriptEnvironmentStatus";
+import type { WorkflowScriptConfig } from "../bindings/WorkflowScriptConfig";
 
 export interface DetectResult {
   kind: string;
@@ -1511,6 +1513,22 @@ const apiImplementation = {
       );
     }
     return invoke<ExtractorTestResult>("test_extractor", { extractor });
+  },
+
+  checkScriptEnvironment: (
+    script: WorkflowScriptConfig,
+  ): Promise<ScriptEnvironmentStatus> => {
+    if (!isTauri()) {
+      return Promise.resolve({
+        available: true,
+        runtime: script.runtime,
+        executable_path: "/usr/local/bin/demo",
+        version: "v20.0.0",
+        missing_modules: [],
+        message: null,
+      });
+    }
+    return invoke<ScriptEnvironmentStatus>("check_script_environment", { script });
   },
 };
 

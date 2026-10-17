@@ -34,6 +34,7 @@ fn unavailable_extraction_modes_fail_explicitly_before_static_fallback() {
             scrape_core::WorkerEvent::Error { message, retryable: false, .. }
                 if message.contains("extraction is unavailable")
                     || message.contains("No compatible Chromium browser found")
+                    || message.contains("script: required in script mode")
         )));
         assert!(!events
             .iter()

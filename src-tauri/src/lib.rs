@@ -223,6 +223,7 @@ pub fn run() {
             commands::scrape::save_browser_session,
             commands::scrape::clear_browser_session,
             commands::scrape::test_extractor,
+            commands::scrape::check_script_environment,
             commands::metrics::get_metrics,
             commands::notifications::create_notification,
             commands::notifications::list_notifications,

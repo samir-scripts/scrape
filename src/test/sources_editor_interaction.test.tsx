@@ -21,7 +21,7 @@ afterEach(() => {
 
 describe("Sources Editor (Section 5)", () => {
   it("supports adding, reordering, and removing sources with at-least-one-source protection", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
 
     expect(screen.getByText("Sources (1)")).toBeTruthy();
@@ -66,7 +66,7 @@ describe("Sources Editor (Section 5)", () => {
   });
 
   it("detects and rejects duplicate normalized endpoints across sources", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
 
     // Source 1: stripe full greenhouse URL
@@ -90,7 +90,7 @@ describe("Sources Editor (Section 5)", () => {
   });
 
   it("triggers independent source detection per source card", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const detectSpy = vi.spyOn(api, "detectSource").mockResolvedValue({
       kind: "greenhouse",
       identifier: "stripe",
