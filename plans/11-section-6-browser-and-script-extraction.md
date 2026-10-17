@@ -4,6 +4,11 @@
 **Parent Specification:** [Reliable ingestion, multi-source workflows, and UI repair](11-reliable-ingestion-and-ui-repair.md#6-browser-and-script-extraction)  
 **Prerequisite State:** Sections 1–5 and Incident 27 (Migrations 0001–0025) implemented and verified on branch `implementation/trustworthy-scraping`.
 
+**Implementation status:** Phase 6A is in progress. The first checkpoint adds shared
+CSS/XPath locators, field attributes, regex transforms and real worker/persistence
+regressions. Hydration, resumable pagination/detail fetching and Phases 6B–6F are
+still open. See [implementation evidence](11-implementation-evidence.md#section-6a--static-locator-foundation-in-progress).
+
 ---
 
 ## 1. Executive Summary & Resource Budget
@@ -18,7 +23,10 @@ Section 6 replaces that heavy stack with a **three-tier, Rust-native extraction 
 | **Tier 2 (Dynamic / Auth)** | **Direct Rust Chrome DevTools Protocol (CDP) over WebSocket (`tokio-tungstenite`)** with resource blocking & pre-document stealth | **110–180 MB** (shared single process) | **30–90 ms** (no image/font/CSS rasterization) | Client-rendered SPAs, "Load more" buttons, readiness waits (`wait_for`), and isolated authenticated sessions (`Open`/`Save`/`Clear`). |
 | **Tier 3 (Custom Code)** | **Versioned Stdin/NDJSON Script Subprocess (`SCRIPT_PROTOCOL_VERSION = 1`)** | **15–45 MB** (bounded, reaped after turn) | Bounded by `timeout_s` | User-authored JS or Python scripts emitting raw candidate JSON frames to authoritative Rust validation and matching. |
 
-### Hard Resource & Concurrency Guardrails (Enforced in Rust)
+Resource figures above are design targets, not measured implementation results.
+Browser/script budgets remain acceptance requirements until their phases are verified.
+
+### Hard Resource & Concurrency Guardrails (to enforce in Rust)
 
 1. **Single Shared Browser Process (`max_processes = 1`)**: At most one headless Chromium-family browser process may exist per worker run, launched lazily only if a source uses `mode = "browser"`.
 2. **Bounded Browser Contexts (`max_contexts = 2`) & Immediate Tab Teardown**: At most two isolated browser contexts (`Target.createBrowserContext`). Every page target (`Target.createTarget`) is closed via `Target.closeTarget` immediately when a round-robin turn completes so V8 heaps never accumulate across sources.
@@ -56,6 +64,11 @@ Execute one phase at a time. Follow the mandatory loop for every phase:
 ---
 
 ### Phase 6A — Tier 1: Single-Pass CSS + XPath 1.0 + SPA Hydration + Resumable Pagination & Detail Enrichment
+
+Implementation note: the locator grammar and evaluator live in
+`crates/scrape-core/src/{locator,xpath}.rs`, shared by host validation and worker
+execution. This follows the domain-ownership rule above without making the host
+depend on the worker executable crate. `selector.rs` consumes those modules.
 
 #### 1. Goal
 Upgrade `crates/scrape-worker/src/adapters/selector.rs` and `crates/scrape-worker/src/coordinator.rs` so `SourceKind::Selector` in `static` mode supports:

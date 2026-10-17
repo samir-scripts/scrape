@@ -340,3 +340,77 @@ Validation actually run:
 - Verified forward repair ([Incident 27](errors/27-native-startup-migration-23.md), migration 25) on the authorized installation (`REPAIR_OK migration_version=25 integrity=ok`), retaining consistent version-23 snapshot `scrape_data.db.pre-migration-955efef2-348f-4cd4-845d-5ff2c5765ba0.db` and preserving all 23 prior migration records and user state.
 
 No live career-site verification, physical native gestures, native 200% zoom acceptance, or original 438/436/2 reconstruction was performed. Sections 6–8 remain open. Existing plan 06–09 domain, data, and retention protections remain authoritative.
+
+## Section 6A — Static locator foundation (in progress)
+
+Implementation: `5824072`, starting from clean revision `a150e70` and the revised
+[Section 6 blueprint](11-section-6-browser-and-script-extraction.md). This is the
+first coherent Phase 6A checkpoint, not completion of Phase 6A or Section 6.
+
+Implemented:
+
+- Shared `scrape-core::{locator,xpath}` parsing/evaluation for host workflow
+  validation and worker extraction, using the existing HTML5 DOM and dependencies.
+  CSS containers/XPath fields and XPath containers/CSS fields work together.
+  Branding now reuses the selector page's parsed tree.
+- The specified location-path subset supports relative/absolute paths, child,
+  self, parent and following-sibling steps, descendant shorthand, wildcard/text
+  tests, attribute/string predicates, indexing and terminal attribute/text
+  extraction. `//a[1]` retains per-parent indexing; `(//a)[1]` indexes the whole
+  result. Nested descendant contexts are deduplicated without rewalking already
+  covered subtrees. Unsupported syntax fails explicitly. The documented parser
+  limits are 4096 bytes, 64 steps and 32 predicates per step.
+- Static `source_config` supports field attributes, CSS `@attribute` shorthand,
+  original ID extraction, and Rust regex transforms on all seven posting fields.
+  Required title/link/configured-ID failures produce invalid-candidate events;
+  optional failures stay unknown. Plain-text description extraction preserves
+  literal markup as text. Conflicting extraction modes fail validation.
+- Workflow serialization/YAML tests preserve locators/transforms. The actual
+  packaged sidecar → production mapper → temporary SQLite regression verifies
+  title matching, a shared cap of two, reconciled examined/rejected/accepted
+  counts, original IDs/URLs, authentic dates, native hourly cents, preview without
+  persistence, and refresh preserving notes/favorites/application status.
+
+The baseline `cargo test -p scrape-worker --lib` passed **23 tests**. The new
+`mixed_locators_extract_original_id_attributes_and_regex` regression then failed
+against the original code because XPath was passed to the CSS parser. It passes
+through the implemented shared parser. An initial new integration test had an
+`Option<String>` compile error; the assertion was corrected to inspect the actual
+optional ID contract. No existing assertions or timeouts were weakened.
+
+Validation actually run on this checkpoint:
+
+- `npm run build:sidecar`: passed, including the final XPath traversal change;
+  rebuilt the packaged `aarch64-apple-darwin` release worker before host tests.
+- `cargo test --workspace`: **375 passed** (156 host, 7 worker/repository,
+  151 core, 26 worker unit, 8 adapter, 5 branding-process, 4 coordinator,
+  13 limits-process, 5 worker-process). Final output:
+  `/tmp/scrape-section-6a-rust-tests.log`. Local HTTP and SQLite fixtures only.
+- `cargo fmt --all --check` and
+  `cargo clippy --workspace --all-targets -- -D warnings`: passed.
+- `npm run gen:types` and `git diff --exit-code src/bindings`: passed, no drift.
+  Output: `/tmp/scrape-section-6a-bindings.log`.
+- `npx vitest run src/test/yaml_workflow.test.ts --maxWorkers=1`: **21 passed**.
+- `npx vitest run --maxWorkers=1`: **459 passed / 76 files**. Existing Node
+  localStorage experimental warnings did not fail tests.
+- `npx tsc --noEmit`, `npm run build`, `node scripts/check-style.mjs`,
+  `node scripts/test-app-startup.mjs`, and `git diff --check`: passed. Production
+  build retains the existing large-chunk advisory.
+
+Limits and remaining work:
+
+- Phase 6A hydration extraction, resumable selector pagination, bounded detail
+  enrichment and readiness/load-more metadata are **not implemented**. Selector
+  discovery still loads a single page eagerly. Continue those before declaring
+  Phase 6A complete.
+- Phases 6B–6F (protocol v7, migration 26/trust, CDP/runtime/session management,
+  script subprocesses, editor controls and integration acceptance) remain open.
+  This checkpoint does not change protocol v6, WorkflowSpec v5 boundary types,
+  migrations or stored checksums. New settings use the existing `source_config`
+  mapping, with Rust validation.
+- No browser/native UI journey, physical interaction, live career-site/provider
+  verification or resource benchmark was performed. RAM/CPU figures in the
+  blueprint are targets, not measured results. No screenshot baselines changed.
+- No user database or application storage was used. Original-report reproduction
+  and Sections 7–8 remain open. Section 5 behavior and plans 06–09 protections
+  remain authoritative.
