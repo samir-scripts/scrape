@@ -197,3 +197,22 @@ retention pruning by workflow, unchanged previous checksums, rollback after an
 injected transaction failure, and idempotent restart. To roll back, restore the
 consistent pre-migration snapshot with a compatible application build; Git revert
 alone is not a database rollback. Never edit applied SQL or checksums.
+
+
+## Verified migration-23 repair (2026-10-16)
+
+[Incident 27](errors/27-native-startup-migration-23.md) identifies an earlier
+six-column migration 23 (`employer_branding` without `asset_data`) applied before the
+committed seven-column migration 23 gained `asset_data TEXT`. Both SQL histories
+remain immutable. A known checksum plus the complete successful history and exact
+independently reconstructed schema selects the appropriate manifest. Forward
+migration 25 (`0025_finalize_employer_branding.sql`) adds `asset_data TEXT` (and
+backfills any inline `logo_json.asset` into `asset_data`) for the six-column
+history and is a no-op checkpoint (`SELECT 1;`) for the seven-column history.
+Unknown variants and schema drift remain rejected; no old checksum is rewritten.
+
+The affected installation was backed up consistently and upgraded to migration 25
+with integrity `ok`. All original records and migration checksums through version 23
+were unchanged. Retain backup
+`scrape_data.db.pre-migration-955efef2-348f-4cd4-845d-5ff2c5765ba0.db` beside the
+database.

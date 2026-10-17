@@ -63,7 +63,7 @@ Each directory in this repository contains its own dedicated `README.md` documen
   - [`src-tauri/gen/`](src-tauri/gen/README.md) — Auto-generated configuration schemas.
     - [`src-tauri/gen/schemas/`](src-tauri/gen/schemas/README.md) — JSON schemas for capabilities and desktop configuration.
   - [`src-tauri/icons/`](src-tauri/icons/README.md) — Multi-platform application and system tray icons.
-  - [`src-tauri/migrations/`](src-tauri/migrations/README.md) — Forward-only versioned SQLite migrations (0001–0024) executed via SQLx, paired with `src-tauri/historical-migrations/` for upgrade verification.
+  - [`src-tauri/migrations/`](src-tauri/migrations/README.md) — Forward-only versioned SQLite migrations (0001–0025) executed via SQLx, paired with `src-tauri/historical-migrations/` for upgrade verification.
   - [`src-tauri/src/`](src-tauri/src/README.md) — Application initialization, state management, and error handling.
     - [`src-tauri/src/commands/`](src-tauri/src/commands/README.md) — Tauri IPC command endpoints exposed to the frontend.
     - [`src-tauri/src/db/`](src-tauri/src/db/README.md) — SQLite database repositories and query implementations (`jobs`, `postings`, `sources`, `runs`, `branding`, `cleanup`, `history`, `settings`, `metrics`, `notifications`).

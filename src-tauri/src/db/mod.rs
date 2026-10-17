@@ -774,6 +774,267 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn migration_twenty_three_histories_preserve_saved_state_and_metadata() {
+        use scrape_core::branding::{
+            cache_asset, relationship_key, CompanyLogo, LogoEvidence, LogoMethod, LogoStatus,
+        };
+        let evidence = LogoEvidence {
+            url: "https://fixture.test/logo.svg".into(),
+            page_url: "https://fixture.test/jobs".into(),
+            method: LogoMethod::EmployerLabel,
+        };
+        let asset_data = cache_asset(
+            br##"<svg xmlns="http://www.w3.org/2000/svg" width="80" height="20"><path fill="#f80" d="M0 0h80v20H0z"/></svg>"##,
+        )
+        .unwrap();
+        let mut verified = CompanyLogo {
+            evidence: Some(evidence),
+            checked_at: "2026-10-16T00:00:00Z".into(),
+            status: LogoStatus::Verified,
+            cached_asset_reference: None,
+            asset: Some(asset_data.clone()),
+            diagnostic: None,
+        };
+        let reference = verified.asset_reference().unwrap();
+        verified.cached_asset_reference = Some(reference.clone());
+
+        for (legacy_twelve, legacy_nineteen, legacy_twenty_three) in [
+            (false, false, true),
+            (false, false, false),
+            (false, true, true),
+            (false, true, false),
+            (true, false, true),
+            (true, false, false),
+            (true, true, true),
+            (true, true, false),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("version23.db");
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(
+                    SqliteConnectOptions::new()
+                        .filename(&path)
+                        .create_if_missing(true)
+                        .journal_mode(SqliteJournalMode::Wal),
+                )
+                .await
+                .unwrap();
+            let legacy12 = sqlx::migrate::Migration::new(
+                12,
+                "posting removal".into(),
+                sqlx::migrate::MigrationType::Simple,
+                include_str!("../../historical-migrations/0012_posting_removal.sql").into(),
+                false,
+            );
+            let legacy19 = sqlx::migrate::Migration::new(
+                19,
+                "structured job descriptions".into(),
+                sqlx::migrate::MigrationType::Simple,
+                include_str!("../../historical-migrations/0019_structured_job_descriptions.sql")
+                    .into(),
+                false,
+            );
+            let legacy23 = sqlx::migrate::Migration::new(
+                23,
+                "employer branding".into(),
+                sqlx::migrate::MigrationType::Simple,
+                include_str!("../../historical-migrations/0023_employer_branding.sql").into(),
+                false,
+            );
+            let mut applied = Vec::new();
+            if legacy_twelve {
+                applied.push((12, legacy12.checksum.to_vec(), true));
+            }
+            if legacy_nineteen {
+                applied.push((19, legacy19.checksum.to_vec(), true));
+            }
+            if legacy_twenty_three {
+                applied.push((23, legacy23.checksum.to_vec(), true));
+            }
+            let mut manifest = history::manifest(&applied);
+            manifest.migrations = manifest
+                .iter()
+                .take(23)
+                .map(|migration| {
+                    if legacy_twenty_three && migration.version == 23 {
+                        legacy23.clone()
+                    } else {
+                        migration.clone()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .into();
+            manifest.run(&pool).await.unwrap();
+            sqlx::query("INSERT INTO sources(id,kind,name,identifier,created_at,enabled,cadence) VALUES ('saved-source','greenhouse','Saved workflow','acme','2026-01-01',0,'manual')").execute(&pool).await.unwrap();
+            let branding_key = relationship_key("saved-source", "Acme");
+            if legacy_twenty_three {
+                let inline_json = serde_json::to_string(&verified).unwrap();
+                sqlx::query("INSERT INTO employer_branding(key,source_id,company,logo_json,last_attempt_json,asset_reference,updated_at) VALUES (?,?,?,?,?,?,?)")
+                    .bind(&branding_key)
+                    .bind("saved-source")
+                    .bind("Acme")
+                    .bind(&inline_json)
+                    .bind(&inline_json)
+                    .bind(&reference)
+                    .bind("2026-10-16T00:00:00Z")
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+            } else {
+                branding::record(&pool, "saved-source", "Acme", &verified)
+                    .await
+                    .unwrap();
+            }
+            sqlx::query("INSERT INTO jobs(id,dedupe_key,source_id,external_id,title,company,role_type,url,date_added,last_seen_at,status,status_changed_at,notes,favorited,description_source,description_json,company_branding_key) VALUES ('saved','saved-source:42','saved-source','42','Engineer','Acme','full_time','https://example.com/42','2026-01-01','2026-01-01','applied','2026-01-01','Preserved note',1,'<p>Evidence</p>','{}',?)")
+                .bind(&branding_key)
+                .execute(&pool)
+                .await
+                .unwrap();
+            sqlx::query("INSERT INTO job_status_events(job_id,from_status,to_status,changed_at) VALUES ('saved','scraped','applied','2026-01-01')").execute(&pool).await.unwrap();
+            sqlx::query("INSERT INTO app_settings VALUES ('custom.preserved','42','2026-01-01')")
+                .execute(&pool)
+                .await
+                .unwrap();
+            let before: Vec<(i64, Vec<u8>, String)> = sqlx::query_as(
+                "SELECT version,checksum,installed_on FROM _sqlx_migrations ORDER BY version",
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            // Keep pool open or close without checkpointing WAL to exercise uncheckpointed WAL state.
+            let upgraded = init_db(&path).await.unwrap();
+            let after: Vec<(i64, Vec<u8>, String)> = sqlx::query_as(
+                "SELECT version,checksum,installed_on FROM _sqlx_migrations WHERE version<=23 ORDER BY version",
+            )
+            .fetch_all(&upgraded)
+            .await
+            .unwrap();
+            assert_eq!(before, after);
+            let saved: (String, bool, String, String, String) = sqlx::query_as(
+                "SELECT notes,favorited,status,description_source,description_json FROM jobs WHERE id='saved'",
+            )
+            .fetch_one(&upgraded)
+            .await
+            .unwrap();
+            assert_eq!(
+                saved,
+                (
+                    "Preserved note".into(),
+                    true,
+                    "applied".into(),
+                    "<p>Evidence</p>".into(),
+                    "{}".into()
+                )
+            );
+            assert_eq!(
+                branding::asset(&upgraded, &reference).await.unwrap(),
+                asset_data
+            );
+            branding::record(&upgraded, "saved-source", "Acme", &verified)
+                .await
+                .unwrap();
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT count(*) FROM job_status_events WHERE job_id='saved'"
+                )
+                .fetch_one(&upgraded)
+                .await
+                .unwrap(),
+                1
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, String>(
+                    "SELECT value FROM app_settings WHERE key='custom.preserved'"
+                )
+                .fetch_one(&upgraded)
+                .await
+                .unwrap(),
+                "42"
+            );
+            assert_eq!(
+                std::fs::read_dir(directory.path())
+                    .unwrap()
+                    .flatten()
+                    .filter(|entry| entry
+                        .file_name()
+                        .to_string_lossy()
+                        .contains("pre-migration"))
+                    .count(),
+                1
+            );
+            upgraded.close().await;
+            pool.close().await;
+            init_db(&path).await.unwrap().close().await;
+            assert_eq!(
+                std::fs::read_dir(directory.path())
+                    .unwrap()
+                    .flatten()
+                    .filter(|entry| entry
+                        .file_name()
+                        .to_string_lossy()
+                        .contains("pre-migration"))
+                    .count(),
+                1
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn migration_twenty_three_unknown_or_drift_is_rejected_without_writes() {
+        for drift in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("rejected23.db");
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(
+                    SqliteConnectOptions::new()
+                        .filename(&path)
+                        .create_if_missing(true),
+                )
+                .await
+                .unwrap();
+            let legacy = sqlx::migrate::Migration::new(
+                23,
+                "employer branding".into(),
+                sqlx::migrate::MigrationType::Simple,
+                include_str!("../../historical-migrations/0023_employer_branding.sql").into(),
+                false,
+            );
+            let mut manifest = history::manifest(&[(23, legacy.checksum.to_vec(), true)]);
+            manifest.migrations = manifest.iter().take(23).cloned().collect::<Vec<_>>().into();
+            manifest.run(&pool).await.unwrap();
+            if drift {
+                sqlx::query("ALTER TABLE employer_branding ADD COLUMN unexpected TEXT")
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+            } else {
+                sqlx::query("UPDATE _sqlx_migrations SET checksum=X'12345678' WHERE version=23")
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+            }
+            pool.close().await;
+            let before = std::fs::read(&path).unwrap();
+            let err = init_db(&path).await.unwrap_err().to_string();
+            if drift {
+                assert!(err.contains("schema does not match"));
+            } else {
+                assert!(err.contains("Migration history mismatch at version 23"));
+            }
+            assert_eq!(before, std::fs::read(&path).unwrap());
+            assert!(!std::fs::read_dir(directory.path())
+                .unwrap()
+                .any(|entry| entry
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .contains("pre-migration")));
+        }
+    }
+
+    #[tokio::test]
     async fn failed_forward_repair_rolls_back_and_can_resume() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("interrupted.db");
@@ -1839,12 +2100,25 @@ mod execution_outcome_upgrade_tests {
         // 2. Real upgrade via init_db (runs migrations + upgrade_workflow_settings_v5)
         let upgraded = init_db(&path).await.unwrap();
 
-        // Verify migration 24 applied
+        // Verify migration 24 and latest migrations applied
+        let v24_success: Option<bool> =
+            sqlx::query_scalar("SELECT success FROM _sqlx_migrations WHERE version = 24")
+                .fetch_optional(&upgraded)
+                .await
+                .unwrap();
+        assert_eq!(v24_success, Some(true));
         let current_v: i64 = sqlx::query_scalar("SELECT max(version) FROM _sqlx_migrations")
             .fetch_one(&upgraded)
             .await
             .unwrap();
-        assert_eq!(current_v, 24);
+        assert_eq!(
+            current_v,
+            sqlx::migrate!("./migrations")
+                .iter()
+                .last()
+                .unwrap()
+                .version
+        );
 
         // Verify parent workflows table exists and contains acme-source and broken-source
         let workflow_count: i64 = sqlx::query_scalar("SELECT count(*) FROM workflows")

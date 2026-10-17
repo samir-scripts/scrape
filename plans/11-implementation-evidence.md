@@ -318,8 +318,8 @@ Sources UI editor in Settings (`WorkflowSections.tsx`):
 
 Validation actually run:
 
-- `cargo test --workspace`: **365 passed** (153 host, 6 worker_repository, 148 core, 23 worker, 8 adapters, 5 branding, 4 coordinator, 13 limits, 5 worker_process).
-  Tests cover multi-source round-robin 7/7/6 distribution at cap 20, rotation across consecutive runs, preview non-rotation, capacity redistribution on exhausted sources, duplicate normalized endpoint rejection, Spec v5 validation, and populated migration 24 upgrade/preservation.
+- `cargo test --workspace`: **367 passed** (155 host, 6 worker_repository, 148 core, 23 worker, 8 adapters, 5 branding, 4 coordinator, 13 limits, 5 worker_process).
+  Tests cover multi-source round-robin 7/7/6 distribution at cap 20, rotation across consecutive runs, preview non-rotation, capacity redistribution on exhausted sources, duplicate normalized endpoint rejection, Spec v5 validation, populated migration 24 upgrade/preservation, all 8 historical `(v12 × v19 × v23)` manifest combinations (`migration_twenty_three_histories_preserve_saved_state_and_metadata`), and version-23 unknown checksum/schema drift rejection (`migration_twenty_three_unknown_or_drift_is_rejected_without_writes`).
 - `cargo fmt --all --check` & `cargo clippy --workspace --all-targets -- -D warnings`: passed with 0 warnings.
 - `npm run gen:types && git diff --exit-code src/bindings`: passed with 0 drift across generated TypeScript boundary contracts (`WorkerConfig.ts`, `WorkflowSpec.ts`, `WorkflowSourceSpec.ts`).
 - `npx tsc --noEmit`: passed with 0 type errors.
@@ -330,11 +330,13 @@ Validation actually run:
 - `npm run test:providers`: 2/2 providers verified against recorded fixtures (SEP Lever & Linear Ashby).
 - `cargo build -p scrape && npm run test:native`: Passed in isolated WKWebView storage with real sidecar execution, cancellation, and IPC persistence.
   Artifacts: `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-ezzSqZ`.
-- `SCRAPE_STARTUP_MODES=fresh,current19,unknown19 npm run test:native-startup`: All 3 native startup modes passed; recognized history upgraded with saved state retained, unknown checksum history refused without file mutation.
+- `SCRAPE_STARTUP_MODES=fresh,current19,unknown19 npm run test:native-startup` and `SCRAPE_STARTUP_MODES=fresh,legacy23,current23,unknown23 npm run test:native-startup`: All native startup modes passed; recognized histories (including the cumulative `legacy12` + `legacy19` + `legacy23` chain) upgraded with saved state retained, unknown checksum histories refused without file mutation or backup creation.
   Artifacts:
-  `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-nfA2Ay`,
-  `.../scrape-native-smoke-uv3y5x`, and
-  `.../scrape-native-smoke-lmwolH`.
+  `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-cVD7ZO` (`fresh`),
+  `.../scrape-native-smoke-4k8qxn` (`legacy23`),
+  `.../scrape-native-smoke-W4C9hL` (`current23`), and
+  `.../scrape-native-smoke-Lsca5W` (`unknown23`).
 - `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/workflows.pw.ts`: 3/3 journeys passed.
+- Verified forward repair ([Incident 27](errors/27-native-startup-migration-23.md), migration 25) on the authorized installation (`REPAIR_OK migration_version=25 integrity=ok`), retaining consistent version-23 snapshot `scrape_data.db.pre-migration-955efef2-348f-4cd4-845d-5ff2c5765ba0.db` and preserving all 23 prior migration records and user state.
 
 No live career-site verification, physical native gestures, native 200% zoom acceptance, or original 438/436/2 reconstruction was performed. Sections 6–8 remain open. Existing plan 06–09 domain, data, and retention protections remain authoritative.

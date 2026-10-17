@@ -49,6 +49,7 @@ Additional forward migrations:
 | 0022 | Additive run/source outcome columns; preserve coarse historical statuses and every existing row. |
 | 0023 | Employer branding registry and saved-posting relationship references; one local image, separate last-attempt diagnostics, no source-delete cascade. |
 | 0024 | Parent workflow ownership and multi-source allocation; creates workflows table, backfills workflow_id across sources, jobs, and scrape_runs, preserves user state, schedules, and historical checksums. |
+| 0025 | Forward employer-branding `asset_data` checkpoint shared with the recognized six-column historical variant of migration 23. |
 
 The Rust backfills preserve source identities, uncertain legacy salary values and
 unresolved suppression keys. Populated upgrade tests preserve all tracked states,
@@ -56,4 +57,4 @@ notes, favorites, status events, workflow rules, custom settings and tombstones.
 See [database recovery](../../plans/database-recovery.md); a Git revert does not
 reverse database schema changes. Never update `_sqlx_migrations` to bypass errors.
 
-`../historical-migrations/` contains verified immutable migration-12 and migration-18 variants. The runner accepts only matching histories and independently rebuilt schemas, then preserves their stored checksums. See incident 25 in the recovery documentation.
+`../historical-migrations/` contains verified immutable migration-12/18, migration-19/20, and migration-23/25 variants. The runner accepts only matching histories and independently rebuilt schemas, then preserves their stored checksums. See incidents 25, 26, and 27 in the recovery documentation.

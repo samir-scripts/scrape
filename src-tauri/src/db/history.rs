@@ -69,6 +69,37 @@ pub(super) fn manifest(applied: &[Applied]) -> Migrator {
             .collect::<Vec<_>>()
             .into();
     }
+    let original = manifest
+        .iter()
+        .find(|migration| migration.version == 23)
+        .unwrap();
+    let early_branding = Migration::new(
+        23,
+        original.description.clone(),
+        original.migration_type,
+        include_str!("../../historical-migrations/0023_employer_branding.sql").into(),
+        false,
+    );
+    if applied.iter().any(|(version, checksum, _)| {
+        *version == 23 && checksum.as_slice() == early_branding.checksum.as_ref()
+    }) {
+        manifest.migrations = manifest
+            .iter()
+            .map(|migration| match migration.version {
+                23 => early_branding.clone(),
+                25 => Migration::new(
+                    25,
+                    migration.description.clone(),
+                    migration.migration_type,
+                    include_str!("../../historical-migrations/0025_finalize_employer_branding.sql")
+                        .into(),
+                    false,
+                ),
+                _ => migration.clone(),
+            })
+            .collect::<Vec<_>>()
+            .into();
+    }
     // The caller validates the entire history and independently reconstructed
     // schema against this manifest before permitting writes.
     manifest
