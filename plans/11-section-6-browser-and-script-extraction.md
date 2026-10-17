@@ -8,9 +8,11 @@
 CSS/XPath fields/regexes, explicit hydration JSON, resumable pagination, bounded
 detail enrichment, readiness and preserved identity/branding. Static load-more
 controls fail explicitly until browser mode exists. Protocol v7 termination/limits
-were pulled forward from 6B to report/enforce 6A coverage correctly; the remaining
-6B contracts, migration 26 and trust work, and 6C–6F, remain open. See
-[implementation evidence](11-implementation-evidence.md#section-6a--hydration-resumable-pagination-and-bounded-details).
+were pulled forward from 6B to report/enforce 6A coverage correctly. Phase 6B
+now adds migration 26, WorkflowSpec v6 with legacy conversion, browser/test
+contracts and persisted local script trust/import quarantine. Phases 6C–6F remain
+open; browser/session/script runners and their editor controls are unavailable. See
+[implementation evidence](11-implementation-evidence.md#section-6b--contracts-migration-26-and-local-script-trust).
 
 ---
 
@@ -132,6 +134,16 @@ Upgrade `crates/scrape-worker/src/adapters/selector.rs` and `crates/scrape-worke
 
 #### 1. Goal
 Extend the shared Rust boundary contracts (`scrape-core`), workflow validator (`src-tauri/src/services/workflow.rs`), and SQLite schema (`0026_browser_sessions_and_script_trust.sql`) with full backward compatibility and zero destructive table rebuilds.
+
+Implementation clarification: the extractor additions use **WorkflowSpec v6** to
+follow project versioning rules. Versions 1–5 still normalize through the single
+Rust resolver; historical storage backfills retain their original v4/v5 versions.
+The migration is additive; it does not rewrite old workflow rows. A path script's
+trust fingerprint also includes file contents, so an in-place file edit requires
+new trust. `import_workflow` quarantines executable sources; `save_workflow` carries
+an explicit import origin, and `trust_workflow_script` requires confirmation and
+the reviewed hash. Trust does not enable a source or start a run. Until 6C/6D,
+the host and worker reject those modes explicitly before execution.
 
 #### 2. Files to Create or Modify
 - **Modify** `crates/scrape-core/src/protocol.rs`:

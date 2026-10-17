@@ -19,13 +19,14 @@ scrape-core/
 └── src/            # Core domain modules
     ├── branding.rs     # Employer logo evidence resolution, decoding, and PNG normalization
     ├── enrich/         # Heuristic analysis algorithms (salary, location, workplace, HTML, etc.)
+    ├── extraction.rs   # Extraction modes, script validation, canonical hashes and shared bounds
     ├── filter.rs       # SQL filter compilation and legacy/query predicate evaluation
     ├── geography.rs    # Country/subdivision catalog and bounded geographic normalization
     ├── identity.rs     # Canonical posting identity and URL normalization
     ├── lib.rs          # Crate root, module exports, and timestamp utilities
     ├── matching.rs     # Authoritative keyword/geography/workplace/partial-evidence matcher & diagnostics
     ├── posting_date.rs # Publication timestamp normalization and timezone-aware date rules
-    ├── protocol.rs     # Subprocess IPC contracts (WorkerConfig, WorkerEvent, NDJSON v6)
+    ├── protocol.rs     # Subprocess IPC contracts (WorkerConfig, WorkerEvent, NDJSON v7)
     ├── role.rs         # Role category classification heuristics (SWE, Data, etc.)
     └── types.rs        # Core enums and domain structures (JobStatus, RoleType, etc.)
 ```
@@ -69,3 +70,8 @@ SQLite predicates. Hourly/annual filters require the original matching interval;
 annual equivalents remain compatibility analytics and have explicitly named
 `salary_annual_min`/`salary_annual_max` fields at the job boundary. Text without
 unit evidence retains an unknown interval. Multiple ranges are never blended.
+
+Phase 6B exports browser-runtime and extractor-test contracts from `protocol.rs`
+and extraction/script contracts from `extraction.rs`. Rust owns validation and
+fingerprints; `npm run gen:types` generates their TypeScript representations.
+These contracts do not provide browser or script execution yet.

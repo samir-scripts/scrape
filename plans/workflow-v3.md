@@ -1,4 +1,8 @@
-# Workflow specification v3
+# Workflow specification compatibility and current v6 contract
+
+Current canonical exports use **v6**. Rust accepts versions 1–5 through the same
+compatibility resolver; the v3/v4/v5 descriptions below record the behavior those
+versions introduced. Existing storage is preserved until a normal save.
 
 The desktop validator is authoritative for create, edit, import and preview. Rust contracts generate the TypeScript representations in `src/bindings`. Versions 1 and 2 migrate explicitly to version 3; unknown fields and unsupported versions are errors with paths.
 
@@ -178,3 +182,37 @@ Worker limits cap source overrides. Navigation defaults to 30 seconds (range
 45-second detail allowance retained. No page/detail work is scheduled after the
 shared matching cap. Exhausted sources, page/time limits, loops and job limits
 have distinct diagnostics. Browser/session/script execution is still pending.
+
+## Typed extraction modes and local trust (Section 6B)
+
+A v6 `selector` extractor accepts `mode: static | browser | script`, defaulting to
+static. YAML aliases `kind: browser` and `kind: script` normalize to selector plus
+mode; SQLite source kinds stay unchanged. Existing `source_config` vocabulary is
+preserved. Typed field selectors, attributes and regexes map to those same Rust
+contracts, including `url_selector`/`url_attribute` → `link`/`link_attribute`, and
+navigation selectors → `detail`, `next_page`, `load_more`, `wait_for`. Bounds are
+validated by shared `WorkerLimits`; source overrides cannot raise worker limits.
+
+Browser and script settings may hold a `session_id` reference. Raw cookies,
+headers, authorization, storage_state and tokens are rejected, including inside
+`source_config`. Sessions and executable trust never travel as YAML authority.
+Browser/session and script execution are unavailable until 6C/6D and fail
+explicitly; static HTTP extraction continues to run normally.
+
+A script requires `runtime: js | python | custom`, exactly one of `code` or `path`,
+and an explicit interpreter for Python/custom. Arguments remain an array. Code
+and file contents are bounded to 1 MiB; there are at most 128 arguments and the
+script timeout range is 1–600 seconds (still subject to source/workflow limits).
+The stable SHA-256 covers runtime, interpreter, code, path and arguments, plus
+file contents for path scripts. Missing local files may be imported/saved for
+review but cannot be trusted or executed.
+
+`import_workflow` returns scripts disabled and disables automatic workflow
+execution; an explicitly disabled workflow may contain no enabled sources so it
+can be saved for review. Execution requires an enabled source. Saves preserve
+local trust only for an unchanged fingerprint and reset it on import or edit.
+`trust_workflow_script` requires local confirmation and the exact reviewed hash;
+custom code runs with local user privileges, and process isolation is not an OS
+sandbox. Trust alone never enables a source or starts a run. Preview, transient
+Test, manual and scheduled runs pass the same trust/content check before any
+subprocess launch. Browser demonstration mode cannot verify these extractors.

@@ -517,3 +517,78 @@ extractor-test boundary contracts, extraction-mode validation and executable
 trust/hash gates. CDP/browser sessions, custom scripts, editor controls and final
 Section 6 integration acceptance remain open in 6C–6F. Original-report reproduction
 and Sections 7–8 remain open; the whole revision is not complete.
+
+## Section 6B — Contracts, migration 26 and local script trust
+
+Implemented 2026-10-17. Commits: `0c4bc25` (additive schema and populated recovery
+regression), `755ea9c` (validation/trust and regressions), `826d7e4` (generated
+TypeScript contracts), `5230e8b` (host launch-guard regression). Phase 6B is complete; browser/session/script execution,
+editor controls and final native acceptance remain open in 6C–6F.
+
+- Migration 26 adds isolated browser-session metadata and source trust/hash
+  columns, preserving the existing source-kind CHECK and every old migration.
+  The v25 fixture snapshots all old table columns/rows, including workflow/source
+  ownership, notes, favorites, tracked history, suppression, runs/logs, schedules,
+  branding bytes and migration checksums. Upgrade, consistent backup contents,
+  injected transaction failure, retry and restart all pass. Session status CHECK
+  and unchanged source-kind CHECK are exercised. Full reset clears session
+  metadata and parent workflows; jobs-only cleanup preserves both.
+- WorkflowSpec v6 adds typed extraction fields, modes, bounds, session references
+  and scripts. Versions 1–5 convert through Rust; historical v4/v5 storage
+  backfills retain their original versions. Browser/script YAML aliases normalize
+  to selector mode without adding database source kinds. Raw credentials and
+  unsupported configuration fail explicitly. CSS/XPath/regex and bounds share the
+  same core validation used by static extraction; no frontend matcher was added.
+- Script fingerprints cover runtime/interpreter/code/path/arguments and, for path
+  scripts, bounded regular-file contents. Imports and edits require fresh local
+  trust. Explicit trust checks the reviewed fingerprint and confirmation, never
+  enables a source or starts work. Database failures remain database errors.
+  Missing files can be saved disabled for review but cannot be trusted.
+- The actual IPC persistence helper is tested with a static source plus a script:
+  exactly two source rows, disabled/reviewed import, explicit trust, unchanged
+  save, re-import reset and cross-workflow ownership rejection. This also fixes
+  duplicating the primary source during new multi-source saves. Import origin
+  survives the frontend draft into Save. Trust metadata is separate from YAML.
+- Preview/Test/manual/scheduled execution checks persisted trust before launching
+  a sidecar. Host and real-worker process tests reject unavailable browser/script
+  modes explicitly, with zero examined candidates and no static fallback. These
+  guards are prerequisites; they are not browser or script execution evidence.
+
+Verification actually run in `/tmp/scrape-phase6b`, with Rust builds using the
+existing workspace target via `CARGO_TARGET_DIR`:
+
+- Baseline workflow validation: **11 passed**. The new migration test first
+  failed at version 25 instead of 26; the new extraction-mode regression first
+  failed because version 6 was unsupported.
+- `npm run build:sidecar`: passed after final core/worker changes and before
+  host/integration verification.
+- `cargo test --workspace`: **407 passed**: 164 host, 9 packaged-worker/repository,
+  160 core, 31 worker unit, 8 adapters, 5 branding process, 6 coordinator,
+  17 limits process, 7 worker process. Final log:
+  `/tmp/scrape-6b-workspace-tests.log`. The final rerun includes regular-file
+  validation, database-error propagation and the final host launch-guard assertions.
+- `cargo fmt --all --check`,
+  `cargo clippy --workspace --all-targets -- -D warnings`,
+  `npm run gen:types`, and `git diff --exit-code -- src/bindings`: passed.
+  Binding drift was checked after staging only the intentional generated files.
+  Logs: `/tmp/scrape-6b-clippy.log`, `/tmp/scrape-6b-bindings.log`.
+- `npx vitest run --maxWorkers=1`: **463 passed / 77 files**, including import
+  quarantine routing, import-origin Save arguments and explicit trust IPC.
+  Log: `/tmp/scrape-6b-frontend-tests.log`.
+- `npx tsc --noEmit`, `npm run build`, `node scripts/check-style.mjs`,
+  `node scripts/test-app-startup.mjs`, and `git diff --check`: passed.
+  Logs: `/tmp/scrape-6b-build.log`, `/tmp/scrape-6b-startup-tests.log`.
+  Existing large-chunk and Node localStorage advisories remain.
+- `npm run test:providers`: **2/2 recorded HTTP → worker replays passed**,
+  SEP/Lever and Linear/Ashby; repeated after `755ea9c` so the report identifies
+  the tested behavior commit. Log: `/tmp/scrape-6b-provider-tests.log`. This is
+  recorded extraction evidence; persistence is covered separately above.
+
+Implementation moved to an isolated worktree when an existing Tauri dev watcher
+was discovered. The user confirmed stopping it before integration. No desktop
+app was launched and no user database/application storage was opened for testing
+or migrated. No native IPC/startup/UI, browser journey, physical interaction,
+live-provider/FAANG or RAM/CPU verification was performed in this phase. No visual
+baseline was changed. Session material handling, actual runners, trust controls
+and disabled-script saving through the editor remain for 6C–6F. Earlier missing
+report reproduction and Sections 7–8 remain open.

@@ -67,7 +67,7 @@ Each directory in this repository contains its own dedicated `README.md` documen
   - [`src-tauri/src/`](src-tauri/src/README.md) — Application initialization, state management, and error handling.
     - [`src-tauri/src/commands/`](src-tauri/src/commands/README.md) — Tauri IPC command endpoints exposed to the frontend.
     - [`src-tauri/src/db/`](src-tauri/src/db/README.md) — SQLite database repositories and query implementations (`jobs`, `postings`, `sources`, `runs`, `branding`, `cleanup`, `history`, `settings`, `metrics`, `notifications`).
-    - [`src-tauri/src/services/`](src-tauri/src/services/README.md) — Background services: `workflow` (WorkflowSpec v5 validator/resolver), `runner`, `ingestion`, `scheduler`, `calendar`, `retention`, `process`, `startup`, `tray`, and `system`.
+    - [`src-tauri/src/services/`](src-tauri/src/services/README.md) — Background services: `workflow` (WorkflowSpec v6 validator/resolver), `runner`, `ingestion`, `scheduler`, `calendar`, `retention`, `process`, `startup`, `tray`, and `system`.
 
 ### 3. Specifications, Plans, Fixtures & Automation
 - [`plans/`](plans/README.md) — System specifications, architectural designs, phased blueprints, and implementation evidence ledgers.
@@ -229,3 +229,10 @@ npm run test:providers:live   # Bounded, timestamped public-provider verificatio
 ```
 
 The live check currently covers Lever/SEP, Ashby/Linear, and Greenhouse/Bitwarden. Generic JSON-LD and selector behavior is covered by local fixtures and native smoke, rather than a claim of live-provider verification. Required CI uses deterministic recordings. Regenerate the browser artifact with `node scripts/provider-verification.mjs --refresh-example` only after reviewing the raw captures and their checksums; preserve original provider IDs, titles and URLs.
+
+Phase 6B adds typed browser/script configuration, migration 26 session metadata,
+and explicit local script trust. Imported scripts stay disabled for review;
+editing executable inputs or path-script contents invalidates trust. Versions 1–5
+convert to WorkflowSpec v6 without rewriting saved user data. Browser and script
+runners and editor controls follow in Phases 6C–6F; configured unavailable modes
+fail explicitly before execution. See [Section 6 evidence](plans/11-implementation-evidence.md).

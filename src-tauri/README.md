@@ -82,3 +82,8 @@ src-tauri/
 | [`icons/`](icons/README.md) | Multi-resolution platform application and tray icon assets. |
 | [`migrations/`](migrations/README.md) | Versioned forward-only SQL migrations establishing the local SQLite database schema. |
 | [`src/`](src/README.md) | Rust application entry points, state containers, error types, commands, and services. |
+
+Phase 6B uses WorkflowSpec v6 and migration 26. The host exposes `import_workflow`
+and `trust_workflow_script`, stores executable trust separately from exported
+configuration, and rejects unavailable browser/script execution explicitly.
+Session metadata exists; session material management and runners follow in 6C/6D.

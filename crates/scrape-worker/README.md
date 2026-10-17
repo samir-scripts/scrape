@@ -187,3 +187,7 @@ limits apply to HTTP discovery; the browser pool is not implemented yet.
 See [configuration examples](../../plans/workflow-v3.md#static-pagination-and-details).
 Use `scrape-worker --protocol-version` to query the authoritative version rather
 than duplicating it in a harness. Protocol-v6 requests are rejected explicitly.
+
+Configured browser/script modes fail explicitly before HTTP discovery while their
+runners are pending in 6C/6D. They never fall back to static scraping. Source
+navigation and workflow-duration overrides use the shared validated bounds.

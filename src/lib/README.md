@@ -42,3 +42,8 @@ fetching a capped set for client filtering. Changing filters or sort resets to t
 page; older responses populate their own query keys and cannot overwrite newer
 results. Navigation counts use independent repository totals. Native filter values
 are persisted under a versioned storage key, including hourly cents and interval.
+
+Workflow file/YAML import uses the desktop `import_workflow` quarantine command.
+The single draft preserves import origin through Save, so an imported executable
+configuration cannot inherit previously stored trust. Browser demonstrations
+reject browser/script extraction and cannot grant script trust.

@@ -17,7 +17,7 @@ The `src-tauri/src/db` directory encapsulates all data access logic, repository 
 | [`cleanup.rs`](cleanup.rs) | All application tables | `preview` and `execute` for confirmed Data Management operations (`DeleteAll`, `KeepFavorites`, `KeepTracked`, `ResetAll`) with `VACUUM INTO` recovery snapshots and posting-identity protection. |
 | [`compensation.rs`](compensation.rs) | `job_compensations` | Persists and queries native compensation ranges (hundredths of currency units, interval, currency, source evidence) separately from annual compatibility analytics. |
 | [`history.rs`](history.rs) | `_sqlx_migrations` | Read-only historical migration checksum and schema verification against recognized migration histories before applying new upgrades. |
-| [`sources.rs`](sources.rs) | `sources` | `SourcesRepo`: Manages workflow/source records, enabled flags, schedule cadences, review status (`needs_review`), and last-scraped timestamps. |
+| [`sources.rs`](sources.rs) | `sources` | `SourcesRepo`: Manages workflow/source records, enabled flags, schedule cadences, review status (`needs_review`), script trust/fingerprints, and last-scraped timestamps. |
 | [`runs.rs`](runs.rs) | `scrape_runs`, `scrape_logs` | `RunsRepo`: Records execution telemetry, `ScanOutcome`, `RunCounts` (including per-source `SourceScanStats` summaries), duration, log entries, and trigger types. |
 | [`metrics.rs`](metrics.rs) | `jobs`, `job_status_events` | `MetricsRepo`: Aggregation queries calculating stage totals, conversion rates, role distributions, salary distribution buckets, streaks, and daily velocity. |
 | [`settings.rs`](settings.rs) | `settings` | `SettingsRepo`: Serializes and retrieves user preferences, appearance settings, and automatic-scraping pause state. |
@@ -38,3 +38,9 @@ compensation predicates use the shared Rust range model. Missing bounds are open
 new-graduate aliases agree, explicit workplace data controls remote matching, and
 country/region restrictions must match the same parsed location. Page ties sort
 by ID. A 2,105-record regression verifies search/counts beyond the old client cap.
+
+Migration 26 adds isolated `browser_sessions` metadata and per-source script
+trust/hash columns. Full reset clears browser-session metadata and parent
+workflows; jobs-only cleanup preserves them. Session credentials and browser
+process management are deferred to Phase 6C. `browser_upgrade_tests.rs` tests the
+populated v25 upgrade, all historical rows/checksums, backup, rollback and restart.
