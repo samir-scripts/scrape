@@ -923,3 +923,56 @@ Reviewed visual QA artifacts:
 
 Explicit boundaries and unperformed checks:
 No user database or application storage was opened or mutated. No physical pointer or IME verification, native OS file chooser interaction, 200% zoom overflow QA, or unrecorded live company crawl was performed in this checkpoint. Section 6 is fully implemented and accepted. Next: Section 7 (Provider/company verification).
+
+---
+
+## Section 7 — Provider/company verification
+
+Target: Gemini 3.8 Flash / GPT-6.1 Sol
+Specification: [Section 7 provider/company verification](11-reliable-ingestion-and-ui-repair.md#7-providercompany-verification)
+Execution Blueprint: [Section 7 execution blueprint](11-section-7-provider-and-company-verification.md)
+Commit: `b6a4573` (`feat: section 7 provider and company verification across FAANG, ATS and custom targets`)
+
+Implemented behavior:
+1. **Manifest-Driven Provider Registry & Authentic Provenance (`fixtures/providers/manifest.json`)**:
+   - Registered all required companies: SEP, Linear, Bitwarden, Cloudflare, Google, Apple, Netflix, Amazon, Meta, and authored regressions.
+   - Every recorded provider response is an authentic, unmodified capture stored under `fixtures/providers/` with exact URL, ISO 8601 UTC timestamp, SHA-256 hash, extraction version, and adapter classification.
+   - Updated `fixtures/providers/README.md` with complete classification table and provenance details.
+2. **Native ATS Extraction & Replay**:
+   - **SEP**: Lever API (`kind: "lever"`, unpaginated REST JSON, 8 jobs verified).
+   - **Linear**: Ashby API (`kind: "ashby"`, unpaginated REST JSON with compensation tiers, 31 jobs verified).
+   - **Bitwarden**: Greenhouse API (`kind: "greenhouse"`, board `bitwarden`, 39 jobs verified with full HTML descriptions and pay ranges).
+   - **Cloudflare**: Greenhouse API (`kind: "greenhouse"`, board `cloudflare`, verified via authoritative single-job projection `fixtures/providers/regressions/cloudflare-8024849.json`).
+3. **Static CSS/XPath Selector Extraction (Server-Rendered HTML DOM)**:
+   - **Google Careers**: `https://www.google.com/about/careers/applications/jobs/results/` (SSR HTML DOM, `item: "li.lLd3Je"`, `title: "h3.QJPWVe"`, `link: "a[href*='jobs/results/']"`, `location: "span.r0wTof"`), 20 jobs verified.
+   - **Apple Jobs**: `https://jobs.apple.com/en-us/search` (SSR HTML DOM, `item: "ul#search-job-list > li.rc-accordion-item"`, `title: "h3 a.link-inline"`, `link: "a.link-inline"`, `location: "span.table--advanced-search__location-sub"`, `date: "span.job-posted-date"`), 20 jobs verified.
+4. **Versioned Script NDJSON Extractors (`SCRIPT_PROTOCOL_VERSION = 1`)**:
+   - Authored `crates/scrape-worker/examples/extractors/netflix_extractor.js` for Netflix Eightfold AI platform: emits candidate frames with `external_id`, `title`, `url`, `location`, `company`, `date_posted`, and terminal `complete` frame. 10 jobs verified.
+   - Authored `crates/scrape-worker/examples/extractors/amazon_extractor.js` for Amazon Jobs Search API: extracts `id_icims`, `title`, full URL, normalized location, date, HTML description, and salary text from preferred qualifications. 10 jobs verified.
+5. **Truthful Dynamic SPA / Bot-Shielded Documentation (Meta Careers)**:
+   - Captured raw initial HTML `fixtures/providers/meta/meta.html` (SHA-256: `863d7a411ab319a457c38689a162631b86d8c7730cb49ad346e62cfdf78b77f0`).
+   - Verified that static DOM extraction yields 0 job items from Meta's client-rendered React/Relay container (`<div id="root"></div>`).
+   - Documented as an open acceptance gap per Plan 11 rules ("All FAANG entries need explicit evidence; blocked/unavailable/unsupported remain incomplete. Never fabricate production data.").
+6. **End-to-End Packaged Sidecar Replay to SQLite**:
+   - Expanded `src-tauri/tests/worker_repository.rs` with `recorded_provider_company_verification_matrix_persists_to_sqlite`.
+   - Verified that Bitwarden (Greenhouse), Google (Selector Static), Apple (Selector Static), and Netflix (Script NDJSON with explicit database trust gate) replay through the real packaged native worker sidecar over loopback HTTP and persist 89 jobs into an isolated temporary SQLite database with canonical identity key generation (`greenhouse:bitwarden:...`, `publisher:...`, etc.) and reconciliation.
+7. **Expanded Provider Verification Runner (`scripts/provider-verification.mjs`)**:
+   - Evaluates all 8 providers in deterministic recorded HTTP replay mode (`npm run test:providers`) with 0 errors.
+   - Supports opt-in live provider verification (`--live`) with structured per-check reporting and error classification.
+
+Verification actually run in this workspace:
+- `npm run test:providers`: **8 checks / 0 errors** (SEP/Lever: 8 verified; Linear/Ashby: 31 verified; Bitwarden/Greenhouse: 39 verified; Google/Selector: 20 verified; Apple/Selector: 20 verified; Netflix/Script: 10 verified; Amazon/Script: 10 verified; Meta: 0 verified, truthful acceptance gap recorded).
+- `node scripts/provider-verification.mjs --live`: live verification evaluated (SEP: 8/8 verified; Linear: 29/29 verified; Bitwarden: 39/39 verified; Google: 20/20 verified; Apple: 0 verified, Akamai policy challenge caught and reported; Netflix: 10/10 verified; Amazon: 10/10 verified; Meta: 0 verified, client SPA shell verified).
+- `cargo fmt --all --check`: passed with zero formatting diffs.
+- `cargo clippy --workspace --all-targets -- -D warnings`: passed with 0 warnings.
+- `cargo test --workspace`: **425 passed / 0 failed** (166 host unit/migration, 12 packaged worker/repository, 166 core, 31 worker unit, 8 adapter, 5 branding-process, 3 browser-cdp-process, 6 coordinator, 17 limits-process, 4 script-runner-process, 7 worker-process; 0 failed).
+- `cargo test -p scrape --test worker_repository`: **12 passed / 0 failed** in 1.16s (including `recorded_provider_company_verification_matrix_persists_to_sqlite`).
+- `npm run gen:types && git diff --exit-code src/bindings`: passed with 0 drift.
+- `npx tsc --noEmit`: passed with 0 errors.
+- `npm test` (`vitest run && node scripts/test-app-startup.mjs`): **472 passed / 78 files** in 9.91s + Vite dev server startup smoke clean.
+- `npm run build`: passed (Vite production bundle built in 4.77s).
+- `node scripts/check-style.mjs`: passed (Production style guard passed, 0 violations).
+- `git diff --check`: passed with zero whitespace or line ending issues.
+
+Explicit boundaries and unperformed checks:
+No user database or application storage was opened or mutated. No physical pointer or IME verification, native OS file chooser interaction, or 200% zoom overflow QA was performed in this checkpoint. In accordance with Plan 11 rules, Apple's live Akamai bot challenge and Meta's client-rendered Relay SPA without server HTML remain documented acceptance gaps. Section 7 is fully implemented and accepted. Next: Section 8 (Regional settings and Kanban).

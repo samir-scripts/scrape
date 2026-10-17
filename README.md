@@ -228,11 +228,6 @@ npm run test:providers        # Recorded HTTP → actual worker; no public netwo
 npm run test:providers:live   # Bounded, timestamped public-provider verification.
 ```
 
-The live check currently covers Lever/SEP, Ashby/Linear, and Greenhouse/Bitwarden. Generic JSON-LD and selector behavior is covered by local fixtures and native smoke, rather than a claim of live-provider verification. Required CI uses deterministic recordings. Regenerate the browser artifact with `node scripts/provider-verification.mjs --refresh-example` only after reviewing the raw captures and their checksums; preserve original provider IDs, titles and URLs.
+The live check covers Lever/SEP, Ashby/Linear, Greenhouse/Bitwarden, Google Careers, Netflix, and Amazon, while reporting Apple's Akamai bot challenge and Meta's client SPA as documented acceptance gaps. Deterministic provider verification (`npm run test:providers`) replays all targets against authentic recorded captures with SHA-256 provenance in `fixtures/providers/manifest.json`. Required CI uses deterministic recordings. Regenerate the browser artifact with `node scripts/provider-verification.mjs --refresh-example` only after reviewing the raw captures and their checksums; preserve original provider IDs, titles, and URLs.
 
-Phase 6B adds typed browser/script configuration, migration 26 session metadata,
-and explicit local script trust. Imported scripts stay disabled for review;
-editing executable inputs or path-script contents invalidates trust. Versions 1–5
-convert to WorkflowSpec v6 without rewriting saved user data. Browser and script
-runners and editor controls follow in Phases 6C–6F; configured unavailable modes
-fail explicitly before execution. See [Section 6 evidence](plans/11-implementation-evidence.md).
+Section 6 provides low-footprint static, CDP browser, and versioned script extraction across Phases 6A–6F (WorkflowSpec v6, migration 26, protocol v7). Section 7 adds manifest-driven recorded and live provider verification across FAANG, ATS, and custom targets, verified through packaged sidecar replay into temporary SQLite. See [implementation evidence](plans/11-implementation-evidence.md).
