@@ -4,10 +4,13 @@
 **Parent Specification:** [Reliable ingestion, multi-source workflows, and UI repair](11-reliable-ingestion-and-ui-repair.md#6-browser-and-script-extraction)  
 **Prerequisite State:** Sections 1–5 and Incident 27 (Migrations 0001–0025) implemented and verified on branch `implementation/trustworthy-scraping`.
 
-**Implementation status:** Phase 6A is in progress. The first checkpoint adds shared
-CSS/XPath locators, field attributes, regex transforms and real worker/persistence
-regressions. Hydration, resumable pagination/detail fetching and Phases 6B–6F are
-still open. See [implementation evidence](11-implementation-evidence.md#section-6a--static-locator-foundation-in-progress).
+**Implementation status:** Phase 6A static extraction is implemented: shared
+CSS/XPath fields/regexes, explicit hydration JSON, resumable pagination, bounded
+detail enrichment, readiness and preserved identity/branding. Static load-more
+controls fail explicitly until browser mode exists. Protocol v7 termination/limits
+were pulled forward from 6B to report/enforce 6A coverage correctly; the remaining
+6B contracts, migration 26 and trust work, and 6C–6F, remain open. See
+[implementation evidence](11-implementation-evidence.md#section-6a--hydration-resumable-pagination-and-bounded-details).
 
 ---
 

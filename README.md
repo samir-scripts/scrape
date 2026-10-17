@@ -178,7 +178,7 @@ automatic-scraping pause; explicit manual runs remain available. See
 [the active revision](plans/11-reliable-ingestion-and-ui-repair.md) for implementation status.
 Static custom sources accept mixed CSS/XPath locators, field attributes and Rust
 regex transforms through `extractor.source_config`; see [examples](plans/workflow-v3.md#static-custom-locators-section-6a).
-Hydration, resumable selector pagination/details and browser/script execution remain pending.
+Static hydration JSON, resumable pagination and bounded detail enrichment share matching and workflow limits. Browser/session/script execution remains pending.
 
 Hourly filters compare explicitly hourly ranges in their original currency,
 including cents and inclusive overlap. Annual analytics are separately derived.

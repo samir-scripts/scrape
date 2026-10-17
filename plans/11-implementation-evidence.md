@@ -414,3 +414,106 @@ Limits and remaining work:
 - No user database or application storage was used. Original-report reproduction
   and Sections 7–8 remain open. Section 5 behavior and plans 06–09 protections
   remain authoritative.
+
+## Section 6A — Hydration, resumable pagination and bounded details
+
+Hydration checkpoint: `c449be0`; resumable static extraction and protocol-v7
+prerequisite: `35728fd`. Started from clean revision `b279eac`. This completes
+the static Phase 6A behavior and supersedes its earlier pending notes. Section 6
+as a whole remains open.
+
+Implemented and exercised:
+
+- Explicit embedded hydration JSON extraction through shared Rust validation of
+  script locators, RFC 6901 pointers, field mappings and regexes. Numeric IDs,
+  original destinations, native salary cents and publication evidence survive the
+  real worker/persistence path. Missing/malformed scripts and non-array pointers
+  fail explicitly; invalid candidates are isolated. No embedded code executes.
+- One posting normalizer handles DOM and hydration evidence. Both retain URL
+  patterns and authoritative matching; optional unknowns remain unknown.
+- Resumable selector sessions retain page/candidate position, follow relative
+  next URLs against actual pages, prevent URL/redirect/fragment loops and yield
+  during bounded discovery (32 events, or a newly fetched page). An empty middle
+  page does not end discovery. No further discovery/details are scheduled after
+  the shared acceptance cap. HTTP robots/pacing/timeouts remain in use.
+- Details are fetched only after known evidence is assessed. They fill missing
+  location/description/pay/date evidence without replacing listing title, ID,
+  company or destination. Required unknown evidence stays unresolved/partial;
+  optional failures warn. Employer branding uses the existing evidence ranking:
+  matching detail JobPosting metadata can improve a lower-ranked listing image.
+- Page/time bounds, invalid navigation and loops retain confirmed results with
+  truthful partial coverage. Coverage warnings do not inflate detail-enrichment
+  warning counts. Pending evaluated candidates are retained across warning yields.
+- Shared budgeting remains fair across mixed paginated/single-page sources,
+  including optional detail warnings. Controlled deadlines stop source work before
+  consuming another candidate and workflow work before source initialization.
+- Static `wait_for` checks HTML presence. Load-more clicking fails explicitly
+  until browser mode is implemented. Configuration examples and directory READMEs
+  describe the supported static settings and limitations.
+
+Sequencing adjustment: pagination needs the blueprint's `PageLimit` contract.
+Protocol v7, `PageLimit`/`NeedsLogin` termination, and the planned WorkerLimits
+fields/defaults were pulled forward from 6B. Rust validates bounds before source
+work and generates TypeScript. Protocol-v6 requests fail explicitly. The browser
+process/context limits are configuration contracts; runtime pool enforcement
+awaits 6C. `--protocol-version` lets provider verification query Rust's version
+instead of duplicating a numeric constant. No migration was added; applied SQL
+and checksums, WorkflowSpec v5 ownership and user state remain unchanged.
+
+Regressions established before the corresponding fixes:
+
+- Hydration was rejected as a missing DOM description locator.
+- The late-match fixture returned zero rather than two jobs: the original selector
+  path did not continue to page two or obtain required detail evidence.
+- Mixed paginated/single-page sources allocated **4/8/8** rather than **7/7/6**.
+  Optional detail warnings exposed the same lost-round problem separately. Both
+  cases now produce exactly **7/7/6** at cap 20.
+- The new limits-contract test failed with an unknown `max_pages_per_source` field.
+
+Validation actually run:
+
+- `npm run build:sidecar`: passed, including the final branding/fairness changes;
+  the packaged release worker was rebuilt before host/persistence tests.
+- `cargo test --workspace`: **392 passed** (158 host, 9 actual worker/repository,
+  153 core, 30 worker unit, 8 adapter, 5 branding-process, 6 coordinator,
+  17 limits-process, 6 worker-process). Final log:
+  `/tmp/scrape-6a-completion-tests.log`.
+- The three-page fixture (empty middle page plus two distinct detail URLs) runs
+  Preview, insert and refresh through the packaged worker → production mapper →
+  temporary SQLite. Exactly 18 HTTP requests across three runs; two accepted jobs
+  per run; no request to the remaining page/posting; notes/favorites/applied status
+  and original IDs/destinations/hourly cents/publication dates are preserved.
+  The separate late-match process fixture examines 72 (70 rejects, two accepts),
+  fetches exactly two details and no irrelevant detail or unused page.
+- `cargo test -p scrape-worker`, focused coordinator/limits tests, hydration unit
+  regression and core bounds regression were also run. Intermediate logs:
+  `/tmp/scrape-6a-hydration-tests.log` (379 workspace tests),
+  `/tmp/scrape-6a-static-tests.log`, `/tmp/scrape-6a-worker-tests.log`.
+- `cargo fmt --all --check` and
+  `cargo clippy --workspace --all-targets -- -D warnings`: passed on final code.
+- `npm run gen:types` and `git diff --exit-code src/bindings`: passed with no drift
+  after staging the intentional Rust-generated protocol changes. Log:
+  `/tmp/scrape-6a-completion-bindings.log`.
+- `npx vitest run --maxWorkers=1`: **461 passed / 76 files**, including page-limit
+  and needs-login diagnostic labels. Log: `/tmp/scrape-6a-frontend-tests.log`.
+- `npx tsc --noEmit`, `npm run build`, `node scripts/check-style.mjs`,
+  `node scripts/test-app-startup.mjs`, and `git diff --check`: passed. Production
+  build retains the existing chunk-size advisory; frontend tests retain existing
+  Node localStorage experimental warnings. Build log: `/tmp/scrape-6a-build.log`.
+- `npm run test:providers`: **2/2 recorded HTTP replays passed**, SEP/Lever and
+  Linear/Ashby, using the built worker's protocol handshake. Repeated after commit
+  so report provenance names `35728fd`. Log: `/tmp/scrape-6a-provider-tests.log`.
+  This checks recorded associations through the worker, not live sites or provider
+  persistence; temporary SQLite coverage is reported separately above.
+
+No native UI/IPC/startup journey, physical interaction, browser journey, live
+provider/FAANG verification or RAM/CPU benchmark was performed in this checkpoint.
+No user database/application storage or screenshot baseline was used or changed.
+Reference-encoded hydration formats require explicit user decoding in a future
+custom script; static extraction does not promise arbitrary SPA support.
+
+Next: finish Phase 6B's migration 26, populated upgrade/recovery tests, browser and
+extractor-test boundary contracts, extraction-mode validation and executable
+trust/hash gates. CDP/browser sessions, custom scripts, editor controls and final
+Section 6 integration acceptance remain open in 6C–6F. Original-report reproduction
+and Sections 7–8 remain open; the whole revision is not complete.
