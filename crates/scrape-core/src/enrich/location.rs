@@ -545,11 +545,7 @@ pub fn parse_with_country(raw: &str, country: Option<&str>) -> Vec<ParsedLocatio
     };
     parse(raw)
         .into_iter()
-        .map(|original| {
-            let mut location = parse_single(&format!("{}, {country}", original.raw));
-            location.raw = original.raw;
-            location
-        })
+        .map(|original| parse_single_with_country(&original.raw, Some(&country)))
         .collect()
 }
 
@@ -719,6 +715,10 @@ fn labeled_location_value(value: &str) -> Option<(&'static str, &str)> {
 }
 
 fn parse_single(raw: &str) -> ParsedLocation {
+    parse_single_with_country(raw, None)
+}
+
+fn parse_single_with_country(raw: &str, country_context: Option<&str>) -> ParsedLocation {
     use crate::geography::{contains_phrase, country_code as country, normalize, REGIONS};
     // Exclusions are not positive eligibility evidence. Keep the complete raw text.
     let upper = raw.to_ascii_uppercase();
@@ -769,30 +769,32 @@ fn parse_single(raw: &str) -> ParsedLocation {
             .to_string()
     };
     let ambiguous_code = |part: &str| REGIONS.iter().any(|r| r.code == part);
-    let explicit_country = parts
-        .iter()
-        .find_map(|part| {
-            let candidate = policy_stripped(part);
-            if candidate == "GEORGIA" {
-                return if contains_phrase(evidence, "TBILISI") {
-                    Some("GE".into())
-                } else {
-                    None
-                };
-            }
-            if candidate.len() == 2 && ambiguous_code(&candidate) && normalized != candidate {
-                return city
-                    .filter(|c| c.country_code == candidate)
-                    .map(|c| c.country_code.to_string());
-            }
-            country(&candidate)
-        })
-        .or_else(|| {
-            let last = evidence.split_whitespace().next_back()?;
-            (last.len() <= 3 && last == last.to_uppercase() && !ambiguous_code(last))
-                .then(|| country(last))
-                .flatten()
-        });
+    let explicit_country = country_context.map(str::to_owned).or_else(|| {
+        parts
+            .iter()
+            .find_map(|part| {
+                let candidate = policy_stripped(part);
+                if candidate == "GEORGIA" {
+                    return if contains_phrase(evidence, "TBILISI") {
+                        Some("GE".into())
+                    } else {
+                        None
+                    };
+                }
+                if candidate.len() == 2 && ambiguous_code(&candidate) && normalized != candidate {
+                    return city
+                        .filter(|c| c.country_code == candidate)
+                        .map(|c| c.country_code.to_string());
+                }
+                country(&candidate)
+            })
+            .or_else(|| {
+                let last = evidence.split_whitespace().next_back()?;
+                (last.len() <= 3 && last == last.to_uppercase() && !ambiguous_code(last))
+                    .then(|| country(last))
+                    .flatten()
+            })
+    });
     let region = REGIONS
         .iter()
         .filter_map(|region| {
@@ -1015,6 +1017,15 @@ mod provider_context_tests {
         assert_eq!(values[0].region_code.as_deref(), Some("US-IN"));
         assert_eq!(values[1].city.as_deref(), Some("Notincatalog"));
         assert_eq!(values[1].region_code.as_deref(), Some("US-CA"));
+        for code in ["IN", "CA"] {
+            assert_eq!(
+                parse_with_country("Unlisted city", Some(code))[0]
+                    .country_code
+                    .as_deref(),
+                Some(code),
+                "explicit provider country must override abbreviation ambiguity"
+            );
+        }
         assert_eq!(parse("Westfield, IN")[0].country_code, None);
         assert_eq!(parse("Notincatalog, CA")[0].country_code, None);
         assert_eq!(
