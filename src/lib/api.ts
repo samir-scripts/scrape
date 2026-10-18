@@ -2,7 +2,7 @@ import { INGESTION_LIMITS } from "../bindings/ingestionLimits";
 import { errorMessage } from "./errors";
 import type { WorkflowSpec } from "../bindings/WorkflowSpec";
 import type { WorkflowPreview } from "../bindings/WorkflowPreview";
-import { workflowSpecToCreateInput, workflowSpecToYaml, validateWorkflowYaml } from "./yamlWorkflow";
+import { workflowSpecToCreateInput, workflowSpecToYaml, validateWorkflowYaml, SAMPLE_WORKFLOW_TEMPLATES } from "./yamlWorkflow";
 import { matchesJob } from "./filter";
 import type { RemovedPosting } from "../bindings/RemovedPosting";
 import type { RemovalResult } from "../bindings/RemovalResult";
@@ -498,21 +498,24 @@ function matchesDemoWorkflow(job: Job, source: Source): boolean {
   if (filters.query || filters.policy) throw new Error("Expert queries and policies require desktop validation.");
   const rules = filters.matching;
   if (rules?.posting_date) throw new Error("Posting-date previews require desktop extraction.");
-  const includes = filters.include_keywords ?? devSettings.filters_include_keywords;
-  const excludes = filters.exclude_keywords ?? devSettings.filters_exclude_keywords;
-  const locations = filters.locations ?? devSettings.filters_locations;
-  const roles = filters.role_types ?? devSettings.filters_role_types;
+  const includes = filters.include_keywords;
+  const excludes = filters.exclude_keywords;
+  const locations = filters.locations;
+  const roles = filters.role_types;
   const text = `${job.title} ${job.location || ""}`.toLowerCase();
   const contains = (word: string) => text.includes(word.toLowerCase());
-  if (includes.length && !includes.some(contains) || excludes.some(contains)) return false;
-  if (locations.length && !locations.some(loc => (job.location || "").toLowerCase().includes(loc.toLowerCase()))) return false;
-  if (roles.length && !roles.includes(job.role_type)) return false;
+  if (includes && includes.length && !includes.some(contains)) return false;
+  if (excludes && excludes.length && excludes.some(contains)) return false;
+  if (locations && locations.length && !locations.some(loc => (job.location || "").toLowerCase().includes(loc.toLowerCase()))) return false;
+  if (roles && roles.length && !roles.includes(job.role_type)) return false;
   const keywords = rules?.keywords;
   if (keywords) {
     const values = { title: job.title, company: job.company, location: job.location || "", description: job.description_text || "" };
     const haystack = keywords.fields.map(field => values[field as keyof typeof values] || "").join(" ").toLowerCase();
     const match = (word: string) => haystack.includes(word.toLowerCase());
-    if (keywords.any.length && !keywords.any.some(match) || !keywords.all.every(match) || keywords.exclude.some(match)) return false;
+    if (keywords.any?.length && !keywords.any.some(match)) return false;
+    if (keywords.all?.length && !keywords.all.every(match)) return false;
+    if (keywords.exclude?.length && keywords.exclude.some(match)) return false;
   }
   if (rules?.workplaces?.length && !rules.workplaces.includes(job.workplace_type)) return false;
   const pay = rules?.compensation || filters.compensation;
@@ -520,7 +523,7 @@ function matchesDemoWorkflow(job: Job, source: Source): boolean {
     role_types: rules?.role_types, experience_min: rules?.experience_min, experience_max: rules?.experience_max,
     experience_include_unknown: rules?.experience_include_unknown, new_grad: rules?.new_grad,
     sponsorship: rules?.sponsorship, clearance: rules?.clearance, work_auth: rules?.work_auth,
-    countries: rules?.countries, regions: rules?.regions, location_include_unknown: rules?.location_include_unknown,
+    countries: rules?.countries, regions: rules?.regions, cities: rules?.cities, location_include_unknown: rules?.location_include_unknown,
     salary_min: pay?.min_minor == null ? undefined : pay.min_minor / 100, salary_max: pay?.max_minor == null ? undefined : pay.max_minor / 100,
     salary_interval: pay?.interval, salary_currency: pay?.currency, salary_include_unknown: pay?.include_unknown,
   });
@@ -790,6 +793,41 @@ const apiImplementation = {
       return Promise.resolve(newSource);
     }
     return invoke<Source>("seed_sample_workflow");
+  },
+
+  seedAllSampleWorkflows: (): Promise<Source[]> => {
+    if (!isTauri()) {
+      for (const tpl of SAMPLE_WORKFLOW_TEMPLATES) {
+        const input = workflowSpecToCreateInput(tpl.spec);
+        if (!devSources.some((s) => s.name === tpl.name || (s.identifier === input.identifier && s.kind === input.kind))) {
+          const newSource: Source = {
+            id: `sample-${crypto.randomUUID()}`,
+            kind: input.kind as any,
+            name: input.name,
+            identifier: input.identifier,
+            config: (input.config || {}) as any,
+            enabled: input.enabled ?? true,
+            last_run_at: null,
+            last_status: null,
+            last_error: null,
+            created_at: new Date().toISOString(),
+            cadence: input.cadence || "daily",
+            cadence_cron: input.cadence_cron || null,
+            next_run_at: null,
+            last_run_duration_ms: null,
+            retention_days: BigInt(input.retention_days || 45),
+            retention_policy: input.retention_policy || "untracked_only",
+            filters: (input.filters || {}) as any,
+            needs_review: false,
+            script_trusted: false,
+          };
+          devSources.push(newSource);
+        }
+      }
+      saveDevSources();
+      return Promise.resolve([...devSources]);
+    }
+    return invoke<Source[]>("seed_all_sample_workflows");
   },
 
   createSource: (input: {

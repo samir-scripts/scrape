@@ -13,7 +13,7 @@ import { JobLimitInput } from "./JobLimitInput";
 import { CustomExtractorConfig } from "./CustomExtractorConfig";
 import type { Source } from "../../../bindings/Source";
 import { api } from "../../../lib/api";
-import { canonicalizeAtsUrl, normalizedEndpoint } from "../../../lib/yamlWorkflow";
+import { canonicalizeAtsUrl, normalizedEndpoint, SAMPLE_WORKFLOW_TEMPLATES, normalizeLegacyWorkflowFilters } from "../../../lib/yamlWorkflow";
 
 export const emptyRules = (): PostingRules => ({
   keywords: null,
@@ -30,6 +30,7 @@ export const emptyRules = (): PostingRules => ({
   clearance: [],
   countries: [],
   regions: [],
+  cities: [],
   location_include_unknown: false,
 });
 export const words = (text: string) =>
@@ -94,6 +95,31 @@ export function WorkflowSections({
 
     return (
       <div className="grid gap-4">
+        {!initialSource && (
+          <div className="flex flex-col gap-1 text-sm border p-3 bg-[var(--color-surface)]">
+            <label className="font-bold flex items-center justify-between">
+              <span>Sample Workflow Template</span>
+              <span className="text-xs font-normal text-[var(--color-ink-mute)]">Quick setup</span>
+            </label>
+            <p className="text-xs text-[var(--color-ink-mute)]">
+              Choose a preconfigured workflow template across ATS, static selectors, and custom scripts.
+            </p>
+            <Select
+              aria-label="Choose sample workflow template"
+              value=""
+              options={[
+                { value: "", label: "Select a sample template to load..." },
+                ...SAMPLE_WORKFLOW_TEMPLATES.map((t) => ({ value: t.id, label: t.name })),
+              ]}
+              onChange={(id) => {
+                const tpl = SAMPLE_WORKFLOW_TEMPLATES.find((t) => t.id === id);
+                if (tpl) {
+                  change(tpl.spec);
+                }
+              }}
+            />
+          </div>
+        )}
         {field("Workflow name", draft.metadata.name, (name) =>
           change({ ...draft, metadata: { ...draft.metadata, name } }),
         )}
@@ -367,7 +393,74 @@ export function WorkflowSections({
     return (
       <div className="grid gap-3">
         <JobLimitInput value={draft.max_jobs_per_run ?? INGESTION_LIMITS.default} onChange={value => change(value == null ? { ...draft } : { ...draft, max_jobs_per_run: value })} />
+        {filters.query && (
+          <div role="alert" className="border border-[var(--color-warning)] p-3 grid gap-2 bg-[var(--color-paper)]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-bold text-xs text-[var(--color-warning)] uppercase tracking-wider">Expert SQL Query Active</span>
+              <Button size="sm" type="button" onClick={() => change({ ...draft, filters: { ...filters, query: undefined } })}>
+                Clear query
+              </Button>
+            </div>
+            <p className="text-xs text-[var(--color-ink-mute)] font-code break-all">
+              {filters.query}
+            </p>
+            <p className="text-xs text-[var(--color-ink-mute)]">
+              Notice: This raw SQL query restricts scraping results in addition to the structured rules below. Clear it if you want only structured matching.
+            </p>
+          </div>
+        )}
+        {(filters.locations?.length || filters.include_keywords?.length || filters.exclude_keywords?.length || filters.role_types?.length) ? (
+          <div role="status" className="border border-[var(--color-warning)] p-3 grid gap-2 bg-[var(--color-paper)]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-bold text-xs text-[var(--color-warning)] uppercase tracking-wider">Legacy Filters Detected</span>
+              <Button
+                size="sm"
+                type="button"
+                onClick={() => {
+                  change({
+                    ...draft,
+                    filters: normalizeLegacyWorkflowFilters((draft.filters || {}) as any),
+                  });
+                }}
+              >
+                Migrate to structured rules
+              </Button>
+            </div>
+            <p className="text-xs text-[var(--color-ink-mute)]">
+              This workflow contains legacy keyword, location, or role filters that run in combination with structured rules. Click above to migrate them into primary rules and clear the legacy restrictions.
+            </p>
+          </div>
+        ) : null}
         <KeywordMatching rules={rules} change={change} />
+        <fieldset className="flex flex-wrap gap-4 border-t pt-3 text-sm">
+          <legend className="font-bold mb-1">Role types</legend>
+          {(
+            [
+              ["full_time", "Full-time"],
+              ["internship", "Internship"],
+              ["contract", "Contract"],
+              ["part_time", "Part-time"],
+              ["seasonal", "Seasonal"],
+            ] as const
+          ).map(([value, label]) => (
+            <label key={value} className="flex min-h-8 items-center gap-2">
+              <input
+                type="checkbox"
+                checked={rules.role_types.includes(value)}
+                onChange={(e) => {
+                  const updated = e.target.checked
+                    ? [...rules.role_types, value]
+                    : rules.role_types.filter((v) => v !== value);
+                  setRules({ role_types: updated });
+                }}
+              />
+              {label}
+            </label>
+          ))}
+        </fieldset>
+        <p className="text-xs text-[var(--color-ink-mute)]">
+          Leave all unchecked to match any role type.
+        </p>
         <GeographyMatching rules={rules} onChange={setRules} onDraftChange={() => change({ ...draft })} />
         {advanced && field(
           "Location matches (additional text restriction)",
@@ -380,33 +473,6 @@ export function WorkflowSections({
         )}
         {advanced && (
           <>
-            <fieldset className="flex flex-wrap gap-3">
-              <legend>Roles</legend>
-              {(
-                [
-                  "full_time",
-                  "part_time",
-                  "contract",
-                  "internship",
-                  "seasonal",
-                ] as const
-              ).map((value) => (
-                <label key={value}>
-                  <input
-                    type="checkbox"
-                    checked={rules.role_types.includes(value)}
-                    onChange={(e) =>
-                      setRules({
-                        role_types: e.target.checked
-                          ? [...rules.role_types, value]
-                          : rules.role_types.filter((v) => v !== value),
-                      })
-                    }
-                  />{" "}
-                  {value.replaceAll("_", " ")}
-                </label>
-              ))}
-            </fieldset>
             <SalaryRangeFilter
               salaryMin={
                 rules.compensation?.min_minor == null

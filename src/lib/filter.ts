@@ -116,12 +116,23 @@ export function matchesJob(job: Job, filter: Partial<JobFilter>): boolean {
     const mode = filter.remote.replace("_only", "");
     if (mode === "exclude_remote" ? job.workplace_type === "remote" : job.workplace_type !== mode) return false;
   }
-  const countries = filter.countries || [], regions = filter.regions || [];
-  if (countries.length || regions.length) {
+  const countries = filter.countries || [], regions = filter.regions || [], cities = filter.cities || [];
+  if (countries.length || regions.length || cities.length) {
     const locations = job.locations || [];
-    if (!locations.length) { if (!filter.location_include_unknown) return false; }
-    else if (!locations.some((loc) => (!countries.length || countries.some((c) => c.toUpperCase() === loc.country_code?.toUpperCase())) &&
-      (!regions.length || regions.some((r) => loc.region_code?.toUpperCase() === r.toUpperCase() || loc.region_code?.toUpperCase().endsWith(`-${r.toUpperCase()}`))))) return false;
+    if (!locations.length) {
+      if (!filter.location_include_unknown) return false;
+    } else {
+      const match = locations.some((loc) => {
+        const countryMatch = !countries.length || countries.some((c) => c.toUpperCase() === loc.country_code?.toUpperCase());
+        const regionMatch = !regions.length || regions.some((r) => loc.region_code?.toUpperCase() === r.toUpperCase() || loc.region_code?.toUpperCase().endsWith(`-${r.toUpperCase()}`));
+        const cityMatch = !cities.length || cities.some((city) => {
+          const cLower = city.toLowerCase();
+          return loc.city?.toLowerCase().includes(cLower) || loc.raw?.toLowerCase().includes(cLower) || (job.location?.toLowerCase().includes(cLower) ?? false);
+        });
+        return countryMatch && regionMatch && cityMatch;
+      });
+      if (!match) return false;
+    }
   }
 
   return true;

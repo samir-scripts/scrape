@@ -324,6 +324,22 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
               ADD WORKFLOW
             </Button>
           </Tooltip>
+          <Button
+            variant="default"
+            disabled={isRecordedMode()}
+            onClick={async () => {
+              try {
+                await api.seedAllSampleWorkflows();
+                fetchSources();
+                notifySuccess("Loaded test workflows suite across ATS, selectors, and scripts.");
+              } catch (err) {
+                notifyError(`Failed to load test workflows: ${err}`);
+              }
+            }}
+            aria-label="Load test workflows"
+          >
+            Load test workflows
+          </Button>
           {activeRun ? <>
             <span role="status" className="max-w-48 truncate text-xs">{scanStatusText || "Running workflows…"}</span>
             <Button variant="danger" onClick={() => api.cancelScrape().then(cancelled => notifyInfo(cancelled ? "Cancellation requested; committed results remain saved." : "No active run to cancel.")).catch(error => notifyError(String(error)))}>Cancel run</Button>

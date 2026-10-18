@@ -1,0 +1,58 @@
+# ==============================================================================
+# SCRAPE SAMPLE WORKFLOW: SEP Software & Embedded Consulting
+# Target: SEP Lever Openings
+# Spec Version: 6 (Multi-source, structured matching, fair budget)
+# ==============================================================================
+
+version: 6
+
+metadata:
+  name: "SEP — Software, AI & Embedded Engineering"
+  company: "SEP"
+  enabled: true
+
+sources:
+  - id: "sep"
+    label: "SEP — Lever"
+    enabled: true
+    employer_hint: "SEP"
+    extractor:
+      kind: lever
+      url: "https://jobs.lever.co/sep"
+
+schedule:
+  cadence: daily
+  time: "09:00"
+  cron: "0 0 9 * * *"
+
+filters:
+  matching:
+    role_types:
+      - full_time
+      - internship
+    workplaces:
+      - hybrid
+      - onsite
+    countries:
+      - US
+    regions:
+      - US-IN
+    cities:
+      - Indianapolis
+      - Westfield
+    keywords:
+      any:
+        - Software
+        - Engineer
+        - AI
+        - Producer
+        - Embedded
+        - Cloud
+      all: []
+      exclude: []
+      fields:
+        - title
+
+retention:
+  days: 30
+  policy: untracked_only

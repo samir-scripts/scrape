@@ -60,3 +60,24 @@ pub async fn seed_sample_workflow(app: AppHandle, state: State<'_, AppState>) ->
     let _ = app.emit("sources://changed", &source);
     Ok(source)
 }
+
+#[tauri::command]
+pub async fn seed_all_sample_workflows(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Vec<Source>> {
+    let _permit = state.runner.write_permit()?;
+    let mut created = Vec::new();
+    let existing = SourcesRepo::list(&state.db).await?;
+    for input in SourcesRepo::sample_workflows_suite() {
+        if !existing
+            .iter()
+            .any(|s| s.identifier == input.identifier && s.kind == input.kind)
+        {
+            let source = SourcesRepo::create(&state.db, input).await?;
+            let _ = app.emit("sources://changed", &source);
+            created.push(source);
+        }
+    }
+    Ok(created)
+}

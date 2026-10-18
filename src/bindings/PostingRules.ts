@@ -11,4 +11,4 @@ export type PostingRules = { keywords: KeywordRules | null, posting_date: Postin
 /**
  * "any", "only", or "exclude". Exclusion retains unknown classifications.
  */
-new_grad: string | null, sponsorship: Array<TriState>, work_auth: Array<WorkAuthRequirement>, clearance: Array<TriState>, countries: Array<string>, regions: Array<string>, location_include_unknown: boolean, };
+new_grad: string | null, sponsorship: Array<TriState>, work_auth: Array<WorkAuthRequirement>, clearance: Array<TriState>, countries: Array<string>, regions: Array<string>, cities: Array<string>, location_include_unknown: boolean, };

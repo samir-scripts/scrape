@@ -205,6 +205,182 @@ pub struct WorkerFilters {
 }
 
 impl WorkerFilters {
+    pub fn normalize_into_matching(&mut self) {
+        if self.matching.is_none()
+            && self.include_keywords.is_empty()
+            && self.exclude_keywords.is_empty()
+            && self.locations.is_empty()
+            && self.role_types.is_empty()
+        {
+            return;
+        }
+        let matching = self
+            .matching
+            .get_or_insert_with(crate::matching::PostingRules::default);
+
+        // 1. include_keywords -> matching.keywords.any
+        if !self.include_keywords.is_empty() {
+            let kw = matching
+                .keywords
+                .get_or_insert_with(crate::matching::KeywordRules::default);
+            for word in self.include_keywords.drain(..) {
+                let trimmed = word.trim();
+                if !trimmed.is_empty()
+                    && !kw
+                        .any
+                        .iter()
+                        .any(|existing| existing.eq_ignore_ascii_case(trimmed))
+                {
+                    kw.any.push(trimmed.to_string());
+                }
+            }
+        }
+
+        // 2. exclude_keywords -> matching.keywords.exclude
+        if !self.exclude_keywords.is_empty() {
+            let kw = matching
+                .keywords
+                .get_or_insert_with(crate::matching::KeywordRules::default);
+            for word in self.exclude_keywords.drain(..) {
+                let trimmed = word.trim();
+                if !trimmed.is_empty()
+                    && !kw
+                        .exclude
+                        .iter()
+                        .any(|existing| existing.eq_ignore_ascii_case(trimmed))
+                {
+                    kw.exclude.push(trimmed.to_string());
+                }
+            }
+        }
+
+        // 3. role_types -> matching.role_types
+        for role in self.role_types.drain(..) {
+            if !matching.role_types.contains(&role) {
+                matching.role_types.push(role);
+            }
+        }
+
+        // 4. locations -> partition
+        for loc in self.locations.drain(..) {
+            let trimmed = loc.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            match trimmed.to_ascii_lowercase().as_str() {
+                "remote" | "telecommute" | "virtual" => {
+                    if !matching
+                        .workplaces
+                        .contains(&crate::types::WorkplaceType::Remote)
+                    {
+                        matching
+                            .workplaces
+                            .push(crate::types::WorkplaceType::Remote);
+                    }
+                }
+                "hybrid" => {
+                    if !matching
+                        .workplaces
+                        .contains(&crate::types::WorkplaceType::Hybrid)
+                    {
+                        matching
+                            .workplaces
+                            .push(crate::types::WorkplaceType::Hybrid);
+                    }
+                }
+                "on-site" | "onsite" | "in-office" | "in office" | "in-person" | "in person" => {
+                    if !matching
+                        .workplaces
+                        .contains(&crate::types::WorkplaceType::Onsite)
+                    {
+                        matching
+                            .workplaces
+                            .push(crate::types::WorkplaceType::Onsite);
+                    }
+                }
+                _ => {
+                    if let Some(code) = crate::geography::country_code(trimmed) {
+                        if !matching
+                            .countries
+                            .iter()
+                            .any(|c| c.eq_ignore_ascii_case(&code))
+                        {
+                            matching.countries.push(code);
+                        }
+                    } else if trimmed.contains('-')
+                        && crate::geography::REGIONS.iter().any(|r| {
+                            format!("{}-{}", r.country_code, r.code).eq_ignore_ascii_case(trimmed)
+                        })
+                    {
+                        if !matching
+                            .regions
+                            .iter()
+                            .any(|r| r.eq_ignore_ascii_case(trimmed))
+                        {
+                            matching.regions.push(trimmed.to_ascii_uppercase());
+                        }
+                    } else {
+                        let parsed = crate::enrich::location::parse(trimmed);
+                        if let Some(first) = parsed.first() {
+                            if let Some(ref c) = first.country_code {
+                                if !matching
+                                    .countries
+                                    .iter()
+                                    .any(|existing| existing.eq_ignore_ascii_case(c))
+                                {
+                                    matching.countries.push(c.clone());
+                                }
+                            }
+                            if let Some(ref r) = first.region_code {
+                                if !matching
+                                    .regions
+                                    .iter()
+                                    .any(|existing| existing.eq_ignore_ascii_case(r))
+                                {
+                                    matching.regions.push(r.clone());
+                                }
+                            }
+                            if let Some(ref city) = first.city {
+                                if !matching
+                                    .cities
+                                    .iter()
+                                    .any(|existing| existing.eq_ignore_ascii_case(city))
+                                {
+                                    matching.cities.push(city.clone());
+                                }
+                            } else if first.country_code.is_none()
+                                && first.region_code.is_none()
+                                && !matching
+                                    .cities
+                                    .iter()
+                                    .any(|existing| existing.eq_ignore_ascii_case(trimmed))
+                            {
+                                matching.cities.push(trimmed.to_string());
+                            }
+                        } else if !matching
+                            .cities
+                            .iter()
+                            .any(|existing| existing.eq_ignore_ascii_case(trimmed))
+                        {
+                            matching.cities.push(trimmed.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. If query was the known default sample query string, clear it
+        if let Some(ref q) = self.query {
+            let trimmed = q.trim();
+            if trimmed
+                == "title LIKE '%Engineer%' OR title LIKE '%Developer%' OR title LIKE '%Intern%'"
+                || trimmed == "title LIKE '%Engineer%' OR title LIKE '%Intern%'"
+            {
+                self.query = None;
+            }
+        }
+    }
+
     pub fn to_expr(&self) -> Result<crate::filter::FilterExpr, String> {
         Ok(crate::FilterExpr::And(
             self.categorized_predicates()?

@@ -588,7 +588,46 @@ impl SourcesRepo {
             name: "Cloudflare — Software Engineering & Internships".to_string(),
             identifier: "cloudflare".to_string(),
             config: Some(serde_json::json!({
-                "url": "https://boards.greenhouse.io/cloudflare"
+                "url": "https://boards.greenhouse.io/cloudflare",
+                "__workflow_spec": {
+                    "version": 6,
+                    "metadata": {
+                        "name": "Cloudflare — Software Engineering & Internships",
+                        "company": "Cloudflare",
+                        "enabled": true
+                    },
+                    "sources": [{
+                        "id": "cloudflare",
+                        "label": "Cloudflare — Greenhouse",
+                        "enabled": true,
+                        "employer_hint": "Cloudflare",
+                        "extractor": {
+                            "kind": "greenhouse",
+                            "url": "https://boards.greenhouse.io/cloudflare"
+                        }
+                    }],
+                    "schedule": {
+                        "cadence": "daily",
+                        "time": "09:00",
+                        "cron": "0 0 9 * * *",
+                        "timezone": "UTC"
+                    },
+                    "filters": {
+                        "matching": {
+                            "role_types": ["internship", "full_time"],
+                            "workplaces": ["remote", "hybrid", "onsite"],
+                            "countries": ["US", "GB", "PT"],
+                            "cities": ["Austin", "San Francisco", "London", "Lisbon"],
+                            "keywords": {
+                                "any": ["Software", "Engineer", "Developer", "Systems", "Intern"],
+                                "all": [],
+                                "exclude": ["Recruiter", "Account Executive", "Sales Representative"],
+                                "fields": ["title"]
+                            }
+                        }
+                    },
+                    "retention": { "days": 45, "policy": "untracked_only" }
+                }
             })),
             enabled: Some(true),
             cadence: Some(SourceCadence::Daily),
@@ -597,12 +636,420 @@ impl SourcesRepo {
             retention_policy: Some("untracked_only".to_string()),
             filters: Some(serde_json::json!({
                 "role_types": ["internship", "full_time"],
-                "query": "title LIKE '%Engineer%' OR title LIKE '%Developer%' OR title LIKE '%Intern%'",
-                "include_keywords": ["Software", "Engineer", "Developer", "Systems", "Intern"],
-                "exclude_keywords": ["Recruiter", "Account Executive", "Sales Representative"],
-                "locations": ["Remote", "San Francisco", "Austin", "London", "Lisbon"]
+                "matching": {
+                    "role_types": ["internship", "full_time"],
+                    "workplaces": ["remote", "hybrid", "onsite"],
+                    "countries": ["US", "GB", "PT"],
+                    "cities": ["Austin", "San Francisco", "London", "Lisbon"],
+                    "keywords": {
+                        "any": ["Software", "Engineer", "Developer", "Systems", "Intern"],
+                        "all": [],
+                        "exclude": ["Recruiter", "Account Executive", "Sales Representative"],
+                        "fields": ["title"]
+                    }
+                }
             })),
         }
+    }
+
+    pub fn sample_workflows_suite() -> Vec<CreateSourceInput> {
+        vec![
+            Self::default_sample_workflow_input(),
+            CreateSourceInput {
+                kind: SourceKind::Greenhouse,
+                name: "Bitwarden — Remote Full-Stack & Security Engineering".to_string(),
+                identifier: "bitwarden".to_string(),
+                config: Some(serde_json::json!({
+                    "url": "https://boards.greenhouse.io/bitwarden",
+                    "__workflow_spec": {
+                        "version": 6,
+                        "metadata": {
+                            "name": "Bitwarden — Remote Full-Stack & Security Engineering",
+                            "company": "Bitwarden",
+                            "enabled": true
+                        },
+                        "sources": [{
+                            "id": "bitwarden",
+                            "label": "Bitwarden — Greenhouse",
+                            "enabled": true,
+                            "employer_hint": "Bitwarden",
+                            "extractor": {
+                                "kind": "greenhouse",
+                                "url": "https://boards.greenhouse.io/bitwarden"
+                            }
+                        }],
+                        "schedule": {
+                            "cadence": "daily",
+                            "time": "09:00",
+                            "cron": "0 0 9 * * *",
+                            "timezone": "UTC"
+                        },
+                        "filters": {
+                            "matching": {
+                                "role_types": ["full_time"],
+                                "workplaces": ["remote"],
+                                "countries": ["US", "CA", "GB", "IN"],
+                                "cities": [],
+                                "keywords": {
+                                    "any": ["Engineer", "Developer", "Security", "QA", "Cloud"],
+                                    "all": [],
+                                    "exclude": [],
+                                    "fields": ["title"]
+                                }
+                            }
+                        },
+                        "retention": { "days": 30, "policy": "untracked_only" }
+                    }
+                })),
+                enabled: Some(true),
+                cadence: Some(SourceCadence::Daily),
+                cadence_cron: Some("0 0 9 * * *".to_string()),
+                retention_days: Some(30),
+                retention_policy: Some("untracked_only".to_string()),
+                filters: Some(serde_json::json!({
+                    "matching": {
+                        "role_types": ["full_time"],
+                        "workplaces": ["remote"],
+                        "countries": ["US", "CA", "GB", "IN"],
+                        "cities": [],
+                        "keywords": {
+                            "any": ["Engineer", "Developer", "Security", "QA", "Cloud"],
+                            "all": [],
+                            "exclude": [],
+                            "fields": ["title"]
+                        }
+                    }
+                })),
+            },
+            CreateSourceInput {
+                kind: SourceKind::Ashby,
+                name: "Linear — Product, Frontend & Mobile Engineering".to_string(),
+                identifier: "linear".to_string(),
+                config: Some(serde_json::json!({
+                    "url": "https://jobs.ashbyhq.com/linear",
+                    "__workflow_spec": {
+                        "version": 6,
+                        "metadata": {
+                            "name": "Linear — Product, Frontend & Mobile Engineering",
+                            "company": "Linear",
+                            "enabled": true
+                        },
+                        "sources": [{
+                            "id": "linear",
+                            "label": "Linear — Ashby",
+                            "enabled": true,
+                            "employer_hint": "Linear",
+                            "extractor": {
+                                "kind": "ashby",
+                                "url": "https://jobs.ashbyhq.com/linear"
+                            }
+                        }],
+                        "schedule": {
+                            "cadence": "daily",
+                            "time": "09:00",
+                            "cron": "0 0 9 * * *",
+                            "timezone": "UTC"
+                        },
+                        "filters": {
+                            "matching": {
+                                "role_types": ["full_time"],
+                                "workplaces": ["remote"],
+                                "countries": ["US", "CA", "GB", "DE", "FR"],
+                                "cities": [],
+                                "keywords": {
+                                    "any": ["Engineer", "Product", "Designer", "Frontend", "Mobile"],
+                                    "all": [],
+                                    "exclude": [],
+                                    "fields": ["title"]
+                                }
+                            }
+                        },
+                        "retention": { "days": 30, "policy": "untracked_only" }
+                    }
+                })),
+                enabled: Some(true),
+                cadence: Some(SourceCadence::Daily),
+                cadence_cron: Some("0 0 9 * * *".to_string()),
+                retention_days: Some(30),
+                retention_policy: Some("untracked_only".to_string()),
+                filters: Some(serde_json::json!({
+                    "matching": {
+                        "role_types": ["full_time"],
+                        "workplaces": ["remote"],
+                        "countries": ["US", "CA", "GB", "DE", "FR"],
+                        "cities": [],
+                        "keywords": {
+                            "any": ["Engineer", "Product", "Designer", "Frontend", "Mobile"],
+                            "all": [],
+                            "exclude": [],
+                            "fields": ["title"]
+                        }
+                    }
+                })),
+            },
+            CreateSourceInput {
+                kind: SourceKind::Lever,
+                name: "SEP — Software, AI & Embedded Engineering".to_string(),
+                identifier: "sep".to_string(),
+                config: Some(serde_json::json!({
+                    "url": "https://jobs.lever.co/sep",
+                    "__workflow_spec": {
+                        "version": 6,
+                        "metadata": {
+                            "name": "SEP — Software, AI & Embedded Engineering",
+                            "company": "SEP",
+                            "enabled": true
+                        },
+                        "sources": [{
+                            "id": "sep",
+                            "label": "SEP — Lever",
+                            "enabled": true,
+                            "employer_hint": "SEP",
+                            "extractor": {
+                                "kind": "lever",
+                                "url": "https://jobs.lever.co/sep"
+                            }
+                        }],
+                        "schedule": {
+                            "cadence": "daily",
+                            "time": "09:00",
+                            "cron": "0 0 9 * * *",
+                            "timezone": "UTC"
+                        },
+                        "filters": {
+                            "matching": {
+                                "role_types": ["full_time", "internship"],
+                                "workplaces": ["hybrid", "onsite"],
+                                "countries": ["US"],
+                                "regions": ["US-IN"],
+                                "cities": ["Indianapolis", "Westfield"],
+                                "keywords": {
+                                    "any": ["Software", "Engineer", "AI", "Producer", "Embedded", "Cloud"],
+                                    "all": [],
+                                    "exclude": [],
+                                    "fields": ["title"]
+                                }
+                            }
+                        },
+                        "retention": { "days": 30, "policy": "untracked_only" }
+                    }
+                })),
+                enabled: Some(true),
+                cadence: Some(SourceCadence::Daily),
+                cadence_cron: Some("0 0 9 * * *".to_string()),
+                retention_days: Some(30),
+                retention_policy: Some("untracked_only".to_string()),
+                filters: Some(serde_json::json!({
+                    "matching": {
+                        "role_types": ["full_time", "internship"],
+                        "workplaces": ["hybrid", "onsite"],
+                        "countries": ["US"],
+                        "regions": ["US-IN"],
+                        "cities": ["Indianapolis", "Westfield"],
+                        "keywords": {
+                            "any": ["Software", "Engineer", "AI", "Producer", "Embedded", "Cloud"],
+                            "all": [],
+                            "exclude": [],
+                            "fields": ["title"]
+                        }
+                    }
+                })),
+            },
+            CreateSourceInput {
+                kind: SourceKind::Selector,
+                name: "Google & Apple — Core Software & ML Engineering".to_string(),
+                identifier: "google-apple-selector".to_string(),
+                config: Some(serde_json::json!({
+                    "mode": "static",
+                    "url": "https://www.google.com/about/careers/applications/jobs/results/",
+                    "item": "li.lLd3Je",
+                    "title": "h3.QJPWVe",
+                    "link": "a[href*=\"jobs/results/\"]",
+                    "location": "span.r0wTof",
+                    "__workflow_spec": {
+                        "version": 6,
+                        "metadata": {
+                            "name": "Google & Apple — Core Software & ML Engineering",
+                            "company": "BigTech",
+                            "enabled": true
+                        },
+                        "sources": [
+                            {
+                                "id": "google",
+                                "label": "Google Careers",
+                                "enabled": true,
+                                "employer_hint": "Google",
+                                "extractor": {
+                                    "kind": "selector",
+                                    "mode": "static",
+                                    "url": "https://www.google.com/about/careers/applications/jobs/results/",
+                                    "job_container": "li.lLd3Je",
+                                    "title_selector": "h3.QJPWVe",
+                                    "url_selector": "a[href*=\"jobs/results/\"]",
+                                    "location_selector": "span.r0wTof"
+                                }
+                            },
+                            {
+                                "id": "apple",
+                                "label": "Apple Jobs",
+                                "enabled": true,
+                                "employer_hint": "Apple",
+                                "extractor": {
+                                    "kind": "selector",
+                                    "mode": "static",
+                                    "url": "https://jobs.apple.com/en-us/search",
+                                    "job_container": "ul#search-job-list > li.rc-accordion-item",
+                                    "title_selector": "h3 a.link-inline",
+                                    "url_selector": "a.link-inline",
+                                    "location_selector": "span.table--advanced-search__location-sub",
+                                    "date_selector": "span.job-posted-date"
+                                }
+                            }
+                        ],
+                        "schedule": {
+                            "cadence": "daily",
+                            "time": "09:00",
+                            "cron": "0 0 9 * * *",
+                            "timezone": "UTC"
+                        },
+                        "filters": {
+                            "matching": {
+                                "role_types": ["full_time", "internship"],
+                                "workplaces": ["hybrid", "onsite"],
+                                "countries": ["US"],
+                                "regions": ["US-CA", "US-WA", "US-NY", "US-TX"],
+                                "cities": ["Mountain View", "Cupertino", "Seattle", "New York", "Austin"],
+                                "keywords": {
+                                    "any": ["Software", "Machine Learning", "Data", "Systems", "Platform"],
+                                    "all": [],
+                                    "exclude": [],
+                                    "fields": ["title"]
+                                }
+                            }
+                        },
+                        "retention": { "days": 30, "policy": "untracked_only" }
+                    }
+                })),
+                enabled: Some(true),
+                cadence: Some(SourceCadence::Daily),
+                cadence_cron: Some("0 0 9 * * *".to_string()),
+                retention_days: Some(30),
+                retention_policy: Some("untracked_only".to_string()),
+                filters: Some(serde_json::json!({
+                    "matching": {
+                        "role_types": ["full_time", "internship"],
+                        "workplaces": ["hybrid", "onsite"],
+                        "countries": ["US"],
+                        "regions": ["US-CA", "US-WA", "US-NY", "US-TX"],
+                        "cities": ["Mountain View", "Cupertino", "Seattle", "New York", "Austin"],
+                        "keywords": {
+                            "any": ["Software", "Machine Learning", "Data", "Systems", "Platform"],
+                            "all": [],
+                            "exclude": [],
+                            "fields": ["title"]
+                        }
+                    }
+                })),
+            },
+            CreateSourceInput {
+                kind: SourceKind::Selector,
+                name: "Netflix & Amazon — Distributed Systems & Platform".to_string(),
+                identifier: "streaming-cloud-script".to_string(),
+                config: Some(serde_json::json!({
+                    "mode": "script",
+                    "url": "https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10",
+                    "script": {
+                        "runtime": "js",
+                        "interpreter": "node",
+                        "path": "crates/scrape-worker/examples/extractors/netflix_extractor.js"
+                    },
+                    "__workflow_spec": {
+                        "version": 6,
+                        "metadata": {
+                            "name": "Netflix & Amazon — Distributed Systems & Platform",
+                            "company": "Cloud",
+                            "enabled": true
+                        },
+                        "sources": [
+                            {
+                                "id": "netflix",
+                                "label": "Netflix",
+                                "enabled": true,
+                                "employer_hint": "Netflix",
+                                "extractor": {
+                                    "kind": "selector",
+                                    "mode": "script",
+                                    "url": "https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10",
+                                    "script": {
+                                        "runtime": "js",
+                                        "interpreter": "node",
+                                        "path": "crates/scrape-worker/examples/extractors/netflix_extractor.js"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "amazon",
+                                "label": "Amazon",
+                                "enabled": true,
+                                "employer_hint": "Amazon",
+                                "extractor": {
+                                    "kind": "selector",
+                                    "mode": "script",
+                                    "url": "https://www.amazon.jobs/en/search.json?offset=0&result_limit=10",
+                                    "script": {
+                                        "runtime": "js",
+                                        "interpreter": "node",
+                                        "path": "crates/scrape-worker/examples/extractors/amazon_extractor.js"
+                                    }
+                                }
+                            }
+                        ],
+                        "schedule": {
+                            "cadence": "daily",
+                            "time": "09:00",
+                            "cron": "0 0 9 * * *",
+                            "timezone": "UTC"
+                        },
+                        "filters": {
+                            "matching": {
+                                "role_types": ["full_time"],
+                                "workplaces": ["remote", "hybrid", "onsite"],
+                                "countries": ["US"],
+                                "regions": ["US-CA", "US-WA"],
+                                "cities": [],
+                                "keywords": {
+                                    "any": ["Distributed", "Platform", "Backend", "Data", "Infrastructure"],
+                                    "all": [],
+                                    "exclude": [],
+                                    "fields": ["title"]
+                                }
+                            }
+                        },
+                        "retention": { "days": 30, "policy": "untracked_only" }
+                    }
+                })),
+                enabled: Some(true),
+                cadence: Some(SourceCadence::Daily),
+                cadence_cron: Some("0 0 9 * * *".to_string()),
+                retention_days: Some(30),
+                retention_policy: Some("untracked_only".to_string()),
+                filters: Some(serde_json::json!({
+                    "matching": {
+                        "role_types": ["full_time"],
+                        "workplaces": ["remote", "hybrid", "onsite"],
+                        "countries": ["US"],
+                        "regions": ["US-CA", "US-WA"],
+                        "cities": [],
+                        "keywords": {
+                            "any": ["Distributed", "Platform", "Backend", "Data", "Infrastructure"],
+                            "all": [],
+                            "exclude": [],
+                            "fields": ["title"]
+                        }
+                    }
+                })),
+            },
+        ]
     }
 
     pub async fn seed_default_sample_if_empty(pool: &SqlitePool) -> Result<Option<Source>> {

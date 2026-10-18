@@ -3,6 +3,7 @@ import type { PostingRules } from "../../../bindings/PostingRules";
 import { COUNTRIES, REGIONS_BY_COUNTRY } from "../../../lib/locationData";
 import { SearchCombobox } from "../../ui/Select";
 import { Icon } from "../../ui/Icon";
+import { KeywordInput } from "../../ui/KeywordInput";
 
 type Choice = { code: string; name: string };
 function SearchChoice({ label, value, choices, disabled, placeholder, resetAfterSelect, onSelect, onDraftChange }: {
@@ -53,7 +54,33 @@ export function GeographyMatching({ rules, onChange, onDraftChange }: { rules: P
     {!!rules.regions.length && <div className="flex gap-2 flex-wrap">{rules.regions.map(region => <button key={region} type="button" className="border min-h-8 px-2 py-1 inline-flex gap-2 items-center" aria-label={`Remove ${regions.find(r => r.code === canonical(region))?.name || region}`} onClick={() => onChange({ regions: rules.regions.filter(value => value !== region) })}>
       {regions.find(r => r.code === canonical(region))?.name || region}<Icon name="close" />
     </button>)}</div>}
-    <p className="text-[var(--color-ink-mute)]">Country, state and workplace apply together. Remote alone does not imply a country. Leave a field empty for no restriction.</p>
+    <KeywordInput
+      label="Cities / Location terms"
+      value={rules.cities || []}
+      onChange={cities => onChange({ cities })}
+      onDraftChange={onDraftChange}
+    />
+    <div className="flex gap-2 flex-wrap items-center text-xs">
+      <span className="text-[var(--color-ink-mute)]">Quick add:</span>
+      {["San Francisco", "Austin", "New York", "Seattle", "London", "Lisbon", "Berlin", "Indianapolis"].map(city => (
+        <button
+          key={city}
+          type="button"
+          disabled={(rules.cities || []).some(c => c.toLowerCase() === city.toLowerCase())}
+          className="border min-h-7 px-2 py-0.5 hover:bg-[var(--color-surface-hover)] disabled:opacity-40"
+          onClick={() => {
+            const current = rules.cities || [];
+            if (!current.some(c => c.toLowerCase() === city.toLowerCase())) {
+              onChange({ cities: [...current, city] });
+              onDraftChange();
+            }
+          }}
+        >
+          + {city}
+        </button>
+      ))}
+    </div>
+    <p className="text-[var(--color-ink-mute)]">Country, state, city, and workplace apply together. Remote alone does not imply a country. Leave a field empty for no restriction.</p>
     <fieldset className="flex gap-4 flex-wrap"><legend className="mb-1">Workplace — match any selected</legend>
       {([['remote','Remote'],['hybrid','Hybrid'],['onsite','In-person / On-site']] as const).map(([code,label]) => <label key={code} className="flex gap-2 items-center min-h-8"><input type="checkbox" checked={rules.workplaces.includes(code)} onChange={event => onChange({ workplaces: event.target.checked ? [...rules.workplaces,code] : rules.workplaces.filter(value => value !== code) })} />{label}</label>)}
     </fieldset>

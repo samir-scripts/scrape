@@ -401,6 +401,7 @@ describe("Work Authorization & Green Card Filtering", () => {
       clearance: null,
       countries: null,
       regions: null,
+      cities: null,
       remote: null,
       location_include_unknown: true,
       work_auth: ["us_person", "open"],
@@ -409,6 +410,21 @@ describe("Work Authorization & Green Card Filtering", () => {
     expect(matchesJob(usPersonJob, usPersonFilter)).toBe(true);
     expect(matchesJob(openJob, usPersonFilter)).toBe(true);
     expect(matchesJob(citizenJob, usPersonFilter)).toBe(false);
+  });
+
+  it("filters jobs based on cities", () => {
+    const lisbonJob = createMockJob({
+      location: "Lisbon, Portugal",
+      locations: [{ raw: "Lisbon, Portugal", city: "Lisbon", region_code: null, country_code: "PT", is_remote: false }],
+    });
+    const sfJob = createMockJob({
+      location: "San Francisco, CA",
+      locations: [{ raw: "San Francisco, CA", city: "San Francisco", region_code: "CA", country_code: "US", is_remote: false }],
+    });
+
+    expect(matchesJob(lisbonJob, { cities: ["Lisbon"] })).toBe(true);
+    expect(matchesJob(sfJob, { cities: ["Lisbon"] })).toBe(false);
+    expect(matchesJob(sfJob, { cities: ["San Francisco"] })).toBe(true);
   });
 });
 

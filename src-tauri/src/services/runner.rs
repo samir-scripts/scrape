@@ -91,8 +91,11 @@ pub fn resolve_worker_filters(
             effective[key] = value.clone();
         }
     }
-    let filters: WorkerFilters = serde_json::from_value(effective)
+    let mut filters: WorkerFilters = serde_json::from_value(effective)
         .map_err(|e| AppError::Validation(format!("workflow.filters: {e}")))?;
+    if filters.matching.is_some() {
+        filters.normalize_into_matching();
+    }
     filters.to_expr().map_err(AppError::Validation)?;
     Ok(filters)
 }
@@ -1831,31 +1834,10 @@ mod tests {
         let discovered_page = JobsRepo::list(
             &pool,
             JobFilter {
-                matching: None,
                 statuses: Some(vec![JobStatus::Scraped, JobStatus::Viewed]),
-                role_types: None,
-                search: None,
-                source_id: None,
-                sort: None,
                 limit: Some(50),
                 offset: Some(0),
-                favorited_only: None,
-                salary_min: None,
-                salary_max: None,
-                salary_currency: None,
-                salary_include_unknown: None,
-                salary_interval: None,
-                experience_min: None,
-                experience_max: None,
-                experience_include_unknown: None,
-                new_grad: None,
-                sponsorship: None,
-                work_auth: None,
-                clearance: None,
-                countries: None,
-                regions: None,
-                remote: None,
-                location_include_unknown: None,
+                ..Default::default()
             },
         )
         .await
@@ -1875,36 +1857,15 @@ mod tests {
         let tracked_page = JobsRepo::list(
             &pool,
             JobFilter {
-                matching: None,
                 statuses: Some(vec![
                     JobStatus::Applied,
                     JobStatus::Interviewing,
                     JobStatus::Offer,
                     JobStatus::Rejected,
                 ]),
-                role_types: None,
-                search: None,
-                source_id: None,
-                sort: None,
                 limit: Some(50),
                 offset: Some(0),
-                favorited_only: None,
-                salary_min: None,
-                salary_max: None,
-                salary_currency: None,
-                salary_include_unknown: None,
-                salary_interval: None,
-                experience_min: None,
-                experience_max: None,
-                experience_include_unknown: None,
-                new_grad: None,
-                sponsorship: None,
-                work_auth: None,
-                clearance: None,
-                countries: None,
-                regions: None,
-                remote: None,
-                location_include_unknown: None,
+                ..Default::default()
             },
         )
         .await
@@ -1922,31 +1883,10 @@ mod tests {
         let discovered_after = JobsRepo::list(
             &pool,
             JobFilter {
-                matching: None,
                 statuses: Some(vec![JobStatus::Scraped, JobStatus::Viewed]),
-                role_types: None,
-                search: None,
-                source_id: None,
-                sort: None,
                 limit: Some(50),
                 offset: Some(0),
-                favorited_only: None,
-                salary_min: None,
-                salary_max: None,
-                salary_currency: None,
-                salary_include_unknown: None,
-                salary_interval: None,
-                experience_min: None,
-                experience_max: None,
-                experience_include_unknown: None,
-                new_grad: None,
-                sponsorship: None,
-                work_auth: None,
-                clearance: None,
-                countries: None,
-                regions: None,
-                remote: None,
-                location_include_unknown: None,
+                ..Default::default()
             },
         )
         .await

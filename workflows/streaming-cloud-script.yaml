@@ -1,0 +1,72 @@
+# ==============================================================================
+# SCRAPE SAMPLE WORKFLOW: Netflix & Amazon Script Extraction
+# Target: Custom Scripts (Node.js/Python)
+# Spec Version: 6 (Multi-source, structured matching, fair budget)
+# ==============================================================================
+
+version: 6
+
+metadata:
+  name: "Netflix & Amazon — Distributed Systems & Platform"
+  company: "Cloud"
+  enabled: true
+
+sources:
+  - id: "netflix"
+    label: "Netflix"
+    enabled: true
+    employer_hint: "Netflix"
+    extractor:
+      kind: selector
+      mode: script
+      url: "https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10"
+      script:
+        runtime: js
+        interpreter: node
+        path: "crates/scrape-worker/examples/extractors/netflix_extractor.js"
+  - id: "amazon"
+    label: "Amazon"
+    enabled: true
+    employer_hint: "Amazon"
+    extractor:
+      kind: selector
+      mode: script
+      url: "https://www.amazon.jobs/en/search.json?category[]=software-development&normalized_country_code[]=USA&radius=24km&facets[]=normalized_country_code&facets[]=category&offset=0&result_limit=10"
+      script:
+        runtime: js
+        interpreter: node
+        path: "crates/scrape-worker/examples/extractors/amazon_extractor.js"
+
+schedule:
+  cadence: daily
+  time: "09:00"
+  cron: "0 0 9 * * *"
+
+filters:
+  matching:
+    role_types:
+      - full_time
+    workplaces:
+      - remote
+      - hybrid
+      - onsite
+    countries:
+      - US
+    regions:
+      - US-CA
+      - US-WA
+    keywords:
+      any:
+        - Distributed
+        - Platform
+        - Backend
+        - Data
+        - Infrastructure
+      all: []
+      exclude: []
+      fields:
+        - title
+
+retention:
+  days: 30
+  policy: untracked_only

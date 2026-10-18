@@ -271,6 +271,180 @@ static TOP_CITIES: &[CityEntry] = &[
         region_code: "IE-D",
         country_code: "IE",
     },
+    CityEntry {
+        name: "LISBON",
+        city: "Lisbon",
+        region_code: "",
+        country_code: "PT",
+    },
+    CityEntry {
+        name: "PORTO",
+        city: "Porto",
+        region_code: "",
+        country_code: "PT",
+    },
+    CityEntry {
+        name: "MANCHESTER",
+        city: "Manchester",
+        region_code: "GB-ENG",
+        country_code: "GB",
+    },
+    CityEntry {
+        name: "EDINBURGH",
+        city: "Edinburgh",
+        region_code: "GB-SCT",
+        country_code: "GB",
+    },
+    CityEntry {
+        name: "PARIS",
+        city: "Paris",
+        region_code: "FR-IDF",
+        country_code: "FR",
+    },
+    CityEntry {
+        name: "MUNICH",
+        city: "Munich",
+        region_code: "DE-BY",
+        country_code: "DE",
+    },
+    CityEntry {
+        name: "FRANKFURT",
+        city: "Frankfurt",
+        region_code: "DE-HE",
+        country_code: "DE",
+    },
+    CityEntry {
+        name: "WARSAW",
+        city: "Warsaw",
+        region_code: "",
+        country_code: "PL",
+    },
+    CityEntry {
+        name: "ZURICH",
+        city: "Zurich",
+        region_code: "",
+        country_code: "CH",
+    },
+    CityEntry {
+        name: "MADRID",
+        city: "Madrid",
+        region_code: "",
+        country_code: "ES",
+    },
+    CityEntry {
+        name: "BARCELONA",
+        city: "Barcelona",
+        region_code: "",
+        country_code: "ES",
+    },
+    CityEntry {
+        name: "MILAN",
+        city: "Milan",
+        region_code: "",
+        country_code: "IT",
+    },
+    CityEntry {
+        name: "STOCKHOLM",
+        city: "Stockholm",
+        region_code: "",
+        country_code: "SE",
+    },
+    CityEntry {
+        name: "SINGAPORE",
+        city: "Singapore",
+        region_code: "",
+        country_code: "SG",
+    },
+    CityEntry {
+        name: "SYDNEY",
+        city: "Sydney",
+        region_code: "AU-NSW",
+        country_code: "AU",
+    },
+    CityEntry {
+        name: "MELBOURNE",
+        city: "Melbourne",
+        region_code: "AU-VIC",
+        country_code: "AU",
+    },
+    CityEntry {
+        name: "TOKYO",
+        city: "Tokyo",
+        region_code: "",
+        country_code: "JP",
+    },
+    CityEntry {
+        name: "SEOUL",
+        city: "Seoul",
+        region_code: "",
+        country_code: "KR",
+    },
+    CityEntry {
+        name: "BENGALURU",
+        city: "Bengaluru",
+        region_code: "IN-KA",
+        country_code: "IN",
+    },
+    CityEntry {
+        name: "BANGALORE",
+        city: "Bengaluru",
+        region_code: "IN-KA",
+        country_code: "IN",
+    },
+    CityEntry {
+        name: "HYDERABAD",
+        city: "Hyderabad",
+        region_code: "IN-TS",
+        country_code: "IN",
+    },
+    CityEntry {
+        name: "PUNE",
+        city: "Pune",
+        region_code: "IN-MH",
+        country_code: "IN",
+    },
+    CityEntry {
+        name: "MUMBAI",
+        city: "Mumbai",
+        region_code: "IN-MH",
+        country_code: "IN",
+    },
+    CityEntry {
+        name: "GURUGRAM",
+        city: "Gurugram",
+        region_code: "IN-HR",
+        country_code: "IN",
+    },
+    CityEntry {
+        name: "GURGAON",
+        city: "Gurugram",
+        region_code: "IN-HR",
+        country_code: "IN",
+    },
+    CityEntry {
+        name: "MEXICO CITY",
+        city: "Mexico City",
+        region_code: "",
+        country_code: "MX",
+    },
+    CityEntry {
+        name: "SAO PAULO",
+        city: "Sao Paulo",
+        region_code: "",
+        country_code: "BR",
+    },
+    CityEntry {
+        name: "BUENOS AIRES",
+        city: "Buenos Aires",
+        region_code: "",
+        country_code: "AR",
+    },
+    CityEntry {
+        name: "INDIANAPOLIS",
+        city: "Indianapolis",
+        region_code: "US-IN",
+        country_code: "US",
+    },
 ];
 
 pub fn parse(raw_input: &str) -> Vec<ParsedLocation> {
@@ -576,8 +750,10 @@ fn parse_single(raw: &str) -> ParsedLocation {
     let region_code = region
         .map(|r| format!("{}-{}", r.country_code, r.code))
         .or_else(|| {
-            city.filter(|c| Some(c.country_code) == country_code.as_deref())
-                .map(|c| c.region_code.to_string())
+            city.filter(|c| {
+                Some(c.country_code) == country_code.as_deref() && !c.region_code.trim().is_empty()
+            })
+            .map(|c| c.region_code.to_string())
         });
     ParsedLocation {
         raw: raw.to_string(),
@@ -632,6 +808,23 @@ mod tests {
         let nyc = parse("NYC").remove(0);
         assert_eq!(nyc.city, Some("New York".to_string()));
         assert_eq!(nyc.region_code, Some("US-NY".to_string()));
+
+        let lisbon = parse("Lisbon, Portugal").remove(0);
+        assert_eq!(lisbon.city, Some("Lisbon".to_string()));
+        assert_eq!(lisbon.country_code, Some("PT".to_string()));
+
+        let indy = parse("Indianapolis, IN").remove(0);
+        assert_eq!(indy.city, Some("Indianapolis".to_string()));
+        assert_eq!(indy.region_code, Some("US-IN".to_string()));
+        assert_eq!(indy.country_code, Some("US".to_string()));
+
+        let blr = parse("Bengaluru, India").remove(0);
+        assert_eq!(blr.city, Some("Bengaluru".to_string()));
+        assert_eq!(blr.country_code, Some("IN".to_string()));
+
+        let sg = parse("Singapore").remove(0);
+        assert_eq!(sg.city, Some("Singapore".to_string()));
+        assert_eq!(sg.country_code, Some("SG".to_string()));
     }
 
     #[test]

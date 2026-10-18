@@ -1,0 +1,54 @@
+# ==============================================================================
+# SCRAPE SAMPLE WORKFLOW: Linear Product & Mobile Engineering
+# Target: Linear Ashby Openings
+# Spec Version: 6 (Multi-source, structured matching, fair budget)
+# ==============================================================================
+
+version: 6
+
+metadata:
+  name: "Linear — Product, Frontend & Mobile Engineering"
+  company: "Linear"
+  enabled: true
+
+sources:
+  - id: "linear"
+    label: "Linear — Ashby"
+    enabled: true
+    employer_hint: "Linear"
+    extractor:
+      kind: ashby
+      url: "https://jobs.ashbyhq.com/linear"
+
+schedule:
+  cadence: daily
+  time: "09:00"
+  cron: "0 0 9 * * *"
+
+filters:
+  matching:
+    role_types:
+      - full_time
+    workplaces:
+      - remote
+    countries:
+      - US
+      - CA
+      - GB
+      - DE
+      - FR
+    keywords:
+      any:
+        - Engineer
+        - Product
+        - Designer
+        - Frontend
+        - Mobile
+      all: []
+      exclude: []
+      fields:
+        - title
+
+retention:
+  days: 30
+  policy: untracked_only

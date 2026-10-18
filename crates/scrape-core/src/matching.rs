@@ -311,6 +311,7 @@ pub struct PostingRules {
     pub clearance: Vec<TriState>,
     pub countries: Vec<String>,
     pub regions: Vec<String>,
+    pub cities: Vec<String>,
     pub location_include_unknown: bool,
 }
 impl PostingRules {
@@ -353,6 +354,9 @@ impl PostingRules {
                     .into(),
             );
         }
+        if self.cities.iter().any(|c| c.trim().is_empty()) {
+            return Err("matching.cities: must not contain blank entries".into());
+        }
         if let Some(keywords) = &self.keywords {
             if keywords
                 .any
@@ -391,7 +395,7 @@ impl PostingRules {
         Ok(())
     }
     fn geography_matches(&self, locations: &[ParsedLocation]) -> bool {
-        if self.countries.is_empty() && self.regions.is_empty() {
+        if self.countries.is_empty() && self.regions.is_empty() && self.cities.is_empty() {
             return true;
         }
         let known: Vec<_> = locations
@@ -402,6 +406,7 @@ impl PostingRules {
                         .region_code
                         .as_ref()
                         .is_some_and(|v| !v.trim().is_empty())
+                    || loc.city.as_ref().is_some_and(|v| !v.trim().is_empty())
             })
             .collect();
         if known.is_empty() {
@@ -409,28 +414,47 @@ impl PostingRules {
         }
         known.into_iter().any(|loc| {
             let country = loc.effective_country();
-            (self.countries.is_empty()
+            let country_match = self.countries.is_empty()
                 || country.map_or(self.location_include_unknown, |code| {
                     self.countries.iter().any(|c| c.eq_ignore_ascii_case(code))
-                }))
-                && (self.regions.is_empty()
-                    || if let Some(code) =
-                        loc.region_code.as_deref().filter(|v| !v.trim().is_empty())
-                    {
-                        self.regions.iter().any(|region| {
-                            code.eq_ignore_ascii_case(region)
-                                || code
-                                    .to_ascii_uppercase()
-                                    .ends_with(&format!("-{}", region.to_ascii_uppercase()))
-                        })
-                    } else {
-                        self.location_include_unknown
-                            && self.regions.iter().any(|region| {
-                                region.split_once('-').is_none_or(|(prefix, _)| {
-                                    country.is_none_or(|code| code.eq_ignore_ascii_case(prefix))
-                                })
-                            })
+                });
+            let region_match = self.regions.is_empty()
+                || if let Some(code) = loc.region_code.as_deref().filter(|v| !v.trim().is_empty()) {
+                    self.regions.iter().any(|region| {
+                        code.eq_ignore_ascii_case(region)
+                            || code
+                                .to_ascii_uppercase()
+                                .ends_with(&format!("-{}", region.to_ascii_uppercase()))
                     })
+                } else {
+                    self.location_include_unknown
+                        && self.regions.iter().any(|region| {
+                            region.split_once('-').is_none_or(|(prefix, _)| {
+                                country.is_none_or(|code| code.eq_ignore_ascii_case(prefix))
+                            })
+                        })
+                };
+            let city_match = self.cities.is_empty()
+                || if let Some(city) = loc.city.as_deref().filter(|v| !v.trim().is_empty()) {
+                    self.cities.iter().any(|target| {
+                        let t = target.trim();
+                        city.eq_ignore_ascii_case(t)
+                            || loc
+                                .raw
+                                .to_ascii_lowercase()
+                                .contains(&t.to_ascii_lowercase())
+                    })
+                } else if self.location_include_unknown {
+                    true
+                } else {
+                    self.cities.iter().any(|target| {
+                        let t = target.trim();
+                        loc.raw
+                            .to_ascii_lowercase()
+                            .contains(&t.to_ascii_lowercase())
+                    })
+                };
+            country_match && region_match && city_match
         })
     }
     pub fn matches_event(&self, event: &WorkerEvent) -> bool {
@@ -605,7 +629,7 @@ impl PostingRules {
             (RejectionReason::Clearance, !self.clearance.is_empty()),
             (
                 RejectionReason::Geography,
-                !self.countries.is_empty() || !self.regions.is_empty(),
+                !self.countries.is_empty() || !self.regions.is_empty() || !self.cities.is_empty(),
             ),
         ];
         for (reason, active) in active {
@@ -653,18 +677,19 @@ impl PostingRules {
                             && self.clearance.contains(&TriState::Unknown)
                     }
                     RejectionReason::Geography => {
-                        !locations
-                            .iter()
-                            .any(|l| l.effective_country().is_some() || l.region_code.is_some())
-                            && self.location_include_unknown
+                        !locations.iter().any(|l| {
+                            l.effective_country().is_some()
+                                || l.region_code.is_some()
+                                || l.city.is_some()
+                        }) && self.location_include_unknown
                     }
                     _ => false,
                 };
             let known_positive_geography = reason == RejectionReason::Geography
                 && evidence.fields.contains(&FilterField::Location)
-                && locations
-                    .iter()
-                    .any(|l| l.effective_country().is_some() || l.region_code.is_some())
+                && locations.iter().any(|l| {
+                    l.effective_country().is_some() || l.region_code.is_some() || l.city.is_some()
+                })
                 && !failed.contains(&reason);
             assessment.check(
                 reason,
@@ -809,7 +834,7 @@ impl PostingRules {
             Some("exclude") => clauses.push("is_new_grad != 'yes'".into()),
             _ => {}
         }
-        if !self.countries.is_empty() || !self.regions.is_empty() {
+        if !self.countries.is_empty() || !self.regions.is_empty() || !self.cities.is_empty() {
             let mut geo = Vec::new();
             let country = "coalesce(NULLIF(trim(jl.country_code),''), CASE WHEN instr(jl.region_code,'-') > 0 THEN substr(jl.region_code,1,instr(jl.region_code,'-')-1) END)";
             if !self.countries.is_empty() {
@@ -843,7 +868,22 @@ impl PostingRules {
                 }
                 geo.push(format!("({})", parts.join(" OR ")));
             }
-            let known = "(NULLIF(trim(jl.country_code),'') IS NOT NULL OR NULLIF(trim(jl.region_code),'') IS NOT NULL)";
+            if !self.cities.is_empty() {
+                let mut parts = Vec::new();
+                for city in &self.cities {
+                    let condition = "(instr(lower(coalesce(jl.city, '')), lower(?)) > 0 OR instr(lower(jl.raw), lower(?)) > 0 OR instr(lower(coalesce(jobs.location, '')), lower(?)) > 0)";
+                    bindings.push(Bind::Text(city.clone()));
+                    bindings.push(Bind::Text(city.clone()));
+                    bindings.push(Bind::Text(city.clone()));
+                    parts.push(if self.location_include_unknown {
+                        format!("({condition} OR NULLIF(trim(coalesce(jl.city, jl.raw, jobs.location, '')),'') IS NULL)")
+                    } else {
+                        condition.to_string()
+                    });
+                }
+                geo.push(format!("({})", parts.join(" OR ")));
+            }
+            let known = "(NULLIF(trim(jl.country_code),'') IS NOT NULL OR NULLIF(trim(jl.region_code),'') IS NOT NULL OR NULLIF(trim(jl.city),'') IS NOT NULL)";
             let exists = format!("EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id=jobs.id AND {known} AND ({}))", geo.join(" AND "));
             clauses.push(if self.location_include_unknown { format!("({exists} OR NOT EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id=jobs.id AND {known}))") } else { exists });
         }
@@ -897,9 +937,40 @@ mod geography_tests {
                 regions: vec!["CA-ON".into()],
                 ..Default::default()
             },
+            PostingRules {
+                cities: vec!["  ".into()],
+                ..Default::default()
+            },
         ] {
             assert!(rules.validate().is_err());
         }
+    }
+    #[test]
+    fn city_matching_and_combined_geography() {
+        let city_loc = |city: &str, country: Option<&str>, raw: &str| ParsedLocation {
+            raw: raw.into(),
+            city: Some(city.into()),
+            country_code: country.map(str::to_string),
+            region_code: None,
+            is_remote: false,
+        };
+
+        let rules = PostingRules {
+            cities: vec!["Austin".into(), "Lisbon".into()],
+            ..Default::default()
+        };
+        assert!(rules.geography_matches(&[city_loc("Austin", Some("US"), "Austin, TX")]));
+        assert!(rules.geography_matches(&[city_loc("Lisbon", Some("PT"), "Lisbon, Portugal")]));
+        assert!(!rules.geography_matches(&[city_loc("New York", Some("US"), "New York, NY")]));
+
+        // Combined with countries: Austin (US) matches, Lisbon (PT) rejected
+        let us_only = PostingRules {
+            countries: vec!["US".into()],
+            cities: vec!["Austin".into(), "Lisbon".into()],
+            ..Default::default()
+        };
+        assert!(us_only.geography_matches(&[city_loc("Austin", Some("US"), "Austin, TX")]));
+        assert!(!us_only.geography_matches(&[city_loc("Lisbon", Some("PT"), "Lisbon, Portugal")]));
     }
 }
 

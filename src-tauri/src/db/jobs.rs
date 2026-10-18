@@ -160,6 +160,7 @@ pub struct JobFilter {
     // Location filters
     pub countries: Option<Vec<String>>,
     pub regions: Option<Vec<String>>,
+    pub cities: Option<Vec<String>>,
     pub remote: Option<String>, // "any" | "remote_only" | "exclude_remote"
     pub location_include_unknown: Option<bool>,
 }
@@ -627,6 +628,7 @@ impl JobsRepo {
             clearance: filter.clearance.clone().unwrap_or_default(),
             countries: filter.countries.clone().unwrap_or_default(),
             regions: filter.regions.clone().unwrap_or_default(),
+            cities: filter.cities.clone().unwrap_or_default(),
             location_include_unknown: filter.location_include_unknown.unwrap_or(false),
         };
         for rules in [&rules].into_iter().chain(filter.matching.as_ref()) {

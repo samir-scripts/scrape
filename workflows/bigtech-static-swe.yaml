@@ -1,0 +1,81 @@
+# ==============================================================================
+# SCRAPE SAMPLE WORKFLOW: Google & Apple Multi-Source Static Selectors
+# Target: Google and Apple Careers
+# Spec Version: 6 (Multi-source, structured matching, fair budget)
+# ==============================================================================
+
+version: 6
+
+metadata:
+  name: "Google & Apple — Core Software & ML Engineering"
+  company: "BigTech"
+  enabled: true
+
+sources:
+  - id: "google"
+    label: "Google Careers"
+    enabled: true
+    employer_hint: "Google"
+    extractor:
+      kind: selector
+      mode: static
+      url: "https://www.google.com/about/careers/applications/jobs/results/"
+      job_container: "li.lLd3Je"
+      title_selector: "h3.QJPWVe"
+      url_selector: "a[href*=\"jobs/results/\"]"
+      location_selector: "span.r0wTof"
+  - id: "apple"
+    label: "Apple Jobs"
+    enabled: true
+    employer_hint: "Apple"
+    extractor:
+      kind: selector
+      mode: static
+      url: "https://jobs.apple.com/en-us/search"
+      job_container: "ul#search-job-list > li.rc-accordion-item"
+      title_selector: "h3 a.link-inline"
+      url_selector: "a.link-inline"
+      location_selector: "span.table--advanced-search__location-sub"
+      date_selector: "span.job-posted-date"
+
+schedule:
+  cadence: daily
+  time: "09:00"
+  cron: "0 0 9 * * *"
+
+filters:
+  matching:
+    role_types:
+      - full_time
+      - internship
+    workplaces:
+      - hybrid
+      - onsite
+    countries:
+      - US
+    regions:
+      - US-CA
+      - US-WA
+      - US-NY
+      - US-TX
+    cities:
+      - Mountain View
+      - Cupertino
+      - Seattle
+      - New York
+      - Austin
+    keywords:
+      any:
+        - Software
+        - Machine Learning
+        - Data
+        - Systems
+        - Platform
+      all: []
+      exclude: []
+      fields:
+        - title
+
+retention:
+  days: 30
+  policy: untracked_only

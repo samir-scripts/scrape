@@ -15,36 +15,43 @@ export type { WorkflowExtractor } from "../bindings/WorkflowExtractor";
 export type { WorkflowSchedule } from "../bindings/WorkflowSchedule";
 export type { WorkflowFilters } from "../bindings/WorkflowFilters";
 export type { WorkflowRetention } from "../bindings/WorkflowRetention";
+import type { PostingRules } from "../bindings/PostingRules";
+import type { WorkflowFilters } from "../bindings/WorkflowFilters";
 
-export const SAMPLE_SWE_INTERNSHIP_YAML = `version: 6
+export const SAMPLE_SWE_INTERNSHIP_YAML = `version: 2
 metadata:
   name: "Cloudflare — Software Engineering Internships"
   company: "Cloudflare"
   enabled: true
-sources:
-  - id: "cloudflare-swe"
-    label: "Cloudflare Greenhouse"
-    enabled: true
-    employer_hint: "Cloudflare"
-    extractor:
-      kind: greenhouse
-      url: "https://boards.greenhouse.io/cloudflare"
+extractor:
+  kind: greenhouse
+  url: "https://boards.greenhouse.io/cloudflare"
 schedule:
   cadence: daily
   time: "09:00"
   cron: "0 0 9 * * *"
 filters:
-  role_types: [internship]
-  include_keywords: ["Software", "Engineer", "Intern"]
-  exclude_keywords: ["MBA", "Sales", "Marketing"]
-  locations: ["Remote", "San Francisco, CA", "Austin, TX"]
+  role_types:
+    - internship
+  include_keywords:
+    - "Software"
+    - "Engineer"
+    - "Intern"
+  exclude_keywords:
+    - "MBA"
+    - "Sales"
+    - "Marketing"
+  locations:
+    - "Remote"
+    - "San Francisco, CA"
+    - "Austin, TX"
 retention:
   days: 45
   policy: untracked_only
 `;
 
 export const SAMPLE_SWE_INTERNSHIP_SPEC: WorkflowSpec = {
-  version: 6,
+  version: 2,
   metadata: {
     name: "Cloudflare — Software Engineering Internships",
     company: "Cloudflare",
@@ -52,8 +59,8 @@ export const SAMPLE_SWE_INTERNSHIP_SPEC: WorkflowSpec = {
   },
   sources: [
     {
-      id: "cloudflare-swe",
-      label: "Cloudflare Greenhouse",
+      id: "cloudflare",
+      label: "Cloudflare — Greenhouse",
       enabled: true,
       employer_hint: "Cloudflare",
       extractor: {
@@ -78,6 +85,449 @@ export const SAMPLE_SWE_INTERNSHIP_SPEC: WorkflowSpec = {
     policy: "untracked_only",
   },
 };
+
+export const SAMPLE_CLOUDFLARE_V6_SPEC: WorkflowSpec = {
+  version: 6,
+  metadata: {
+    name: "Cloudflare — Systems, Network & Security Engineering",
+    company: "Cloudflare",
+    enabled: true,
+  },
+  sources: [
+    {
+      id: "cloudflare",
+      label: "Cloudflare — Greenhouse",
+      enabled: true,
+      employer_hint: "Cloudflare",
+      extractor: {
+        kind: "greenhouse",
+        url: "https://boards.greenhouse.io/cloudflare",
+      },
+    },
+  ],
+  schedule: {
+    cadence: "daily",
+    time: "09:00",
+    cron: "0 0 9 * * *" as any,
+  },
+  filters: {
+    matching: {
+      role_types: ["full_time", "internship"],
+      workplaces: ["remote", "hybrid", "onsite"],
+      countries: ["US", "GB", "PT"],
+      regions: [],
+      cities: ["Austin", "San Francisco", "London", "Lisbon"],
+      location_include_unknown: false,
+      experience_min: null,
+      experience_max: null,
+      experience_include_unknown: false,
+      new_grad: null,
+      sponsorship: [],
+      work_auth: [],
+      clearance: [],
+      compensation: null,
+      posting_date: null,
+      keywords: {
+        any: ["Engineer", "Developer", "Security", "Systems", "Network"],
+        all: [],
+        exclude: ["Recruiter", "Account Executive", "Sales"],
+        fields: ["title"],
+      },
+    },
+    role_types: [],
+    include_keywords: [],
+    exclude_keywords: [],
+    locations: [],
+  },
+  retention: {
+    days: 45,
+    policy: "untracked_only",
+  },
+};
+
+export const SAMPLE_BITWARDEN_SPEC: WorkflowSpec = {
+  version: 6,
+  metadata: {
+    name: "Bitwarden — Remote Full-Stack & Security Engineering",
+    company: "Bitwarden",
+    enabled: true,
+  },
+  sources: [
+    {
+      id: "bitwarden",
+      label: "Bitwarden — Greenhouse",
+      enabled: true,
+      employer_hint: "Bitwarden",
+      extractor: {
+        kind: "greenhouse",
+        url: "https://boards.greenhouse.io/bitwarden",
+      },
+    },
+  ],
+  schedule: {
+    cadence: "daily",
+    time: "09:00",
+    cron: "0 0 9 * * *",
+  },
+  filters: {
+    matching: {
+      role_types: ["full_time"],
+      workplaces: ["remote"],
+      countries: ["US", "CA", "GB", "IN"],
+      regions: [],
+      cities: [],
+      location_include_unknown: false,
+      experience_min: null,
+      experience_max: null,
+      experience_include_unknown: false,
+      new_grad: null,
+      sponsorship: [],
+      work_auth: [],
+      clearance: [],
+      compensation: null,
+      posting_date: null,
+      keywords: {
+        any: ["Engineer", "Developer", "Security", "QA", "Cloud"],
+        all: [],
+        exclude: [],
+        fields: ["title"],
+      },
+    },
+    role_types: [],
+    include_keywords: [],
+    exclude_keywords: [],
+    locations: [],
+  },
+  retention: {
+    days: 30,
+    policy: "untracked_only",
+  },
+};
+
+export const SAMPLE_LINEAR_SPEC: WorkflowSpec = {
+  version: 6,
+  metadata: {
+    name: "Linear — Product, Frontend & Mobile Engineering",
+    company: "Linear",
+    enabled: true,
+  },
+  sources: [
+    {
+      id: "linear",
+      label: "Linear — Ashby",
+      enabled: true,
+      employer_hint: "Linear",
+      extractor: {
+        kind: "ashby",
+        url: "https://jobs.ashbyhq.com/linear",
+      },
+    },
+  ],
+  schedule: {
+    cadence: "daily",
+    time: "09:00",
+    cron: "0 0 9 * * *",
+  },
+  filters: {
+    matching: {
+      role_types: ["full_time"],
+      workplaces: ["remote"],
+      countries: ["US", "CA", "GB", "DE", "FR"],
+      regions: [],
+      cities: [],
+      location_include_unknown: false,
+      experience_min: null,
+      experience_max: null,
+      experience_include_unknown: false,
+      new_grad: null,
+      sponsorship: [],
+      work_auth: [],
+      clearance: [],
+      compensation: null,
+      posting_date: null,
+      keywords: {
+        any: ["Engineer", "Product", "Designer", "Frontend", "Mobile"],
+        all: [],
+        exclude: [],
+        fields: ["title"],
+      },
+    },
+    role_types: [],
+    include_keywords: [],
+    exclude_keywords: [],
+    locations: [],
+  },
+  retention: {
+    days: 30,
+    policy: "untracked_only",
+  },
+};
+
+export const SAMPLE_SEP_SPEC: WorkflowSpec = {
+  version: 6,
+  metadata: {
+    name: "SEP — Software, AI & Embedded Engineering",
+    company: "SEP",
+    enabled: true,
+  },
+  sources: [
+    {
+      id: "sep",
+      label: "SEP — Lever",
+      enabled: true,
+      employer_hint: "SEP",
+      extractor: {
+        kind: "lever",
+        url: "https://jobs.lever.co/sep",
+      },
+    },
+  ],
+  schedule: {
+    cadence: "daily",
+    time: "09:00",
+    cron: "0 0 9 * * *",
+  },
+  filters: {
+    matching: {
+      role_types: ["full_time", "internship"],
+      workplaces: ["hybrid", "onsite"],
+      countries: ["US"],
+      regions: ["US-IN"],
+      cities: ["Indianapolis", "Westfield"],
+      location_include_unknown: false,
+      experience_min: null,
+      experience_max: null,
+      experience_include_unknown: false,
+      new_grad: null,
+      sponsorship: [],
+      work_auth: [],
+      clearance: [],
+      compensation: null,
+      posting_date: null,
+      keywords: {
+        any: ["Software", "Engineer", "AI", "Producer", "Embedded", "Cloud"],
+        all: [],
+        exclude: [],
+        fields: ["title"],
+      },
+    },
+    role_types: [],
+    include_keywords: [],
+    exclude_keywords: [],
+    locations: [],
+  },
+  retention: {
+    days: 30,
+    policy: "untracked_only",
+  },
+};
+
+export const SAMPLE_BIGTECH_SPEC: WorkflowSpec = {
+  version: 6,
+  metadata: {
+    name: "Google & Apple — Core Software & ML Engineering",
+    company: "BigTech",
+    enabled: true,
+  },
+  sources: [
+    {
+      id: "google",
+      label: "Google Careers",
+      enabled: true,
+      employer_hint: "Google",
+      extractor: {
+        kind: "selector",
+        mode: "static",
+        url: "https://www.google.com/about/careers/applications/jobs/results/",
+        job_container: "li.lLd3Je",
+        title_selector: "h3.QJPWVe",
+        url_selector: "a[href*=\"jobs/results/\"]",
+        location_selector: "span.r0wTof",
+      },
+    },
+    {
+      id: "apple",
+      label: "Apple Jobs",
+      enabled: true,
+      employer_hint: "Apple",
+      extractor: {
+        kind: "selector",
+        mode: "static",
+        url: "https://jobs.apple.com/en-us/search",
+        job_container: "ul#search-job-list > li.rc-accordion-item",
+        title_selector: "h3 a.link-inline",
+        url_selector: "a.link-inline",
+        location_selector: "span.table--advanced-search__location-sub",
+        date_selector: "span.job-posted-date",
+      },
+    },
+  ],
+  schedule: {
+    cadence: "daily",
+    time: "09:00",
+    cron: "0 0 9 * * *",
+  },
+  filters: {
+    matching: {
+      role_types: ["full_time", "internship"],
+      workplaces: ["hybrid", "onsite"],
+      countries: ["US"],
+      regions: ["US-CA", "US-WA", "US-NY", "US-TX"],
+      cities: ["Mountain View", "Cupertino", "Seattle", "New York", "Austin"],
+      location_include_unknown: false,
+      experience_min: null,
+      experience_max: null,
+      experience_include_unknown: false,
+      new_grad: null,
+      sponsorship: [],
+      work_auth: [],
+      clearance: [],
+      compensation: null,
+      posting_date: null,
+      keywords: {
+        any: ["Software", "Machine Learning", "Data", "Systems", "Platform"],
+        all: [],
+        exclude: [],
+        fields: ["title"],
+      },
+    },
+    role_types: [],
+    include_keywords: [],
+    exclude_keywords: [],
+    locations: [],
+  },
+  retention: {
+    days: 30,
+    policy: "untracked_only",
+  },
+};
+
+export const SAMPLE_STREAMING_SCRIPT_SPEC: WorkflowSpec = {
+  version: 6,
+  metadata: {
+    name: "Netflix & Amazon — Distributed Systems & Platform",
+    company: "Cloud",
+    enabled: true,
+  },
+  sources: [
+    {
+      id: "netflix",
+      label: "Netflix",
+      enabled: true,
+      employer_hint: "Netflix",
+      extractor: {
+        kind: "selector",
+        mode: "script",
+        url: "https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10",
+        script: {
+          runtime: "js",
+          interpreter: "node",
+          path: "crates/scrape-worker/examples/extractors/netflix_extractor.js",
+        },
+      },
+    },
+    {
+      id: "amazon",
+      label: "Amazon",
+      enabled: true,
+      employer_hint: "Amazon",
+      extractor: {
+        kind: "selector",
+        mode: "script",
+        url: "https://www.amazon.jobs/en/search.json?offset=0&result_limit=10",
+        script: {
+          runtime: "js",
+          interpreter: "node",
+          path: "crates/scrape-worker/examples/extractors/amazon_extractor.js",
+        },
+      },
+    },
+  ],
+  schedule: {
+    cadence: "daily",
+    time: "09:00",
+    cron: "0 0 9 * * *",
+  },
+  filters: {
+    matching: {
+      role_types: ["full_time"],
+      workplaces: ["remote", "hybrid", "onsite"],
+      countries: ["US"],
+      regions: ["US-CA", "US-WA"],
+      cities: [],
+      location_include_unknown: false,
+      experience_min: null,
+      experience_max: null,
+      experience_include_unknown: false,
+      new_grad: null,
+      sponsorship: [],
+      work_auth: [],
+      clearance: [],
+      compensation: null,
+      posting_date: null,
+      keywords: {
+        any: ["Distributed", "Platform", "Backend", "Data", "Infrastructure"],
+        all: [],
+        exclude: [],
+        fields: ["title"],
+      },
+    },
+    role_types: [],
+    include_keywords: [],
+    exclude_keywords: [],
+    locations: [],
+  },
+  retention: {
+    days: 30,
+    policy: "untracked_only",
+  },
+};
+
+export interface WorkflowTemplateOption {
+  id: string;
+  name: string;
+  description: string;
+  spec: WorkflowSpec;
+}
+
+export const SAMPLE_WORKFLOW_TEMPLATES: WorkflowTemplateOption[] = [
+  {
+    id: "cloudflare-systems-swe",
+    name: "Cloudflare — Systems & Security (Greenhouse)",
+    description: "Full-Time & Internships in US/UK/PT (Austin, SF, London, Lisbon)",
+    spec: SAMPLE_CLOUDFLARE_V6_SPEC,
+  },
+  {
+    id: "bitwarden-remote-security",
+    name: "Bitwarden — Remote Security (Greenhouse)",
+    description: "Remote Full-Stack & Security Engineering across US, CA, UK, India",
+    spec: SAMPLE_BITWARDEN_SPEC,
+  },
+  {
+    id: "linear-product-engineering",
+    name: "Linear — Product & Frontend (Ashby)",
+    description: "Remote Product, Frontend & Mobile Engineering in US, CA, Europe",
+    spec: SAMPLE_LINEAR_SPEC,
+  },
+  {
+    id: "sep-midwest-consulting",
+    name: "SEP — Software & AI Consulting (Lever)",
+    description: "Hybrid & Onsite Engineering in Indianapolis/Westfield, Indiana",
+    spec: SAMPLE_SEP_SPEC,
+  },
+  {
+    id: "bigtech-static-swe",
+    name: "Google & Apple — Core ML & SWE (Multi-Source)",
+    description: "Static CSS/XPath selector crawl across Google Careers & Apple Jobs",
+    spec: SAMPLE_BIGTECH_SPEC,
+  },
+  {
+    id: "streaming-cloud-script",
+    name: "Netflix & Amazon — Platform Systems (Script)",
+    description: "Custom Node.js NDJSON script extractor template",
+    spec: SAMPLE_STREAMING_SCRIPT_SPEC,
+  },
+];
 
 export interface YamlValidationError {
   line?: number;
@@ -525,6 +975,93 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
       days: Number(source.retention_days),
       policy: source.retention_policy,
     },
+  };
+}
+
+export function normalizeLegacyWorkflowFilters(rawFilters: Record<string, any>): WorkflowFilters {
+  const matching: PostingRules = {
+    keywords: null,
+    posting_date: null,
+    compensation: null,
+    role_types: [],
+    workplaces: [],
+    experience_min: null,
+    experience_max: null,
+    experience_include_unknown: false,
+    new_grad: null,
+    sponsorship: [],
+    work_auth: [],
+    clearance: [],
+    countries: [],
+    regions: [],
+    cities: [],
+    location_include_unknown: false,
+    ...(rawFilters.matching || {}),
+  };
+  matching.keywords = matching.keywords ? { ...matching.keywords } : null;
+  matching.countries = [...(matching.countries || [])];
+  matching.regions = [...(matching.regions || [])];
+  matching.cities = [...(matching.cities || [])];
+  matching.workplaces = [...(matching.workplaces || [])];
+  matching.role_types = [...(matching.role_types || [])];
+
+  if (Array.isArray(rawFilters.include_keywords) && rawFilters.include_keywords.length > 0) {
+    if (!matching.keywords) {
+      matching.keywords = { any: [], all: [], exclude: [], fields: ["title"] };
+    }
+    for (const kw of rawFilters.include_keywords) {
+      if (kw && typeof kw === "string" && !matching.keywords.any.includes(kw.trim())) {
+        matching.keywords.any.push(kw.trim());
+      }
+    }
+  }
+  if (Array.isArray(rawFilters.exclude_keywords) && rawFilters.exclude_keywords.length > 0) {
+    if (!matching.keywords) {
+      matching.keywords = { any: [], all: [], exclude: [], fields: ["title"] };
+    }
+    for (const kw of rawFilters.exclude_keywords) {
+      if (kw && typeof kw === "string" && !matching.keywords.exclude.includes(kw.trim())) {
+        matching.keywords.exclude.push(kw.trim());
+      }
+    }
+  }
+  if (Array.isArray(rawFilters.role_types)) {
+    for (const rt of rawFilters.role_types) {
+      if (rt && !matching.role_types.includes(rt)) {
+        matching.role_types.push(rt);
+      }
+    }
+  }
+  if (Array.isArray(rawFilters.locations)) {
+    for (const loc of rawFilters.locations) {
+      if (!loc || typeof loc !== "string") continue;
+      const lower = loc.trim().toLowerCase();
+      if (["remote", "telecommute", "virtual"].includes(lower)) {
+        if (!matching.workplaces.includes("remote")) matching.workplaces.push("remote");
+      } else if (["hybrid"].includes(lower)) {
+        if (!matching.workplaces.includes("hybrid")) matching.workplaces.push("hybrid");
+      } else if (["onsite", "on-site", "in-office", "in office", "in-person"].includes(lower)) {
+        if (!matching.workplaces.includes("onsite")) matching.workplaces.push("onsite");
+      } else {
+        const clean = loc.trim();
+        if (!matching.cities.includes(clean)) {
+          matching.cities.push(clean);
+        }
+      }
+    }
+  }
+  const isDefaultQuery =
+    rawFilters.query === "title LIKE '%Engineer%' OR title LIKE '%Developer%' OR title LIKE '%Intern%'" ||
+    rawFilters.query === "title LIKE '%Engineer%' OR title LIKE '%Intern%'";
+
+  return {
+    ...rawFilters,
+    matching,
+    query: isDefaultQuery ? undefined : rawFilters.query,
+    include_keywords: [],
+    exclude_keywords: [],
+    locations: [],
+    role_types: [],
   };
 }
 

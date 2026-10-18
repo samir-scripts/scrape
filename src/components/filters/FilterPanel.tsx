@@ -179,6 +179,7 @@ export function FilterPanel({
       clearance: filterSpec.clearance ?? null,
       countries: filterSpec.countries ?? null,
       regions: filterSpec.regions ?? null,
+      cities: filterSpec.cities ?? null,
       remote: filterSpec.remote ?? null,
       location_include_unknown: filterSpec.location_include_unknown ?? true,
       work_auth: filterSpec.work_auth ?? null,
