@@ -446,6 +446,8 @@ See [research, error log and proposed repair](25-native-startup-migration-12.md)
 Repair was applied through forward migration 18 with a consistent backup. Protected saved state and all previous migration checksums remained intact. See incident 25 for verification.
 
 
-### 28. Seeded workflows produce no Discovered jobs — repair pending
+### 28. Seeded workflows produce no Discovered jobs — matching/extraction repair pending
 
-Recorded 2026-10-18 against `8d8c45a`. Multiple failures were reproduced in isolated worker/database probes: missing multi-source rows cause SQLite 787, restrictive templates reject unknown evidence, normalization changes rule semantics, and provider replay omits the seeded workflow path. See the [incident log and evidence](28-empty-seeded-workflows.md) and [step-by-step implementation handoff](../12-workflow-ingestion-repair.md). This is a diagnosis, not an applied solution.
+Recorded 2026-10-18 against `8d8c45a`. Multiple failures were reproduced in isolated worker/database probes: missing multi-source rows cause SQLite 787, restrictive templates reject unknown evidence, normalization changes rule semantics, and provider replay omits the seeded workflow path. See the [incident log and evidence](28-empty-seeded-workflows.md) and [step-by-step implementation handoff](../12-workflow-ingestion-repair.md). These are the original diagnosis findings; the partial implementation checkpoint follows below.
+
+Incident 28 update: Plan 12 Sections 1–2 now implement diagnostics and atomic ownership (migration 27, `b29d3a4`, `38a362e`). See [current verification](../12-implementation-evidence.md). Matching/extraction and exact saved-run/native acceptance remain open; the live database has not been repaired.

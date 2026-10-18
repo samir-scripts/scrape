@@ -1057,3 +1057,14 @@ Implementation `141b113`: shared seed service and workflow-to-worker preparation
 Actually run: `npm run build:sidecar` passed; final `cargo test -p scrape --lib --test worker_repository` passed **171 + 13 tests**, with no skips; `cargo clippy -p scrape --all-targets -- -D warnings`, formatting, binding diff, TypeScript and style checks passed; targeted frontend event tests **5 passed**. The new redaction regression failed before implementation; a fixture's nonblocking accepted socket initially truncated a large response and was corrected with blocking sockets/asserted writes. No expectations or limits were weakened. See [Plan 12 evidence](12-implementation-evidence.md) for exact commands, logs and results.
 
 No live provider/user-database/native UI/startup/IPC run or migration was performed; full workspace/frontend/build/provider checks were not rerun. Recorded Bitwarden/SEP and a labelled authored Cloudflare control prove diagnostics and persistence boundaries, not full company support or the exact user's all-zero run. Next: Plan 12 Section 2.
+
+
+## Plan 12 Section 2 — Atomic multi-source ownership and script review
+
+Commits: `456e2b7` (forward migration 27), `b29d3a4` (atomic ownership, explicit backed-up repair and disabled per-source script review), `68d1025` (Rust-generated seed-report binding), `38a362e` (parent retention/cleanup and legacy CRUD guard). Six templates create eight owned source records; parent-only listing/scheduling, identity-preserving reorder/removal/re-add, same-board workflows, transactional rollback and foreign ownership rejection are verified.
+
+Populated v26 upgrade compares all historical table rows and checks preserved job/run links, checksums, backup, rollback after injected failure, retry and restart. Authored Google/Apple unrestricted controls persist both source jobs under the parent; strict template matching and live support are not claimed. UI tests cover Save disabled without Preview/Run, exact child fingerprints and stale-snapshot protection. Parent retention preserves tracked/favorited/annotated jobs and cleanup counts parents.
+
+Actually run: rebuilt sidecar; full `cargo test --workspace` **441 tests passed**; full serial Vitest **504 tests / 79 files passed**; workspace Clippy with denied warnings, generated binding/drift, frontend build, style, Vite startup smoke, formatting and diff checks passed. No tests skipped. See [Plan 12 evidence](12-implementation-evidence.md) for commands, logs, initial regressions, code changes and limits.
+
+No user database was opened, migrated or repaired; no live provider or native GUI/IPC/startup/browser/physical acceptance was performed. Matching/evidence, templates and actual extraction coverage remain open. Next: Plan 12 Section 3.

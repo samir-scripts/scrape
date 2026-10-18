@@ -45,3 +45,48 @@ No schema/data migration, user-database repair, live provider request, live work
 This checkpoint implements the shared reproduction/diagnostics foundation of Section 1. Existing missing multi-source rows, template restrictions, unsafe filter normalization, geography parity, Google base URLs, and pagination remain open acceptance defects. Their repair-specific desired-behavior regressions belong with Sections 2–7; the original Incident 28 probes remain archived. The exact user's all-zero saved-run state remains uninspected.
 
 The existing Run all effective-config column and aggregate counters still have historical last-workflow semantics; the new context log retains each workflow preparation but does not claim aggregate accounting repair. Source-level/native launch and portable script-resource verification remain later acceptance work. Next implementation section: **2 — canonical seed/save/import ownership and local trust persistence**.
+
+
+## Section 2 — Atomic workflow ownership and local script review
+
+Commits: migration `456e2b7`; canonical persistence, repair helper and UI `b29d3a4`; generated report binding `68d1025`; parent-retention/legacy-CRUD follow-up `38a362e`. Started on a clean tree at `f27edb2`. No application database was opened or repaired.
+
+### Delivered behavior
+
+All built-in seed paths, editor Save and imported workflow Save use `workflow::persist` → `workflow_store.rs`. Each workflow is validated before mutation; one transaction checks ownership, assigns canonical UUIDs to new local aliases, writes the parent and every child, and stores those exact IDs in the spec. Existing owned source IDs are retained. Attempts to take another workflow's source or save a child as a different parent fail explicitly. Normal Save cannot leave a half-created/half-edited workflow after a child write fails. Legacy single-source IPC CRUD rejects embedded multi-source configurations and directs callers to Save workflow.
+
+Migration 27 replaces global `(kind, identifier)` uniqueness with workflow-scoped uniqueness. All prior SQL/checksums remain unchanged. Startup's normal consistent backup precedes the forward migration. The replacement preserves every source column and temporarily maps/restores the two `ON DELETE SET NULL` source-reference columns while foreign keys stay enabled. Populated v26 tests compare every historical table, preserved job/run links and migration metadata; check backup contents, failure immediately after the old table is dropped, rollback/retry and restart. Recovery details and primary SQLite references are in [database recovery](database-recovery.md).
+
+Workflow lists and due-source queries show parent records. Children use manual cadence and have no separate schedule; launching one directly is rejected. Parent job filters include owned child postings. Removed sources remain saved, disabled and unscheduled, retaining historical job ownership. Re-adding an endpoint reuses its existing owned ID. Post-run retention resolves children to the parent, deduplicates owners and applies the parent's policy; bulk-cleanup previews count parent workflows. Tracked/favorited/annotated jobs remain protected.
+
+Suite seeding reports created, already-present and needs-review records using Rust-generated `SeedWorkflowReport`. Loading examples again preserves existing edits. Six seeded workflows materialize eight source rows, including independently reviewable Netflix/Amazon script records. Duplicate external boards in separate workflows are allowed; duplicate normalized endpoints inside one workflow remain rejected.
+
+Executable sources are persisted disabled with local fingerprints. Imports reset trust, changed executable content invalidates trust, and unchanged locally trusted content retains it. Trust never enables a source/workflow or creates a next run. Aggregate review covers the currently configured sources, excluding retired historical children. Preflight requires a source row owned by the selected parent before worker launch.
+
+The editor's **Save disabled for review** path validates and saves without a preview or a run, avoiding the trust/preview deadlock. Reopening a static parent with a script child retains the validated multi-source draft. Each script loads its own source row/fingerprint; the review control compares the executable being displayed with that child's actual saved executable, including differences from a stale parent snapshot. The action now says **Trust saved script** and explains that enabling remains explicit.
+
+Existing malformed seeded workflows are not silently rewritten. Normal Save repairs their ownership as an explicit edit. The new `repair_workflow_ownership` example provides an explicit idempotent data-repair path with a separate consistent backup, refusing missing databases, backup failures and foreign ownership conflicts. It preserves the parent ID, name, identifier, filters, schedule, notes, favorites, tracking history and suppression. Failure during repair rolls back; restart and repeated repair add no duplicates or extra ownership backup. The CLI/service starts no extraction or scheduling. Only the isolated service fixtures were exercised; the helper was not run against user data.
+
+### Regressions and verification
+
+- The new seed regression first failed **6 source rows vs 8 expected**, proving the original missing-child defect. A later retry exposed legacy-vs-canonical endpoint duplicate detection; both paths now recognize existing workflows without overwriting them.
+- Injected child INSERT failure proves rollback for creation and editing. Identity-preserving reorder/removal/re-add, shared endpoints across workflows, foreign-source conflicts, and saving via a child ID are tested.
+- The populated v26 upgrade test preserves all historical table rows and validates `foreign_key_check`, backup version/content, injected failure after DROP, retry and restart. The previous migration-26 test's current-manifest expectation advances to 27 while all its protected-state checks remain intact.
+- Exact canonical IDs replace hard-coded local aliases in existing script trust/persistence tests; original emitted-job and persistence assertions remain. The default sample now asserts empty legacy role restrictions plus its unchanged structured role choices, rather than the obsolete duplicated legacy array.
+- A real packaged-worker test uses the actual seeded Google/Apple configuration with labelled authored HTML and **unrestricted control filters**: both source IDs persist successfully and both postings are returned through the parent workflow filter. It does not claim the strict templates or live career sites are repaired.
+- New UI tests prove disabled Save performs neither Preview nor Run, child trust targets the child's stored fingerprint, and a different saved child executable blocks trust. The initially missing review button exposed the aggregate-review draft bug; the implementation was fixed instead of weakening the fixture.
+- The final retention/cleanup regression first failed because two source rows were counted as two workflows. It now also proves a child-only completion applies the parent policy, while retaining the annotated, favorited, interviewing posting.
+
+Actually run:
+
+- `npm run build:sidecar`: passed (`/tmp/plan12-step2-sidecar.log`).
+- `cargo test --workspace`: **441** tests passed (`/tmp/plan12-step2-workspace.log`). This includes 179 host tests and 14 worker/repository integrations; no tests were skipped.
+- `cargo clippy --workspace --all-targets -- -D warnings`: passed (`/tmp/plan12-step2-clippy.log`).
+- `npm run gen:types` and `git diff --exit-code -- src/bindings`: passed (`/tmp/plan12-step2-bindings.log`); the generated binding is committed separately.
+- `npx vitest run --maxWorkers=1`: **504 tests / 79 files passed** (`/tmp/plan12-step2-frontend.log`).
+- `npm run build`: TypeScript and production build passed; existing large-chunk advisory remains (`/tmp/plan12-step2-build.log`).
+- `node scripts/check-style.mjs`: passed (`/tmp/plan12-step2-style.log`).
+- `node scripts/test-app-startup.mjs`: Vite startup/entry transform/shutdown smoke passed (`/tmp/plan12-step2-startup.log`).
+- `cargo fmt --all --check` and `git diff --check`: passed.
+
+No live provider verification, native app startup/IPC/UI/browser journey, visual/physical QA, or user-data migration/repair was performed. The authored two-source fixture proves ownership/persistence, not Google/Apple coverage. Full company scripts, portable resource setup, matching normalization/evidence and URL/pagination defects remain in later sections. **Next: Section 3 — restore matching compatibility and remove competing normalization paths.**

@@ -1,6 +1,6 @@
 # Incident 28 — Seeded workflows produce no Discovered jobs
 
-Status: **Investigated; Section 1 diagnostics/reproduction foundation implemented at `141b113`; ingestion repairs remain pending.** See [current evidence](../12-implementation-evidence.md). Recorded 2026-10-18 against `8d8c45a49faeb829e2b2d99cd6840ebbe54b243d`, branch `implementation/trustworthy-scraping`. Requested deliverable: diagnosis, research, error log, and an implementation handoff for GPT-6.1 Sol. See [Plan 12](../12-workflow-ingestion-repair.md).
+Status: **Sections 1–2 diagnostics and ownership repair implemented; matching/extraction acceptance remains open.** See [current evidence](../12-implementation-evidence.md). Recorded 2026-10-18 against `8d8c45a49faeb829e2b2d99cd6840ebbe54b243d`, branch `implementation/trustworthy-scraping`. Requested deliverable: diagnosis, research, error log, and an implementation handoff for GPT-6.1 Sol. See [Plan 12](../12-workflow-ingestion-repair.md).
 
 ## Scope and confidence
 
@@ -124,3 +124,8 @@ Not run: full workspace/frontend/Clippy suite, native UI/IPC, full native runner
 ## Section 1 implementation checkpoint
 
 `141b113` adds shared seeding/preparation, durable redacted context before sidecar preflight, original-vs-effective rule snapshots, missing-source observations, and batch-persistence failure counts/logs. It adds deterministic actual-seed → packaged-worker → SQLite → Discovered controls and refresh/status preservation. See [Plan 12 evidence](../12-implementation-evidence.md) for this run's commands, results and limits. This does not repair missing child records, normalize filters safely, improve geography/URLs/pagination, or establish the user's exact saved-run context. Section 2 ownership/trust repair is next.
+
+
+## Section 2 implementation checkpoint
+
+Migration `456e2b7` scopes endpoint uniqueness to workflow ownership. Atomic persistence/UI `b29d3a4`, generated report `68d1025`, and parent-retention/CRUD follow-up `38a362e` materialize every owned child, retain canonical IDs/history, prevent independent child scheduling and foreign reparenting, and provide disabled Save with exact per-source script trust. An explicit backed-up helper repairs missing ownership without overwriting saved filters/schedules or launching extraction. It has not been applied to user data. See [Section 2 evidence](../12-implementation-evidence.md). Matching normalization, field evidence, actual company extraction/pagination and native acceptance remain open; Section 3 is next.

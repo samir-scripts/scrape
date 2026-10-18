@@ -1,6 +1,6 @@
 # Workflow ingestion repair — implementation handoff for GPT-6.1 Sol
 
-Status: **Section 1 reproduction/diagnostics foundation implemented at `141b113`; Section 2 ownership repair is next.** See [implementation evidence](12-implementation-evidence.md). Sections 2–8 acceptance remains pending. Investigated 2026-10-18 at `8d8c45a`. Start with [Incident 28](errors/28-empty-seeded-workflows.md) and its measured evidence. The user requested this plan after the six new templates failed to populate Discovered.
+Status: **Sections 1–2 implemented; Section 3 matching compatibility is next.** Section 2 commits: migration `456e2b7`, atomic ownership/UI `b29d3a4`, generated contract `68d1025`, parent ownership follow-up `38a362e`. See [implementation evidence](12-implementation-evidence.md). Sections 3–8 acceptance remains pending. Investigated 2026-10-18 at `8d8c45a`. The user requested implementation after the six new templates failed to populate Discovered.
 
 This plan reopens plan 11 Sections 5–7 acceptance for seeded workflows, matching compatibility, and real company coverage. Earlier implementation records remain historical evidence; their broad completion/support claims do not establish working seeded workflows. Preserve plans 06–11 identity, provenance, suppression, retention, scheduling, trusted script execution, fair budgeting and protected-user-data requirements. Native acceptance from plans 08/10 remains outstanding.
 
@@ -27,6 +27,8 @@ Files: `src-tauri/tests/worker_repository.rs`, `src-tauri/src/services/{runner,i
 **Gate:** tests fail at the real problematic boundaries, and logs identify whether zero occurred before matching, at matching, at host persistence, or only in the view. Captured fixtures/projections must have classification, URL, timestamp and checksum; preserve a durable full Cloudflare capture if exact board counts become test expectations. The existing `/tmp` Cloudflare capture is not a committed fixture.
 
 ## 2. Make seed/save/import share workflow ownership and trust persistence
+
+Implemented and fixture-verified: atomic parent/child saves, canonical IDs, workflow-scoped endpoint uniqueness (migration 27), parent-only scheduling/listing/retention, source-specific script review and disabled Save, and an explicit backed-up ownership repair helper. The helper has not been run against user data. Existing matching, provider extraction and native acceptance gaps remain open.
 
 Files: `commands/sources.rs`, `db/sources.rs`, `services/workflow.rs::persist`, `services/script_trust.rs`, `SourcesSettings.tsx`, `api.ts`.
 
