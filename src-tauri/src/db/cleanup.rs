@@ -88,7 +88,7 @@ async fn snapshot(conn: &mut SqliteConnection, mode: CleanupMode) -> Result<Clea
     ))
     .fetch_one(&mut *conn)
     .await?;
-    let workflows = sqlx::query_scalar("SELECT COUNT(*) FROM sources")
+    let workflows = sqlx::query_scalar("SELECT COUNT(*) FROM workflows")
         .fetch_one(&mut *conn)
         .await?;
     let blocks = sqlx::query_scalar("SELECT COUNT(*) FROM (SELECT identity FROM blocked_postings UNION SELECT identity FROM posting_legacy_blocks UNION SELECT 'legacy:' || dedupe_key FROM deleted_jobs)").fetch_one(&mut *conn).await?;

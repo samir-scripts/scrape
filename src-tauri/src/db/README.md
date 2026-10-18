@@ -60,3 +60,5 @@ The typed workflow service owns atomic parent/child writes; the low-level source
 repository remains available for legacy single-source commands and isolated
 historical fixtures. See database recovery for the explicit backed-up ownership
 repair helper.
+Cleanup previews count parent workflows; owned child rows are not additional
+workflows. Child completion resolves retention policy through parent ownership.

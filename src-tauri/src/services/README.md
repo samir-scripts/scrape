@@ -101,3 +101,8 @@ stale parent snapshot, before offering trust.
 Existing malformed records are repaired only by explicit Save or the backed-up
 `repair_workflow_ownership` helper documented in database recovery. This revision
 does not run that helper against application data.
+
+Retention resolves completed child IDs to their parent and deduplicates by
+workflow before applying the parent's retention policy. Bulk-cleanup previews
+count workflow parents rather than extraction-source rows. The regression keeps
+tracked/favorited/annotated jobs while expiring an eligible child posting.

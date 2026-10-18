@@ -95,16 +95,37 @@ impl RetentionService {
         let mut outcome = RetentionOutcome::new(now);
         let mut seen = HashSet::new();
         for id in source_ids {
-            if !seen.insert(id.clone()) {
+            let owner = match sqlx::query_scalar::<_, Option<String>>(
+                "SELECT workflow_id FROM sources WHERE id=?",
+            )
+            .bind(&id)
+            .fetch_optional(pool)
+            .await
+            {
+                Ok(Some(owner)) => owner.unwrap_or_else(|| id.clone()),
+                Ok(None) => {
+                    outcome
+                        .failures
+                        .push(format!("Workflow source {id} no longer exists"));
+                    continue;
+                }
+                Err(error) => {
+                    outcome.failures.push(format!(
+                        "Could not resolve workflow ownership for {id}: {error}"
+                    ));
+                    continue;
+                }
+            };
+            if !seen.insert(owner.clone()) {
                 continue;
             }
-            match SourcesRepo::get(pool, &id).await {
+            match SourcesRepo::get(pool, &owner).await {
                 Ok(source) => {
                     let one = Self::prune_sources(pool, std::slice::from_ref(&source), now).await;
                     outcome.deleted_records += one.deleted_records;
                     outcome.failures.extend(one.failures);
                 }
-                Err(error) => outcome.failures.push(format!("Workflow {id}: {error}")),
+                Err(error) => outcome.failures.push(format!("Workflow {owner}: {error}")),
             }
         }
         outcome
@@ -205,6 +226,56 @@ mod tests {
     async fn old_job(pool: &SqlitePool, source: &Source, id: &str) {
         sqlx::query("INSERT INTO jobs (id,dedupe_key,source_id,title,company,url,date_added,last_seen_at,status,status_changed_at) VALUES (?1,?1,?2,'Role','Org','https://example.test/job','2000-01-01T00:00:00Z','2026-10-15T12:00:00Z','scraped','2000-01-01T00:00:00Z')")
             .bind(id).bind(&source.id).execute(pool).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn child_completion_uses_parent_retention_and_cleanup_counts_workflows() {
+        let pool = crate::db::init_memory_db().await.unwrap();
+        let spec=crate::services::workflow::validate(serde_json::json!({"version":6,"metadata":{"name":"Authored ownership retention fixture"},"sources":[
+            {"id":"a","label":"A","enabled":true,"extractor":{"kind":"greenhouse","url":"retention-a"}},
+            {"id":"b","label":"B","enabled":true,"extractor":{"kind":"lever","url":"retention-b"}}
+        ],"schedule":{"cadence":"manual"},"retention":{"days":30,"policy":"untracked_only"}}),"UTC").unwrap();
+        let parent = crate::services::workflow::persist(&pool, spec, None, false, "UTC")
+            .await
+            .unwrap();
+        let child = SourcesRepo::get(
+            &pool,
+            parent.config["__workflow_spec"]["sources"][1]["id"]
+                .as_str()
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        old_job(&pool, &child, "expired-child").await;
+        old_job(&pool, &child, "protected-child").await;
+        sqlx::query("UPDATE jobs SET workflow_id=?")
+            .bind(&parent.id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE jobs SET notes='Protected note',favorited=1,status='interviewing' WHERE id='protected-child'").execute(&pool).await.unwrap();
+        sqlx::query("UPDATE sources SET retention_days=0 WHERE id=?")
+            .bind(&child.id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let preview = crate::db::cleanup::preview(&pool, crate::db::cleanup::CleanupMode::ResetAll)
+            .await
+            .unwrap();
+        assert_eq!(preview.workflows, 1);
+        let outcome = RetentionService::prune_source_ids(
+            &pool,
+            [child.id],
+            Utc.with_ymd_and_hms(2026, 10, 18, 12, 0, 0).unwrap(),
+        )
+        .await;
+        assert!(outcome.failures.is_empty());
+        assert_eq!(outcome.deleted_records, 1);
+        let kept = JobsRepo::get(&pool, "protected-child").await.unwrap();
+        assert_eq!(kept.notes.as_deref(), Some("Protected note"));
+        assert!(kept.favorited);
+        assert_eq!(kept.status, scrape_core::JobStatus::Interviewing);
+        assert!(JobsRepo::get(&pool, "expired-child").await.is_err());
     }
 
     #[tokio::test]
