@@ -44,3 +44,10 @@ trust/hash columns. Full reset clears browser-session metadata and parent
 workflows; jobs-only cleanup preserves them. Session credentials and browser
 process management are deferred to Phase 6C. `browser_upgrade_tests.rs` tests the
 populated v25 upgrade, all historical rows/checksums, backup, rollback and restart.
+
+Run diagnostics store credential-redacted effective configurations and sanitize
+historical configurations on reads. Per-workflow preparation and preflight errors
+are retained in `scrape_logs`, including contexts from Run all; persistence failure
+logs and counters retain earlier committed batches. No schema migration is needed
+for Plan 12 section 1. These snapshots describe attempted execution and are not
+executable workflow exports.

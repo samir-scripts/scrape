@@ -132,6 +132,15 @@ pub struct ScrapeLogEntry {
 pub struct RunsRepo;
 
 impl RunsRepo {
+    fn diagnostic_config(value: Option<String>) -> Result<Option<scrape_core::WorkerConfig>> {
+        value
+            .map(|value| {
+                let config = serde_json::from_str(&value)?;
+                crate::services::execution_diagnostics::safe_config(&config)
+            })
+            .transpose()
+    }
+
     pub async fn start(pool: &SqlitePool, trigger: TriggerType) -> Result<ScrapeRun> {
         Self::start_with_source(pool, trigger, None).await
     }
@@ -182,7 +191,9 @@ impl RunsRepo {
         config: &scrape_core::WorkerConfig,
     ) -> Result<()> {
         sqlx::query("UPDATE scrape_runs SET effective_config_json=? WHERE id=?")
-            .bind(serde_json::to_string(config)?)
+            .bind(serde_json::to_string(
+                &crate::services::execution_diagnostics::safe_config(config)?,
+            )?)
             .bind(id)
             .execute(pool)
             .await?;
@@ -265,10 +276,7 @@ impl RunsRepo {
                 .get::<Option<String>, _>("counts_json")
                 .map(|value| serde_json::from_str(&value))
                 .transpose()?,
-            effective_config: r
-                .get::<Option<String>, _>("effective_config_json")
-                .map(|value| serde_json::from_str(&value))
-                .transpose()?,
+            effective_config: Self::diagnostic_config(r.get("effective_config_json"))?,
         })
     }
 
@@ -307,10 +315,7 @@ impl RunsRepo {
                     .get::<Option<String>, _>("counts_json")
                     .map(|value| serde_json::from_str(&value))
                     .transpose()?,
-                effective_config: r
-                    .get::<Option<String>, _>("effective_config_json")
-                    .map(|value| serde_json::from_str(&value))
-                    .transpose()?,
+                effective_config: Self::diagnostic_config(r.get("effective_config_json"))?,
             });
         }
 
@@ -359,10 +364,7 @@ impl RunsRepo {
                     .get::<Option<String>, _>("counts_json")
                     .map(|value| serde_json::from_str(&value))
                     .transpose()?,
-                effective_config: r
-                    .get::<Option<String>, _>("effective_config_json")
-                    .map(|value| serde_json::from_str(&value))
-                    .transpose()?,
+                effective_config: Self::diagnostic_config(r.get("effective_config_json"))?,
             });
         }
 
@@ -441,6 +443,64 @@ impl RunsRepo {
 mod tests {
     use super::*;
     use crate::db::init_memory_db;
+
+    #[tokio::test]
+    async fn diagnostic_config_redacts_executable_and_session_secrets_without_mutating_execution() {
+        let pool = init_memory_db().await.unwrap();
+        let run = RunsRepo::start(&pool, TriggerType::Manual).await.unwrap();
+        let config: scrape_core::WorkerConfig = serde_json::from_value(serde_json::json!({
+            "version": scrape_core::PROTOCOL_VERSION,
+            "sources": [{"id":"authored", "kind":"selector", "name":"Fixture", "identifier":"https://fixture.invalid/jobs?token=private-url-token&page=2", "config":{
+                "mode":"script", "script":{"runtime":"js", "code":"const private_code = 'secret-code';", "args":["--password=secret-argument"]},
+                "cookies":"private-cookie", "storage_state":{"value":"private-session"},
+                "__workflow_spec":{"version":6, "sources":[{"extractor":{"script":{"runtime":"js","path":"/private/secret-script.js"}}}]}
+            }}],
+            "filters":{"matching":{"keywords":{"any":["Engineer"],"fields":["title"]}}}
+        })).unwrap();
+        RunsRepo::record_config(&pool, &run.id, &config)
+            .await
+            .unwrap();
+        let saved = RunsRepo::get(&pool, &run.id)
+            .await
+            .unwrap()
+            .effective_config
+            .unwrap();
+        let text = serde_json::to_string(&saved).unwrap();
+        for secret in [
+            "private-url-token",
+            "secret-code",
+            "secret-argument",
+            "private-cookie",
+            "private-session",
+            "secret-script.js",
+        ] {
+            assert!(
+                !text.contains(secret),
+                "diagnostic persisted secret: {secret}"
+            );
+        }
+        assert!(text.contains("Engineer"));
+        assert!(text.contains("page=2"));
+        // Older rows may predate safe persistence. Sanitize reads without rewriting history.
+        sqlx::query("UPDATE scrape_runs SET effective_config_json=? WHERE id=?")
+            .bind(serde_json::to_string(&config).unwrap())
+            .bind(&run.id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        for saved in [
+            RunsRepo::get(&pool, &run.id).await.unwrap(),
+            RunsRepo::recent(&pool, 1).await.unwrap().remove(0),
+        ] {
+            let exported = serde_json::to_string(&saved.effective_config).unwrap();
+            assert!(!exported.contains("secret-code"));
+            assert!(!exported.contains("private-url-token"));
+        }
+        assert!(config.sources[0].config["script"]["code"]
+            .as_str()
+            .unwrap()
+            .contains("secret-code"));
+    }
 
     #[tokio::test]
     async fn effective_rules_and_stage_counts_survive_failure_and_restart_queries() {

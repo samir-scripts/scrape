@@ -1,11 +1,9 @@
-use crate::db::jobs::{JobsRepo, ScrapedJob};
+use crate::db::jobs::ScrapedJob;
 use crate::db::runs::{LogLevel, RunCounts, RunStatus, RunsRepo, ScrapeRun, TriggerType};
 use crate::db::settings::SettingsRepo;
 use crate::db::sources::SourcesRepo;
 use crate::error::{AppError, Result};
-use scrape_core::{
-    WorkerConfig, WorkerEvent, WorkerFilters, WorkerLimits, WorkerSource, PROTOCOL_VERSION,
-};
+use scrape_core::{WorkerConfig, WorkerEvent, WorkerFilters};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -319,80 +317,17 @@ impl ScrapeRunner {
                 break;
             }
 
-            let spec_opt: Option<super::workflow::WorkflowSpec> = source
-                .config
-                .get("__workflow_spec")
-                .and_then(|v| serde_json::from_value(v.clone()).ok());
-
-            let (worker_sources, max_jobs) = if let Some(spec) = &spec_opt {
-                let inputs = super::workflow::workflow_source_inputs(spec, &tz_name)?;
-                let w_sources: Vec<WorkerSource> = spec
-                    .sources
-                    .iter()
-                    .zip(inputs.iter())
-                    .filter(|(s, _)| s.enabled)
-                    .map(|(s, input)| WorkerSource {
-                        id: if spec.sources.len() == 1 {
-                            source.id.clone()
-                        } else {
-                            s.id.clone()
-                        },
-                        kind: input.kind,
-                        name: s
-                            .employer_hint
-                            .clone()
-                            .or_else(|| spec.metadata.company.clone())
-                            .unwrap_or_else(|| s.label.clone()),
-                        identifier: input.identifier.clone(),
-                        config: input.config.clone().unwrap_or(serde_json::Value::Null),
-                    })
-                    .collect();
-                let cap = spec
-                    .max_jobs_per_run
-                    .unwrap_or(scrape_core::protocol::DEFAULT_MAX_JOBS_PER_RUN);
-                (w_sources, Some(cap))
-            } else {
-                let single = vec![WorkerSource {
-                    id: source.id.clone(),
-                    kind: source.kind,
-                    name: source
-                        .config
-                        .get("__company")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("Unknown company")
-                        .to_owned(),
-                    identifier: source.identifier.clone(),
-                    config: source.config.clone(),
-                }];
-                (single, None)
-            };
-
-            if worker_sources.is_empty() {
+            let mut config =
+                super::execution_diagnostics::prepare(source, &tz_name, &run.started_at)?;
+            if config.sources.is_empty() {
                 continue;
             }
-
-            let workflow_filters =
-                resolve_worker_filters(&source.filters, scrape_core::WorkerFilters::default())?;
-            let starting_index = source
-                .config
-                .get("__starting_source_index")
-                .and_then(serde_json::Value::as_u64)
-                .unwrap_or(0) as usize;
-
-            let config = WorkerConfig {
-                version: PROTOCOL_VERSION,
-                run_started_at: Some(run.started_at.clone()),
-                sources: worker_sources.clone(),
-                filters: workflow_filters,
-                filters_by_source: Default::default(),
-                limits: WorkerLimits::default(),
-                blocked_postings: crate::db::postings::suppression_snapshot(&self.pool).await?,
-                max_jobs_per_run: max_jobs,
-                starting_source_index: Some(starting_index),
-            };
+            config.blocked_postings = crate::db::postings::suppression_snapshot(&self.pool).await?;
+            let worker_sources = config.sources.clone();
+            let starting_index = config.starting_source_index.unwrap_or(0);
 
             let start_time = Instant::now();
-            let step_result = self.execute_sidecar(app, &run.id, config).await;
+            let step_result = self.execute_sidecar(app, &run.id, &source.id, config).await;
             let duration_ms = start_time.elapsed().as_millis() as i64;
             let next_run =
                 crate::services::scheduler::calculate_next_run_for_source(source, &tz_name);
@@ -569,8 +504,8 @@ impl ScrapeRunner {
             ));
         }
         super::workflow::validated_stored_config(source.kind, &source.config)?;
-        let filters =
-            resolve_worker_filters(&source.filters, scrape_core::WorkerFilters::default())?;
+        // Invalid saved filters must fail before opening a run record.
+        resolve_worker_filters(&source.filters, Default::default())?;
         let run = RunsRepo::start_with_source(&self.pool, trigger, Some(source_id)).await?;
         let _ = app.emit(
             "scrape://started",
@@ -595,74 +530,13 @@ impl ScrapeRunner {
             .flatten()
             .unwrap_or_else(|| "UTC".to_string());
 
-        let spec_opt: Option<super::workflow::WorkflowSpec> = source
-            .config
-            .get("__workflow_spec")
-            .and_then(|v| serde_json::from_value(v.clone()).ok());
-
-        let (worker_sources, max_jobs) = if let Some(spec) = &spec_opt {
-            let inputs = super::workflow::workflow_source_inputs(spec, &tz_str)?;
-            let sources: Vec<WorkerSource> = spec
-                .sources
-                .iter()
-                .zip(inputs.iter())
-                .filter(|(s, _)| s.enabled)
-                .map(|(s, input)| WorkerSource {
-                    id: if spec.sources.len() == 1 {
-                        source.id.clone()
-                    } else {
-                        s.id.clone()
-                    },
-                    kind: input.kind,
-                    name: s
-                        .employer_hint
-                        .clone()
-                        .or_else(|| spec.metadata.company.clone())
-                        .unwrap_or_else(|| s.label.clone()),
-                    identifier: input.identifier.clone(),
-                    config: input.config.clone().unwrap_or(serde_json::Value::Null),
-                })
-                .collect();
-            let cap = spec
-                .max_jobs_per_run
-                .unwrap_or(scrape_core::protocol::DEFAULT_MAX_JOBS_PER_RUN);
-            (sources, Some(cap))
-        } else {
-            let single = vec![WorkerSource {
-                id: source.id.clone(),
-                kind: source.kind,
-                name: source
-                    .config
-                    .get("__company")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("Unknown company")
-                    .to_owned(),
-                identifier: source.identifier.clone(),
-                config: source.config.clone(),
-            }];
-            (single, None)
-        };
-
-        let starting_index = source
-            .config
-            .get("__starting_source_index")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(0) as usize;
-
-        let config = WorkerConfig {
-            version: PROTOCOL_VERSION,
-            run_started_at: Some(run.started_at.clone()),
-            filters_by_source: Default::default(),
-            sources: worker_sources.clone(),
-            filters,
-            limits: WorkerLimits::default(),
-            blocked_postings: crate::db::postings::suppression_snapshot(&self.pool).await?,
-            max_jobs_per_run: max_jobs,
-            starting_source_index: Some(starting_index),
-        };
+        let mut config = super::execution_diagnostics::prepare(&source, &tz_str, &run.started_at)?;
+        config.blocked_postings = crate::db::postings::suppression_snapshot(&self.pool).await?;
+        let worker_sources = config.sources.clone();
+        let starting_index = config.starting_source_index.unwrap_or(0);
 
         let start_time = Instant::now();
-        let run_result = self.execute_sidecar(app, &run.id, config).await;
+        let run_result = self.execute_sidecar(app, &run.id, &source.id, config).await;
         let duration_ms = start_time.elapsed().as_millis() as i64;
 
         if !worker_sources.is_empty() {
@@ -829,15 +703,16 @@ impl ScrapeRunner {
         &self,
         app: &AppHandle,
         run_id: &str,
+        workflow_id: &str,
         config: WorkerConfig,
     ) -> Result<(i64, i64, HashMap<String, (String, Option<String>)>)> {
-        super::script_trust::validate_execution(&self.pool, &config.sources).await?;
-        let mut budget = super::ingestion::RunPostingBudget::new(&config.sources)?;
-        RunsRepo::record_config(&self.pool, run_id, &config).await?;
         let mut counts = RunCounts {
             examination_incomplete: Some(true),
             ..Default::default()
         };
+        RunsRepo::record_counts(&self.pool, run_id, &counts).await?;
+        super::execution_diagnostics::preflight(&self.pool, run_id, workflow_id, &config).await?;
+        let mut budget = super::ingestion::RunPostingBudget::new(&config.sources)?;
         let (mut rx, child) = crate::services::process::worker_command(app)?
             .args(["--stdin"])
             .spawn()
@@ -971,15 +846,14 @@ impl ScrapeRunner {
                                     if job_buffer.len() >= 50
                                         || last_flush.elapsed() >= Duration::from_millis(500)
                                     {
-                                        let stats =
-                                            JobsRepo::upsert_scraped(&self.pool, &job_buffer)
-                                                .await?;
+                                        let stats = super::execution_diagnostics::persist_batch(
+                                            &self.pool,
+                                            run_id,
+                                            &job_buffer,
+                                            &mut counts,
+                                        )
+                                        .await?;
                                         total_new += stats.inserted;
-                                        counts.inserted += stats.inserted;
-                                        counts.updated += stats.updated;
-                                        counts.blocked += stats.blocked;
-                                        RunsRepo::record_counts(&self.pool, run_id, &counts)
-                                            .await?;
                                         job_buffer.clear();
                                         last_flush = Instant::now();
                                     }
@@ -1302,11 +1176,14 @@ impl ScrapeRunner {
 
         // Flush remaining buffered jobs
         if !job_buffer.is_empty() {
-            let stats = JobsRepo::upsert_scraped(&self.pool, &job_buffer).await?;
+            let stats = super::execution_diagnostics::persist_batch(
+                &self.pool,
+                run_id,
+                &job_buffer,
+                &mut counts,
+            )
+            .await?;
             total_new += stats.inserted;
-            counts.inserted += stats.inserted;
-            counts.updated += stats.updated;
-            counts.blocked += stats.blocked;
             job_buffer.clear();
         }
 

@@ -48,15 +48,7 @@ pub async fn delete_source(app: AppHandle, state: State<'_, AppState>, id: Strin
 #[tauri::command]
 pub async fn seed_sample_workflow(app: AppHandle, state: State<'_, AppState>) -> Result<Source> {
     let _permit = state.runner.write_permit()?;
-    let list = SourcesRepo::list(&state.db).await?;
-    if let Some(existing) = list
-        .into_iter()
-        .find(|s| s.identifier == "cloudflare" && s.kind == scrape_core::SourceKind::Greenhouse)
-    {
-        return Ok(existing);
-    }
-    let input = SourcesRepo::default_sample_workflow_input();
-    let source = SourcesRepo::create(&state.db, input).await?;
+    let source = crate::services::sample_workflows::seed_default(&state.db).await?;
     let _ = app.emit("sources://changed", &source);
     Ok(source)
 }
@@ -67,17 +59,8 @@ pub async fn seed_all_sample_workflows(
     state: State<'_, AppState>,
 ) -> Result<Vec<Source>> {
     let _permit = state.runner.write_permit()?;
-    let mut created = Vec::new();
-    let existing = SourcesRepo::list(&state.db).await?;
-    for input in SourcesRepo::sample_workflows_suite() {
-        if !existing
-            .iter()
-            .any(|s| s.identifier == input.identifier && s.kind == input.kind)
-        {
-            let source = SourcesRepo::create(&state.db, input).await?;
-            let _ = app.emit("sources://changed", &source);
-            created.push(source);
-        }
-    }
-    Ok(created)
+    let result = crate::services::sample_workflows::seed_all(&state.db).await;
+    // Also refresh after a partial batch failure: earlier creations may be saved.
+    let _ = app.emit("sources://changed", ());
+    result
 }

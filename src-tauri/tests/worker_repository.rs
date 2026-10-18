@@ -2223,3 +2223,204 @@ async fn recorded_provider_company_verification_matrix_persists_to_sqlite() {
     let _ = server.join();
     pool.close().await;
 }
+
+/// Plan 12 section 1: the actual seed service and runner preparation, not a
+/// hand-built replacement source. Cloudflare is an explicitly authored control;
+/// Bitwarden and SEP are immutable recorded provider captures.
+#[tokio::test]
+async fn seeded_workflow_rules_explain_zero_results_through_discovered_query() {
+    use scrape_lib::db::runs::{RunCounts, RunsRepo, TriggerType};
+    use scrape_lib::services::{execution_diagnostics, sample_workflows};
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    };
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap();
+    let bitwarden =
+        std::fs::read_to_string(root.join("fixtures/providers/greenhouse/bitwarden.json")).unwrap();
+    let sep = std::fs::read_to_string(root.join("fixtures/providers/lever/sep.json")).unwrap();
+    let cloudflare = serde_json::json!({"meta":{"total":3},"jobs":[
+        {"id":91001,"title":"Software Engineer","absolute_url":"https://fixture.invalid/cloudflare/91001","location":{"name":"Austin, TX"},"content":"Authored fixture. Hybrid engineering."},
+        {"id":91002,"title":"Software Engineering Intern","absolute_url":"https://fixture.invalid/cloudflare/91002","location":{"name":"Austin, TX"},"content":"Authored fixture. Hybrid internship."},
+        {"id":91003,"title":"Sales Manager","absolute_url":"https://fixture.invalid/cloudflare/91003","location":{"name":"Austin, TX"},"content":"Authored fixture. Hybrid sales."}
+    ]}).to_string();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    listener.set_nonblocking(true).unwrap();
+    let running = Arc::new(AtomicBool::new(true));
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let active = running.clone();
+    let observed = requests.clone();
+    let server = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while active.load(Ordering::SeqCst) && Instant::now() < deadline {
+            let Ok((mut stream, _)) = listener.accept() else {
+                std::thread::sleep(Duration::from_millis(5));
+                continue;
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut bytes = [0; 8192];
+            let n = stream.read(&mut bytes).unwrap_or(0);
+            let request = String::from_utf8_lossy(&bytes[..n]);
+            let path = request.split_whitespace().nth(1).unwrap_or("");
+            observed.lock().unwrap().push(path.to_string());
+            let (status, body) = match path {
+                "/boards-api.greenhouse.io/v1/boards/cloudflare/jobs?content=true" => {
+                    ("200 OK", cloudflare.as_str())
+                }
+                "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs?content=true" => {
+                    ("200 OK", bitwarden.as_str())
+                }
+                "/api.lever.co/v0/postings/sep?mode=json" => ("200 OK", sep.as_str()),
+                _ if path.ends_with("/robots.txt") => ("200 OK", "User-agent: *\nAllow: /"),
+                // No uncaptured detail/branding request may masquerade as a listing.
+                _ => ("404 Not Found", "Uncaptured optional fixture resource"),
+            };
+            write!(
+                stream,
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+        }
+    });
+    for (board, expected) in [
+        ("cloudflare", [3, 2, 1]),
+        ("bitwarden", [20, 20, 0]),
+        ("sep", [8, 6, 0]),
+    ] {
+        for (variant, expected_jobs) in expected.into_iter().enumerate() {
+            let directory = tempfile::tempdir().unwrap();
+            let pool = scrape_lib::db::init_db(&directory.path().join("seeded.db"))
+                .await
+                .unwrap();
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>("PRAGMA foreign_keys")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap(),
+                1
+            );
+            let seeded = sample_workflows::seed_all(&pool).await.unwrap();
+            let source = seeded.iter().find(|s| s.identifier == board).unwrap();
+            let run =
+                RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&source.id))
+                    .await
+                    .unwrap();
+            let mut config =
+                execution_diagnostics::prepare(source, "UTC", &run.started_at).unwrap();
+            config.filters=match variant {
+                0 => WorkerFilters::default(),
+                1 => serde_json::from_value(serde_json::json!({"matching":{"keywords":{"any":["Engineer"],"fields":["title"]}}})).unwrap(),
+                _ => config.filters,
+            };
+            config.limits.per_host_delay_ms = 0;
+            config.limits.enrichment = Some(scrape_core::protocol::EnrichmentLimits {
+                max_requests: 0,
+                timeout_ms: 5000,
+            });
+            execution_diagnostics::preflight(&pool, &run.id, &source.id, &config)
+                .await
+                .unwrap();
+            let events = invoke_replay(&config, false, Some(&origin));
+            let WorkerEvent::Done { stats } = events.last().unwrap() else {
+                panic!("missing terminal stats")
+            };
+            assert_eq!(
+                stats.jobs_emitted,
+                expected_jobs,
+                "{board}, variant {variant}; stats={stats:?}; errors={:?}; requests={:?}",
+                events
+                    .iter()
+                    .filter(|e| matches!(e, WorkerEvent::Error { .. }))
+                    .collect::<Vec<_>>(),
+                requests.lock().unwrap()
+            );
+            let scan = stats.sources[0].clone();
+            scan.validate().unwrap();
+            assert_eq!(scan.accepted, expected_jobs);
+            if board == "bitwarden" && variant == 2 {
+                assert_eq!((scan.examined, scan.rejected, scan.accepted), (39, 39, 0));
+                assert!(scan.rejections.iter().any(|r| r.reason
+                    == scrape_core::matching::RejectionReason::RoleType
+                    && r.count == 23));
+            }
+            if board == "sep" && variant == 2 {
+                assert_eq!((scan.examined, scan.rejected, scan.accepted), (8, 8, 0));
+                assert!(scan.rejections.iter().any(|r| r.reason
+                    == scrape_core::matching::RejectionReason::Geography
+                    && r.count == 6));
+            }
+            let batch: Vec<_> = events
+                .into_iter()
+                .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+                .map(|e| scraped_job_from_event(e).unwrap())
+                .collect();
+            let mut counts = RunCounts {
+                fetched: scan.examined as i64,
+                rejected: scan.rejected as i64,
+                sources: Some(vec![scan]),
+                ..Default::default()
+            };
+            execution_diagnostics::persist_batch(&pool, &run.id, &batch, &mut counts)
+                .await
+                .unwrap();
+            let filter = JobFilter {
+                statuses: Some(vec![
+                    scrape_core::JobStatus::Scraped,
+                    scrape_core::JobStatus::Viewed,
+                ]),
+                ..Default::default()
+            };
+            assert_eq!(
+                JobsRepo::list(&pool, filter.clone()).await.unwrap().total,
+                expected_jobs as i64
+            );
+            let saved = RunsRepo::get(&pool, &run.id).await.unwrap();
+            assert_eq!(saved.counts.unwrap().inserted, expected_jobs as i64);
+            assert_eq!(saved.effective_config.unwrap().filters, config.filters);
+            assert!(RunsRepo::get_logs(&pool, &run.id).await.unwrap()[0]
+                .message
+                .contains("execution_preparation"));
+            if expected_jobs > 0 {
+                let first = JobsRepo::list(&pool, filter.clone())
+                    .await
+                    .unwrap()
+                    .items
+                    .remove(0);
+                JobsRepo::update_status(&pool, &first.id, scrape_core::JobStatus::Applied)
+                    .await
+                    .unwrap();
+                execution_diagnostics::persist_batch(&pool, &run.id, &batch, &mut counts)
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    JobsRepo::list(&pool, filter).await.unwrap().total,
+                    expected_jobs as i64 - 1,
+                    "refresh must preserve tracked status"
+                );
+                assert_eq!(counts.updated, expected_jobs as i64);
+            }
+            pool.close().await;
+        }
+    }
+    running.store(false, Ordering::SeqCst);
+    server.join().unwrap();
+    let requests = requests.lock().unwrap();
+    for path in [
+        "/boards-api.greenhouse.io/v1/boards/cloudflare/jobs?content=true",
+        "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs?content=true",
+        "/api.lever.co/v0/postings/sep?mode=json",
+    ] {
+        assert_eq!(
+            requests.iter().filter(|p| p.as_str() == path).count(),
+            3,
+            "each variant must use the same listing once"
+        );
+    }
+}

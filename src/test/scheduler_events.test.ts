@@ -27,3 +27,16 @@ it("refreshes retention status, lists, totals, metrics and stale selection after
  for(const key of ["retention_status","jobs","job_counts","job_status_events","metrics","sources","scheduler_status"]) expect(invalidate).toHaveBeenCalledWith({queryKey:[key]});
  stop();
 });
+
+it.each(["success", "failed", "cancelled"])("refreshes every saved-job page and totals on %s completion without changing view filters", async status => {
+ const client=new QueryClient();
+ const stop=await setupAppEventListeners(client);
+ const keys=[["jobs","discovered-filtered",0],["jobs","discovered-filtered",20],["jobs","tracked",0],["job_counts"]];
+ for(const key of keys)client.setQueryData(key,{items:[],total:0});
+ const before=useUIStore.getState().filterSpec;
+ handlers.get("scrape://finished")!({payload:{status}});
+ for(const key of keys)expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+ expect(useUIStore.getState().filterSpec).toEqual(before);
+ expect(useUIStore.getState().isScanning).toBe(false);
+ stop();client.clear();
+});

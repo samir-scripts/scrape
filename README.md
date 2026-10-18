@@ -4,6 +4,13 @@ Scrape is a high-performance, local-first desktop application that runs in the b
 
 **Stack:** Tauri v2 · Rust (Tokio, Reqwest, Scraper, SQLx) · SQLite (WAL mode) · React 19 · TypeScript · Tailwind CSS v4 · Visx
 
+
+Workflow ingestion repair is tracked in [Plan 12](plans/12-workflow-ingestion-repair.md).
+Its first section adds durable redacted run-preparation/preflight diagnostics and
+seed-service → packaged-worker → temporary-database regressions. Existing seeded
+multi-source ownership and matching/extraction defects remain open; see
+[Incident 28](plans/errors/28-empty-seeded-workflows.md).
+
 ---
 
 ## Architecture Overview

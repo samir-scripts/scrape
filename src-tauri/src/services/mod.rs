@@ -15,3 +15,6 @@ pub mod native_smoke;
 pub mod retention;
 
 pub mod startup;
+
+pub mod execution_diagnostics;
+pub mod sample_workflows;

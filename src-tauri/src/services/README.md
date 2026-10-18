@@ -11,6 +11,8 @@ The `src-tauri/src/services` directory contains long-running background tasks, p
 | File | Service Domain | Core Responsibilities & Implementation |
 |---|---|---|
 | [`mod.rs`](mod.rs) | Service Root | Consolidates service modules and exports public service constructs. |
+| [`sample_workflows.rs`](sample_workflows.rs) | Built-in Seeding | Shared callable service behind both seed commands and deterministic seed-path tests; ownership repair remains Plan 12 section 2. |
+| [`execution_diagnostics.rs`](execution_diagnostics.rs) | Run Preparation & Diagnostics | Shared workflow-to-worker preparation, redacted context/config snapshots before preflight, and durable batch-persistence failure evidence. |
 | [`workflow.rs`](workflow.rs) | Authoritative Workflow Specification | Defines and validates `WorkflowSpec` (v6) with path-specific diagnostics, converts legacy v1–v5 configurations through a single compatibility resolver, and prepares worker execution inputs and previews. |
 | [`script_trust.rs`](script_trust.rs) | Local Script Trust | Quarantines imports, hashes executable inputs/file bytes, persists explicit confirmation, rechecks trust before previews/runs and reconciles workflow review state. Trust never enables execution automatically. |
 | [`runner.rs`](runner.rs) | Worker Process Orchestration | `ScrapeRunner`: Spawns the `scrape-worker` sidecar with `PROTOCOL_VERSION = 7`, streams and revalidates NDJSON events (`Job`, `Branding`, `Warning`, `SourceCompleted`, `Completed`), enforces write coordination, and broadcasts `scrape://event` updates. |
@@ -50,3 +52,29 @@ Each workflow owns an explicit `WorkflowSpec` v6 configuration (sources collecti
 Calendar scheduling (`calendar.rs`) computes next runs from local time, ISO weekdays, and IANA timezone across creation, edits, and post-run updates. DST gaps run at the first valid instant; overlaps use their first occurrence once. One dispatcher queue in `scheduler.rs` coalesces due workflows and waits through manual-run overlap; missed occurrences become one catch-up run before the next future date. All automatic paths share the persisted global pause flag, while explicit manual runs remain available.
 
 `PostingRules` is shared by worker evaluation and repository query compilation. It supports Any/All/Exclude keywords by explicit field, partial-evidence evaluation for bounded detail enrichment, native compensation, experience, role/workplace, eligibility, and geography. Posting-date rules use one captured run-start instant and explicit IANA timezone; missing publication dates are never replaced with discovery or provider `updated_at` edit time. Worker protocol v7 enforces exact contract compatibility between the host and sidecar.
+
+## Seeded-workflow diagnostics (Plan 12 section 1)
+
+`sample_workflows.rs` is the service used by both seed IPC commands and isolated
+regressions. It currently preserves the existing seeding behavior; multi-source
+ownership repair is the next Plan 12 section.
+
+`execution_diagnostics.rs` shares workflow-to-worker preparation between manual,
+scheduled and Run all execution. Before trust/runtime validation, each attempted
+execution stores a redacted worker-config snapshot and a per-workflow context log
+with persisted rules, effective rules, child ownership and enabled/review/trust
+state. Missing source rows are labelled `source_row_missing`. These observations
+do not repair or enable sources. Historical seed origin remains unknown.
+
+Executable bodies, file paths/arguments, credentials, URL authentication/query
+secrets and cookie/session material are omitted from diagnostic copies. Suppressed
+identities are represented by a count in context. The actual worker configuration
+is unchanged. Historical effective-config rows are sanitized when read without
+rewriting their stored bytes. Per-workflow context logs retain all preparations
+within a Run all run; the historical `effective_config` field still represents the
+last prepared child workflow, and aggregate Run all counters are not repaired here.
+
+Batch persistence uses the shared diagnostic writer to retain earlier committed
+counters and record the failure stage if a later transaction rolls back. Database
+errors retain their database error classification. See
+[Plan 12](../../../plans/12-workflow-ingestion-repair.md) for remaining repairs.
