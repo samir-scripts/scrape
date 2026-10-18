@@ -1,6 +1,6 @@
 # Incident 28 — Seeded workflows produce no Discovered jobs
 
-Status: **Investigated; repair not implemented.** Recorded 2026-10-18 against `8d8c45a49faeb829e2b2d99cd6840ebbe54b243d`, branch `implementation/trustworthy-scraping`. Requested deliverable: diagnosis, research, error log, and an implementation handoff for GPT-6.1 Sol. See [Plan 12](../12-workflow-ingestion-repair.md).
+Status: **Investigated; Section 1 diagnostics/reproduction foundation implemented at `141b113`; ingestion repairs remain pending.** See [current evidence](../12-implementation-evidence.md). Recorded 2026-10-18 against `8d8c45a49faeb829e2b2d99cd6840ebbe54b243d`, branch `implementation/trustworthy-scraping`. Requested deliverable: diagnosis, research, error log, and an implementation handoff for GPT-6.1 Sol. See [Plan 12](../12-workflow-ingestion-repair.md).
 
 ## Scope and confidence
 
@@ -119,3 +119,8 @@ Evidence artifacts:
 To reproduce on the tested Apple Silicon/macOS setup: copy the archived host probe to the previously absent `src-tauri/tests/incident28_probe.rs`; rebuild the sidecar; run only `incident28_seed_and_persistence_probe` to produce `/tmp/incident28-host.json`; supply the captured Cloudflare file or deliberately acquire a new, separately labelled capture; run `node plans/errors/fixtures/incident-28/replay.mjs` from repo root with loopback binding allowed; then run all `cargo test -p scrape --test incident28_probe -- --nocapture`. Archive results and remove only the temporary probe file. Adapt the diagnostic executable triple on other platforms. A fresh Cloudflare capture changes counts; the old raw bytes are not in Git.
 
 Not run: full workspace/frontend/Clippy suite, native UI/IPC, full native runner, scheduled execution, live multi-provider ingestion, user-database inspection, or repairs. No migrations, production source edits, or user-data changes were made.
+
+
+## Section 1 implementation checkpoint
+
+`141b113` adds shared seeding/preparation, durable redacted context before sidecar preflight, original-vs-effective rule snapshots, missing-source observations, and batch-persistence failure counts/logs. It adds deterministic actual-seed → packaged-worker → SQLite → Discovered controls and refresh/status preservation. See [Plan 12 evidence](../12-implementation-evidence.md) for this run's commands, results and limits. This does not repair missing child records, normalize filters safely, improve geography/URLs/pagination, or establish the user's exact saved-run context. Section 2 ownership/trust repair is next.

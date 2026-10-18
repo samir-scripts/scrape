@@ -1,6 +1,6 @@
 # Workflow ingestion repair — implementation handoff for GPT-6.1 Sol
 
-Status: **Ready to implement; no product repair applied.** Investigated 2026-10-18 at `8d8c45a`. Start with [Incident 28](errors/28-empty-seeded-workflows.md) and its measured evidence. The user requested this plan after the six new templates failed to populate Discovered.
+Status: **Section 1 reproduction/diagnostics foundation implemented at `141b113`; Section 2 ownership repair is next.** See [implementation evidence](12-implementation-evidence.md). Sections 2–8 acceptance remains pending. Investigated 2026-10-18 at `8d8c45a`. Start with [Incident 28](errors/28-empty-seeded-workflows.md) and its measured evidence. The user requested this plan after the six new templates failed to populate Discovered.
 
 This plan reopens plan 11 Sections 5–7 acceptance for seeded workflows, matching compatibility, and real company coverage. Earlier implementation records remain historical evidence; their broad completion/support claims do not establish working seeded workflows. Preserve plans 06–11 identity, provenance, suppression, retention, scheduling, trusted script execution, fair budgeting and protected-user-data requirements. Native acceptance from plans 08/10 remains outstanding.
 
@@ -13,6 +13,8 @@ Keep one shared 20-accepted-job workflow budget (refreshes count), preview at mo
 Implement **one numbered section per coherent behavior/test commit**. Inspect/checkpoint the tree first. Write a failing desired-behavior regression, implement, verify, update evidence, then commit explicit files. Rebuild the sidecar before host/process/native checks whenever core/worker code changes. Commit generated Rust→TypeScript bindings separately. Do not rerun archived diagnostic assertions as desired behavior: they intentionally document current bugs.
 
 ## 1. Establish one end-to-end reproduction and useful run evidence
+
+Checkpoint `141b113` implements shared seed/execution preparation, redacted per-workflow context and preflight/persistence-stage diagnostics, plus seed → packaged worker → SQLite → Discovered controls. Current matching, ownership and extraction defects remain recorded in Incident 28; repair-specific acceptance is still required in Sections 2–7. Full native/UI acceptance and exact saved-user-run reproduction remain open.
 
 Files: `src-tauri/tests/worker_repository.rs`, `src-tauri/src/services/{runner,ingestion}.rs`, `src-tauri/src/commands/{sources,scrape}.rs`, `src/lib/events.ts`, existing native test harness and workflow editor tests.
 

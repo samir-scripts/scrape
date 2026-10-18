@@ -1048,3 +1048,12 @@ Actually run: `npm run build:sidecar` (passed); temporary `cargo test -p scrape 
 Current template accepted counts: Cloudflare 3, Bitwarden 0, Linear 2, SEP 0, Google 0, Apple 0, Netflix 0, Amazon 0. Cloudflare used a newly fetched read-only public listing snapshot; other sites used repository captures. Four-source worker-event → temporary SQLite → Discovered-query replay confirmed 3/0/2/0. Missing multi-source rows reproduced SQLite foreign-key errors; normalization and city worker/repository disagreement were reproduced independently. Raw logs remain under `/tmp/incident28-*`; durable result summaries and probe sources are linked from the incident.
 
 Full regression/frontend/native suites and live workflow ingestion were not run. Original saved-run context remains uninspected, so the universal all-zero user report is not claimed as exactly reproduced. Earlier broad Section 5–7 completion claims are reopened for affected acceptance by Plan 12.
+
+
+## Plan 12 Section 1 — Reproduction and durable execution diagnostics
+
+Implementation `141b113`: shared seed service and workflow-to-worker preparation; redacted stored/effective configuration and per-workflow ownership/review/trust snapshots before preflight; explicit persistence-stage failures with retained earlier commits; real seed-service → packaged-worker → temporary SQLite → Discovered regression controls; completion-event invalidation across cached pages. Current ingestion defects remain open.
+
+Actually run: `npm run build:sidecar` passed; final `cargo test -p scrape --lib --test worker_repository` passed **171 + 13 tests**, with no skips; `cargo clippy -p scrape --all-targets -- -D warnings`, formatting, binding diff, TypeScript and style checks passed; targeted frontend event tests **5 passed**. The new redaction regression failed before implementation; a fixture's nonblocking accepted socket initially truncated a large response and was corrected with blocking sockets/asserted writes. No expectations or limits were weakened. See [Plan 12 evidence](12-implementation-evidence.md) for exact commands, logs and results.
+
+No live provider/user-database/native UI/startup/IPC run or migration was performed; full workspace/frontend/build/provider checks were not rerun. Recorded Bitwarden/SEP and a labelled authored Cloudflare control prove diagnostics and persistence boundaries, not full company support or the exact user's all-zero run. Next: Plan 12 Section 2.
