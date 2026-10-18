@@ -32,8 +32,16 @@ for (const theme of ["paper", "obsidian"] as const) {
         await page.keyboard.press("Escape");
       }
 
+      const time = page.getByRole("button", { name: "Time format" });
+      await time.click();
+      await expect(page.getByRole("listbox")).toBeVisible();
+      await expect(page.getByRole("option")).toHaveCount(2);
+      await page.screenshot({ path: testInfo.outputPath(`time-format-${theme}-${width}.png`), fullPage: true });
+      await page.getByRole("option", { name: /24-hour/ }).click();
+      await expect(time).toContainText("24-hour · 15:25");
+
       await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
-      await page.getByRole("button", { name: /ADD WORKFLOW/ }).click();
+      await page.getByRole("button", { name: /add workflow/i }).click();
       await page.getByRole("textbox", { name: "Source URL or board identifier" }).fill("https://boards.greenhouse.io/fixture-board");
       await page.getByRole("button", { name: "Continue to Matching" }).click();
       const country = page.getByRole("combobox", { name: "Country", exact: true });

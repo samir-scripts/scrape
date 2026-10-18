@@ -12,7 +12,7 @@ for (const theme of ['paper', 'obsidian']) test(`${theme} handle pointer, cancel
  const handle = page.getByRole('button', { name: `Drag ${title} to another stage` });
  await expect(handle.locator('svg')).toBeVisible();
  await moveByPointer(page, title, 'interviewing');
- await page.screenshot({ path: `plans/assets/10-ui-review/kanban-${theme}.png`, fullPage: true });
+ await page.screenshot({ path: `plans/assets/11-kanban-review/kanban-${theme}.png`, fullPage: true });
  await handle.focus(); await page.keyboard.press('Space'); await page.keyboard.press('ArrowRight'); await page.keyboard.press('Escape');
  await expect(page.getByRole('region', { name: 'INTERVIEWING stage' }).getByRole('article')).toHaveCount(1);
  const before = (await handle.boundingBox())!;

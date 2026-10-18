@@ -37,13 +37,10 @@ export function KanbanBoard({
   }, [selectedJobId]);
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[var(--color-paper-2)]">
+    <div className="flex-1 min-h-0 flex flex-col bg-[var(--color-kanban-board)]">
       <span id="kanban-drag-instructions" className="sr-only">Drag the handle to a stage. Or press Space, left/right arrows, Enter to confirm, Escape to cancel.</span>
       <p role="status" className="sr-only">{drag.announcement}</p>
-      <div className="px-4 py-2 flex gap-4 items-center">
-        <p className="text-xs text-[var(--color-ink-mute)]">
-          Showing applications on this page. Stage counts describe loaded jobs.
-        </p>
+      <div className="kanban-stage-header px-4 py-2 flex gap-4 items-center justify-end">
         <label className="kanban-stage-picker text-sm">
           Stage{" "}
           <Select aria-label="Board stage" value={stage}

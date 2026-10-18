@@ -17,6 +17,9 @@
   --color-stage-offer: var(--palette-lime);
   --color-stage-rejected: var(--palette-cherry);
   --color-stage-label: var(--palette-ink);
+  --color-kanban-board: var(--palette-paper);
+  --color-kanban-column: var(--palette-paper);
+  --color-kanban-card: var(--palette-cream);
 }
 
 @theme {
@@ -76,6 +79,9 @@
   --color-stage-offer: #BBD05D;
   --color-stage-rejected: #E87585;
   --color-stage-label: #1A1A1A;
+  --color-kanban-board: var(--palette-obsidian);
+  --color-kanban-column: var(--palette-obsidian);
+  --color-kanban-card: #36363a;
 }
 
 /* One selected family throughout the interface. Code remains fixed-width. */
@@ -207,8 +213,10 @@
   .tracked-table th:first-child { min-width: 160px; width: auto; }
 }
 
+.kanban-stage-header { display: none; }
 .kanban-stage-picker { display: none; }
 @media (max-width: 767px) {
+  .kanban-stage-header { display: flex; }
   .kanban-stage-picker { display: block; }
   .kanban-columns { min-width: 100%; }
   .kanban-column { width: min(300px, calc(100vw - 48px)); }

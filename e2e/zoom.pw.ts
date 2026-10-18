@@ -34,7 +34,7 @@ test("both themes remain operable at actual 200% browser zoom", async () => {
       if (theme === "obsidian") await page.getByRole("button", { name: /^OBSIDIAN/ }).click();
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
-      const add = page.getByRole("button", { name: /ADD WORKFLOW/ });
+      const add = page.getByRole("button", { name: /add workflow/i });
       await add.click();
       const dialog = page.getByRole("dialog", { name: "Create workflow" });
       await expect(dialog.getByRole("textbox", { name: "Source URL or board identifier" })).toBeVisible();

@@ -23,5 +23,19 @@ describe("semantic text token contrast (not a substitute for rendered QA)", () =
         });
       }
     }
+    for (const foreground of ["ink", "ink-mute"]) {
+      for (const background of ["kanban-board", "kanban-column", "kanban-card"]) {
+        it(`${theme}: ${foreground} on ${background} meets 4.5:1`, () => {
+          const values = [luminance(colors[foreground]), luminance(colors[background])].sort((a, b) => b - a);
+          expect((values[0] + 0.05) / (values[1] + 0.05)).toBeGreaterThanOrEqual(4.5);
+        });
+      }
+    }
+    for (const background of ["paper", "kanban-board", "kanban-column", "kanban-card"]) {
+      it(`${theme}: focus control on ${background} meets 3:1`, () => {
+        const values = [luminance(colors["focus"]), luminance(colors[background])].sort((a, b) => b - a);
+        expect((values[0] + 0.05) / (values[1] + 0.05)).toBeGreaterThanOrEqual(3.0);
+      });
+    }
   }
 });

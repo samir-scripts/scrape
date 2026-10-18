@@ -9,7 +9,7 @@ import { formatDate } from "../lib/formatters";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-it("selects a readable date example and updates the labeled time radio group", async () => {
+it("selects a readable date example and updates the labeled time select control", async () => {
   const updates: [string, unknown][] = [];
   function Harness() {
     const [settings, setSettings] = useState(DEFAULT_SETTINGS);
@@ -33,10 +33,10 @@ it("selects a readable date example and updates the labeled time radio group", a
     "MM/DD/YY", "DD/MM/YY", "MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD",
   ]);
 
-  await user.click(screen.getByRole("radio", { name: "24-hour" }));
+  await user.click(screen.getByRole("button", { name: "Time format" }));
+  await user.click(await screen.findByRole("option", { name: "24-hour · 15:25" }));
   expect(updates).toContainEqual(["system.time_format", "24h"]);
-  expect((screen.getByRole("radio", { name: "24-hour" }) as HTMLInputElement).checked).toBe(true);
-  expect(screen.getByRole("radiogroup", { name: "Time format" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Time format" }).textContent).toContain("24-hour · 15:25");
 });
 
 it("stores the application-wide automatic scraping pause in System settings", async () => {

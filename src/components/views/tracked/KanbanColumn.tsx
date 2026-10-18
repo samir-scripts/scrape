@@ -49,9 +49,9 @@ export function KanbanColumn({
       id={`kanban-stage-${status}`}
       data-kanban-stage={status}
       aria-label={`${config.label} stage`}
-      className={`flex flex-col h-full overflow-hidden border border-[var(--color-ink-mute)] bg-[var(--color-paper-2)] ${isOver ? "outline outline-2 outline-[var(--color-focus)] outline-offset-[-2px]" : ""}`}
+      className={`flex flex-col h-full overflow-hidden border border-[var(--color-ink-mute)] bg-[var(--color-kanban-column)] ${isOver ? "outline outline-2 outline-[var(--color-focus)] outline-offset-[-2px]" : ""}`}
     >
-      <header style={{ borderBottomColor: config.stageAccent }} className="min-h-12 shrink-0 px-4 py-3 border-b-2 bg-[var(--color-paper-2)] flex items-center justify-between gap-2">
+      <header style={{ borderBottomColor: config.stageAccent }} className="min-h-12 shrink-0 px-4 py-3 border-b-2 bg-[var(--color-kanban-column)] flex items-center justify-between gap-2">
         <h3 className="font-bold text-sm normal-case">
           {config.label.toLowerCase()}
         </h3>
@@ -60,8 +60,7 @@ export function KanbanColumn({
       <div data-stage-scroll className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
         {!jobs.length ? (
           <p className="text-sm text-[var(--color-ink-mute)] p-3">
-            No jobs loaded in this stage. Check other pages or move an
-            application here.
+            No jobs on this page.
           </p>
         ) : (
           jobs.map((job) => (

@@ -181,19 +181,15 @@ export function SystemSettings({
         </div>
 
         <div className="grid grid-cols-1 gap-4 pt-1 sm:grid-cols-2">
-          <fieldset className="grid gap-2">
-            <legend className="text-xs text-[var(--color-ink-mute)]">TIME FORMAT</legend>
-            <div role="radiogroup" aria-label="Time format" className="flex flex-wrap gap-4">
-              {([["12h", "12-hour (AM/PM)"], ["24h", "24-hour"]] as const).map(([value, label]) => (
-                <label key={value} className="inline-flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name="time-format" value={value}
-                    checked={settings.system_time_format === value}
-                    onChange={() => onUpdateSetting("system.time_format", value)} />
-                  <span>{label}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          <label className="grid gap-2 text-xs text-[var(--color-ink-mute)]">
+            TIME FORMAT
+            <Select aria-label="Time format" value={settings.system_time_format}
+              options={[
+                { value: "12h", label: "12-hour · 3:25 PM" },
+                { value: "24h", label: "24-hour · 15:25" },
+              ]}
+              onChange={(fmt) => onUpdateSetting("system.time_format", fmt)} />
+          </label>
 
           <label className="grid gap-2 text-xs text-[var(--color-ink-mute)]">
             DATE FORMAT

@@ -35,9 +35,6 @@ All drag, Move to, inspector, shortcut and Undo actions reach
 requests. Cards remain at the confirmed repository stage while saving and on
 failure; the error offers retry. Each successful write refreshes jobs, counts and
 history. Queue snapshots are discarded after draining, so refreshed repository
-state stays authoritative. Counts on columns describe this page only.
+state stays authoritative. Counts on columns describe this page only; empty columns display "No jobs on this page." and column headers show loaded counts (e.g. "0 loaded").
 
-Semantic stage tokens color the Kanban headers/cards and the shared status tags
-used in lists and the inspector. Automated browser pointer, keyboard, cancellation
-and restart verification passed in both themes. Actual native macOS pointer
-acceptance remains unverified; see the section 5 implementation evidence.
+Semantic board (`--color-kanban-board`), column (`--color-kanban-column`), card (`--color-kanban-card`), and stage tokens (`--color-stage-*`) color the Kanban board, headers, cream cards, and shared status tags used in lists, inspector, and drag preview. Automated browser pointer, keyboard, cancellation and restart verification passed in both themes. Actual native macOS pointer acceptance remains unverified; see the implementation evidence.
