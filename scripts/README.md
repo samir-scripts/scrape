@@ -10,6 +10,7 @@ The `scripts/` directory contains Node.js automation scripts used during develop
 
 | File | Language / Runtime | Purpose & Execution Flow |
 |---|---|---|
+| [`generate-template-catalog.mjs`](generate-template-catalog.mjs) | Node.js + Rust | Runs the Rust catalog exporter and writes the picker JSON/YAML projections. `--check` fails on drift; does not touch any database or execute scraping. |
 | [`build-sidecar.mjs`](build-sidecar.mjs) | Node.js (ESM) | Compiles the `scrape-worker` sidecar binary via `cargo build -p scrape-worker --release`, detects the local host target triple via `rustc -vV`, resolves Cargo's actual target directory from metadata (including `CARGO_TARGET_DIR` overrides), and stages the resulting binary into `src-tauri/binaries/scrape-worker-<target>` with executable permissions. |
 | [`test-app-startup.mjs`](test-app-startup.mjs) | Node.js (ESM) | Automated smoke test for CI and local verification. Boots the Vite development server, performs an HTTP GET request against `http://localhost:1420/index.html`, verifies module bundling and HTML transformation without runtime panics, and cleanly terminates the process. |
 
@@ -140,3 +141,5 @@ review fixture through production validation, use
 `cargo run -p scrape-core --example cache-logo-fixture -- INPUT OUTPUT.png`.
 Capture URL/time/checksums and the original JPEG-format bytes are preserved next
 to `crates/scrape-worker/tests/fixtures/cloudflare-logo.json`.
+
+Provider smoke checks now consume canonical generated extractor configurations. Their permissive replay routes and parser-level success criteria remain historical limitations scheduled for Plan 12 Section 7; a green smoke run is not full workflow/company acceptance.

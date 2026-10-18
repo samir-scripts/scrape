@@ -222,3 +222,7 @@ See the [current contract](../../plans/workflow-v3.md#field-evidence-and-script-
 Changed bundled/user scripts invalidate local trust and require review; no workflow
 is automatically rewritten or enabled. Bundled Netflix workplace mapping is based
 on recorded fields and does not establish live pagination/coverage support.
+
+## Bundled script examples (Plan 12 Section 5)
+
+Netflix/Amazon example code is embedded by the host template catalog and exported inline in YAML. Its dynamic `node:fs` import works in a temporary CommonJS `.js` file or the repository ES-module context. Desktop preflight requires an explicit absolute Node.js 18+ executable and local per-source trust. Recorded bounded pages do not prove provider pagination/exhaustion; that repair remains Section 6.

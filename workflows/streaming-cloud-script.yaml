@@ -1,62 +1,214 @@
-# ==============================================================================
-# SCRAPE SAMPLE WORKFLOW: Netflix & Amazon Script Extraction
-# Target: Custom Scripts (Node.js/Python)
-# Spec Version: 6 (Multi-source, structured matching, fair budget)
-# ==============================================================================
-
+# Generated from Rust template catalog v1. Do not edit.
+# Bundled script protocol 2 example, disabled. Select an absolute Node.js executable for each source, save, review and trust each script, then enable explicitly. Pagination coverage remains incomplete.
 version: 6
-
+max_jobs_per_run: 20
 metadata:
-  name: "Netflix & Amazon — Distributed Systems & Platform"
-  company: "Cloud"
-  enabled: true
-
+  name: Netflix & Amazon — Script example (Setup required)
+  company: Cloud
+  enabled: false
 sources:
-  - id: "netflix"
-    label: "Netflix"
-    enabled: true
-    employer_hint: "Netflix"
+  - id: netflix
+    label: Netflix
+    enabled: false
+    employer_hint: Netflix
     extractor:
       kind: selector
+      url: https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10
       mode: script
-      url: "https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10"
       script:
         runtime: js
-        interpreter: node
-        path: "crates/scrape-worker/examples/extractors/netflix_extractor.js"
-  - id: "amazon"
-    label: "Amazon"
-    enabled: true
-    employer_hint: "Amazon"
-    extractor:
-      kind: selector
-      mode: script
-      url: "https://www.amazon.jobs/en/search.json?category[]=software-development&normalized_country_code[]=USA&radius=24km&facets[]=normalized_country_code&facets[]=category&offset=0&result_limit=10"
-      script:
-        runtime: js
-        interpreter: node
-        path: "crates/scrape-worker/examples/extractors/amazon_extractor.js"
+        code: |
+          #!/usr/bin/env node
+          // Netflix Eightfold API extractor speaking SCRIPT_PROTOCOL_VERSION = 2
 
+          async function main() {
+            // Works as a packaged temporary .js file and as an imported ES module.
+            const { readFileSync } = await import("node:fs");
+            const inputChunks = [];
+            for await (const chunk of process.stdin) {
+              inputChunks.push(chunk);
+            }
+            const inputStr = Buffer.concat(inputChunks).toString("utf8").trim();
+            if (!inputStr) {
+              process.stderr.write("No input received on stdin\n");
+              process.exit(1);
+            }
+
+            const input = JSON.parse(inputStr);
+            if (input.version !== 2) {
+              process.stderr.write(`Unsupported protocol version: ${input.version}\n`);
+              process.exit(1);
+            }
+
+            let data;
+            const fixturePath = input.config?.fixture_path || input.config?.script?.args?.[0] || process.argv[2];
+            if (fixturePath) {
+              const raw = readFileSync(fixturePath, "utf8");
+              data = JSON.parse(raw);
+            } else {
+              const res = await fetch(input.url, {
+                headers: { "User-Agent": "Scrape/1.0 (Job Aggregator; +https://github.com/scrape)" },
+                signal: AbortSignal.timeout(input.timeout_ms || 30000),
+              });
+              if (!res.ok) {
+                process.stderr.write(`HTTP error: ${res.status} ${res.statusText}\n`);
+                process.exit(1);
+              }
+              data = await res.json();
+            }
+
+            const positions = data.positions || [];
+            const limit = Math.min(positions.length, input.max_candidates || 100);
+
+            for (let i = 0; i < limit; i++) {
+              const pos = positions[i];
+              const candidate = {
+                type: "candidate",
+                version: 2,
+                external_id: String(pos.id || pos.ats_job_id || ""),
+                title: pos.name || pos.posting_name || "Untitled Role",
+                url: pos.canonicalPositionUrl || `https://explore.jobs.netflix.net/careers/job/${pos.id}`,
+                location: Array.isArray(pos.locations) && pos.locations.length > 0
+                  ? pos.locations.join("; ")
+                  : (pos.location || null),
+                company: "Netflix",
+                // Observed in the recorded Netflix contract; no arrangement is inferred
+                // from a physical office address or a continental location label.
+                workplace_type: pos.work_location_option === "remote_local" ? "remote"
+                  : ["onsite", "remote", "hybrid"].includes(pos.work_location_option)
+                    ? pos.work_location_option : "unknown",
+              };
+              if (pos.job_description) {
+                candidate.description = pos.job_description;
+              }
+              if (pos.t_create) {
+                candidate.date_posted = new Date(pos.t_create * 1000).toISOString();
+              }
+              process.stdout.write(JSON.stringify(candidate) + "\n");
+            }
+
+            const complete = {
+              type: "complete",
+              version: 2,
+              exhausted: limit >= positions.length,
+            };
+            process.stdout.write(JSON.stringify(complete) + "\n");
+          }
+
+          main().catch((err) => {
+            process.stderr.write(String(err?.stack || err) + "\n");
+            process.exit(1);
+          });
+  - id: amazon
+    label: Amazon
+    enabled: false
+    employer_hint: Amazon
+    extractor:
+      kind: selector
+      url: https://www.amazon.jobs/en/search.json?offset=0&result_limit=10
+      mode: script
+      script:
+        runtime: js
+        code: |
+          #!/usr/bin/env node
+          // Amazon Jobs API extractor speaking SCRIPT_PROTOCOL_VERSION = 2
+
+          async function main() {
+            // Works as a packaged temporary .js file and as an imported ES module.
+            const { readFileSync } = await import("node:fs");
+            const inputChunks = [];
+            for await (const chunk of process.stdin) {
+              inputChunks.push(chunk);
+            }
+            const inputStr = Buffer.concat(inputChunks).toString("utf8").trim();
+            if (!inputStr) {
+              process.stderr.write("No input received on stdin\n");
+              process.exit(1);
+            }
+
+            const input = JSON.parse(inputStr);
+            if (input.version !== 2) {
+              process.stderr.write(`Unsupported protocol version: ${input.version}\n`);
+              process.exit(1);
+            }
+
+            let data;
+            const fixturePath = input.config?.fixture_path || input.config?.script?.args?.[0] || process.argv[2];
+            if (fixturePath) {
+              const raw = readFileSync(fixturePath, "utf8");
+              data = JSON.parse(raw);
+            } else {
+              const res = await fetch(input.url, {
+                headers: { "User-Agent": "Scrape/1.0 (Job Aggregator; +https://github.com/scrape)" },
+                signal: AbortSignal.timeout(input.timeout_ms || 30000),
+              });
+              if (!res.ok) {
+                process.stderr.write(`HTTP error: ${res.status} ${res.statusText}\n`);
+                process.exit(1);
+              }
+              data = await res.json();
+            }
+
+            const jobs = data.jobs || [];
+            const limit = Math.min(jobs.length, input.max_candidates || 100);
+
+            for (let i = 0; i < limit; i++) {
+              const job = jobs[i];
+              const candidate = {
+                type: "candidate",
+                version: 2,
+                external_id: String(job.id_icims || job.id || ""),
+                title: job.title || "Untitled Role",
+                url: job.job_path
+                  ? (job.job_path.startsWith("http") ? job.job_path : `https://www.amazon.jobs${job.job_path}`)
+                  : `https://www.amazon.jobs/en/jobs/${job.id_icims || job.id}`,
+                location: job.normalized_location || job.location || null,
+                company: job.company_name || "Amazon",
+              };
+              if (job.description) {
+                candidate.description = job.description;
+              }
+              if (job.posted_date) {
+                candidate.date_posted = job.posted_date;
+              }
+              // Extract base salary from preferred qualifications or description if present
+              if (job.preferred_qualifications) {
+                const match = job.preferred_qualifications.match(/(\$[\d,]+(?:\s*-\s*\$[\d,]+)?(?:\s*(?:USD|per year|annually))?|[\d,]+\.\d{2}\s*-\s*[\d,]+\.\d{2}\s*USD\s*annually)/i);
+                if (match) {
+                  candidate.salary = match[1];
+                }
+              }
+              process.stdout.write(JSON.stringify(candidate) + "\n");
+            }
+
+            const complete = {
+              type: "complete",
+              version: 2,
+              exhausted: limit >= jobs.length,
+            };
+            process.stdout.write(JSON.stringify(complete) + "\n");
+          }
+
+          main().catch((err) => {
+            process.stderr.write(String(err?.stack || err) + "\n");
+            process.exit(1);
+          });
 schedule:
   cadence: daily
-  time: "09:00"
-  cron: "0 0 9 * * *"
-
+  time: 09:00
+  cron: 0 0 9 * * *
+  timezone: UTC
+  run_on_startup: false
 filters:
+  role_types: []
+  include_keywords: []
+  exclude_keywords: []
+  locations: []
   matching:
-    role_types:
-      - full_time
-    workplaces:
-      - remote
-      - hybrid
-      - onsite
-    countries:
-      - US
-    regions:
-      - US-CA
-      - US-WA
     keywords:
       any:
+        - Engineer
+        - Developer
         - Distributed
         - Platform
         - Backend
@@ -66,7 +218,21 @@ filters:
       exclude: []
       fields:
         - title
-
+    posting_date: null
+    compensation: null
+    role_types: []
+    workplaces: []
+    experience_min: null
+    experience_max: null
+    experience_include_unknown: false
+    new_grad: null
+    sponsorship: []
+    work_auth: []
+    clearance: []
+    countries: []
+    regions: []
+    cities: []
+    location_include_unknown: false
 retention:
   days: 30
   policy: untracked_only

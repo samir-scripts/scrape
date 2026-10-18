@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Amazon Jobs API extractor speaking SCRIPT_PROTOCOL_VERSION = 2
-import { readFileSync } from "node:fs";
 
 async function main() {
+  // Works as a packaged temporary .js file and as an imported ES module.
+  const { readFileSync } = await import("node:fs");
   const inputChunks = [];
   for await (const chunk of process.stdin) {
     inputChunks.push(chunk);

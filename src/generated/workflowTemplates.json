@@ -1,0 +1,1200 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "cloudflare-systems-network",
+      "name": "Cloudflare — Engineering (title keywords)",
+      "description": "Title keywords only. Employment, workplace and geography are unrestricted, including unknown evidence. Preview before saving; live availability varies.",
+      "readiness": "ready",
+      "seed": true,
+      "legacy_identifier": "cloudflare",
+      "spec": {
+        "version": 6,
+        "max_jobs_per_run": 20,
+        "metadata": {
+          "name": "Cloudflare — Engineering (title keywords)",
+          "company": "Cloudflare",
+          "enabled": true
+        },
+        "sources": [
+          {
+            "id": "cloudflare",
+            "label": "Cloudflare — Greenhouse",
+            "enabled": true,
+            "employer_hint": "Cloudflare",
+            "extractor": {
+              "kind": "greenhouse",
+              "url": "https://boards.greenhouse.io/cloudflare"
+            }
+          }
+        ],
+        "schedule": {
+          "cadence": "daily",
+          "time": "09:00",
+          "cron": "0 0 9 * * *",
+          "timezone": "UTC",
+          "run_on_startup": false
+        },
+        "filters": {
+          "role_types": [],
+          "include_keywords": [],
+          "exclude_keywords": [],
+          "locations": [],
+          "matching": {
+            "keywords": {
+              "any": [
+                "Software",
+                "Engineer",
+                "Developer",
+                "Systems",
+                "Intern"
+              ],
+              "all": [],
+              "exclude": [
+                "Recruiter",
+                "Account Executive",
+                "Sales Representative"
+              ],
+              "fields": [
+                "title"
+              ]
+            },
+            "posting_date": null,
+            "compensation": null,
+            "role_types": [],
+            "workplaces": [],
+            "experience_min": null,
+            "experience_max": null,
+            "experience_include_unknown": false,
+            "new_grad": null,
+            "sponsorship": [],
+            "work_auth": [],
+            "clearance": [],
+            "countries": [],
+            "regions": [],
+            "cities": [],
+            "location_include_unknown": false
+          }
+        },
+        "retention": {
+          "days": 45,
+          "policy": "untracked_only"
+        }
+      },
+      "extractors": [
+        {
+          "id": "cloudflare",
+          "kind": "greenhouse",
+          "identifier": "cloudflare",
+          "config": {
+            "__company": "Cloudflare",
+            "__cron_timezone": "UTC",
+            "__run_on_startup": false,
+            "__schedule": {
+              "time": "09:00",
+              "timezone": "UTC",
+              "weekdays": []
+            },
+            "__source_id": "cloudflare",
+            "url": "https://boards.greenhouse.io/cloudflare"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cloudflare-systems-network-restrictive",
+      "name": "Cloudflare — Restrictive role/geography example",
+      "description": "Restrictive example: selected employment, workplace and geography must all match. Missing evidence may produce zero matches; inspect Preview diagnostics. Not added by Load test workflows.",
+      "readiness": "restrictive_example",
+      "seed": false,
+      "legacy_identifier": "cloudflare",
+      "spec": {
+        "version": 6,
+        "max_jobs_per_run": 20,
+        "metadata": {
+          "name": "Cloudflare — Restrictive role/geography example",
+          "company": "Cloudflare",
+          "enabled": false
+        },
+        "sources": [
+          {
+            "id": "cloudflare",
+            "label": "Cloudflare — Greenhouse",
+            "enabled": true,
+            "employer_hint": "Cloudflare",
+            "extractor": {
+              "kind": "greenhouse",
+              "url": "https://boards.greenhouse.io/cloudflare"
+            }
+          }
+        ],
+        "schedule": {
+          "cadence": "daily",
+          "time": "09:00",
+          "cron": "0 0 9 * * *",
+          "timezone": "UTC",
+          "run_on_startup": false
+        },
+        "filters": {
+          "role_types": [],
+          "include_keywords": [],
+          "exclude_keywords": [],
+          "locations": [],
+          "matching": {
+            "keywords": {
+              "any": [
+                "Software",
+                "Engineer",
+                "Developer",
+                "Systems",
+                "Intern"
+              ],
+              "all": [],
+              "exclude": [
+                "Recruiter",
+                "Account Executive",
+                "Sales Representative"
+              ],
+              "fields": [
+                "title"
+              ]
+            },
+            "posting_date": null,
+            "compensation": null,
+            "role_types": [
+              "internship",
+              "full_time"
+            ],
+            "workplaces": [
+              "remote",
+              "hybrid",
+              "onsite"
+            ],
+            "experience_min": null,
+            "experience_max": null,
+            "experience_include_unknown": false,
+            "new_grad": null,
+            "sponsorship": [],
+            "work_auth": [],
+            "clearance": [],
+            "countries": [
+              "US",
+              "GB",
+              "PT"
+            ],
+            "regions": [],
+            "cities": [
+              "Austin",
+              "San Francisco",
+              "London",
+              "Lisbon"
+            ],
+            "location_include_unknown": false
+          }
+        },
+        "retention": {
+          "days": 45,
+          "policy": "untracked_only"
+        }
+      },
+      "extractors": [
+        {
+          "id": "cloudflare",
+          "kind": "greenhouse",
+          "identifier": "cloudflare",
+          "config": {
+            "__company": "Cloudflare",
+            "__cron_timezone": "UTC",
+            "__run_on_startup": false,
+            "__schedule": {
+              "time": "09:00",
+              "timezone": "UTC",
+              "weekdays": []
+            },
+            "__source_id": "cloudflare",
+            "url": "https://boards.greenhouse.io/cloudflare"
+          }
+        }
+      ]
+    },
+    {
+      "id": "bitwarden-remote-security",
+      "name": "Bitwarden — Engineering (title keywords)",
+      "description": "Title keywords only. Employment, workplace and geography are unrestricted, including unknown evidence. Preview before saving; live availability varies.",
+      "readiness": "ready",
+      "seed": true,
+      "legacy_identifier": "bitwarden",
+      "spec": {
+        "version": 6,
+        "max_jobs_per_run": 20,
+        "metadata": {
+          "name": "Bitwarden — Engineering (title keywords)",
+          "company": "Bitwarden",
+          "enabled": true
+        },
+        "sources": [
+          {
+            "id": "bitwarden",
+            "label": "Bitwarden — Greenhouse",
+            "enabled": true,
+            "employer_hint": "Bitwarden",
+            "extractor": {
+              "kind": "greenhouse",
+              "url": "https://boards.greenhouse.io/bitwarden"
+            }
+          }
+        ],
+        "schedule": {
+          "cadence": "daily",
+          "time": "09:00",
+          "cron": "0 0 9 * * *",
+          "timezone": "UTC",
+          "run_on_startup": false
+        },
+        "filters": {
+          "role_types": [],
+          "include_keywords": [],
+          "exclude_keywords": [],
+          "locations": [],
+          "matching": {
+            "keywords": {
+              "any": [
+                "Engineer",
+                "Developer",
+                "Security",
+                "QA",
+                "Cloud"
+              ],
+              "all": [],
+              "exclude": [],
+              "fields": [
+                "title"
+              ]
+            },
+            "posting_date": null,
+            "compensation": null,
+            "role_types": [],
+            "workplaces": [],
+            "experience_min": null,
+            "experience_max": null,
+            "experience_include_unknown": false,
+            "new_grad": null,
+            "sponsorship": [],
+            "work_auth": [],
+            "clearance": [],
+            "countries": [],
+            "regions": [],
+            "cities": [],
+            "location_include_unknown": false
+          }
+        },
+        "retention": {
+          "days": 30,
+          "policy": "untracked_only"
+        }
+      },
+      "extractors": [
+        {
+          "id": "bitwarden",
+          "kind": "greenhouse",
+          "identifier": "bitwarden",
+          "config": {
+            "__company": "Bitwarden",
+            "__cron_timezone": "UTC",
+            "__run_on_startup": false,
+            "__schedule": {
+              "time": "09:00",
+              "timezone": "UTC",
+              "weekdays": []
+            },
+            "__source_id": "bitwarden",
+            "url": "https://boards.greenhouse.io/bitwarden"
+          }
+        }
+      ]
+    },
+    {
+      "id": "bitwarden-remote-security-restrictive",
+      "name": "Bitwarden — Restrictive role/geography example",
+      "description": "Restrictive example: selected employment, workplace and geography must all match. Missing evidence may produce zero matches; inspect Preview diagnostics. Not added by Load test workflows.",
+      "readiness": "restrictive_example",
+      "seed": false,
+      "legacy_identifier": "bitwarden",
+      "spec": {
+        "version": 6,
+        "max_jobs_per_run": 20,
+        "metadata": {
+          "name": "Bitwarden — Restrictive role/geography example",
+          "company": "Bitwarden",
+          "enabled": false
+        },
+        "sources": [
+          {
+            "id": "bitwarden",
+            "label": "Bitwarden — Greenhouse",
+            "enabled": true,
+            "employer_hint": "Bitwarden",
+            "extractor": {
+              "kind": "greenhouse",
+              "url": "https://boards.greenhouse.io/bitwarden"
+            }
+          }
+        ],
+        "schedule": {
+          "cadence": "daily",
+          "time": "09:00",
+          "cron": "0 0 9 * * *",
+          "timezone": "UTC",
+          "run_on_startup": false
+        },
+        "filters": {
+          "role_types": [],
+          "include_keywords": [],
+          "exclude_keywords": [],
+          "locations": [],
+          "matching": {
+            "keywords": {
+              "any": [
+                "Engineer",
+                "Developer",
+                "Security",
+                "QA",
+                "Cloud"
+              ],
+              "all": [],
+              "exclude": [],
+              "fields": [
+                "title"
+              ]
+            },
+            "posting_date": null,
+            "compensation": null,
+            "role_types": [
+              "full_time"
+            ],
+            "workplaces": [
+              "remote"
+            ],
+            "experience_min": null,
+            "experience_max": null,
+            "experience_include_unknown": false,
+            "new_grad": null,
+            "sponsorship": [],
+            "work_auth": [],
+            "clearance": [],
+            "countries": [
+              "US",
+              "CA",
+              "GB",
+              "IN"
+            ],
+            "regions": [],
+            "cities": [],
+            "location_include_unknown": false
+          }
+        },
+        "retention": {
+          "days": 30,
+          "policy": "untracked_only"
+        }
+      },
+      "extractors": [
+        {
+          "id": "bitwarden",
+          "kind": "greenhouse",
+          "identifier": "bitwarden",
+          "config": {
+            "__company": "Bitwarden",
+            "__cron_timezone": "UTC",
+            "__run_on_startup": false,
+            "__schedule": {
+              "time": "09:00",
+              "timezone": "UTC",
+              "weekdays": []
+            },
+            "__source_id": "bitwarden",
+            "url": "https://boards.greenhouse.io/bitwarden"
+          }
+        }
+      ]
+    },
+    {
+      "id": "linear-product-engineering",
+      "name": "Linear — Product Engineering (title keywords)",
+      "description": "Title keywords only. Employment, workplace and geography are unrestricted, including unknown evidence. Preview before saving; live availability varies.",
+      "readiness": "ready",
+      "seed": true,
+      "legacy_identifier": "linear",
+      "spec": {
+        "version": 6,
+        "max_jobs_per_run": 20,
+        "metadata": {
+          "name": "Linear — Product Engineering (title keywords)",
+          "company": "Linear",
+          "enabled": true
+        },
+        "sources": [
+          {
+            "id": "linear",
+            "label": "Linear — Ashby",
+            "enabled": true,
+            "employer_hint": "Linear",
+            "extractor": {
+              "kind": "ashby",
+              "url": "https://jobs.ashbyhq.com/linear"
+            }
+          }
+        ],
+        "schedule": {
+          "cadence": "daily",
+          "time": "09:00",
+          "cron": "0 0 9 * * *",
+          "timezone": "UTC",
+          "run_on_startup": false
+        },
+        "filters": {
+          "role_types": [],
+          "include_keywords": [],
+          "exclude_keywords": [],
+          "locations": [],
+          "matching": {
+            "keywords": {
+              "any": [
+                "Engineer",
+                "Product",
+                "Designer",
+                "Frontend",
+                "Mobile"
+              ],
+              "all": [],
+              "exclude": [],
+              "fields": [
+                "title"
+              ]
+            },
+            "posting_date": null,
+            "compensation": null,
+            "role_types": [],
+            "workplaces": [],
+            "experience_min": null,
+            "experience_max": null,
+            "experience_include_unknown": false,
+            "new_grad": null,
+            "sponsorship": [],
+            "work_auth": [],
+            "clearance": [],
+            "countries": [],
+            "regions": [],
+            "cities": [],
+            "location_include_unknown": false
+          }
+        },
+        "retention": {
+          "days": 30,
+          "policy": "untracked_only"
+        }
+      },
+      "extractors": [
+        {
+          "id": "linear",
+          "kind": "ashby",
+          "identifier": "linear",
+          "config": {
+            "__company": "Linear",
+            "__cron_timezone": "UTC",
+            "__run_on_startup": false,
+            "__schedule": {
+              "time": "09:00",
+              "timezone": "UTC",
+              "weekdays": []
+            },
+            "__source_id": "linear",
+            "url": "https://jobs.ashbyhq.com/linear"
+          }
+        }
+      ]
+    },
+    {
+      "id": "linear-product-engineering-restrictive",
+      "name": "Linear — Restrictive role/geography example",
+      "description": "Restrictive example: selected employment, workplace and geography must all match. Missing evidence may produce zero matches; inspect Preview diagnostics. Not added by Load test workflows.",
+      "readiness": "restrictive_example",
+      "seed": false,
+      "legacy_identifier": "linear",
+      "spec": {
+        "version": 6,
+        "max_jobs_per_run": 20,
+        "metadata": {
+          "name": "Linear — Restrictive role/geography example",
+          "company": "Linear",
+          "enabled": false
+        },
+        "sources": [
+          {
+            "id": "linear",
+            "label": "Linear — Ashby",
+            "enabled": true,
+            "employer_hint": "Linear",
+            "extractor": {
+              "kind": "ashby",
+              "url": "https://jobs.ashbyhq.com/linear"
+            }
+          }
+        ],
+        "schedule": {
+          "cadence": "daily",
+          "time": "09:00",
+          "cron": "0 0 9 * * *",
+          "timezone": "UTC",
+          "run_on_startup": false
+        },
+        "filters": {
+          "role_types": [],
+          "include_keywords": [],
+          "exclude_keywords": [],
+          "locations": [],
+          "matching": {
+            "keywords": {
+              "any": [
+                "Engineer",
+                "Product",
+                "Designer",
+                "Frontend",
+                "Mobile"
+              ],
+              "all": [],
+              "exclude": [],
+              "fields": [
+                "title"
+              ]
+            },
+            "posting_date": null,
+            "compensation": null,
+            "role_types": [
+              "full_time"
+            ],
+            "workplaces": [
+              "remote"
+            ],
+            "experience_min": null,
+            "experience_max": null,
+            "experience_include_unknown": false,
+            "new_grad": null,
+            "sponsorship": [],
+            "work_auth": [],
+            "clearance": [],
+            "countries": [
+              "US",
+              "CA",
+              "GB",
+              "DE",
+              "FR"
+            ],
+            "regions": [],
+            "cities": [],
+            "location_include_unknown": false
+          }
+        },
+        "retention": {
+          "days": 30,
+          "policy": "untracked_only"
+        }
+      },
+      "extractors": [
+        {
+          "id": "linear",
+          "kind": "ashby",
+          "identifier": "linear",
+          "config": {
+            "__company": "Linear",
+            "__cron_timezone": "UTC",
+            "__run_on_startup": false,
+            "__schedule": {
+              "time": "09:00",
+              "timezone": "UTC",
+              "weekdays": []
+            },
+            "__source_id": "linear",
+            "url": "https://jobs.ashbyhq.com/linear"
+          }
+        }
+      ]
+    },
+    {
+      "id": "sep-midwest-consulting",
+      "name": "SEP — Engineering (title keywords)",
+      "description": "Title keywords only. Employment, workplace and geography are unrestricted, including unknown evidence. Preview before saving; live availability varies.",
+      "readiness": "ready",
+      "seed": true,
+      "legacy_identifier": "sep",
+      "spec": {
+        "version": 6,
+        "max_jobs_per_run": 20,
+        "metadata": {
+          "name": "SEP — Engineering (title keywords)",
+          "company": "SEP",
+          "enabled": true
+        },
+        "sources": [
+          {
+            "id": "sep",
+            "label": "SEP — Lever",
+            "enabled": true,
+            "employer_hint": "SEP",
+            "extractor": {
+              "kind": "lever",
+              "url": "https://jobs.lever.co/sep"
+            }
+          }
+        ],
+        "schedule": {
+          "cadence": "daily",
+          "time": "09:00",
+          "cron": "0 0 9 * * *",
+          "timezone": "UTC",
+          "run_on_startup": false
+        },
+        "filters": {
+          "role_types": [],
+          "include_keywords": [],
+          "exclude_keywords": [],
+          "locations": [],
+          "matching": {
+            "keywords": {
+              "any": [
+                "Software",
+                "Engineer",
+                "AI",
+                "Producer",
+                "Embedded",
+                "Cloud"
+              ],
+              "all": [],
+              "exclude": [],
+              "fields": [
+                "title"
+              ]
+            },
+            "posting_date": null,
+            "compensation": null,
+            "role_types": [],
+            "workplaces": [],
+            "experience_min": null,
+            "experience_max": null,
+            "experience_include_unknown": false,
+            "new_grad": null,
+            "sponsorship": [],
+            "work_auth": [],
+            "clearance": [],
+            "countries": [],
+            "regions": [],
+            "cities": [],
+            "location_include_unknown": false
+          }
+        },
+        "retention": {
+          "days": 30,
+          "policy": "untracked_only"
+        }
+      },
+      "extractors": [
+        {
+          "id": "sep",
+          "kind": "lever",
+          "identifier": "sep",
+          "config": {
+            "__company": "SEP",
+            "__cron_timezone": "UTC",
+            "__run_on_startup": false,
+            "__schedule": {
+              "time": "09:00",
+              "timezone": "UTC",
+              "weekdays": []
+            },
+            "__source_id": "sep",
+            "url": "https://jobs.lever.co/sep"
+          }
+        }
+      ]
+    },
+    {
+      "id": "sep-midwest-consulting-restrictive",
+      "name": "SEP — Restrictive role/geography example",
+      "description": "Restrictive example: selected employment, workplace and geography must all match. Missing evidence may produce zero matches; inspect Preview diagnostics. Not added by Load test workflows.",
+      "readiness": "restrictive_example",
+      "seed": false,
+      "legacy_identifier": "sep",
+      "spec": {
+        "version": 6,
+        "max_jobs_per_run": 20,
+        "metadata": {
+          "name": "SEP — Restrictive role/geography example",
+          "company": "SEP",
+          "enabled": false
+        },
+        "sources": [
+          {
+            "id": "sep",
+            "label": "SEP — Lever",
+            "enabled": true,
+            "employer_hint": "SEP",
+            "extractor": {
+              "kind": "lever",
+              "url": "https://jobs.lever.co/sep"
+            }
+          }
+        ],
+        "schedule": {
+          "cadence": "daily",
+          "time": "09:00",
+          "cron": "0 0 9 * * *",
+          "timezone": "UTC",
+          "run_on_startup": false
+        },
+        "filters": {
+          "role_types": [],
+          "include_keywords": [],
+          "exclude_keywords": [],
+          "locations": [],
+          "matching": {
+            "keywords": {
+              "any": [
+                "Software",
+                "Engineer",
+                "AI",
+                "Producer",
+                "Embedded",
+                "Cloud"
+              ],
+              "all": [],
+              "exclude": [],
+              "fields": [
+                "title"
+              ]
+            },
+            "posting_date": null,
+            "compensation": null,
+            "role_types": [
+              "full_time",
+              "internship"
+            ],
+            "workplaces": [
+              "hybrid",
+              "onsite"
+            ],
+            "experience_min": null,
+            "experience_max": null,
+            "experience_include_unknown": false,
+            "new_grad": null,
+            "sponsorship": [],
+            "work_auth": [],
+            "clearance": [],
+            "countries": [
+              "US"
+            ],
+            "regions": [
+              "US-IN"
+            ],
+            "cities": [
+              "Indianapolis",
+              "Westfield"
+            ],
+            "location_include_unknown": false
+          }
+        },
+        "retention": {
+          "days": 30,
+          "policy": "untracked_only"
+        }
+      },
+      "extractors": [
+        {
+          "id": "sep",
+          "kind": "lever",
+          "identifier": "sep",
+          "config": {
+            "__company": "SEP",
+            "__cron_timezone": "UTC",
+            "__run_on_startup": false,
+            "__schedule": {
+              "time": "09:00",
+              "timezone": "UTC",
+              "weekdays": []
+            },
+            "__source_id": "sep",
+            "url": "https://jobs.lever.co/sep"
+          }
+        }
+      ]
+    },
+    {
+      "id": "bigtech-static-swe",
+      "name": "Google & Apple — Static extraction example (Needs review)",
+      "description": "Static selector example, disabled for review. Google URL resolution and Apple selectors/pagination still need verification; this is not verified full-site ingestion.",
+      "readiness": "needs_review",
+      "seed": true,
+      "legacy_identifier": "google-apple-selector",
+      "spec": {
+        "version": 6,
+        "max_jobs_per_run": 20,
+        "metadata": {
+          "name": "Google & Apple — Static extraction example (Needs review)",
+          "company": "BigTech",
+          "enabled": false
+        },
+        "sources": [
+          {
+            "id": "google",
+            "label": "Google Careers",
+            "enabled": false,
+            "employer_hint": "Google",
+            "extractor": {
+              "kind": "selector",
+              "url": "https://www.google.com/about/careers/applications/jobs/results/",
+              "job_container": "li.lLd3Je",
+              "title_selector": "h3.QJPWVe",
+              "url_selector": "a[href*=\"jobs/results/\"]",
+              "location_selector": "span.r0wTof",
+              "mode": "static"
+            }
+          },
+          {
+            "id": "apple",
+            "label": "Apple Jobs",
+            "enabled": false,
+            "employer_hint": "Apple",
+            "extractor": {
+              "kind": "selector",
+              "url": "https://jobs.apple.com/en-us/search",
+              "job_container": "ul#search-job-list > li.rc-accordion-item",
+              "title_selector": "h3 a.link-inline",
+              "url_selector": "a.link-inline",
+              "location_selector": "span.table--advanced-search__location-sub",
+              "date_selector": "span.job-posted-date",
+              "mode": "static"
+            }
+          }
+        ],
+        "schedule": {
+          "cadence": "daily",
+          "time": "09:00",
+          "cron": "0 0 9 * * *",
+          "timezone": "UTC",
+          "run_on_startup": false
+        },
+        "filters": {
+          "role_types": [],
+          "include_keywords": [],
+          "exclude_keywords": [],
+          "locations": [],
+          "matching": {
+            "keywords": {
+              "any": [
+                "Software",
+                "Machine Learning",
+                "Data",
+                "Systems",
+                "Platform"
+              ],
+              "all": [],
+              "exclude": [],
+              "fields": [
+                "title"
+              ]
+            },
+            "posting_date": null,
+            "compensation": null,
+            "role_types": [],
+            "workplaces": [],
+            "experience_min": null,
+            "experience_max": null,
+            "experience_include_unknown": false,
+            "new_grad": null,
+            "sponsorship": [],
+            "work_auth": [],
+            "clearance": [],
+            "countries": [],
+            "regions": [],
+            "cities": [],
+            "location_include_unknown": false
+          }
+        },
+        "retention": {
+          "days": 30,
+          "policy": "untracked_only"
+        }
+      },
+      "extractors": [
+        {
+          "id": "google",
+          "kind": "selector",
+          "identifier": "https://www.google.com/about/careers/applications/jobs/results/",
+          "config": {
+            "__company": "Google",
+            "__cron_timezone": "UTC",
+            "__run_on_startup": false,
+            "__schedule": {
+              "time": "09:00",
+              "timezone": "UTC",
+              "weekdays": []
+            },
+            "__source_id": "google",
+            "item": "li.lLd3Je",
+            "link": "a[href*=\"jobs/results/\"]",
+            "location": "span.r0wTof",
+            "mode": "static",
+            "title": "h3.QJPWVe",
+            "url": "https://www.google.com/about/careers/applications/jobs/results/"
+          }
+        },
+        {
+          "id": "apple",
+          "kind": "selector",
+          "identifier": "https://jobs.apple.com/en-us/search",
+          "config": {
+            "__company": "Apple",
+            "__cron_timezone": "UTC",
+            "__run_on_startup": false,
+            "__schedule": {
+              "time": "09:00",
+              "timezone": "UTC",
+              "weekdays": []
+            },
+            "__source_id": "apple",
+            "date": "span.job-posted-date",
+            "item": "ul#search-job-list > li.rc-accordion-item",
+            "link": "a.link-inline",
+            "location": "span.table--advanced-search__location-sub",
+            "mode": "static",
+            "title": "h3 a.link-inline",
+            "url": "https://jobs.apple.com/en-us/search"
+          }
+        }
+      ]
+    },
+    {
+      "id": "streaming-cloud-script",
+      "name": "Netflix & Amazon — Script example (Setup required)",
+      "description": "Bundled script protocol 2 example, disabled. Select an absolute Node.js executable for each source, save, review and trust each script, then enable explicitly. Pagination coverage remains incomplete.",
+      "readiness": "setup_required",
+      "seed": true,
+      "legacy_identifier": "streaming-cloud-script",
+      "spec": {
+        "version": 6,
+        "max_jobs_per_run": 20,
+        "metadata": {
+          "name": "Netflix & Amazon — Script example (Setup required)",
+          "company": "Cloud",
+          "enabled": false
+        },
+        "sources": [
+          {
+            "id": "netflix",
+            "label": "Netflix",
+            "enabled": false,
+            "employer_hint": "Netflix",
+            "extractor": {
+              "kind": "selector",
+              "url": "https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10",
+              "mode": "script",
+              "script": {
+                "runtime": "js",
+                "code": "#!/usr/bin/env node\n// Netflix Eightfold API extractor speaking SCRIPT_PROTOCOL_VERSION = 2\n\nasync function main() {\n  // Works as a packaged temporary .js file and as an imported ES module.\n  const { readFileSync } = await import(\"node:fs\");\n  const inputChunks = [];\n  for await (const chunk of process.stdin) {\n    inputChunks.push(chunk);\n  }\n  const inputStr = Buffer.concat(inputChunks).toString(\"utf8\").trim();\n  if (!inputStr) {\n    process.stderr.write(\"No input received on stdin\\n\");\n    process.exit(1);\n  }\n\n  const input = JSON.parse(inputStr);\n  if (input.version !== 2) {\n    process.stderr.write(`Unsupported protocol version: ${input.version}\\n`);\n    process.exit(1);\n  }\n\n  let data;\n  const fixturePath = input.config?.fixture_path || input.config?.script?.args?.[0] || process.argv[2];\n  if (fixturePath) {\n    const raw = readFileSync(fixturePath, \"utf8\");\n    data = JSON.parse(raw);\n  } else {\n    const res = await fetch(input.url, {\n      headers: { \"User-Agent\": \"Scrape/1.0 (Job Aggregator; +https://github.com/scrape)\" },\n      signal: AbortSignal.timeout(input.timeout_ms || 30000),\n    });\n    if (!res.ok) {\n      process.stderr.write(`HTTP error: ${res.status} ${res.statusText}\\n`);\n      process.exit(1);\n    }\n    data = await res.json();\n  }\n\n  const positions = data.positions || [];\n  const limit = Math.min(positions.length, input.max_candidates || 100);\n\n  for (let i = 0; i < limit; i++) {\n    const pos = positions[i];\n    const candidate = {\n      type: \"candidate\",\n      version: 2,\n      external_id: String(pos.id || pos.ats_job_id || \"\"),\n      title: pos.name || pos.posting_name || \"Untitled Role\",\n      url: pos.canonicalPositionUrl || `https://explore.jobs.netflix.net/careers/job/${pos.id}`,\n      location: Array.isArray(pos.locations) && pos.locations.length > 0\n        ? pos.locations.join(\"; \")\n        : (pos.location || null),\n      company: \"Netflix\",\n      // Observed in the recorded Netflix contract; no arrangement is inferred\n      // from a physical office address or a continental location label.\n      workplace_type: pos.work_location_option === \"remote_local\" ? \"remote\"\n        : [\"onsite\", \"remote\", \"hybrid\"].includes(pos.work_location_option)\n          ? pos.work_location_option : \"unknown\",\n    };\n    if (pos.job_description) {\n      candidate.description = pos.job_description;\n    }\n    if (pos.t_create) {\n      candidate.date_posted = new Date(pos.t_create * 1000).toISOString();\n    }\n    process.stdout.write(JSON.stringify(candidate) + \"\\n\");\n  }\n\n  const complete = {\n    type: \"complete\",\n    version: 2,\n    exhausted: limit >= positions.length,\n  };\n  process.stdout.write(JSON.stringify(complete) + \"\\n\");\n}\n\nmain().catch((err) => {\n  process.stderr.write(String(err?.stack || err) + \"\\n\");\n  process.exit(1);\n});\n"
+              }
+            }
+          },
+          {
+            "id": "amazon",
+            "label": "Amazon",
+            "enabled": false,
+            "employer_hint": "Amazon",
+            "extractor": {
+              "kind": "selector",
+              "url": "https://www.amazon.jobs/en/search.json?offset=0&result_limit=10",
+              "mode": "script",
+              "script": {
+                "runtime": "js",
+                "code": "#!/usr/bin/env node\n// Amazon Jobs API extractor speaking SCRIPT_PROTOCOL_VERSION = 2\n\nasync function main() {\n  // Works as a packaged temporary .js file and as an imported ES module.\n  const { readFileSync } = await import(\"node:fs\");\n  const inputChunks = [];\n  for await (const chunk of process.stdin) {\n    inputChunks.push(chunk);\n  }\n  const inputStr = Buffer.concat(inputChunks).toString(\"utf8\").trim();\n  if (!inputStr) {\n    process.stderr.write(\"No input received on stdin\\n\");\n    process.exit(1);\n  }\n\n  const input = JSON.parse(inputStr);\n  if (input.version !== 2) {\n    process.stderr.write(`Unsupported protocol version: ${input.version}\\n`);\n    process.exit(1);\n  }\n\n  let data;\n  const fixturePath = input.config?.fixture_path || input.config?.script?.args?.[0] || process.argv[2];\n  if (fixturePath) {\n    const raw = readFileSync(fixturePath, \"utf8\");\n    data = JSON.parse(raw);\n  } else {\n    const res = await fetch(input.url, {\n      headers: { \"User-Agent\": \"Scrape/1.0 (Job Aggregator; +https://github.com/scrape)\" },\n      signal: AbortSignal.timeout(input.timeout_ms || 30000),\n    });\n    if (!res.ok) {\n      process.stderr.write(`HTTP error: ${res.status} ${res.statusText}\\n`);\n      process.exit(1);\n    }\n    data = await res.json();\n  }\n\n  const jobs = data.jobs || [];\n  const limit = Math.min(jobs.length, input.max_candidates || 100);\n\n  for (let i = 0; i < limit; i++) {\n    const job = jobs[i];\n    const candidate = {\n      type: \"candidate\",\n      version: 2,\n      external_id: String(job.id_icims || job.id || \"\"),\n      title: job.title || \"Untitled Role\",\n      url: job.job_path\n        ? (job.job_path.startsWith(\"http\") ? job.job_path : `https://www.amazon.jobs${job.job_path}`)\n        : `https://www.amazon.jobs/en/jobs/${job.id_icims || job.id}`,\n      location: job.normalized_location || job.location || null,\n      company: job.company_name || \"Amazon\",\n    };\n    if (job.description) {\n      candidate.description = job.description;\n    }\n    if (job.posted_date) {\n      candidate.date_posted = job.posted_date;\n    }\n    // Extract base salary from preferred qualifications or description if present\n    if (job.preferred_qualifications) {\n      const match = job.preferred_qualifications.match(/(\\$[\\d,]+(?:\\s*-\\s*\\$[\\d,]+)?(?:\\s*(?:USD|per year|annually))?|[\\d,]+\\.\\d{2}\\s*-\\s*[\\d,]+\\.\\d{2}\\s*USD\\s*annually)/i);\n      if (match) {\n        candidate.salary = match[1];\n      }\n    }\n    process.stdout.write(JSON.stringify(candidate) + \"\\n\");\n  }\n\n  const complete = {\n    type: \"complete\",\n    version: 2,\n    exhausted: limit >= jobs.length,\n  };\n  process.stdout.write(JSON.stringify(complete) + \"\\n\");\n}\n\nmain().catch((err) => {\n  process.stderr.write(String(err?.stack || err) + \"\\n\");\n  process.exit(1);\n});\n"
+              }
+            }
+          }
+        ],
+        "schedule": {
+          "cadence": "daily",
+          "time": "09:00",
+          "cron": "0 0 9 * * *",
+          "timezone": "UTC",
+          "run_on_startup": false
+        },
+        "filters": {
+          "role_types": [],
+          "include_keywords": [],
+          "exclude_keywords": [],
+          "locations": [],
+          "matching": {
+            "keywords": {
+              "any": [
+                "Engineer",
+                "Developer",
+                "Distributed",
+                "Platform",
+                "Backend",
+                "Data",
+                "Infrastructure"
+              ],
+              "all": [],
+              "exclude": [],
+              "fields": [
+                "title"
+              ]
+            },
+            "posting_date": null,
+            "compensation": null,
+            "role_types": [],
+            "workplaces": [],
+            "experience_min": null,
+            "experience_max": null,
+            "experience_include_unknown": false,
+            "new_grad": null,
+            "sponsorship": [],
+            "work_auth": [],
+            "clearance": [],
+            "countries": [],
+            "regions": [],
+            "cities": [],
+            "location_include_unknown": false
+          }
+        },
+        "retention": {
+          "days": 30,
+          "policy": "untracked_only"
+        }
+      },
+      "extractors": [
+        {
+          "id": "netflix",
+          "kind": "selector",
+          "identifier": "https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10",
+          "config": {
+            "__company": "Netflix",
+            "__cron_timezone": "UTC",
+            "__run_on_startup": false,
+            "__schedule": {
+              "time": "09:00",
+              "timezone": "UTC",
+              "weekdays": []
+            },
+            "__source_id": "netflix",
+            "mode": "script",
+            "script": {
+              "code": "#!/usr/bin/env node\n// Netflix Eightfold API extractor speaking SCRIPT_PROTOCOL_VERSION = 2\n\nasync function main() {\n  // Works as a packaged temporary .js file and as an imported ES module.\n  const { readFileSync } = await import(\"node:fs\");\n  const inputChunks = [];\n  for await (const chunk of process.stdin) {\n    inputChunks.push(chunk);\n  }\n  const inputStr = Buffer.concat(inputChunks).toString(\"utf8\").trim();\n  if (!inputStr) {\n    process.stderr.write(\"No input received on stdin\\n\");\n    process.exit(1);\n  }\n\n  const input = JSON.parse(inputStr);\n  if (input.version !== 2) {\n    process.stderr.write(`Unsupported protocol version: ${input.version}\\n`);\n    process.exit(1);\n  }\n\n  let data;\n  const fixturePath = input.config?.fixture_path || input.config?.script?.args?.[0] || process.argv[2];\n  if (fixturePath) {\n    const raw = readFileSync(fixturePath, \"utf8\");\n    data = JSON.parse(raw);\n  } else {\n    const res = await fetch(input.url, {\n      headers: { \"User-Agent\": \"Scrape/1.0 (Job Aggregator; +https://github.com/scrape)\" },\n      signal: AbortSignal.timeout(input.timeout_ms || 30000),\n    });\n    if (!res.ok) {\n      process.stderr.write(`HTTP error: ${res.status} ${res.statusText}\\n`);\n      process.exit(1);\n    }\n    data = await res.json();\n  }\n\n  const positions = data.positions || [];\n  const limit = Math.min(positions.length, input.max_candidates || 100);\n\n  for (let i = 0; i < limit; i++) {\n    const pos = positions[i];\n    const candidate = {\n      type: \"candidate\",\n      version: 2,\n      external_id: String(pos.id || pos.ats_job_id || \"\"),\n      title: pos.name || pos.posting_name || \"Untitled Role\",\n      url: pos.canonicalPositionUrl || `https://explore.jobs.netflix.net/careers/job/${pos.id}`,\n      location: Array.isArray(pos.locations) && pos.locations.length > 0\n        ? pos.locations.join(\"; \")\n        : (pos.location || null),\n      company: \"Netflix\",\n      // Observed in the recorded Netflix contract; no arrangement is inferred\n      // from a physical office address or a continental location label.\n      workplace_type: pos.work_location_option === \"remote_local\" ? \"remote\"\n        : [\"onsite\", \"remote\", \"hybrid\"].includes(pos.work_location_option)\n          ? pos.work_location_option : \"unknown\",\n    };\n    if (pos.job_description) {\n      candidate.description = pos.job_description;\n    }\n    if (pos.t_create) {\n      candidate.date_posted = new Date(pos.t_create * 1000).toISOString();\n    }\n    process.stdout.write(JSON.stringify(candidate) + \"\\n\");\n  }\n\n  const complete = {\n    type: \"complete\",\n    version: 2,\n    exhausted: limit >= positions.length,\n  };\n  process.stdout.write(JSON.stringify(complete) + \"\\n\");\n}\n\nmain().catch((err) => {\n  process.stderr.write(String(err?.stack || err) + \"\\n\");\n  process.exit(1);\n});\n",
+              "runtime": "js"
+            },
+            "url": "https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10"
+          }
+        },
+        {
+          "id": "amazon",
+          "kind": "selector",
+          "identifier": "https://www.amazon.jobs/en/search.json?offset=0&result_limit=10",
+          "config": {
+            "__company": "Amazon",
+            "__cron_timezone": "UTC",
+            "__run_on_startup": false,
+            "__schedule": {
+              "time": "09:00",
+              "timezone": "UTC",
+              "weekdays": []
+            },
+            "__source_id": "amazon",
+            "mode": "script",
+            "script": {
+              "code": "#!/usr/bin/env node\n// Amazon Jobs API extractor speaking SCRIPT_PROTOCOL_VERSION = 2\n\nasync function main() {\n  // Works as a packaged temporary .js file and as an imported ES module.\n  const { readFileSync } = await import(\"node:fs\");\n  const inputChunks = [];\n  for await (const chunk of process.stdin) {\n    inputChunks.push(chunk);\n  }\n  const inputStr = Buffer.concat(inputChunks).toString(\"utf8\").trim();\n  if (!inputStr) {\n    process.stderr.write(\"No input received on stdin\\n\");\n    process.exit(1);\n  }\n\n  const input = JSON.parse(inputStr);\n  if (input.version !== 2) {\n    process.stderr.write(`Unsupported protocol version: ${input.version}\\n`);\n    process.exit(1);\n  }\n\n  let data;\n  const fixturePath = input.config?.fixture_path || input.config?.script?.args?.[0] || process.argv[2];\n  if (fixturePath) {\n    const raw = readFileSync(fixturePath, \"utf8\");\n    data = JSON.parse(raw);\n  } else {\n    const res = await fetch(input.url, {\n      headers: { \"User-Agent\": \"Scrape/1.0 (Job Aggregator; +https://github.com/scrape)\" },\n      signal: AbortSignal.timeout(input.timeout_ms || 30000),\n    });\n    if (!res.ok) {\n      process.stderr.write(`HTTP error: ${res.status} ${res.statusText}\\n`);\n      process.exit(1);\n    }\n    data = await res.json();\n  }\n\n  const jobs = data.jobs || [];\n  const limit = Math.min(jobs.length, input.max_candidates || 100);\n\n  for (let i = 0; i < limit; i++) {\n    const job = jobs[i];\n    const candidate = {\n      type: \"candidate\",\n      version: 2,\n      external_id: String(job.id_icims || job.id || \"\"),\n      title: job.title || \"Untitled Role\",\n      url: job.job_path\n        ? (job.job_path.startsWith(\"http\") ? job.job_path : `https://www.amazon.jobs${job.job_path}`)\n        : `https://www.amazon.jobs/en/jobs/${job.id_icims || job.id}`,\n      location: job.normalized_location || job.location || null,\n      company: job.company_name || \"Amazon\",\n    };\n    if (job.description) {\n      candidate.description = job.description;\n    }\n    if (job.posted_date) {\n      candidate.date_posted = job.posted_date;\n    }\n    // Extract base salary from preferred qualifications or description if present\n    if (job.preferred_qualifications) {\n      const match = job.preferred_qualifications.match(/(\\$[\\d,]+(?:\\s*-\\s*\\$[\\d,]+)?(?:\\s*(?:USD|per year|annually))?|[\\d,]+\\.\\d{2}\\s*-\\s*[\\d,]+\\.\\d{2}\\s*USD\\s*annually)/i);\n      if (match) {\n        candidate.salary = match[1];\n      }\n    }\n    process.stdout.write(JSON.stringify(candidate) + \"\\n\");\n  }\n\n  const complete = {\n    type: \"complete\",\n    version: 2,\n    exhausted: limit >= jobs.length,\n  };\n  process.stdout.write(JSON.stringify(complete) + \"\\n\");\n}\n\nmain().catch((err) => {\n  process.stderr.write(String(err?.stack || err) + \"\\n\");\n  process.exit(1);\n});\n",
+              "runtime": "js"
+            },
+            "url": "https://www.amazon.jobs/en/search.json?offset=0&result_limit=10"
+          }
+        }
+      ]
+    },
+    {
+      "id": "software-engineering-internships",
+      "name": "Cloudflare — Internship/location example (Restrictive)",
+      "description": "Restrictive legacy example: internship AND keyword rules AND any listed location text. Zero matches may be valid. Not the default; not seeded automatically.",
+      "readiness": "restrictive_example",
+      "seed": false,
+      "legacy_identifier": "cloudflare",
+      "spec": {
+        "version": 6,
+        "max_jobs_per_run": 20,
+        "metadata": {
+          "name": "Cloudflare — Internship/location example (Restrictive)",
+          "company": "Cloudflare",
+          "enabled": false
+        },
+        "sources": [
+          {
+            "id": "cloudflare",
+            "label": "Cloudflare — Greenhouse",
+            "enabled": true,
+            "employer_hint": "Cloudflare",
+            "extractor": {
+              "kind": "greenhouse",
+              "url": "https://boards.greenhouse.io/cloudflare"
+            }
+          }
+        ],
+        "schedule": {
+          "cadence": "daily",
+          "time": "09:00",
+          "cron": "0 0 9 * * *",
+          "timezone": "UTC",
+          "run_on_startup": false
+        },
+        "filters": {
+          "role_types": [
+            "internship"
+          ],
+          "include_keywords": [
+            "Software",
+            "Engineer",
+            "Intern"
+          ],
+          "exclude_keywords": [
+            "MBA",
+            "Sales",
+            "Marketing"
+          ],
+          "locations": [
+            "Remote",
+            "San Francisco, CA",
+            "Austin, TX"
+          ]
+        },
+        "retention": {
+          "days": 45,
+          "policy": "untracked_only"
+        }
+      },
+      "extractors": [
+        {
+          "id": "cloudflare",
+          "kind": "greenhouse",
+          "identifier": "cloudflare",
+          "config": {
+            "__company": "Cloudflare",
+            "__cron_timezone": "UTC",
+            "__run_on_startup": false,
+            "__schedule": {
+              "time": "09:00",
+              "timezone": "UTC",
+              "weekdays": []
+            },
+            "__source_id": "cloudflare",
+            "url": "https://boards.greenhouse.io/cloudflare"
+          }
+        }
+      ]
+    }
+  ]
+}

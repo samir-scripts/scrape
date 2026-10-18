@@ -11,6 +11,7 @@ The `src-tauri/src/services` directory contains long-running background tasks, p
 | File | Service Domain | Core Responsibilities & Implementation |
 |---|---|---|
 | [`mod.rs`](mod.rs) | Service Root | Consolidates service modules and exports public service constructs. |
+| [`template_catalog.rs`](template_catalog.rs) | Built-in Templates | Versioned Rust-validated catalog; title-only seed defaults, separately labelled restrictive examples, embedded protocol-2 scripts and generated picker/YAML/extractor projections. |
 | [`sample_workflows.rs`](sample_workflows.rs) | Built-in Seeding | Shared callable service behind both seed commands; canonical atomic saves and created/already-present/needs-review reports. |
 | [`execution_diagnostics.rs`](execution_diagnostics.rs) | Run Preparation & Diagnostics | Shared workflow-to-worker preparation, redacted context/config snapshots before preflight, and durable batch-persistence failure evidence. |
 | [`workflow_store.rs`](workflow_store.rs) | Atomic Workflow Ownership | Validates and saves parent/child records in one transaction, canonicalizes IDs, preserves owned identities/trust, retires removed sources, and performs explicit backed-up ownership repair. |
@@ -118,3 +119,5 @@ Ingestion revalidates the core location tuple bounds and country/subdivision
 consistency before persistence. Script protocol 2 supplies employment/workplace/
 location evidence through existing WorkerEvent fields; worker protocol stays 7.
 Existing script fingerprints/trust checks remain authoritative.
+
+JavaScript runtime preflight requires an explicit absolute Node.js 18+ executable; missing setup never falls back to a developer shell. File scripts require absolute readable paths before trust/execution; embedded scripts need no repository checkout. See [template setup](../../../workflows/README.md).

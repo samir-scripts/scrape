@@ -23,3 +23,5 @@ pub mod workflow_store;
 
 #[cfg(test)]
 mod matching_compatibility_tests;
+
+pub mod template_catalog;

@@ -1,45 +1,31 @@
-# ==============================================================================
-# SCRAPE SAMPLE WORKFLOW: SEP Software & Embedded Consulting
-# Target: SEP Lever Openings
-# Spec Version: 6 (Multi-source, structured matching, fair budget)
-# ==============================================================================
-
+# Generated from Rust template catalog v1. Do not edit.
+# Title keywords only. Employment, workplace and geography are unrestricted, including unknown evidence. Preview before saving; live availability varies.
 version: 6
-
+max_jobs_per_run: 20
 metadata:
-  name: "SEP — Software, AI & Embedded Engineering"
-  company: "SEP"
+  name: SEP — Engineering (title keywords)
+  company: SEP
   enabled: true
-
 sources:
-  - id: "sep"
-    label: "SEP — Lever"
+  - id: sep
+    label: SEP — Lever
     enabled: true
-    employer_hint: "SEP"
+    employer_hint: SEP
     extractor:
       kind: lever
-      url: "https://jobs.lever.co/sep"
-
+      url: https://jobs.lever.co/sep
 schedule:
   cadence: daily
-  time: "09:00"
-  cron: "0 0 9 * * *"
-
+  time: 09:00
+  cron: 0 0 9 * * *
+  timezone: UTC
+  run_on_startup: false
 filters:
+  role_types: []
+  include_keywords: []
+  exclude_keywords: []
+  locations: []
   matching:
-    role_types:
-      - full_time
-      - internship
-    workplaces:
-      - hybrid
-      - onsite
-    countries:
-      - US
-    regions:
-      - US-IN
-    cities:
-      - Indianapolis
-      - Westfield
     keywords:
       any:
         - Software
@@ -52,7 +38,21 @@ filters:
       exclude: []
       fields:
         - title
-
+    posting_date: null
+    compensation: null
+    role_types: []
+    workplaces: []
+    experience_min: null
+    experience_max: null
+    experience_include_unknown: false
+    new_grad: null
+    sponsorship: []
+    work_auth: []
+    clearance: []
+    countries: []
+    regions: []
+    cities: []
+    location_include_unknown: false
 retention:
   days: 30
   policy: untracked_only

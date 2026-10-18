@@ -6,6 +6,21 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
+// Adapter configurations are projections of Rust's canonical extractor definitions.
+// This remains a direct-worker smoke check; full workflow acceptance is Plan 12 §7.
+const templateCatalog = JSON.parse(await readFile(new URL("../src/generated/workflowTemplates.json", import.meta.url), "utf8"));
+function extractor(id) {
+  const entry = templateCatalog.templates.filter(template => template.seed).flatMap(template => template.extractors).find(source => source.id === id);
+  if (!entry) throw new Error(`No canonical extractor for ${id}`);
+  return entry;
+}
+function extractorConfig(id) {
+  const config = structuredClone(extractor(id).config);
+  if (config.script) config.script.interpreter = process.execPath; // Explicit fixture runtime.
+  config.__workflow_spec = { max_jobs_per_run: 100 };
+  return config;
+}
+
 const live = process.argv.includes("--live");
 const refresh = process.argv.includes("--refresh-example");
 
@@ -13,97 +28,69 @@ const providers = [
   {
     kind: "lever",
     name: "SEP",
-    identifier: "sep",
+    identifier: extractor("sep").identifier,
     url: "https://api.lever.co/v0/postings/sep?mode=json",
     file: "fixtures/providers/lever/sep.json",
     classification: "native_ats",
+    config: extractorConfig("sep"),
   },
   {
     kind: "ashby",
     name: "Linear",
-    identifier: "linear",
+    identifier: extractor("linear").identifier,
     url: "https://api.ashbyhq.com/posting-api/job-board/linear?includeCompensation=true",
     file: "fixtures/providers/ashby/linear.json",
     classification: "native_ats",
+    config: extractorConfig("linear"),
   },
   {
     kind: "greenhouse",
     name: "Bitwarden",
-    identifier: "bitwarden",
+    identifier: extractor("bitwarden").identifier,
     url: "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs?content=true",
     file: "fixtures/providers/greenhouse/bitwarden.json",
     classification: "native_ats",
+    config: extractorConfig("bitwarden"),
   },
   {
     kind: "selector",
     mode: "static",
     name: "Google",
     identifier: "google",
-    url: "https://www.google.com/about/careers/applications/jobs/results/",
+    url: extractor("google").config.url,
     file: "fixtures/providers/selector/google.html",
     classification: "selector_static",
-    config: {
-      mode: "static",
-      item: "li.lLd3Je",
-      title: "h3.QJPWVe",
-      link: "a[href*=\"jobs/results/\"]",
-      location: "span.r0wTof",
-      __workflow_spec: { max_jobs_per_run: 100 },
-    },
+    config: extractorConfig("google"),
   },
   {
     kind: "selector",
     mode: "static",
     name: "Apple",
     identifier: "apple",
-    url: "https://jobs.apple.com/en-us/search",
+    url: extractor("apple").config.url,
     file: "fixtures/providers/selector/apple.html",
     classification: "selector_static",
-    config: {
-      mode: "static",
-      item: "ul#search-job-list > li.rc-accordion-item",
-      title: "h3 a.link-inline",
-      link: "a.link-inline",
-      location: "span.table--advanced-search__location-sub",
-      date: "span.job-posted-date",
-      __workflow_spec: { max_jobs_per_run: 100 },
-    },
+    config: extractorConfig("apple"),
   },
   {
     kind: "selector",
     mode: "script",
     name: "Netflix",
     identifier: "netflix",
-    url: "https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10",
+    url: extractor("netflix").config.url,
     file: "fixtures/providers/script/netflix.json",
     classification: "script_ndjson",
-    config: {
-      mode: "script",
-      script: {
-        runtime: "js",
-        interpreter: "node",
-        path: "crates/scrape-worker/examples/extractors/netflix_extractor.js",
-      },
-      __workflow_spec: { max_jobs_per_run: 100 },
-    },
+    config: extractorConfig("netflix"),
   },
   {
     kind: "selector",
     mode: "script",
     name: "Amazon",
     identifier: "amazon",
-    url: "https://www.amazon.jobs/en/search.json?offset=0&result_limit=10",
+    url: extractor("amazon").config.url,
     file: "fixtures/providers/script/amazon.json",
     classification: "script_ndjson",
-    config: {
-      mode: "script",
-      script: {
-        runtime: "js",
-        interpreter: "node",
-        path: "crates/scrape-worker/examples/extractors/amazon_extractor.js",
-      },
-      __workflow_spec: { max_jobs_per_run: 100 },
-    },
+    config: extractorConfig("amazon"),
   },
   {
     kind: "selector",

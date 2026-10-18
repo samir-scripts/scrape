@@ -36,7 +36,9 @@ fn invoke(config: &WorkerConfig, preview: bool) -> Vec<WorkerEvent> {
     invoke_replay(config, preview, None)
 }
 fn invoke_replay(config: &WorkerConfig, preview: bool, origin: Option<&str>) -> Vec<WorkerEvent> {
+    let cwd = tempfile::tempdir().unwrap();
     let mut command = Command::new(worker());
+    command.current_dir(cwd.path());
     command.arg("--stdin");
     if let Some(origin) = origin {
         command.args(["--replay-origin", origin]);
@@ -1716,6 +1718,7 @@ if (!input.continuation) {
                     "url": "https://fixture.test/jobs",
                     "script": {
                         "runtime": "js",
+                        "interpreter": fixture_node_path(),
                         "code": script_code
                     }
                 }
@@ -2134,7 +2137,7 @@ async fn recorded_provider_company_verification_matrix_persists_to_sqlite() {
                 "mode": "script",
                 "script": {
                     "runtime": "js",
-                    "interpreter": "node",
+                    "interpreter": fixture_node_path(),
                     "path": netflix_extractor_path,
                     "args": [netflix_fixture_path]
                 }
@@ -2243,6 +2246,8 @@ async fn seeded_workflow_rules_explain_zero_results_through_discovered_query() {
         .unwrap();
     let bitwarden =
         std::fs::read_to_string(root.join("fixtures/providers/greenhouse/bitwarden.json")).unwrap();
+    let linear =
+        std::fs::read_to_string(root.join("fixtures/providers/ashby/linear.json")).unwrap();
     let sep = std::fs::read_to_string(root.join("fixtures/providers/lever/sep.json")).unwrap();
     let cloudflare = serde_json::json!({"meta":{"total":3},"jobs":[
         {"id":91001,"title":"Software Engineer","absolute_url":"https://fixture.invalid/cloudflare/91001","location":{"name":"Austin, TX"},"content":"Authored fixture. Hybrid work model for engineering."},
@@ -2279,6 +2284,9 @@ async fn seeded_workflow_rules_explain_zero_results_through_discovered_query() {
                 "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs?content=true" => {
                     ("200 OK", bitwarden.as_str())
                 }
+                "/api.ashbyhq.com/posting-api/job-board/linear?includeCompensation=true" => {
+                    ("200 OK", linear.as_str())
+                }
                 "/api.lever.co/v0/postings/sep?mode=json" => ("200 OK", sep.as_str()),
                 _ if path.ends_with("/robots.txt") => ("200 OK", "User-agent: *\nAllow: /"),
                 // No uncaptured detail/branding request may masquerade as a listing.
@@ -2293,11 +2301,12 @@ async fn seeded_workflow_rules_explain_zero_results_through_discovered_query() {
         }
     });
     for (board, expected) in [
-        ("cloudflare", [3, 2, 1]),
-        ("bitwarden", [20, 20, 0]),
-        ("sep", [8, 6, 6]),
+        ("cloudflare", vec![(0, 3), (1, 2), (2, 1), (3, 2)]),
+        ("bitwarden", vec![(0, 20), (1, 20), (2, 0), (3, 20)]),
+        ("sep", vec![(0, 8), (1, 6), (2, 6), (3, 6)]),
+        ("linear", vec![(0, 20), (1, 10), (3, 20)]),
     ] {
-        for (variant, expected_jobs) in expected.into_iter().enumerate() {
+        for (variant, expected_jobs) in expected {
             let directory = tempfile::tempdir().unwrap();
             let pool = scrape_lib::db::init_db(&directory.path().join("seeded.db"))
                 .await
@@ -2310,13 +2319,42 @@ async fn seeded_workflow_rules_explain_zero_results_through_discovered_query() {
                 1
             );
             let seeded = sample_workflows::seed_all(&pool).await.unwrap();
-            let source = seeded.iter().find(|s| s.identifier == board).unwrap();
+            let mut source = seeded
+                .iter()
+                .find(|s| s.identifier == board)
+                .unwrap()
+                .clone();
+            if variant == 2 {
+                // Labelled restrictive control is saved through the same service;
+                // variant 3 executes the new title-only seeded default unchanged.
+                let catalog = scrape_lib::services::template_catalog::catalog().unwrap();
+                let strict = catalog
+                    .templates
+                    .iter()
+                    .find(|t| t.legacy_identifier == board && t.id.ends_with("-restrictive"))
+                    .unwrap();
+                let mut spec = scrape_lib::services::workflow::validate(
+                    source.config["__workflow_spec"].clone(),
+                    "UTC",
+                )
+                .unwrap();
+                spec.filters = strict.spec.filters.clone();
+                source = scrape_lib::services::workflow::persist(
+                    &pool,
+                    spec,
+                    Some(source.id.clone()),
+                    false,
+                    "UTC",
+                )
+                .await
+                .unwrap();
+            }
             let run =
                 RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&source.id))
                     .await
                     .unwrap();
             let mut config =
-                execution_diagnostics::prepare(source, "UTC", &run.started_at).unwrap();
+                execution_diagnostics::prepare(&source, "UTC", &run.started_at).unwrap();
             config.filters=match variant {
                 0 => WorkerFilters::default(),
                 1 => serde_json::from_value(serde_json::json!({"matching":{"keywords":{"any":["Engineer"],"fields":["title"]}}})).unwrap(),
@@ -2438,15 +2476,25 @@ async fn seeded_workflow_rules_explain_zero_results_through_discovered_query() {
     running.store(false, Ordering::SeqCst);
     server.join().unwrap();
     let requests = requests.lock().unwrap();
-    for path in [
-        "/boards-api.greenhouse.io/v1/boards/cloudflare/jobs?content=true",
-        "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs?content=true",
-        "/api.lever.co/v0/postings/sep?mode=json",
+    for (path, count) in [
+        (
+            "/boards-api.greenhouse.io/v1/boards/cloudflare/jobs?content=true",
+            4,
+        ),
+        (
+            "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs?content=true",
+            4,
+        ),
+        ("/api.lever.co/v0/postings/sep?mode=json", 4),
+        (
+            "/api.ashbyhq.com/posting-api/job-board/linear?includeCompensation=true",
+            3,
+        ),
     ] {
         assert_eq!(
             requests.iter().filter(|p| p.as_str() == path).count(),
-            3,
-            "each variant must use the same listing once"
+            count,
+            "each explicit control/default variant must use the same listing once"
         );
     }
 }
@@ -2509,6 +2557,17 @@ async fn seeded_multi_source_selector_jobs_persist_with_parent_attribution() {
         .into_iter()
         .find(|s| s.name.starts_with("Google & Apple"))
         .unwrap();
+    let mut spec =
+        scrape_lib::services::workflow::validate(parent.config["__workflow_spec"].clone(), "UTC")
+            .unwrap();
+    spec.metadata.enabled = Some(true);
+    for entry in &mut spec.sources {
+        entry.enabled = true;
+    }
+    let parent =
+        scrape_lib::services::workflow::persist(&pool, spec, Some(parent.id.clone()), false, "UTC")
+            .await
+            .unwrap();
     let run = RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&parent.id))
         .await
         .unwrap();
@@ -2861,7 +2920,7 @@ async fn recorded_netflix_workplace_only_evidence_survives_script_trust_and_pers
     let pool = scrape_lib::db::init_db(&dir.path().join("netflix-evidence.db"))
         .await
         .unwrap();
-    let spec=workflow::validate(json!({"version":6,"metadata":{"name":"Recorded Netflix workplace control"},"sources":[{"id":"netflix","label":"Netflix","extractor":{"kind":"script","url":"https://explore.jobs.netflix.net/api/apply/v2/jobs","script":{"runtime":"js","path":root.join("crates/scrape-worker/examples/extractors/netflix_extractor.js").to_str().unwrap(),"args":[root.join("fixtures/providers/script/netflix.json").to_str().unwrap()]}}}],"schedule":{"cadence":"manual"},"filters":{"matching":{"workplaces":["remote"]}}}),"UTC").unwrap();
+    let spec=workflow::validate(json!({"version":6,"metadata":{"name":"Recorded Netflix workplace control"},"sources":[{"id":"netflix","label":"Netflix","extractor":{"kind":"script","url":"https://explore.jobs.netflix.net/api/apply/v2/jobs","script":{"runtime":"js","interpreter":fixture_node_path(),"path":root.join("crates/scrape-worker/examples/extractors/netflix_extractor.js").to_str().unwrap(),"args":[root.join("fixtures/providers/script/netflix.json").to_str().unwrap()]}}}],"schedule":{"cadence":"manual"},"filters":{"matching":{"workplaces":["remote"]}}}),"UTC").unwrap();
     let parent = workflow::persist(&pool, spec, None, false, "UTC")
         .await
         .unwrap();
@@ -2926,5 +2985,170 @@ async fn recorded_netflix_workplace_only_evidence_survives_script_trust_and_pers
     .await
     .unwrap();
     assert_eq!(saved.total, 2);
+    pool.close().await;
+}
+
+fn fixture_node_path() -> String {
+    let output = std::process::Command::new("node")
+        .args(["-p", "process.execPath"])
+        .output()
+        .expect("Node.js fixture runtime");
+    assert!(output.status.success());
+    String::from_utf8(output.stdout).unwrap().trim().to_string()
+}
+
+/// Recorded bounded pages, NOT live/full-site coverage. The actual seed is set
+/// up explicitly, saved/reviewed/enabled, then run outside the repository cwd.
+#[tokio::test]
+async fn seeded_bundled_scripts_run_after_explicit_setup_from_non_repository_directory() {
+    use scrape_lib::services::{execution_diagnostics, sample_workflows, script_trust, workflow};
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&directory.path().join("script-setup.db"))
+        .await
+        .unwrap();
+    let parent = sample_workflows::seed_all(&pool)
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(!parent.enabled && parent.needs_review);
+    let mut spec = workflow::validate(parent.config["__workflow_spec"].clone(), "UTC").unwrap();
+    for entry in &mut spec.sources {
+        let script = entry.extractor.script.as_mut().unwrap();
+        assert!(script.path.is_none());
+        script.interpreter = Some(fixture_node_path());
+    }
+    // Persisted source IDs are UUIDs; pick fixture names by employer instead.
+    for entry in &mut spec.sources {
+        entry.extractor.script.as_mut().unwrap().args = Some(vec![root
+            .join(format!(
+                "fixtures/providers/script/{}.json",
+                entry.employer_hint.as_ref().unwrap().to_lowercase()
+            ))
+            .to_string_lossy()
+            .to_string()]);
+    }
+    let parent = workflow::persist(&pool, spec, Some(parent.id.clone()), false, "UTC")
+        .await
+        .unwrap();
+    let mut spec = workflow::validate(parent.config["__workflow_spec"].clone(), "UTC").unwrap();
+    for entry in &spec.sources {
+        let row = SourcesRepo::get(&pool, &entry.id).await.unwrap();
+        assert!(row.needs_review && !row.script_trusted && !row.enabled);
+        script_trust::trust(
+            &pool,
+            &entry.id,
+            row.script_sha256.as_deref().unwrap(),
+            true,
+        )
+        .await
+        .unwrap();
+        assert!(!SourcesRepo::get(&pool, &entry.id).await.unwrap().enabled);
+    }
+    spec.metadata.enabled = Some(true);
+    for entry in &mut spec.sources {
+        entry.enabled = true;
+    }
+    let parent = workflow::persist(&pool, spec, Some(parent.id.clone()), false, "UTC")
+        .await
+        .unwrap();
+    let mut config =
+        execution_diagnostics::prepare(&parent, "UTC", "2026-10-18T00:00:00Z").unwrap();
+    config.limits.per_host_delay_ms = 0;
+    script_trust::validate_execution(&pool, &config.sources)
+        .await
+        .unwrap();
+    let events = invoke(&config, false);
+    let WorkerEvent::Done { stats } = events.last().unwrap() else {
+        panic!()
+    };
+    assert_eq!(stats.sources.len(), 2);
+    let batch: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .cloned()
+        .map(|e| scraped_job_from_event(e).unwrap())
+        .collect();
+    let mut ids: Vec<_> = batch
+        .iter()
+        .map(|job| job.external_id.as_deref().unwrap())
+        .collect();
+    ids.sort();
+    assert_eq!(
+        ids,
+        [
+            "10421270",
+            "10436388",
+            "10489389",
+            "10507775",
+            "10524143",
+            "10582071",
+            "10582075",
+            "790318858893"
+        ]
+    );
+    assert_eq!(
+        batch
+            .iter()
+            .filter(|job| job.role_type == scrape_core::RoleType::Unknown)
+            .count(),
+        7
+    );
+    assert_eq!(
+        batch
+            .iter()
+            .filter(|job| job.role_type == scrape_core::RoleType::Internship)
+            .count(),
+        1
+    );
+    let saved = JobsRepo::upsert_scraped(&pool, &batch).await.unwrap();
+    assert_eq!(saved.inserted, 8);
+    assert_eq!(
+        JobsRepo::list(
+            &pool,
+            JobFilter {
+                source_id: Some(parent.id.clone()),
+                ..Default::default()
+            }
+        )
+        .await
+        .unwrap()
+        .total,
+        8
+    );
+    // Explicit known + unknown choices survive save/reopen and worker matching.
+    let mut spec = workflow::validate(parent.config["__workflow_spec"].clone(), "UTC").unwrap();
+    let rules = spec.filters.as_mut().unwrap().matching.as_mut().unwrap();
+    rules.role_types = vec![
+        scrape_core::RoleType::Internship,
+        scrape_core::RoleType::Unknown,
+    ];
+    rules.workplaces = vec![
+        scrape_core::WorkplaceType::Remote,
+        scrape_core::WorkplaceType::Unknown,
+    ];
+    let parent = workflow::persist(&pool, spec, Some(parent.id.clone()), false, "UTC")
+        .await
+        .unwrap();
+    let config = execution_diagnostics::prepare(&parent, "UTC", "2026-10-18T00:00:00Z").unwrap();
+    script_trust::validate_execution(&pool, &config.sources)
+        .await
+        .unwrap();
+    let explicit: Vec<_> = invoke(&config, false)
+        .into_iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .map(|e| scraped_job_from_event(e).unwrap())
+        .collect();
+    let mut explicit_ids: Vec<_> = explicit
+        .iter()
+        .map(|job| job.external_id.as_deref().unwrap())
+        .collect();
+    explicit_ids.sort();
+    assert_eq!(explicit_ids, ids);
+    let refreshed = JobsRepo::upsert_scraped(&pool, &explicit).await.unwrap();
+    assert_eq!((refreshed.inserted, refreshed.updated), (0, 8));
     pool.close().await;
 }

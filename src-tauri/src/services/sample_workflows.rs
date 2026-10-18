@@ -12,7 +12,7 @@ pub async fn seed_default(pool: &SqlitePool) -> Result<Source> {
     {
         return Ok(existing);
     }
-    seed_input(pool, SourcesRepo::default_sample_workflow_input()).await
+    seed_input(pool, super::template_catalog::seed_inputs()?.remove(0)).await
 }
 
 #[derive(serde::Serialize, serde::Deserialize, ts_rs::TS)]
@@ -34,7 +34,7 @@ pub async fn seed_all_report(pool: &SqlitePool) -> Result<SeedWorkflowReport> {
         needs_review: vec![],
     };
     let existing = SourcesRepo::list(pool).await?;
-    for input in SourcesRepo::sample_workflows_suite() {
+    for input in super::template_catalog::seed_inputs()? {
         let spec = crate::services::workflow::validate(
             input.config.as_ref().unwrap()["__workflow_spec"].clone(),
             "UTC",
@@ -76,6 +76,52 @@ async fn seed_input(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn reseeding_does_not_replace_saved_restrictive_filters_or_schedule() {
+        let pool = crate::db::init_memory_db().await.unwrap();
+        let original = seed_all(&pool).await.unwrap().remove(0);
+        let mut spec =
+            super::super::workflow::validate(original.config["__workflow_spec"].clone(), "UTC")
+                .unwrap();
+        spec.metadata.name = "My deliberately strict saved workflow".into();
+        spec.filters = Some(serde_json::from_value(serde_json::json!({
+            "role_types":["internship"], "locations":["Remote","Austin"],
+            "query":"title LIKE '%Engineer%'", "matching":{"role_types":["full_time"],"countries":["CA"],"cities":["Toronto"]}
+        })).unwrap());
+        spec.schedule.as_mut().unwrap().time = Some("15:20".into());
+        let saved = super::super::workflow::persist(&pool, spec, Some(original.id), false, "UTC")
+            .await
+            .unwrap();
+        let before = serde_json::to_value(&saved).unwrap();
+        let report = seed_all_report(&pool).await.unwrap();
+        assert!(report.created.is_empty());
+        assert_eq!(report.already_present.len(), 6);
+        assert_eq!(
+            serde_json::to_value(SourcesRepo::get(&pool, &saved.id).await.unwrap()).unwrap(),
+            before
+        );
+    }
+
+    #[test]
+    fn new_ats_templates_do_not_require_unobserved_role_or_geography() {
+        for input in SourcesRepo::sample_workflows_suite().into_iter().take(4) {
+            let spec = crate::services::workflow::validate(
+                input.config.as_ref().unwrap()["__workflow_spec"].clone(),
+                "UTC",
+            )
+            .unwrap();
+            let rules = spec.filters.unwrap().matching.unwrap();
+            assert!(rules.role_types.is_empty(), "{}", input.name);
+            assert!(rules.workplaces.is_empty(), "{}", input.name);
+            assert!(
+                rules.countries.is_empty() && rules.regions.is_empty() && rules.cities.is_empty()
+            );
+            let keywords = rules.keywords.unwrap();
+            assert!(!keywords.any.is_empty());
+            assert_eq!(keywords.fields, vec![scrape_core::FilterField::Title]);
+        }
+    }
+
     #[tokio::test]
     async fn seeds_materialize_owned_children_without_independent_schedules() {
         let pool = crate::db::init_memory_db().await.unwrap();

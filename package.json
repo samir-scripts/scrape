@@ -16,7 +16,9 @@
     "test:native": "node scripts/native-smoke.mjs",
     "test:native-startup": "node scripts/test-native-startup.mjs",
     "test:providers": "node scripts/provider-verification.mjs",
-    "test:providers:live": "node scripts/provider-verification.mjs --live"
+    "test:providers:live": "node scripts/provider-verification.mjs --live",
+    "gen:templates": "node scripts/generate-template-catalog.mjs",
+    "check:templates": "node scripts/generate-template-catalog.mjs --check"
   },
   "dependencies": {
     "@fontsource-variable/fira-code": "^5.3.0",

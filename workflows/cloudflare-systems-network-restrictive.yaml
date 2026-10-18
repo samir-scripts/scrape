@@ -1,0 +1,72 @@
+# Generated from Rust template catalog v1. Do not edit.
+# Restrictive example: selected employment, workplace and geography must all match. Missing evidence may produce zero matches; inspect Preview diagnostics. Not added by Load test workflows.
+version: 6
+max_jobs_per_run: 20
+metadata:
+  name: Cloudflare — Restrictive role/geography example
+  company: Cloudflare
+  enabled: false
+sources:
+  - id: cloudflare
+    label: Cloudflare — Greenhouse
+    enabled: true
+    employer_hint: Cloudflare
+    extractor:
+      kind: greenhouse
+      url: https://boards.greenhouse.io/cloudflare
+schedule:
+  cadence: daily
+  time: 09:00
+  cron: 0 0 9 * * *
+  timezone: UTC
+  run_on_startup: false
+filters:
+  role_types: []
+  include_keywords: []
+  exclude_keywords: []
+  locations: []
+  matching:
+    keywords:
+      any:
+        - Software
+        - Engineer
+        - Developer
+        - Systems
+        - Intern
+      all: []
+      exclude:
+        - Recruiter
+        - Account Executive
+        - Sales Representative
+      fields:
+        - title
+    posting_date: null
+    compensation: null
+    role_types:
+      - internship
+      - full_time
+    workplaces:
+      - remote
+      - hybrid
+      - onsite
+    experience_min: null
+    experience_max: null
+    experience_include_unknown: false
+    new_grad: null
+    sponsorship: []
+    work_auth: []
+    clearance: []
+    countries:
+      - US
+      - GB
+      - PT
+    regions: []
+    cities:
+      - Austin
+      - San Francisco
+      - London
+      - Lisbon
+    location_include_unknown: false
+retention:
+  days: 45
+  policy: untracked_only

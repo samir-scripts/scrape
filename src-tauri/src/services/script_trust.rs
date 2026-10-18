@@ -16,6 +16,9 @@ pub fn fingerprint(script: &WorkflowScriptConfig) -> Result<String> {
     let Some(path) = &script.path else {
         return Ok(canonical);
     };
+    if !std::path::Path::new(path).is_absolute() {
+        return Err(AppError::Validation("script.path: select an absolute path to a local script file, or embed code before saving; repository-relative paths are not portable".into()));
+    }
     if !std::fs::metadata(path)
         .map_err(|error| AppError::Validation(format!("script.path: {error}")))?
         .is_file()
@@ -209,22 +212,43 @@ fn resolve_executable_path(name: &str) -> Option<String> {
 }
 
 pub fn check_script_environment(script: &WorkflowScriptConfig) -> Result<ScriptEnvironmentStatus> {
+    if script.path.is_some() {
+        fingerprint(script)?;
+    }
     match script.runtime {
         ScriptRuntime::Js => {
-            let binary = script.interpreter.as_deref().unwrap_or("node");
+            let Some(binary) = script.interpreter.as_deref() else {
+                return Ok(ScriptEnvironmentStatus {
+                    available: false, runtime: ScriptRuntime::Js, executable_path: None,
+                    version: None, missing_modules: vec![],
+                    message: Some("Setup required: select an absolute path to a Node.js executable (Node.js 18 or newer). No runtime is downloaded or selected implicitly.".into()),
+                });
+            };
+            if !std::path::Path::new(binary).is_absolute() {
+                return Ok(ScriptEnvironmentStatus {
+                    available: false, runtime: ScriptRuntime::Js, executable_path: None,
+                    version: None, missing_modules: vec![],
+                    message: Some("Setup required: choose the absolute path to Node.js; a shell command such as node depends on the developer PATH.".into()),
+                });
+            }
             let output = std::process::Command::new(binary).arg("--version").output();
             match output {
                 Ok(out) if out.status.success() => {
                     let version_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
                     let exec_path =
                         resolve_executable_path(binary).or_else(|| Some(binary.to_string()));
+                    let supported = version_str
+                        .strip_prefix('v')
+                        .and_then(|version| version.split('.').next())
+                        .and_then(|major| major.parse::<u32>().ok())
+                        .is_some_and(|major| major >= 18);
                     Ok(ScriptEnvironmentStatus {
-                        available: true,
+                        available: supported,
                         runtime: ScriptRuntime::Js,
                         executable_path: exec_path,
                         version: Some(version_str),
                         missing_modules: Vec::new(),
-                        message: None,
+                        message: (!supported).then(|| "Select Node.js 18 or newer; the configured executable did not report a supported Node.js version.".into()),
                     })
                 }
                 Ok(out) => {
@@ -434,7 +458,7 @@ mod tests {
     use super::*;
     use crate::db::sources::{CreateSourceInput, SourcesRepo, UpdateSourceInput};
     fn input(code: &str) -> CreateSourceInput {
-        serde_json::from_value(serde_json::json!({"kind":"selector","name":"Script fixture","identifier":"https://fixture.test/jobs","enabled":true,"cadence":"daily","config":{"url":"https://fixture.test/jobs","mode":"script","script":{"runtime":"js","code":code}}})).unwrap()
+        serde_json::from_value(serde_json::json!({"kind":"selector","name":"Script fixture","identifier":"https://fixture.test/jobs","enabled":true,"cadence":"daily","config":{"url":"https://fixture.test/jobs","mode":"script","script":{"runtime":"js","interpreter":resolve_executable_path("node").expect("Node.js fixture runtime"),"code":code}}})).unwrap()
     }
     fn update(id: &str, config: Value) -> UpdateSourceInput {
         serde_json::from_value(serde_json::json!({"id":id,"config":config,"enabled":true})).unwrap()
@@ -696,6 +720,35 @@ mod tests {
         .await
         .is_err());
         pool.close().await;
+    }
+
+    #[test]
+    fn portable_script_setup_never_uses_a_shell_runtime_or_relative_file() {
+        let mut script: WorkflowScriptConfig =
+            serde_json::from_value(serde_json::json!({"runtime":"js","code":"fixture"})).unwrap();
+        let missing = check_script_environment(&script).unwrap();
+        assert!(!missing.available);
+        assert!(missing.message.unwrap().contains("absolute path"));
+        script.interpreter = Some("node".into());
+        assert!(!check_script_environment(&script).unwrap().available);
+        script.interpreter = Some("/nonexistent/scrape-fixture-node".into());
+        let missing = check_script_environment(&script).unwrap();
+        assert!(!missing.available);
+        assert!(missing
+            .message
+            .unwrap()
+            .contains("not found or not executable"));
+        script.path = Some("repo/extractor.js".into());
+        script.code = None;
+        assert!(fingerprint(&script)
+            .unwrap_err()
+            .to_string()
+            .contains("absolute path"));
+        script.path = Some("/nonexistent/scrape-fixture-script.js".into());
+        assert!(fingerprint(&script)
+            .unwrap_err()
+            .to_string()
+            .contains("script.path"));
     }
 
     #[test]

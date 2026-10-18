@@ -1,69 +1,49 @@
-# ==============================================================================
-# SCRAPE SAMPLE WORKFLOW: Google & Apple Multi-Source Static Selectors
-# Target: Google and Apple Careers
-# Spec Version: 6 (Multi-source, structured matching, fair budget)
-# ==============================================================================
-
+# Generated from Rust template catalog v1. Do not edit.
+# Static selector example, disabled for review. Google URL resolution and Apple selectors/pagination still need verification; this is not verified full-site ingestion.
 version: 6
-
+max_jobs_per_run: 20
 metadata:
-  name: "Google & Apple — Core Software & ML Engineering"
-  company: "BigTech"
-  enabled: true
-
+  name: Google & Apple — Static extraction example (Needs review)
+  company: BigTech
+  enabled: false
 sources:
-  - id: "google"
-    label: "Google Careers"
-    enabled: true
-    employer_hint: "Google"
+  - id: google
+    label: Google Careers
+    enabled: false
+    employer_hint: Google
     extractor:
       kind: selector
+      url: https://www.google.com/about/careers/applications/jobs/results/
+      job_container: li.lLd3Je
+      title_selector: h3.QJPWVe
+      url_selector: a[href*="jobs/results/"]
+      location_selector: span.r0wTof
       mode: static
-      url: "https://www.google.com/about/careers/applications/jobs/results/"
-      job_container: "li.lLd3Je"
-      title_selector: "h3.QJPWVe"
-      url_selector: "a[href*=\"jobs/results/\"]"
-      location_selector: "span.r0wTof"
-  - id: "apple"
-    label: "Apple Jobs"
-    enabled: true
-    employer_hint: "Apple"
+  - id: apple
+    label: Apple Jobs
+    enabled: false
+    employer_hint: Apple
     extractor:
       kind: selector
+      url: https://jobs.apple.com/en-us/search
+      job_container: ul#search-job-list > li.rc-accordion-item
+      title_selector: h3 a.link-inline
+      url_selector: a.link-inline
+      location_selector: span.table--advanced-search__location-sub
+      date_selector: span.job-posted-date
       mode: static
-      url: "https://jobs.apple.com/en-us/search"
-      job_container: "ul#search-job-list > li.rc-accordion-item"
-      title_selector: "h3 a.link-inline"
-      url_selector: "a.link-inline"
-      location_selector: "span.table--advanced-search__location-sub"
-      date_selector: "span.job-posted-date"
-
 schedule:
   cadence: daily
-  time: "09:00"
-  cron: "0 0 9 * * *"
-
+  time: 09:00
+  cron: 0 0 9 * * *
+  timezone: UTC
+  run_on_startup: false
 filters:
+  role_types: []
+  include_keywords: []
+  exclude_keywords: []
+  locations: []
   matching:
-    role_types:
-      - full_time
-      - internship
-    workplaces:
-      - hybrid
-      - onsite
-    countries:
-      - US
-    regions:
-      - US-CA
-      - US-WA
-      - US-NY
-      - US-TX
-    cities:
-      - Mountain View
-      - Cupertino
-      - Seattle
-      - New York
-      - Austin
     keywords:
       any:
         - Software
@@ -75,7 +55,21 @@ filters:
       exclude: []
       fields:
         - title
-
+    posting_date: null
+    compensation: null
+    role_types: []
+    workplaces: []
+    experience_min: null
+    experience_max: null
+    experience_include_unknown: false
+    new_grad: null
+    sponsorship: []
+    work_auth: []
+    clearance: []
+    countries: []
+    regions: []
+    cities: []
+    location_include_unknown: false
 retention:
   days: 30
   policy: untracked_only
