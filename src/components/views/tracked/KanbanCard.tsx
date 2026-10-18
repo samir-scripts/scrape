@@ -17,7 +17,7 @@ export function KanbanCard({ job, title, actions, children, footer, id, selected
   placeholder?: boolean;
   preview?: boolean;
 }) {
-  const accent = STATUS_CONFIG[job.status]?.stageAccent;
+  const accent = job.status === "interviewing" ? "var(--color-stage-accent-interviewing)" : STATUS_CONFIG[job.status]?.stageAccent;
   return <article id={id} aria-hidden={preview || undefined}
     className={`border border-l-4 p-4 grid gap-3 select-text bg-[var(--color-kanban-card)] ${selected ? "outline outline-2 outline-[var(--color-focus)] outline-offset-[-2px]" : ""} ${placeholder ? "opacity-25 border-dashed" : ""} ${preview ? "pointer-events-none outline outline-2 outline-[var(--color-ink)]" : ""}`}
     style={{ borderLeftColor: accent, ...(preview ? { backgroundColor: "var(--color-kanban-card)" } : {}) } as CSSProperties}>

@@ -51,11 +51,18 @@ export function KanbanColumn({
       aria-label={`${config.label} stage`}
       className={`flex flex-col h-full overflow-hidden border border-[var(--color-ink-mute)] bg-[var(--color-kanban-column)] ${isOver ? "outline outline-2 outline-[var(--color-focus)] outline-offset-[-2px]" : ""}`}
     >
-      <header style={{ borderBottomColor: config.stageAccent }} className="min-h-12 shrink-0 px-4 py-3 border-b-2 bg-[var(--color-kanban-column)] flex items-center justify-between gap-2">
-        <h3 className="font-bold text-sm normal-case">
-          {config.label.toLowerCase()}
-        </h3>
-        <span className="text-xs" aria-live="polite">{isOver ? `${dropPending ? "Saving in" : "Drop in"} ${config.label.toLowerCase()}` : `${jobs.length} loaded`}</span>
+      <header className="min-h-12 shrink-0 px-4 py-3 border-b border-[var(--color-ink-mute)] bg-[var(--color-surface-raised)] flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span
+            className="w-2.5 h-2.5 border border-[var(--color-ink)] shrink-0"
+            style={{ backgroundColor: config.bg }}
+            aria-hidden="true"
+          />
+          <h3 className="font-bold text-sm normal-case">
+            {config.label.toLowerCase()}
+          </h3>
+        </div>
+        <span className="text-xs text-[var(--color-ink-mute)]" aria-live="polite">{isOver ? `${dropPending ? "Saving in" : "Drop in"} ${config.label.toLowerCase()}` : `${jobs.length} loaded`}</span>
       </header>
       <div data-stage-scroll className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
         {!jobs.length ? (

@@ -14,6 +14,7 @@
   --color-unread: #7566BA;
   --color-stage-applied: var(--palette-lavender);
   --color-stage-interviewing: var(--palette-cream);
+  --color-stage-accent-interviewing: var(--palette-ink);
   --color-stage-offer: var(--palette-lime);
   --color-stage-rejected: var(--palette-cherry);
   --color-stage-label: var(--palette-ink);
@@ -76,6 +77,7 @@
   --color-unread: #C6C2F2;
   --color-stage-applied: #9E95EA;
   --color-stage-interviewing: #E4C891;
+  --color-stage-accent-interviewing: #E4C891;
   --color-stage-offer: #BBD05D;
   --color-stage-rejected: #E87585;
   --color-stage-label: #1A1A1A;

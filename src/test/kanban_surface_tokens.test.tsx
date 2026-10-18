@@ -6,7 +6,10 @@ import { SystemSettings } from "../components/views/settings/SystemSettings";
 import { KanbanBoard } from "../components/views/tracked/KanbanBoard";
 import { KanbanColumn } from "../components/views/tracked/KanbanColumn";
 import { KanbanCard, KanbanCardPreview } from "../components/views/tracked/KanbanCard";
-import { DEFAULT_SETTINGS } from "../lib/api";
+import { api, DEFAULT_SETTINGS } from "../lib/api";
+import { useUIStore } from "../lib/store";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import App from "../App";
 import { recordedJobs } from "../lib/recordedJobs";
 import { useState } from "react";
 import type { Job } from "../bindings/Job";
@@ -92,7 +95,7 @@ describe("Section 8: Regional Settings and Kanban Surface Contracts", () => {
     ).toBeNull();
   });
 
-  it("renders KanbanColumn using semantic column surface and concise 'No jobs on this page.' empty state", () => {
+  it("renders KanbanColumn using raised header surface, structural 1px border, and concise 'No jobs on this page.' empty state", () => {
     const { container } = render(
       <KanbanColumn
         status="interviewing"
@@ -111,6 +114,18 @@ describe("Section 8: Regional Settings and Kanban Surface Contracts", () => {
     expect(section).toBeTruthy();
     expect(section?.className).toContain("bg-[var(--color-kanban-column)]");
 
+    // Header surface should be raised for clear contrast against column/board
+    const header = container.querySelector("header");
+    expect(header).toBeTruthy();
+    expect(header?.className).toContain("bg-[var(--color-surface-raised)]");
+    expect(header?.className).toContain("border-b");
+    expect(header?.className).toContain("border-[var(--color-ink-mute)]");
+
+    // Header should contain ink-bordered stage swatch
+    const swatch = header?.querySelector("span[aria-hidden='true']");
+    expect(swatch).toBeTruthy();
+    expect(swatch?.className).toContain("border-[var(--color-ink)]");
+
     // Header count shows 0 loaded
     expect(screen.getByText("0 loaded")).toBeTruthy();
 
@@ -121,10 +136,10 @@ describe("Section 8: Regional Settings and Kanban Surface Contracts", () => {
     ).toBeNull();
   });
 
-  it("renders KanbanCard with semantic card surface and drag preview with shared Tag", () => {
+  it("renders KanbanCard with semantic card surface, interviewing accent, and drag preview with shared Tag", () => {
     const { container } = render(
       <KanbanCard
-        job={sampleJob}
+        job={{ ...sampleJob, status: "interviewing" }}
         title={<span>{sampleJob.title}</span>}
       />
     );
@@ -132,6 +147,7 @@ describe("Section 8: Regional Settings and Kanban Surface Contracts", () => {
     const card = container.querySelector("article");
     expect(card).toBeTruthy();
     expect(card?.className).toContain("bg-[var(--color-kanban-card)]");
+    expect(card?.style.borderLeftColor).toBe("var(--color-stage-accent-interviewing)");
 
     // Card preview should use shared Tag component
     cleanup();
@@ -141,5 +157,37 @@ describe("Section 8: Regional Settings and Kanban Surface Contracts", () => {
     // Shared Tag renders uppercase label in a font-mono tag with border
     expect(screen.getByText("APPLIED")).toBeTruthy();
     expect(screen.getByText("Move to")).toBeTruthy();
+  });
+
+  it("hides JobPaginator on Tracked Kanban board and displays it on Tracked List", async () => {
+    useUIStore.setState({ view: "tracked", trackedViewMode: "kanban" });
+    vi.spyOn(api, "getSettings").mockResolvedValue({ ...DEFAULT_SETTINGS, app_auto_update: false });
+    vi.spyOn(api, "listJobs").mockImplementation(async (filter) => {
+      if (filter?.limit === 1) return { items: [], total: 0n, limit: 1n, offset: 0n };
+      return { items: [], total: 0n, limit: 200n, offset: 0n };
+    });
+    vi.spyOn(api, "countUnreadNotifications").mockResolvedValue(0);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const user = userEvent.setup();
+
+    render(
+      <QueryClientProvider client={client}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    // Wait for boot sequence to finish and Kanban board to appear
+    await screen.findByRole("region", { name: "APPLIED stage" });
+
+    // In Kanban mode, the bottom JobPaginator navigation should NOT be present
+    expect(screen.queryByRole("navigation", { name: "Job pagination" })).toBeNull();
+    expect(screen.queryByText(/0-0 OF 0/i)).toBeNull();
+
+    // Switch to List mode via SubNav button
+    const listBtn = screen.getByRole("button", { name: "LIST" });
+    await user.click(listBtn);
+
+    // In List mode, JobPaginator should be mounted
+    expect(await screen.findByRole("navigation", { name: "Job pagination" })).toBeTruthy();
   });
 });

@@ -52,13 +52,15 @@ export default function App() {
     };
   }, [queryClient]);
 
+  const trackedViewMode = useUIStore(state => state.trackedViewMode);
+  const isKanban = view === "tracked" && trackedViewMode === "kanban";
   const dataRevision = useUIStore(state => state.dataRevision);
-  const pageKey = JSON.stringify({ view, filterSpec, dataRevision });
+  const pageKey = JSON.stringify({ view, filterSpec, dataRevision, trackedViewMode });
   const [pageState, setPageState] = useState({ key: pageKey, page: 1 });
   const page = pageState.key === pageKey ? pageState.page : 1;
   if (pageState.key !== pageKey) setPageState({ key: pageKey, page: 1 });
-  const pageSize = 50;
-  const offset = pagination(undefined, page, pageSize).offset;
+  const pageSize = isKanban ? 200 : 50;
+  const offset = isKanban ? 0 : pagination(undefined, page, pageSize).offset;
   useLayoutEffect(() => {
     useUIStore.setState({ selectedJobId: null, drawerJobId: null, selectedJobIds: [] });
   }, [pageKey, page]);
@@ -395,7 +397,7 @@ export default function App() {
         />
       )}
 
-      {(view === "discovered" || view === "tracked") && <JobPaginator page={page} pageSize={pageSize} total={total} busy={jobsFetching} onPageChange={requested => setPageState({ key: pageKey, page: requested })} />}
+      {(view === "discovered" || (view === "tracked" && trackedViewMode === "list")) && <JobPaginator page={page} pageSize={pageSize} total={total} busy={jobsFetching} onPageChange={requested => setPageState({ key: pageKey, page: requested })} />}
 
       {view === "metrics" && <MetricsView />}
 

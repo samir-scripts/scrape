@@ -997,17 +997,23 @@ Implemented behavior:
 3. **Shared Semantic Stage Accents & Tokens**:
    - Applied lavender (`#C6C2F2`), Interviewing cream with ink boundary (`#FFF6EE` bg with ink border), Offer lime (`#D6DC82`), Rejected cherry (`#D86072`).
    - Drag preview (`KanbanCardPreview` in `KanbanCard.tsx`) updated to render the shared `<Tag status={job.status} />` component, ensuring uniform stage accents across tags, list, inspector, and drag preview.
-4. **Concise Page-Scope Messaging**:
+4. **Concise Page-Scope Messaging & Paginator Scoping**:
    - Removed repeated page-scope paragraphs from `KanbanBoard` (`Showing applications on this page. Stage counts describe loaded jobs.`).
+   - Scoped `JobPaginator` in `App.tsx` to render strictly on `discovered` or `tracked (list)` view modes, completely removing the awkward "0-0 OF 0" bottom table bar from `KanbanBoard`.
+   - Raised Kanban query capacity to 200 items (`pageSize: 200, offset: 0`) so users see all active tracked applications across stages without arbitrary pagination boundaries.
    - Preserved concise `{jobs.length} loaded` indicators in column headers (`KanbanColumn.tsx`).
    - Simplified empty column messaging to `"No jobs on this page."` (`KanbanColumn.tsx`).
-5. **Accessible Contracts & Contrast Verification**:
+5. **Theme-Friendly Kanban Column Header & Card Surface Enhancements**:
+   - Column header upgraded to raised surface `bg-[var(--color-surface-raised)]` (`#E6E2C8` on Paper, `#36363a` on Obsidian) with a crisp 1px structural divider `border-b border-[var(--color-ink-mute)]`.
+   - Replaced washed-out pastel lines with an authentic stage indicator swatch square with a 1px ink border (`border border-[var(--color-ink)]`) next to each stage title, ensuring high contrast in light mode (including cream `#FFF6EE`).
+   - Added `--color-stage-accent-interviewing` (`var(--palette-ink)` on Paper, `#E4C891` on Obsidian) so interviewing cards have a clearly visible 4px left accent border on cream card surfaces.
+6. **Accessible Contracts & Contrast Verification**:
    - All text surfaces maintain >= 4.5:1 text contrast against rendered card/column/board backgrounds in both Paper and Obsidian themes.
    - Focus rings and interactive controls maintain >= 3:1 contrast.
    - Full WAI keyboard movement, selection, screen-reader instructions, and 200% browser zoom operability verified.
-   - Expanded `src/test/theme_contrast.test.ts` (44 assertions) and authored `src/test/kanban_surface_tokens.test.tsx` (4 assertions).
-6. **Reviewed Visual QA Artifacts**:
-   - `plans/assets/11-kanban-review/kanban-paper.png`: Paper theme Kanban board showing Paper surfaces, cream cards, stage accents, and concise headers.
+   - Expanded `src/test/theme_contrast.test.ts` (44 assertions) and authored `src/test/kanban_surface_tokens.test.tsx` (5 assertions).
+7. **Reviewed Visual QA Artifacts**:
+   - `plans/assets/11-kanban-review/kanban-paper.png`: Paper theme Kanban board showing Paper surfaces, raised header surfaces with ink-bordered stage swatches, cream cards, stage accents, concise headers, and clean board layout without bottom table paginator.
    - `plans/assets/11-kanban-review/kanban-obsidian.png`: Obsidian theme Kanban board showing dark surfaces, elevated cards, and high-contrast stage tags.
 
 Verification actually run in this workspace:
@@ -1018,12 +1024,12 @@ Verification actually run in this workspace:
 - `cargo test -p scrape --test worker_repository`: **12 passed / 0 failed** in 1.17s.
 - `npm run gen:types && git diff --exit-code src/bindings`: passed with 0 drift.
 - `npx tsc --noEmit`: passed with 0 errors.
-- `npm test` (`vitest run && node scripts/test-app-startup.mjs`): **496 passed across 79 test files** in 12.60s + Vite dev server startup smoke clean.
-- `npm run build`: passed (Vite production bundle built in 4.98s).
+- `npm test` (`vitest run && node scripts/test-app-startup.mjs`): **497 passed across 79 test files** in 10.51s + Vite dev server startup smoke clean.
+- `npm run build`: passed (Vite production bundle built in 5.41s).
 - `node scripts/check-style.mjs`: passed (Production style guard passed, 0 violations).
 - `git diff --check`: passed with zero whitespace or line ending issues.
-- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/kanban.pw.ts`: **2 passed / 0 failed** in 11.2s (paper and obsidian pointer journeys, 0 contrast failures, review screenshots saved to `plans/assets/11-kanban-review/`).
-- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/themed-selects.pw.ts`: **4 passed / 0 failed** in 10.9s (paper 480px/1280px, obsidian 480px/1280px with both Date and Time format selects).
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/kanban.pw.ts`: **2 passed / 0 failed** in 8.3s (paper and obsidian pointer journeys, 0 contrast failures, review screenshots saved to `plans/assets/11-kanban-review/`).
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/job-layout.pw.ts e2e/themed-selects.pw.ts`: **9 passed / 0 failed** in 15.3s.
 - `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/zoom.pw.ts`: **1 passed / 0 failed** in 10.8s (both themes operable at actual 200% browser zoom).
 - `npm run test:providers`: **8 checks / 0 errors** (SEP/Lever: 8 verified; Linear/Ashby: 31 verified; Bitwarden/Greenhouse: 39 verified; Google/Selector: 20 verified; Apple/Selector: 20 verified; Netflix/Script: 10 verified; Amazon/Script: 10 verified; Meta: 0 verified, client SPA shell verified).
 - `cargo build -p scrape && npm run test:native`: passed (native artifacts: `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-az1RYr`).
