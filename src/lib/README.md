@@ -52,3 +52,9 @@ Plan 12 section 2 adds generated `SeedWorkflowReport` IPC results. The seed UI
 reports created, retained and needs-review workflows. Script review uses the
 owned child's saved configuration/fingerprint; aggregate parent review retains
 the validated multi-source draft. Existing raw/invalid originals remain guarded.
+
+Workflow compatibility is resolved by Rust. `yamlWorkflow.ts` serializes/parses
+supported configuration without migrating legacy matching into structured rules.
+`api.describeWorkflowFilters` returns generated `FilterCompatibilityRestriction`
+entries from desktop IPC; browser demonstrations preserve restrictions and report
+that authoritative explanations require desktop, rather than implementing a copy.

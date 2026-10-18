@@ -15,8 +15,6 @@ export type { WorkflowExtractor } from "../bindings/WorkflowExtractor";
 export type { WorkflowSchedule } from "../bindings/WorkflowSchedule";
 export type { WorkflowFilters } from "../bindings/WorkflowFilters";
 export type { WorkflowRetention } from "../bindings/WorkflowRetention";
-import type { PostingRules } from "../bindings/PostingRules";
-import type { WorkflowFilters } from "../bindings/WorkflowFilters";
 
 export const SAMPLE_SWE_INTERNSHIP_YAML = `version: 2
 metadata:
@@ -978,93 +976,6 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
       days: Number(source.retention_days),
       policy: source.retention_policy,
     },
-  };
-}
-
-export function normalizeLegacyWorkflowFilters(rawFilters: Record<string, any>): WorkflowFilters {
-  const matching: PostingRules = {
-    keywords: null,
-    posting_date: null,
-    compensation: null,
-    role_types: [],
-    workplaces: [],
-    experience_min: null,
-    experience_max: null,
-    experience_include_unknown: false,
-    new_grad: null,
-    sponsorship: [],
-    work_auth: [],
-    clearance: [],
-    countries: [],
-    regions: [],
-    cities: [],
-    location_include_unknown: false,
-    ...(rawFilters.matching || {}),
-  };
-  matching.keywords = matching.keywords ? { ...matching.keywords } : null;
-  matching.countries = [...(matching.countries || [])];
-  matching.regions = [...(matching.regions || [])];
-  matching.cities = [...(matching.cities || [])];
-  matching.workplaces = [...(matching.workplaces || [])];
-  matching.role_types = [...(matching.role_types || [])];
-
-  if (Array.isArray(rawFilters.include_keywords) && rawFilters.include_keywords.length > 0) {
-    if (!matching.keywords) {
-      matching.keywords = { any: [], all: [], exclude: [], fields: ["title"] };
-    }
-    for (const kw of rawFilters.include_keywords) {
-      if (kw && typeof kw === "string" && !matching.keywords.any.includes(kw.trim())) {
-        matching.keywords.any.push(kw.trim());
-      }
-    }
-  }
-  if (Array.isArray(rawFilters.exclude_keywords) && rawFilters.exclude_keywords.length > 0) {
-    if (!matching.keywords) {
-      matching.keywords = { any: [], all: [], exclude: [], fields: ["title"] };
-    }
-    for (const kw of rawFilters.exclude_keywords) {
-      if (kw && typeof kw === "string" && !matching.keywords.exclude.includes(kw.trim())) {
-        matching.keywords.exclude.push(kw.trim());
-      }
-    }
-  }
-  if (Array.isArray(rawFilters.role_types)) {
-    for (const rt of rawFilters.role_types) {
-      if (rt && !matching.role_types.includes(rt)) {
-        matching.role_types.push(rt);
-      }
-    }
-  }
-  if (Array.isArray(rawFilters.locations)) {
-    for (const loc of rawFilters.locations) {
-      if (!loc || typeof loc !== "string") continue;
-      const lower = loc.trim().toLowerCase();
-      if (["remote", "telecommute", "virtual"].includes(lower)) {
-        if (!matching.workplaces.includes("remote")) matching.workplaces.push("remote");
-      } else if (["hybrid"].includes(lower)) {
-        if (!matching.workplaces.includes("hybrid")) matching.workplaces.push("hybrid");
-      } else if (["onsite", "on-site", "in-office", "in office", "in-person"].includes(lower)) {
-        if (!matching.workplaces.includes("onsite")) matching.workplaces.push("onsite");
-      } else {
-        const clean = loc.trim();
-        if (!matching.cities.includes(clean)) {
-          matching.cities.push(clean);
-        }
-      }
-    }
-  }
-  const isDefaultQuery =
-    rawFilters.query === "title LIKE '%Engineer%' OR title LIKE '%Developer%' OR title LIKE '%Intern%'" ||
-    rawFilters.query === "title LIKE '%Engineer%' OR title LIKE '%Intern%'";
-
-  return {
-    ...rawFilters,
-    matching,
-    query: isDefaultQuery ? undefined : rawFilters.query,
-    include_keywords: [],
-    exclude_keywords: [],
-    locations: [],
-    role_types: [],
   };
 }
 

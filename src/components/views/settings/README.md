@@ -27,7 +27,7 @@ overlapping examples in previews and saved run details.
 
 Matching includes Maximum matching jobs per run: default 20, positive whole numbers up to 10,000, preserved through YAML/edit/reopen. Changing any limit draft invalidates preview; invalid text prevents continuing or previewing. Review explains the run/preview caps. `JobLimitInput` and other consumers use constants generated from Rust by `export_bindings_ingestion_limits`. Preview accepts at most 10 (or the lower configured limit) and labels partial coverage. Existing records refreshed by a run count toward the limit; saved jobs are not removed by changing it.
 
-`GeographyMatching` uses the generated Rust catalog for country/subdivision search and the same `PostingRules` draft as YAML and execution. Enter or blur commits a known name/code; Escape restores a search draft. Any input edit invalidates preview and invalid text blocks continuation. Changing country clears incompatible subdivisions; imported multiple-country rules remain visible and intact until explicitly changed. Workplace choices are multi-select in Simple mode. Unknown geography is opt-in. Advanced contains additional location text restrictions and optional raw geography codes. The catalog is complete for US states/DC, Canadian provinces/territories, UK constituent countries and Australian states/territories; other subdivision coverage is explicitly bounded in the catalog README.
+`GeographyMatching` uses the generated Rust catalog for country/subdivision search and the same `PostingRules` draft as YAML and execution. Enter or blur commits a known name/code; Escape restores a search draft. Any input edit invalidates preview and invalid text blocks continuation. Changing country clears incompatible subdivisions; imported multiple-country rules remain visible and intact until explicitly changed. Workplace choices are multi-select in Simple mode. Unknown geography is opt-in. Active legacy location text restrictions are always visible in `CompatibilityFilters`; Advanced retains optional raw geography codes. The catalog is complete for US states/DC, Canadian provinces/territories, UK constituent countries and Australian states/territories; other subdivision coverage is explicitly bounded in the catalog README.
 
 `RemovedJobsSettings` searches and paginates removed and blocked postings. Restore
 restores saved state and clears suppression atomically; Unblock permits later
@@ -92,3 +92,12 @@ dialog. Native checks use temporary profiles and never the user's active databas
 The page also reports the last automatic retention outcome. Three consecutive
 failures show an actionable warning; routine cleanup records failures and defers
 while another coordinated write is active.
+
+`CompatibilityFilters` shows saved legacy include/exclude/location chips, role types,
+expert query/policy and native compensation alongside structured rules. It fetches
+explanations through `describe_workflow_filters`, generated from Rust's domain
+contract, and never infers a conversion. Explicit edits/removals invalidate preview;
+multiple unfinished legacy inputs flush through the shared keyword event using
+functional draft updates. Individual legacy roles/compensation can be edited in YAML.
+Malformed policy drafts are retained for authoritative validation, not silently
+replaced with the last valid policy. No migration button unions groups or clears SQL.

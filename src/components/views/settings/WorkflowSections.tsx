@@ -1,3 +1,4 @@
+import { CompatibilityFilters } from "./CompatibilityFilters";
 import type { WorkflowDraftChange } from "../../../hooks/useWorkflowDraft";
 import { KeywordMatching } from "./KeywordMatching";
 import { GeographyMatching } from "./GeographyMatching";
@@ -13,7 +14,7 @@ import { JobLimitInput } from "./JobLimitInput";
 import { CustomExtractorConfig } from "./CustomExtractorConfig";
 import type { Source } from "../../../bindings/Source";
 import { api } from "../../../lib/api";
-import { canonicalizeAtsUrl, normalizedEndpoint, SAMPLE_WORKFLOW_TEMPLATES, normalizeLegacyWorkflowFilters } from "../../../lib/yamlWorkflow";
+import { canonicalizeAtsUrl, normalizedEndpoint, SAMPLE_WORKFLOW_TEMPLATES } from "../../../lib/yamlWorkflow";
 
 export const emptyRules = (): PostingRules => ({
   keywords: null,
@@ -393,44 +394,7 @@ export function WorkflowSections({
     return (
       <div className="grid gap-3">
         <JobLimitInput value={draft.max_jobs_per_run ?? INGESTION_LIMITS.default} onChange={value => change(value == null ? { ...draft } : { ...draft, max_jobs_per_run: value })} />
-        {filters.query && (
-          <div role="alert" className="border border-[var(--color-warning)] p-3 grid gap-2 bg-[var(--color-paper)]">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-bold text-xs text-[var(--color-warning)] uppercase tracking-wider">Expert SQL Query Active</span>
-              <Button size="sm" type="button" onClick={() => change({ ...draft, filters: { ...filters, query: undefined } })}>
-                Clear query
-              </Button>
-            </div>
-            <p className="text-xs text-[var(--color-ink-mute)] font-code break-all">
-              {filters.query}
-            </p>
-            <p className="text-xs text-[var(--color-ink-mute)]">
-              Notice: This raw SQL query restricts scraping results in addition to the structured rules below. Clear it if you want only structured matching.
-            </p>
-          </div>
-        )}
-        {(filters.locations?.length || filters.include_keywords?.length || filters.exclude_keywords?.length || filters.role_types?.length) ? (
-          <div role="status" className="border border-[var(--color-warning)] p-3 grid gap-2 bg-[var(--color-paper)]">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-bold text-xs text-[var(--color-warning)] uppercase tracking-wider">Legacy Filters Detected</span>
-              <Button
-                size="sm"
-                type="button"
-                onClick={() => {
-                  change({
-                    ...draft,
-                    filters: normalizeLegacyWorkflowFilters((draft.filters || {}) as any),
-                  });
-                }}
-              >
-                Migrate to structured rules
-              </Button>
-            </div>
-            <p className="text-xs text-[var(--color-ink-mute)]">
-              This workflow contains legacy keyword, location, or role filters that run in combination with structured rules. Click above to migrate them into primary rules and clear the legacy restrictions.
-            </p>
-          </div>
-        ) : null}
+        <CompatibilityFilters draft={draft} change={change} advanced={advanced} />
         <KeywordMatching rules={rules} change={change} />
         <fieldset className="flex flex-wrap gap-4 border-t pt-3 text-sm">
           <legend className="font-bold mb-1">Role types</legend>
@@ -462,15 +426,6 @@ export function WorkflowSections({
           Leave all unchecked to match any role type.
         </p>
         <GeographyMatching rules={rules} onChange={setRules} onDraftChange={() => change({ ...draft })} />
-        {advanced && field(
-          "Location matches (additional text restriction)",
-          filters.locations?.join(", ") || "",
-          (value) =>
-            change({
-              ...draft,
-              filters: { ...filters, locations: words(value) },
-            }),
-        )}
         {advanced && (
           <>
             <SalaryRangeFilter
@@ -671,12 +626,6 @@ export function WorkflowSections({
             {field("Eligible countries (ISO codes)", rules.countries.join(", "), value => setRules({ countries: words(value).map(code => code.toUpperCase()) }))}
             {field("Eligible regions (ISO codes)", rules.regions.join(", "), value => setRules({ regions: words(value).map(code => code.toUpperCase()) }))}
             </details>
-            {field("Expert query", filters.query || "", (query) =>
-              change({
-                ...draft,
-                filters: { ...filters, query: query || undefined },
-              }),
-            )}
           </>
         )}
       </div>

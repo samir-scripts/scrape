@@ -1,3 +1,5 @@
+import type { FilterCompatibilityRestriction } from "../bindings/FilterCompatibilityRestriction";
+import type { WorkflowFilters } from "../bindings/WorkflowFilters";
 import type { SeedWorkflowReport } from "../bindings/SeedWorkflowReport";
 import { INGESTION_LIMITS } from "../bindings/ingestionLimits";
 import { errorMessage } from "./errors";
@@ -1199,6 +1201,10 @@ const apiImplementation = {
     const identifier = kind === "jsonld" ? url : parsed.pathname.split("/").filter(Boolean)[0];
     if (!identifier) throw new Error("The URL must identify a board. Advanced supports custom selectors.");
     return { kind, identifier, name: kind === "jsonld" ? parsed.hostname : identifier };
+  },
+  describeWorkflowFilters: async (filters: WorkflowFilters): Promise<FilterCompatibilityRestriction[]> => {
+    if (!isTauri()) throw new Error("Compatibility explanations require the desktop validator. Restrictions remain preserved; edit them directly or in YAML.");
+    return invoke("describe_workflow_filters", { filters });
   },
   validateWorkflow: async (spec: unknown): Promise<WorkflowSpec> => {
     if (isTauri()) return invoke("validate_workflow", { spec });
