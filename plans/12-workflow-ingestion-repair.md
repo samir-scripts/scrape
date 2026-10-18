@@ -1,6 +1,6 @@
 # Workflow ingestion repair — implementation handoff for GPT-6.1 Sol
 
-Status: **Sections 1–4 implemented; Section 5 template catalog/defaults is next.** Section 4 commits: evidence/parity `621d495`, generated script protocol-2 contracts `2e06cc8`, explicit country context `2e4e426`, contextual diagnostics/accounting `716fb2d`. See [implementation evidence](12-implementation-evidence.md). Sections 5–8 acceptance remains pending. Investigated 2026-10-18 at `8d8c45a`. The user requested implementation after the six new templates failed to populate Discovered.
+Status: **Sections 1–5 implemented; Section 6 site extraction/pagination/URL identity is next.** Section 5 commits: catalog/setup `6b27c35`, generated contracts `4573ec9`, editor/browser evidence `aa4c31f`. See [implementation evidence](12-implementation-evidence.md). Sections 6–8 acceptance remains pending; disabled unverified examples are not evidence of full-site ingestion. Investigated 2026-10-18 at `8d8c45a`. The user requested implementation after the six new templates failed to populate Discovered.
 
 This plan reopens plan 11 Sections 5–7 acceptance for seeded workflows, matching compatibility, and real company coverage. Earlier implementation records remain historical evidence; their broad completion/support claims do not establish working seeded workflows. Preserve plans 06–11 identity, provenance, suppression, retention, scheduling, trusted script execution, fair budgeting and protected-user-data requirements. Native acceptance from plans 08/10 remains outstanding.
 
@@ -70,6 +70,8 @@ Files: `adapters/{greenhouse,lever,ashby,selector}.rs`, `script_runner.rs`, `scr
 **Gate:** SEP structured geography can match its actual US/Indiana evidence; Toronto+Cupertino cannot satisfy Canada+Cupertino; unknown policies agree in worker and repository; completed evidence distinguishes concrete workplace from absent description. Missing required evidence produces truthful partial/rejection diagnostics.
 
 ## 5. Make built-in templates usable, consistent and honestly labelled
+
+Implemented: catalog v1 is Rust-owned and validated, with generated picker/YAML/extractor projections and CI drift checks. Six seed entries include four title-keyword-only ATS defaults and two disabled extraction examples; five restrictive examples remain explicit picker choices. Saved filters/schedules are preserved across reseeding. Embedded protocol-2 scripts require local absolute Node.js setup and explicit trust; repository files are unnecessary. Unknown employment/workplace controls and exact Review restrictions survive save/reopen. Deterministic four-ATS and seeded script fixtures, frontend and both-theme browser checks pass; actual site URL/pagination and native/live acceptance remain Section 6+ gaps.
 
 Files: `db/sources.rs`, `src/lib/yamlWorkflow.ts`, `workflows/`, template picker and Matching UI.
 

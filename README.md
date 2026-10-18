@@ -12,7 +12,11 @@ seed-service → packaged-worker → temporary-database regressions. Section 2 a
 matching constraints, exposes compatibility restrictions in the editor, and confines
 global matching inheritance to legacy imports/upgrades. Section 4 retains provider country/address evidence,
 fixes worker/SQLite geography parity, and adds typed script evidence under custom-runner
-protocol 2 (worker protocol stays 7). Template/extraction/provider/native acceptance remains open; see
+protocol 2 (worker protocol stays 7). Section 5 adds one Rust-validated template catalog,
+generated picker/YAML/extractor configurations, title-only ATS defaults, explicit Unknown
+employment/workplace choices and portable embedded script examples requiring local runtime
+setup and trust. Saved workflows are never loosened by reseeding. See [template setup](workflows/README.md).
+Extraction/provider/native acceptance remains open; see
 [Incident 28](plans/errors/28-empty-seeded-workflows.md).
 
 ---

@@ -58,3 +58,5 @@ supported configuration without migrating legacy matching into structured rules.
 `api.describeWorkflowFilters` returns generated `FilterCompatibilityRestriction`
 entries from desktop IPC; browser demonstrations preserve restrictions and report
 that authoritative explanations require desktop, rather than implementing a copy.
+
+Plan 12 Section 5 removes independent TypeScript template definitions from `yamlWorkflow.ts`: it consumes `src/generated/workflowTemplates.json` under generated Rust contracts. Run `npm run gen:templates` to refresh picker/YAML/extractor projections. Disabled workflows may contain no enabled source during review; execution still requires one. Historical demo filter/extraction settings come from the explicitly restrictive catalog example and stay visibly labelled.

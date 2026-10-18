@@ -101,3 +101,5 @@ multiple unfinished legacy inputs flush through the shared keyword event using
 functional draft updates. Individual legacy roles/compensation can be edited in YAML.
 Malformed policy drafts are retained for authoritative validation, not silently
 replaced with the last valid policy. No migration button unions groups or clears SQL.
+
+Plan 12 Section 5: the picker consumes Rust-generated catalog data and clones selected drafts. New ATS templates use title keywords only; restrictive and unverified/setup examples are labelled separately. Matching exposes Unknown employment/workplace independently of unknown location. Review renders all exact filter settings. Script examples stay disabled until local runtime setup, saved per-source trust and explicit enablement; the interpreter control requests an absolute path. See [template setup](../../../../workflows/README.md).

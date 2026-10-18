@@ -284,3 +284,9 @@ source, including requested country codes and original location text. The existi
 eligibility_incomplete warning flag distinguishes these partial-coverage diagnostics
 from optional enrichment warnings in worker summaries and host run accounting.
 All unresolved candidates remain counted even after the example bound is reached.
+
+## Built-in catalog and local script setup (Plan 12 Section 5)
+
+Catalog v1 is Rust-owned in `services/template_catalog.rs`; `npm run gen:templates` projects validated WorkflowSpec v6 JSON, picker data and YAML. Provider smoke adapters use its execution-only extractor projections. Six seed entries include four broad ATS title-keyword templates and two disabled unverified extraction examples. Five restrictive examples are picker-only. Reseeding recognizes legacy aliases/endpoints and preserves saved rules, schedules and IDs. No migration rewrites existing filters. The internship YAML is an explicitly restrictive v6 example, not the default.
+
+Bundled script code travels inline; no repository-relative path is needed. Node.js 18+ must be selected by absolute executable path before desktop execution. Missing/relative file paths cannot grant trust; absolute imported scripts and embedded code use existing fingerprints/quarantine. Runtime/interpreter edits require a new local trust decision. Worker protocol remains 7, WorkflowSpec remains 6, and custom-script protocol remains 2. Unknown employment/workplace values can be selected alongside known values; empty groups are unconstrained. Full site and native verification remain open.
