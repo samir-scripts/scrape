@@ -1,6 +1,6 @@
 # Incident 28 — Seeded workflows produce no Discovered jobs
 
-Status: **Sections 1–2 diagnostics and ownership repair implemented; matching/extraction acceptance remains open.** See [current evidence](../12-implementation-evidence.md). Recorded 2026-10-18 against `8d8c45a49faeb829e2b2d99cd6840ebbe54b243d`, branch `implementation/trustworthy-scraping`. Requested deliverable: diagnosis, research, error log, and an implementation handoff for GPT-6.1 Sol. See [Plan 12](../12-workflow-ingestion-repair.md).
+Status: **Sections 1–3 diagnostics, ownership and matching compatibility implemented; field evidence/extraction acceptance remains open.** See [current evidence](../12-implementation-evidence.md). Recorded 2026-10-18 against `8d8c45a49faeb829e2b2d99cd6840ebbe54b243d`, branch `implementation/trustworthy-scraping`. Requested deliverable: diagnosis, research, error log, and an implementation handoff for GPT-6.1 Sol. See [Plan 12](../12-workflow-ingestion-repair.md).
 
 ## Scope and confidence
 
@@ -129,3 +129,8 @@ Not run: full workspace/frontend/Clippy suite, native UI/IPC, full native runner
 ## Section 2 implementation checkpoint
 
 Migration `456e2b7` scopes endpoint uniqueness to workflow ownership. Atomic persistence/UI `b29d3a4`, generated report `68d1025`, and parent-retention/CRUD follow-up `38a362e` materialize every owned child, retain canonical IDs/history, prevent independent child scheduling and foreign reparenting, and provide disabled Save with exact per-source script trust. An explicit backed-up helper repairs missing ownership without overwriting saved filters/schedules or launching extraction. It has not been applied to user data. See [Section 2 evidence](../12-implementation-evidence.md). Matching normalization, field evidence, actual company extraction/pagination and native acceptance remain open; Section 3 is next.
+
+
+## Section 3 implementation checkpoint
+
+`95c9453` removes automatic rule rewriting in host/core, keeps independent OR/AND groups and search fields intact, and isolates legacy inheritance from modern execution. `a900efa` generates Rust compatibility descriptions; `a5e3b16` replaces the unsafe migration action with visible editable restrictions. `72ebfa7` adds both-theme browser/YAML checks and reviewed captures. All three semantic flips above have independent acceptance regressions and actual packaged-worker/persistence coverage. Full workspace 446 tests, frontend 508 tests and nine browser journeys pass; see [Section 3 evidence](../12-implementation-evidence.md) for exact commands and limits. No live database or already-lost rules were reconstructed. Field evidence/geography parity (Section 4), templates and extraction remain open.

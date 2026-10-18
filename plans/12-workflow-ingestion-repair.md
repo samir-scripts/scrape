@@ -1,6 +1,6 @@
 # Workflow ingestion repair — implementation handoff for GPT-6.1 Sol
 
-Status: **Sections 1–2 implemented; Section 3 matching compatibility is next.** Section 2 commits: migration `456e2b7`, atomic ownership/UI `b29d3a4`, generated contract `68d1025`, parent ownership follow-up `38a362e`. See [implementation evidence](12-implementation-evidence.md). Sections 3–8 acceptance remains pending. Investigated 2026-10-18 at `8d8c45a`. The user requested implementation after the six new templates failed to populate Discovered.
+Status: **Sections 1–3 implemented; Section 4 field evidence/geography parity is next.** Section 3 commits: compatibility `95c9453`, generated boundary `a900efa`, editor `a5e3b16`, browser verification `72ebfa7`. See [implementation evidence](12-implementation-evidence.md). Sections 4–8 acceptance remains pending. Investigated 2026-10-18 at `8d8c45a`. The user requested implementation after the six new templates failed to populate Discovered.
 
 This plan reopens plan 11 Sections 5–7 acceptance for seeded workflows, matching compatibility, and real company coverage. Earlier implementation records remain historical evidence; their broad completion/support claims do not establish working seeded workflows. Preserve plans 06–11 identity, provenance, suppression, retention, scheduling, trusted script execution, fair budgeting and protected-user-data requirements. Native acceptance from plans 08/10 remains outstanding.
 
@@ -41,6 +41,8 @@ Files: `commands/sources.rs`, `db/sources.rs`, `services/workflow.rs::persist`, 
 **Gate:** new Google/Apple and Netflix/Amazon seeds have both owned child rows; Google/Apple accepted candidates persist without SQLite 787; executable children can be reviewed by stored ID; running before trust still fails explicitly. Repeated seeding adds no duplicates and leaves customized filters unchanged. Multi-source save and removal preserve historical jobs.
 
 ## 3. Restore matching compatibility; eliminate three competing migrations
+
+Implemented: one non-destructive Rust compatibility resolver preserves independent groups, text fields, sample/arbitrary SQL, policy and compensation. Explicit legacy inheritance is isolated from modern workflows. Standard Matching exposes retained restrictions and Rust descriptions; the unsafe migration action is removed. All three Incident 28 flips are covered through validation and packaged-worker/persistence fixtures. No previously lost restrictions or live data were reconstructed.
 
 Files: `crates/scrape-core/src/{protocol,matching,filter}.rs`, `services/{workflow,runner}.rs`, `src/lib/yamlWorkflow.ts`, `WorkflowSections.tsx`.
 

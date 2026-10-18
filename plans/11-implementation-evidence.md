@@ -1068,3 +1068,12 @@ Populated v26 upgrade compares all historical table rows and checks preserved jo
 Actually run: rebuilt sidecar; full `cargo test --workspace` **441 tests passed**; full serial Vitest **504 tests / 79 files passed**; workspace Clippy with denied warnings, generated binding/drift, frontend build, style, Vite startup smoke, formatting and diff checks passed. No tests skipped. See [Plan 12 evidence](12-implementation-evidence.md) for commands, logs, initial regressions, code changes and limits.
 
 No user database was opened, migrated or repaired; no live provider or native GUI/IPC/startup/browser/physical acceptance was performed. Matching/evidence, templates and actual extraction coverage remain open. Next: Plan 12 Section 3.
+
+
+## Plan 12 Section 3 — Faithful matching compatibility
+
+Commits `95c9453`, `a900efa`, `a5e3b16`, `72ebfa7` remove three destructive matching conversions, preserve legacy/structured constraints independently, isolate global inheritance to historical imports/upgrades, and expose saved restrictions with Rust-owned descriptions. Explicit edits invalidate preview; no automatic migration claims lossless behavior. All three Incident 28 semantic flips pass independent acceptance regressions and eight packaged-worker Preview/Run → ingestion → Discovered scenarios.
+
+Actually run: rebuilt sidecar; workspace **446 tests**, frontend **508 tests / 81 files**, **9 Chromium journeys** (including two new compatibility/contrast/YAML tests) passed. Workspace Clippy, generated-binding drift, TypeScript/production build, style, Vite startup smoke, formatting and diff checks passed. Four new Paper/Obsidian captures at 1024/480 were visually reviewed under `plans/assets/12-matching-compatibility-review/`. [Plan 12 evidence](12-implementation-evidence.md) records commands, initial failures and sequencing correction for a Vite reload during concurrent binding generation.
+
+No native/live-provider/user-database acceptance or repair was performed. Browser controls are visibly labelled authored demonstrations; no live provider support follows from these results. Earlier unsafe saves cannot be reverse-engineered into lost rules. Field evidence/geography, templates, extraction/URLs/pagination and user-specific saved-run reproduction remain open. Next: Plan 12 Section 4.
