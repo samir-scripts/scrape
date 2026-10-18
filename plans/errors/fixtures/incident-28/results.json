@@ -1,0 +1,3171 @@
+{
+  "investigated_commit": "8d8c45a49faeb829e2b2d99cd6840ebbe54b243d",
+  "date": "2026-10-18",
+  "classification": "diagnostic probes, not application/native acceptance",
+  "live_database_accessed": false,
+  "cloudflare_capture": {
+    "url": "https://boards-api.greenhouse.io/v1/boards/cloudflare/jobs?content=true",
+    "captured_at": "2026-10-18T07:08:48.421867+00:00",
+    "sha256": "b0ed7d17fb960aa5ae6874f2f736ae23b8f0cda1e84d2c4dfc1451224a957030",
+    "storage": "/tmp/incident28-cloudflare.json (not committed; other raw captures use repository manifest)"
+  },
+  "seed_results": [
+    {
+      "children": [
+        {
+          "name": "Cloudflare",
+          "source_row_exists": true,
+          "guard_error": null,
+          "persistence_error": null
+        }
+      ],
+      "enabled": true,
+      "name": "Cloudflare \u2014 Software Engineering & Internships",
+      "needs_review": false
+    },
+    {
+      "children": [
+        {
+          "name": "Bitwarden",
+          "source_row_exists": true,
+          "guard_error": null,
+          "persistence_error": null
+        }
+      ],
+      "enabled": true,
+      "name": "Bitwarden \u2014 Remote Full-Stack & Security Engineering",
+      "needs_review": false
+    },
+    {
+      "children": [
+        {
+          "name": "Linear",
+          "source_row_exists": true,
+          "guard_error": null,
+          "persistence_error": null
+        }
+      ],
+      "enabled": true,
+      "name": "Linear \u2014 Product, Frontend & Mobile Engineering",
+      "needs_review": false
+    },
+    {
+      "children": [
+        {
+          "name": "SEP",
+          "source_row_exists": true,
+          "guard_error": null,
+          "persistence_error": null
+        }
+      ],
+      "enabled": true,
+      "name": "SEP \u2014 Software, AI & Embedded Engineering",
+      "needs_review": false
+    },
+    {
+      "children": [
+        {
+          "name": "Google",
+          "source_row_exists": false,
+          "guard_error": null,
+          "persistence_error": "Database error: error returned from database: (code: 787) FOREIGN KEY constraint failed"
+        },
+        {
+          "name": "Apple",
+          "source_row_exists": false,
+          "guard_error": null,
+          "persistence_error": "Database error: error returned from database: (code: 787) FOREIGN KEY constraint failed"
+        }
+      ],
+      "enabled": true,
+      "name": "Google & Apple \u2014 Core Software & ML Engineering",
+      "needs_review": false
+    },
+    {
+      "children": [
+        {
+          "name": "Netflix",
+          "source_row_exists": false,
+          "guard_error": "Validation error: Custom script needs local review and explicit trust before preview or execution. Save it disabled first.",
+          "persistence_error": "Database error: error returned from database: (code: 787) FOREIGN KEY constraint failed"
+        },
+        {
+          "name": "Amazon",
+          "source_row_exists": false,
+          "guard_error": "Validation error: Custom script needs local review and explicit trust before preview or execution. Save it disabled first.",
+          "persistence_error": "Database error: error returned from database: (code: 787) FOREIGN KEY constraint failed"
+        }
+      ],
+      "enabled": false,
+      "name": "Netflix & Amazon \u2014 Distributed Systems & Platform",
+      "needs_review": true
+    }
+  ],
+  "replay_results": [
+    {
+      "key": "cloudflare",
+      "variant": "unrestricted",
+      "jobs": 20,
+      "roles": {
+        "unknown": 20
+      },
+      "workplaces": {
+        "hybrid": 20
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 20,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": true,
+          "accepted": 20,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "job_limit",
+          "provider_total": 435,
+          "unresolved": 0,
+          "enrichment_warnings": 21,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 21,
+      "requests": 24
+    },
+    {
+      "key": "cloudflare",
+      "variant": "template",
+      "jobs": 3,
+      "roles": {
+        "internship": 3
+      },
+      "workplaces": {
+        "onsite": 3
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 435,
+          "matched": 3,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 3,
+          "rejected": 432,
+          "rejections": [
+            {
+              "reason": "keyword_any",
+              "count": 221
+            },
+            {
+              "reason": "role_type",
+              "count": 211
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Account Executive, FedCiv",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "keyword_exclusion",
+                "role_type",
+                "geography"
+              ]
+            },
+            {
+              "title": "Account Executive, Indonesia",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "keyword_exclusion",
+                "role_type",
+                "geography"
+              ]
+            },
+            {
+              "title": "AI Security Research & Red Team Engineer",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Associate General Counsel, Privacy Compliance",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type"
+              ]
+            },
+            {
+              "title": "Business Development Representative",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type",
+                "geography"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": 435,
+          "unresolved": 0,
+          "enrichment_warnings": 4,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 4,
+      "requests": 7
+    },
+    {
+      "key": "cloudflare",
+      "variant": "keywords",
+      "jobs": 20,
+      "roles": {
+        "unknown": 20
+      },
+      "workplaces": {
+        "hybrid": 16,
+        "onsite": 2,
+        "remote": 2
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 62,
+          "matched": 20,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": true,
+          "accepted": 20,
+          "rejected": 42,
+          "rejections": [
+            {
+              "reason": "keyword_any",
+              "count": 42
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Account Executive, FedCiv",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "keyword_exclusion"
+              ]
+            },
+            {
+              "title": "Account Executive, Indonesia",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "keyword_exclusion"
+              ]
+            },
+            {
+              "title": "Associate General Counsel, Privacy Compliance",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Business Development Representative",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Business Development Representative - Arabic Speaking",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            }
+          ],
+          "termination": "job_limit",
+          "provider_total": 435,
+          "unresolved": 0,
+          "enrichment_warnings": 21,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 21,
+      "requests": 24
+    },
+    {
+      "key": "cloudflare",
+      "variant": "role",
+      "jobs": 3,
+      "roles": {
+        "internship": 3
+      },
+      "workplaces": {
+        "onsite": 3
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 435,
+          "matched": 3,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 3,
+          "rejected": 432,
+          "rejections": [
+            {
+              "reason": "role_type",
+              "count": 432
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Account Executive, FedCiv",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Account Executive, Indonesia",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "AI Security Research & Red Team Engineer",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Associate General Counsel, Privacy Compliance",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Business Development Representative",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": 435,
+          "unresolved": 0,
+          "enrichment_warnings": 4,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 4,
+      "requests": 7
+    },
+    {
+      "key": "cloudflare",
+      "variant": "workplace",
+      "jobs": 20,
+      "roles": {
+        "unknown": 20
+      },
+      "workplaces": {
+        "hybrid": 20
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 20,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": true,
+          "accepted": 20,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "job_limit",
+          "provider_total": 435,
+          "unresolved": 0,
+          "enrichment_warnings": 21,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 21,
+      "requests": 24
+    },
+    {
+      "key": "cloudflare",
+      "variant": "geography",
+      "jobs": 20,
+      "roles": {
+        "unknown": 20
+      },
+      "workplaces": {
+        "hybrid": 20
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 35,
+          "matched": 20,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": true,
+          "accepted": 20,
+          "rejected": 15,
+          "rejections": [
+            {
+              "reason": "geography",
+              "count": 15
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Account Executive, FedCiv",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Account Executive, Indonesia",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Business Development Representative",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Business Development Representative - Arabic Speaking",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Business Development Representative, Beijing",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            }
+          ],
+          "termination": "job_limit",
+          "provider_total": 435,
+          "unresolved": 0,
+          "enrichment_warnings": 21,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 21,
+      "requests": 24
+    },
+    {
+      "key": "bitwarden",
+      "variant": "unrestricted",
+      "jobs": 20,
+      "roles": {
+        "unknown": 20
+      },
+      "workplaces": {
+        "onsite": 8,
+        "remote": 12
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 20,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": true,
+          "accepted": 20,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "job_limit",
+          "provider_total": 39,
+          "unresolved": 0,
+          "enrichment_warnings": 21,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 21,
+      "requests": 25
+    },
+    {
+      "key": "bitwarden",
+      "variant": "template",
+      "jobs": 0,
+      "roles": {},
+      "workplaces": {},
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 39,
+          "matched": 0,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 0,
+          "rejected": 39,
+          "rejections": [
+            {
+              "reason": "keyword_any",
+              "count": 16
+            },
+            {
+              "reason": "role_type",
+              "count": 23
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Account Executive - EMEA",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type",
+                "workplace"
+              ]
+            },
+            {
+              "title": "Channel Account Executive (EMEA)",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type"
+              ]
+            },
+            {
+              "title": "Channel Marketing Manager (Partner Growth)",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type"
+              ]
+            },
+            {
+              "title": "Engineering Manager (Onboarding & Activation)",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type",
+                "workplace",
+                "geography"
+              ]
+            },
+            {
+              "title": "Engineering Manager (Passkeys)",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type",
+                "workplace"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": 39,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 1
+    },
+    {
+      "key": "bitwarden",
+      "variant": "keywords",
+      "jobs": 20,
+      "roles": {
+        "unknown": 20
+      },
+      "workplaces": {
+        "onsite": 13,
+        "remote": 7
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 35,
+          "matched": 20,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": true,
+          "accepted": 20,
+          "rejected": 15,
+          "rejections": [
+            {
+              "reason": "keyword_any",
+              "count": 15
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Account Executive - EMEA",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Channel Account Executive (EMEA)",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Channel Marketing Manager (Partner Growth)",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Enterprise Account Executive ",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Mid-Market Account Executive - DACH",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            }
+          ],
+          "termination": "job_limit",
+          "provider_total": 39,
+          "unresolved": 0,
+          "enrichment_warnings": 21,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 21,
+      "requests": 25
+    },
+    {
+      "key": "bitwarden",
+      "variant": "role",
+      "jobs": 0,
+      "roles": {},
+      "workplaces": {},
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 39,
+          "matched": 0,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 0,
+          "rejected": 39,
+          "rejections": [
+            {
+              "reason": "role_type",
+              "count": 39
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Account Executive - EMEA",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Channel Account Executive (EMEA)",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Channel Marketing Manager (Partner Growth)",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Engineering Manager (Onboarding & Activation)",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Engineering Manager (Passkeys)",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": 39,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 1
+    },
+    {
+      "key": "bitwarden",
+      "variant": "workplace",
+      "jobs": 17,
+      "roles": {
+        "unknown": 17
+      },
+      "workplaces": {
+        "remote": 17
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 39,
+          "matched": 17,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 17,
+          "rejected": 22,
+          "rejections": [
+            {
+              "reason": "workplace",
+              "count": 22
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Account Executive - EMEA",
+              "primary": "workplace",
+              "overlapping": [
+                "workplace"
+              ]
+            },
+            {
+              "title": "Engineering Manager (Onboarding & Activation)",
+              "primary": "workplace",
+              "overlapping": [
+                "workplace"
+              ]
+            },
+            {
+              "title": "Engineering Manager (Passkeys)",
+              "primary": "workplace",
+              "overlapping": [
+                "workplace"
+              ]
+            },
+            {
+              "title": "Engineering Manager (Web Platform)",
+              "primary": "workplace",
+              "overlapping": [
+                "workplace"
+              ]
+            },
+            {
+              "title": "Engineer - SDET ( Regression Testing)",
+              "primary": "workplace",
+              "overlapping": [
+                "workplace"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": 39,
+          "unresolved": 0,
+          "enrichment_warnings": 18,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 18,
+      "requests": 22
+    },
+    {
+      "key": "bitwarden",
+      "variant": "geography",
+      "jobs": 20,
+      "roles": {
+        "unknown": 20
+      },
+      "workplaces": {
+        "onsite": 8,
+        "remote": 12
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 33,
+          "matched": 20,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": true,
+          "accepted": 20,
+          "rejected": 13,
+          "rejections": [
+            {
+              "reason": "geography",
+              "count": 13
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Engineering Manager (Onboarding & Activation)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Lead Software Engineer (Priv Controls)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Lead Software Engineer (Secrets Manager & AI Identity)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Mid-Market Account Executive - DACH",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Mid-Market Account Executive - (Nordics)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            }
+          ],
+          "termination": "job_limit",
+          "provider_total": 39,
+          "unresolved": 0,
+          "enrichment_warnings": 21,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 21,
+      "requests": 25
+    },
+    {
+      "key": "linear",
+      "variant": "unrestricted",
+      "jobs": 20,
+      "roles": {
+        "full_time": 20
+      },
+      "workplaces": {
+        "remote": 20
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 20,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": true,
+          "accepted": 20,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "job_limit",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 1,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 1,
+      "requests": 4
+    },
+    {
+      "key": "linear",
+      "variant": "template",
+      "jobs": 2,
+      "roles": {
+        "full_time": 2
+      },
+      "workplaces": {
+        "remote": 2
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 31,
+          "matched": 2,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 2,
+          "rejected": 29,
+          "rejections": [
+            {
+              "reason": "geography",
+              "count": 19
+            },
+            {
+              "reason": "keyword_any",
+              "count": 10
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Senior / Staff Fullstack Engineer",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Senior / Staff Fullstack Engineer",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Senior / Staff Product Engineer",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Design Engineer (Web & Brand)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Design Engineer (Web & Brand)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 1,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 1,
+      "requests": 4
+    },
+    {
+      "key": "linear",
+      "variant": "keywords",
+      "jobs": 20,
+      "roles": {
+        "full_time": 20
+      },
+      "workplaces": {
+        "remote": 20
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 26,
+          "matched": 20,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": true,
+          "accepted": 20,
+          "rejected": 6,
+          "rejections": [
+            {
+              "reason": "keyword_any",
+              "count": 6
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Account Executive, Startups",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Customer Success Manager, Growth",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Developer Relations",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Developer Relations",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Customer Success Manager, Enterprise",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            }
+          ],
+          "termination": "job_limit",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 1,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 1,
+      "requests": 4
+    },
+    {
+      "key": "linear",
+      "variant": "role",
+      "jobs": 20,
+      "roles": {
+        "full_time": 20
+      },
+      "workplaces": {
+        "remote": 20
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 20,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": true,
+          "accepted": 20,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "job_limit",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 1,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 1,
+      "requests": 4
+    },
+    {
+      "key": "linear",
+      "variant": "workplace",
+      "jobs": 20,
+      "roles": {
+        "full_time": 20
+      },
+      "workplaces": {
+        "remote": 20
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 20,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": true,
+          "accepted": 20,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "job_limit",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 1,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 1,
+      "requests": 4
+    },
+    {
+      "key": "linear",
+      "variant": "geography",
+      "jobs": 2,
+      "roles": {
+        "full_time": 2
+      },
+      "workplaces": {
+        "remote": 2
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 31,
+          "matched": 2,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 2,
+          "rejected": 29,
+          "rejections": [
+            {
+              "reason": "geography",
+              "count": 29
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Senior / Staff Fullstack Engineer",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Senior / Staff Fullstack Engineer",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Senior / Staff Product Engineer",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Design Engineer (Web & Brand)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Design Engineer (Web & Brand)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 1,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 1,
+      "requests": 4
+    },
+    {
+      "key": "sep",
+      "variant": "unrestricted",
+      "jobs": 8,
+      "roles": {
+        "full_time": 7,
+        "internship": 1
+      },
+      "workplaces": {
+        "onsite": 8
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 8,
+          "matched": 8,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 8,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 1,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 1,
+      "requests": 4
+    },
+    {
+      "key": "sep",
+      "variant": "template",
+      "jobs": 0,
+      "roles": {},
+      "workplaces": {},
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 8,
+          "matched": 0,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 0,
+          "rejected": 8,
+          "rejections": [
+            {
+              "reason": "keyword_any",
+              "count": 2
+            },
+            {
+              "reason": "geography",
+              "count": 6
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Azure Solution Architect (in person)",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "geography"
+              ]
+            },
+            {
+              "title": "Data Engineer (in person)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Experienced Software Engineer (in person)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Lead Software Engineer (in person)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Senior Data Engineer (in person)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 1,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 1,
+      "requests": 4
+    },
+    {
+      "key": "sep",
+      "variant": "keywords",
+      "jobs": 6,
+      "roles": {
+        "full_time": 5,
+        "internship": 1
+      },
+      "workplaces": {
+        "onsite": 6
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 8,
+          "matched": 6,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 6,
+          "rejected": 2,
+          "rejections": [
+            {
+              "reason": "keyword_any",
+              "count": 2
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Azure Solution Architect (in person)",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Senior Product Designer (in person)",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 1,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 1,
+      "requests": 4
+    },
+    {
+      "key": "sep",
+      "variant": "role",
+      "jobs": 8,
+      "roles": {
+        "full_time": 7,
+        "internship": 1
+      },
+      "workplaces": {
+        "onsite": 8
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 8,
+          "matched": 8,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 8,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 1,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 1,
+      "requests": 4
+    },
+    {
+      "key": "sep",
+      "variant": "workplace",
+      "jobs": 8,
+      "roles": {
+        "full_time": 7,
+        "internship": 1
+      },
+      "workplaces": {
+        "onsite": 8
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 8,
+          "matched": 8,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 8,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 1,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 1,
+      "requests": 4
+    },
+    {
+      "key": "sep",
+      "variant": "geography",
+      "jobs": 0,
+      "roles": {},
+      "workplaces": {},
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 8,
+          "matched": 0,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 0,
+          "rejected": 8,
+          "rejections": [
+            {
+              "reason": "geography",
+              "count": 8
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Azure Solution Architect (in person)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Data Engineer (in person)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Experienced Software Engineer (in person)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Lead Software Engineer (in person)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Senior Data Engineer (in person)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 1,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 1,
+      "requests": 4
+    },
+    {
+      "key": "google",
+      "variant": "unrestricted",
+      "jobs": 20,
+      "roles": {
+        "unknown": 20
+      },
+      "workplaces": {
+        "onsite": 20
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 20,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": true,
+          "accepted": 20,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 1,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 1,
+      "requests": 4
+    },
+    {
+      "key": "google",
+      "variant": "template",
+      "jobs": 0,
+      "roles": {},
+      "workplaces": {},
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 0,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 0,
+          "rejected": 20,
+          "rejections": [
+            {
+              "reason": "role_type",
+              "count": 8
+            },
+            {
+              "reason": "keyword_any",
+              "count": 12
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Senior Software Engineer, Ask Google Pay",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type",
+                "geography"
+              ]
+            },
+            {
+              "title": "NPI Product Quality Technical Program Manager",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type",
+                "geography"
+              ]
+            },
+            {
+              "title": "Director, Business Planning and Monetization",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type",
+                "geography"
+              ]
+            },
+            {
+              "title": "Account Manager, Large Customer Sales, Export",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type",
+                "geography"
+              ]
+            },
+            {
+              "title": "Software Engineer, Google Pay, Growth and Communications",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type",
+                "geography"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 2
+    },
+    {
+      "key": "google",
+      "variant": "keywords",
+      "jobs": 8,
+      "roles": {
+        "unknown": 8
+      },
+      "workplaces": {
+        "onsite": 8
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 8,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 8,
+          "rejected": 12,
+          "rejections": [
+            {
+              "reason": "keyword_any",
+              "count": 12
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "NPI Product Quality Technical Program Manager",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Director, Business Planning and Monetization",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Account Manager, Large Customer Sales, Export",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Product Manager, Deep Zoom, DeepMind",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Account Manager, Engage, GCS",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 1,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 1,
+      "requests": 4
+    },
+    {
+      "key": "google",
+      "variant": "role",
+      "jobs": 0,
+      "roles": {},
+      "workplaces": {},
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 0,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 0,
+          "rejected": 20,
+          "rejections": [
+            {
+              "reason": "role_type",
+              "count": 20
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Senior Software Engineer, Ask Google Pay",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "NPI Product Quality Technical Program Manager",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Director, Business Planning and Monetization",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Account Manager, Large Customer Sales, Export",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Software Engineer, Google Pay, Growth and Communications",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 2
+    },
+    {
+      "key": "google",
+      "variant": "workplace",
+      "jobs": 20,
+      "roles": {
+        "unknown": 20
+      },
+      "workplaces": {
+        "onsite": 20
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 20,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": true,
+          "accepted": 20,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 1,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 1,
+      "requests": 4
+    },
+    {
+      "key": "google",
+      "variant": "geography",
+      "jobs": 3,
+      "roles": {
+        "unknown": 3
+      },
+      "workplaces": {
+        "onsite": 3
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 3,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 3,
+          "rejected": 17,
+          "rejections": [
+            {
+              "reason": "geography",
+              "count": 17
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Senior Software Engineer, Ask Google Pay",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "NPI Product Quality Technical Program Manager",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Director, Business Planning and Monetization",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Account Manager, Large Customer Sales, Export",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Software Engineer, Google Pay, Growth and Communications",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 1,
+          "outcome": "success_with_warnings"
+        }
+      ],
+      "errors": [],
+      "warnings": 1,
+      "requests": 4
+    },
+    {
+      "key": "apple",
+      "variant": "unrestricted",
+      "jobs": 20,
+      "roles": {
+        "seasonal": 1,
+        "unknown": 19
+      },
+      "workplaces": {
+        "onsite": 2,
+        "unknown": 18
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 20,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": true,
+          "accepted": 20,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 2
+    },
+    {
+      "key": "apple",
+      "variant": "template",
+      "jobs": 0,
+      "roles": {},
+      "workplaces": {},
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 0,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 0,
+          "rejected": 20,
+          "rejections": [
+            {
+              "reason": "keyword_any",
+              "count": 17
+            },
+            {
+              "reason": "role_type",
+              "count": 3
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "US - Specialist: Seasonal, Part-time",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type",
+                "geography"
+              ]
+            },
+            {
+              "title": "Data Scientist - Intelligent Experiences, MLO",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type",
+                "workplace",
+                "geography"
+              ]
+            },
+            {
+              "title": "Senior Product Manager, Apple Store Online",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type",
+                "workplace",
+                "geography"
+              ]
+            },
+            {
+              "title": "Core Bring Up Engineer, Core OS",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type",
+                "workplace",
+                "geography"
+              ]
+            },
+            {
+              "title": "Pre-silicon Compute and ML Framework Manager",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type",
+                "workplace",
+                "geography"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 2
+    },
+    {
+      "key": "apple",
+      "variant": "keywords",
+      "jobs": 3,
+      "roles": {
+        "unknown": 3
+      },
+      "workplaces": {
+        "unknown": 2,
+        "onsite": 1
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 3,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 3,
+          "rejected": 17,
+          "rejections": [
+            {
+              "reason": "keyword_any",
+              "count": 17
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "US - Specialist: Seasonal, Part-time",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Senior Product Manager, Apple Store Online",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Core Bring Up Engineer, Core OS",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Pre-silicon Compute and ML Framework Manager",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Engineering Leader, AI Safety Engineering & Evaluation, Apple Services Engineering",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 2
+    },
+    {
+      "key": "apple",
+      "variant": "role",
+      "jobs": 0,
+      "roles": {},
+      "workplaces": {},
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 0,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 0,
+          "rejected": 20,
+          "rejections": [
+            {
+              "reason": "role_type",
+              "count": 20
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "US - Specialist: Seasonal, Part-time",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Data Scientist - Intelligent Experiences, MLO",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Senior Product Manager, Apple Store Online",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Core Bring Up Engineer, Core OS",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Pre-silicon Compute and ML Framework Manager",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 2
+    },
+    {
+      "key": "apple",
+      "variant": "workplace",
+      "jobs": 2,
+      "roles": {
+        "seasonal": 1,
+        "unknown": 1
+      },
+      "workplaces": {
+        "onsite": 2
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 2,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 2,
+          "rejected": 18,
+          "rejections": [
+            {
+              "reason": "workplace",
+              "count": 18
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Data Scientist - Intelligent Experiences, MLO",
+              "primary": "workplace",
+              "overlapping": [
+                "workplace"
+              ]
+            },
+            {
+              "title": "Senior Product Manager, Apple Store Online",
+              "primary": "workplace",
+              "overlapping": [
+                "workplace"
+              ]
+            },
+            {
+              "title": "Core Bring Up Engineer, Core OS",
+              "primary": "workplace",
+              "overlapping": [
+                "workplace"
+              ]
+            },
+            {
+              "title": "Pre-silicon Compute and ML Framework Manager",
+              "primary": "workplace",
+              "overlapping": [
+                "workplace"
+              ]
+            },
+            {
+              "title": "Engineering Leader, AI Safety Engineering & Evaluation, Apple Services Engineering",
+              "primary": "workplace",
+              "overlapping": [
+                "workplace"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 2
+    },
+    {
+      "key": "apple",
+      "variant": "geography",
+      "jobs": 0,
+      "roles": {},
+      "workplaces": {},
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 20,
+          "matched": 0,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 0,
+          "rejected": 20,
+          "rejections": [
+            {
+              "reason": "geography",
+              "count": 20
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "US - Specialist: Seasonal, Part-time",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Data Scientist - Intelligent Experiences, MLO",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Senior Product Manager, Apple Store Online",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Core Bring Up Engineer, Core OS",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Pre-silicon Compute and ML Framework Manager",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 2
+    },
+    {
+      "key": "netflix",
+      "variant": "unrestricted",
+      "jobs": 10,
+      "roles": {
+        "unknown": 10
+      },
+      "workplaces": {
+        "onsite": 8,
+        "remote": 2
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 10,
+          "matched": 10,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 10,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 0
+    },
+    {
+      "key": "netflix",
+      "variant": "template",
+      "jobs": 0,
+      "roles": {},
+      "workplaces": {},
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 10,
+          "matched": 0,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 0,
+          "rejected": 10,
+          "rejections": [
+            {
+              "reason": "keyword_any",
+              "count": 10
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Product Marketing Sr. Manager (UCAN) Programmatic Ads",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type"
+              ]
+            },
+            {
+              "title": "Product Marketing Manager (UCAN) Media Effectiveness",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type"
+              ]
+            },
+            {
+              "title": "Partner Engagement Manager, UCAN",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type"
+              ]
+            },
+            {
+              "title": "Experiences Web & Digital Marketing Manager",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type"
+              ]
+            },
+            {
+              "title": "Administrative Assistant, Inclusion Strategy",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 0
+    },
+    {
+      "key": "netflix",
+      "variant": "keywords",
+      "jobs": 0,
+      "roles": {},
+      "workplaces": {},
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 10,
+          "matched": 0,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 0,
+          "rejected": 10,
+          "rejections": [
+            {
+              "reason": "keyword_any",
+              "count": 10
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Product Marketing Sr. Manager (UCAN) Programmatic Ads",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Product Marketing Manager (UCAN) Media Effectiveness",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Partner Engagement Manager, UCAN",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Experiences Web & Digital Marketing Manager",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Administrative Assistant, Inclusion Strategy",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 0
+    },
+    {
+      "key": "netflix",
+      "variant": "role",
+      "jobs": 0,
+      "roles": {},
+      "workplaces": {},
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 10,
+          "matched": 0,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 0,
+          "rejected": 10,
+          "rejections": [
+            {
+              "reason": "role_type",
+              "count": 10
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Product Marketing Sr. Manager (UCAN) Programmatic Ads",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Product Marketing Manager (UCAN) Media Effectiveness",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Partner Engagement Manager, UCAN",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Experiences Web & Digital Marketing Manager",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Administrative Assistant, Inclusion Strategy",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 0
+    },
+    {
+      "key": "netflix",
+      "variant": "workplace",
+      "jobs": 0,
+      "roles": {},
+      "workplaces": {},
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 10,
+          "matched": 0,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 0,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "failed",
+          "provider_total": null,
+          "unresolved": 10,
+          "enrichment_warnings": 0,
+          "outcome": "partial"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 0
+    },
+    {
+      "key": "netflix",
+      "variant": "geography",
+      "jobs": 7,
+      "roles": {
+        "unknown": 7
+      },
+      "workplaces": {
+        "onsite": 6,
+        "remote": 1
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 10,
+          "matched": 7,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 7,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "failed",
+          "provider_total": null,
+          "unresolved": 3,
+          "enrichment_warnings": 0,
+          "outcome": "partial"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 0
+    },
+    {
+      "key": "amazon",
+      "variant": "unrestricted",
+      "jobs": 10,
+      "roles": {
+        "unknown": 9,
+        "internship": 1
+      },
+      "workplaces": {
+        "onsite": 10
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 10,
+          "matched": 10,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 10,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 0
+    },
+    {
+      "key": "amazon",
+      "variant": "template",
+      "jobs": 0,
+      "roles": {},
+      "workplaces": {},
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 10,
+          "matched": 0,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 0,
+          "rejected": 10,
+          "rejections": [
+            {
+              "reason": "keyword_any",
+              "count": 8
+            },
+            {
+              "reason": "role_type",
+              "count": 2
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Systems Development Engineer, OISL Test Automation",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type"
+              ]
+            },
+            {
+              "title": "Software Development Engineer, Alexa Connections",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type",
+                "geography"
+              ]
+            },
+            {
+              "title": "Sr. Software Development Engineer, Amazon Shopping (Rufus)",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type"
+              ]
+            },
+            {
+              "title": "Software Development Engineer, Alexa Communications",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type",
+                "geography"
+              ]
+            },
+            {
+              "title": "Software Development Engineer, AWS Security Epoxy",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any",
+                "role_type",
+                "geography"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 0
+    },
+    {
+      "key": "amazon",
+      "variant": "keywords",
+      "jobs": 2,
+      "roles": {
+        "internship": 1,
+        "unknown": 1
+      },
+      "workplaces": {
+        "onsite": 2
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 10,
+          "matched": 2,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 2,
+          "rejected": 8,
+          "rejections": [
+            {
+              "reason": "keyword_any",
+              "count": 8
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Systems Development Engineer, OISL Test Automation",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Software Development Engineer, Alexa Connections",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Sr. Software Development Engineer, Amazon Shopping (Rufus)",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Software Development Engineer, Alexa Communications",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            },
+            {
+              "title": "Software Development Engineer, AWS Security Epoxy",
+              "primary": "keyword_any",
+              "overlapping": [
+                "keyword_any"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 0
+    },
+    {
+      "key": "amazon",
+      "variant": "role",
+      "jobs": 0,
+      "roles": {},
+      "workplaces": {},
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 10,
+          "matched": 0,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 0,
+          "rejected": 10,
+          "rejections": [
+            {
+              "reason": "role_type",
+              "count": 10
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Systems Development Engineer, OISL Test Automation",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Software Development Engineer, Alexa Connections",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Sr. Software Development Engineer, Amazon Shopping (Rufus)",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Software Development Engineer, Alexa Communications",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            },
+            {
+              "title": "Software Development Engineer, AWS Security Epoxy",
+              "primary": "role_type",
+              "overlapping": [
+                "role_type"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 0
+    },
+    {
+      "key": "amazon",
+      "variant": "workplace",
+      "jobs": 10,
+      "roles": {
+        "unknown": 9,
+        "internship": 1
+      },
+      "workplaces": {
+        "onsite": 10
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 10,
+          "matched": 10,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 10,
+          "rejected": 0,
+          "rejections": [],
+          "rejection_examples": [],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 0
+    },
+    {
+      "key": "amazon",
+      "variant": "geography",
+      "jobs": 3,
+      "roles": {
+        "unknown": 3
+      },
+      "workplaces": {
+        "onsite": 3
+      },
+      "completed": [
+        {
+          "limit": 20,
+          "examined": 10,
+          "matched": 3,
+          "blocked": 0,
+          "duplicates": 0,
+          "invalid": 0,
+          "limit_reached": false,
+          "accepted": 3,
+          "rejected": 7,
+          "rejections": [
+            {
+              "reason": "geography",
+              "count": 7
+            }
+          ],
+          "rejection_examples": [
+            {
+              "title": "Software Development Engineer, Alexa Connections",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Software Development Engineer, Alexa Communications",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Software Development Engineer, AWS Security Epoxy",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Network Deployment Technician, DCC Communities",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            },
+            {
+              "title": "Manager, DPO Technical Operations, Device Postponement Operations (DPO)",
+              "primary": "geography",
+              "overlapping": [
+                "geography"
+              ]
+            }
+          ],
+          "termination": "exhausted",
+          "provider_total": null,
+          "unresolved": 0,
+          "enrichment_warnings": 0,
+          "outcome": "success"
+        }
+      ],
+      "errors": [],
+      "warnings": 0,
+      "requests": 0
+    }
+  ],
+  "semantic_results": {
+    "city_parity": {
+      "repository_matches": 1,
+      "worker_matches": false
+    },
+    "normalization": [
+      {
+        "after": false,
+        "before": true,
+        "case": "remote_or_austin_becomes_remote_and_austin",
+        "normalized": {
+          "compensation": null,
+          "exclude_keywords": [],
+          "include_keywords": [],
+          "locations": [],
+          "matching": {
+            "cities": [
+              "Austin"
+            ],
+            "clearance": [],
+            "compensation": null,
+            "countries": [
+              "US"
+            ],
+            "experience_include_unknown": false,
+            "experience_max": null,
+            "experience_min": null,
+            "keywords": null,
+            "location_include_unknown": false,
+            "new_grad": null,
+            "posting_date": null,
+            "regions": [
+              "US-TX"
+            ],
+            "role_types": [],
+            "sponsorship": [],
+            "work_auth": [],
+            "workplaces": [
+              "remote"
+            ]
+          },
+          "policy": null,
+          "query": null,
+          "role_types": []
+        }
+      },
+      {
+        "after": true,
+        "before": false,
+        "case": "two_any_groups_become_union",
+        "normalized": {
+          "compensation": null,
+          "exclude_keywords": [],
+          "include_keywords": [],
+          "locations": [],
+          "matching": {
+            "cities": [],
+            "clearance": [],
+            "compensation": null,
+            "countries": [],
+            "experience_include_unknown": false,
+            "experience_max": null,
+            "experience_min": null,
+            "keywords": {
+              "all": [],
+              "any": [
+                "Engineer",
+                "Software"
+              ],
+              "exclude": [],
+              "fields": [
+                "title"
+              ]
+            },
+            "location_include_unknown": false,
+            "new_grad": null,
+            "posting_date": null,
+            "regions": [],
+            "role_types": [],
+            "sponsorship": [],
+            "work_auth": [],
+            "workplaces": []
+          },
+          "policy": null,
+          "query": null,
+          "role_types": []
+        }
+      },
+      {
+        "after": true,
+        "before": false,
+        "case": "known_query_removed_automatically",
+        "normalized": {
+          "compensation": null,
+          "exclude_keywords": [],
+          "include_keywords": [],
+          "locations": [],
+          "matching": {
+            "cities": [],
+            "clearance": [],
+            "compensation": null,
+            "countries": [],
+            "experience_include_unknown": false,
+            "experience_max": null,
+            "experience_min": null,
+            "keywords": null,
+            "location_include_unknown": false,
+            "new_grad": null,
+            "posting_date": null,
+            "regions": [],
+            "role_types": [],
+            "sponsorship": [],
+            "work_auth": [],
+            "workplaces": []
+          },
+          "policy": null,
+          "query": null,
+          "role_types": []
+        }
+      }
+    ]
+  },
+  "discovered_results": [
+    {
+      "discovered_query_total": 3,
+      "source": "cloudflare",
+      "worker_matches": 3
+    },
+    {
+      "discovered_query_total": 0,
+      "source": "bitwarden",
+      "worker_matches": 0
+    },
+    {
+      "discovered_query_total": 2,
+      "source": "linear",
+      "worker_matches": 2
+    },
+    {
+      "discovered_query_total": 0,
+      "source": "sep",
+      "worker_matches": 0
+    }
+  ]
+}

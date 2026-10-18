@@ -444,3 +444,8 @@ Read-only refusal is correct; native `.expect()` causes the non-unwinding abort.
 The fresh-database native harness missed this historical variant.
 See [research, error log and proposed repair](25-native-startup-migration-12.md).
 Repair was applied through forward migration 18 with a consistent backup. Protected saved state and all previous migration checksums remained intact. See incident 25 for verification.
+
+
+### 28. Seeded workflows produce no Discovered jobs — repair pending
+
+Recorded 2026-10-18 against `8d8c45a`. Multiple failures were reproduced in isolated worker/database probes: missing multi-source rows cause SQLite 787, restrictive templates reject unknown evidence, normalization changes rule semantics, and provider replay omits the seeded workflow path. See the [incident log and evidence](28-empty-seeded-workflows.md) and [step-by-step implementation handoff](../12-workflow-ingestion-repair.md). This is a diagnosis, not an applied solution.

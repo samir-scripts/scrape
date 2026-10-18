@@ -1,5 +1,7 @@
 # Plan 11 — Section 7 Execution Blueprint: Provider & Company Verification
 
+**Acceptance correction, 2026-10-18:** The “Fully Supported” classifications below are historical and overstate coverage of the seeded workflows. [Incident 28](errors/28-empty-seeded-workflows.md) reproduces filtered zero results, missing source ownership, malformed Google URLs, and first-page-only coverage. [Plan 12](12-workflow-ingestion-repair.md) defines the required repair and full workflow verification. Meta remains an open acceptance gap.
+
 **Target Executor:** Gemini 3.8 Flash / GPT-6.1 Sol  
 **Parent Specification:** [Reliable ingestion, multi-source workflows, and UI repair](11-reliable-ingestion-and-ui-repair.md#7-providercompany-verification)  
 **Prerequisite State:** Sections 1–6 (Phases 6A–6F) implemented, tested, and verified on branch `implementation/trustworthy-scraping`.

@@ -1,0 +1,171 @@
+//! Temporary, isolated incident-28 diagnostic; no application storage.
+use scrape_core::{WorkerEvent, WorkerFilters, WorkerSource};
+use scrape_lib::{
+    db::{self, jobs::JobsRepo, sources::SourcesRepo},
+    services::{
+        ingestion::scraped_job_from_event, runner::resolve_worker_filters, script_trust, workflow,
+    },
+};
+use serde_json::json;
+#[tokio::test]
+async fn incident28_seed_and_persistence_probe() {
+    let dir = std::env::temp_dir().join(format!("incident28-{}", uuid::Uuid::new_v4()));
+    let pool = db::init_db(&dir.join("probe.db")).await.unwrap();
+    let mut report = vec![];
+    for input in SourcesRepo::sample_workflows_suite() {
+        let source = SourcesRepo::create(&pool, input).await.unwrap();
+        let spec: workflow::WorkflowSpec =
+            serde_json::from_value(source.config["__workflow_spec"].clone()).unwrap();
+        let inputs = workflow::workflow_source_inputs(&spec, "UTC").unwrap();
+        let mut children = vec![];
+        for (s, i) in spec.sources.iter().zip(inputs) {
+            let id = if spec.sources.len() == 1 {
+                source.id.clone()
+            } else {
+                s.id.clone()
+            };
+            let worker = WorkerSource {
+                id: id.clone(),
+                kind: i.kind,
+                name: s.employer_hint.clone().unwrap_or(s.label.clone()),
+                identifier: i.identifier,
+                config: i.config.unwrap(),
+            };
+            let exists = SourcesRepo::get(&pool, &id).await.is_ok();
+            let guard = script_trust::validate_execution(&pool, &[worker.clone()])
+                .await
+                .err()
+                .map(|e| e.to_string());
+            let event:WorkerEvent=serde_json::from_value(json!({"type":"job","source_id":id,"external_id":"incident28-authored","title":"Incident 28 authored probe","company":"Authored fixture","url":format!("https://fixture.invalid/{id}/incident28"),"role_type":"unknown"})).unwrap();
+            let result =
+                JobsRepo::upsert_scraped(&pool, &[scraped_job_from_event(event).unwrap()]).await;
+            children.push(json!({"worker":worker,"source_row_exists":exists,"guard_error":guard,"persistence_error":result.err().map(|e|e.to_string())}));
+        }
+        report.push(json!({"name":source.name,"enabled":source.enabled,"needs_review":source.needs_review,"filters":resolve_worker_filters(&source.filters,WorkerFilters::default()).unwrap(),"children":children}));
+    }
+    std::fs::write(
+        "/tmp/incident28-host.json",
+        serde_json::to_string_pretty(&report).unwrap(),
+    )
+    .unwrap();
+    println!("{}",serde_json::to_string_pretty(&report.iter().map(|r|json!({"name":r["name"],"enabled":r["enabled"],"needs_review":r["needs_review"],"children":r["children"].as_array().unwrap().iter().map(|s|json!({"name":s["worker"]["name"],"source_row_exists":s["source_row_exists"],"guard_error":s["guard_error"],"persistence_error":s["persistence_error"]})).collect::<Vec<_>>()})).collect::<Vec<_>>()).unwrap());
+    pool.close().await;
+}
+#[tokio::test]
+async fn incident28_normalization_and_city_parity_probe() {
+    use scrape_core::matching::{MatchingEvaluator, PostingRules};
+    use scrape_lib::db::jobs::JobFilter;
+    let started = chrono::Utc::now();
+    let mut normalization = vec![];
+    for (name, filters, event) in [
+        (
+            "remote_or_austin_becomes_remote_and_austin",
+            json!({"locations":["Remote","Austin"],"matching":{}}),
+            json!({"title":"Engineer","location":"Austin, TX","locations":[{"raw":"Austin, TX","city":"Austin","country_code":"US","region_code":"US-TX","is_remote":false}],"workplace_type":"onsite"}),
+        ),
+        (
+            "two_any_groups_become_union",
+            json!({"include_keywords":["Software"],"matching":{"keywords":{"any":["Engineer"],"fields":["title"]}}}),
+            json!({"title":"Software Designer"}),
+        ),
+        (
+            "known_query_removed_automatically",
+            json!({"query":"title LIKE '%Engineer%' OR title LIKE '%Intern%'","matching":{}}),
+            json!({"title":"Designer"}),
+        ),
+    ] {
+        let mut event = event;
+        let object = event.as_object_mut().unwrap();
+        object.extend(json!({"type":"job","source_id":"fixture","external_id":"1","company":"Authored","url":"https://fixture.invalid/1","role_type":"unknown"}).as_object().unwrap().clone());
+        let event: WorkerEvent = serde_json::from_value(event).unwrap();
+        let mut filters: WorkerFilters = serde_json::from_value(filters).unwrap();
+        let before = MatchingEvaluator::new(&filters)
+            .unwrap()
+            .matches_at(&event, started);
+        filters.normalize_into_matching();
+        let after = MatchingEvaluator::new(&filters)
+            .unwrap()
+            .matches_at(&event, started);
+        assert_ne!(before, after, "diagnostic expected current semantic change");
+        normalization.push(json!({"case":name,"before":before,"after":after,"normalized":filters}));
+    }
+    let dir = std::env::temp_dir().join(format!("incident28-parity-{}", uuid::Uuid::new_v4()));
+    let pool = db::init_db(&dir.join("probe.db")).await.unwrap();
+    let source = SourcesRepo::create(&pool, SourcesRepo::default_sample_workflow_input())
+        .await
+        .unwrap();
+    let event:WorkerEvent=serde_json::from_value(json!({"type":"job","source_id":source.id,"external_id":"parity","title":"Authored cross-location fixture","location_data_complete":true,"company":"Authored","url":"https://fixture.invalid/parity","role_type":"unknown","location":"Toronto, ON, Canada; Cupertino, CA, US","locations":[{"raw":"Toronto, ON, Canada","city":"Toronto","region_code":"CA-ON","country_code":"CA","is_remote":false},{"raw":"Cupertino, CA, US","city":"Cupertino","region_code":"US-CA","country_code":"US","is_remote":false}]})).unwrap();
+    let rules: PostingRules =
+        serde_json::from_value(json!({"countries":["CA"],"cities":["Cupertino"]})).unwrap();
+    let worker = rules.matches_event(&event);
+    JobsRepo::upsert_scraped(&pool, &[scraped_job_from_event(event).unwrap()])
+        .await
+        .unwrap();
+    let repository = JobsRepo::list(
+        &pool,
+        JobFilter {
+            matching: Some(rules),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap()
+    .total;
+    assert!(!worker);
+    assert_eq!(repository, 1, "diagnostic expected cross-location mismatch");
+    let report = json!({"normalization":normalization,"city_parity":{"worker_matches":worker,"repository_matches":repository}});
+    std::fs::write(
+        "/tmp/incident28-semantics.json",
+        serde_json::to_string_pretty(&report).unwrap(),
+    )
+    .unwrap();
+    println!("{}", report);
+    pool.close().await;
+}
+#[tokio::test]
+async fn incident28_recorded_matches_reach_discovered_query() {
+    use scrape_lib::db::jobs::JobFilter;
+    let dir = std::env::temp_dir().join(format!("incident28-discovered-{}", uuid::Uuid::new_v4()));
+    let pool = db::init_db(&dir.join("probe.db")).await.unwrap();
+    let mut report = vec![];
+    for input in SourcesRepo::sample_workflows_suite().into_iter().take(4) {
+        let source = SourcesRepo::create(&pool, input).await.unwrap();
+        let mut batch = vec![];
+        for line in std::fs::read_to_string(format!(
+            "/tmp/incident28-{}-template.ndjson",
+            source.identifier
+        ))
+        .unwrap()
+        .lines()
+        {
+            let mut event: WorkerEvent = serde_json::from_str(line).unwrap();
+            if let WorkerEvent::Job { source_id, .. } = &mut event {
+                *source_id = source.id.clone(); // New temporary database; preserve provider fields.
+                batch.push(scraped_job_from_event(event).unwrap());
+            }
+        }
+        JobsRepo::upsert_scraped(&pool, &batch).await.unwrap();
+        let page = JobsRepo::list(
+            &pool,
+            JobFilter {
+                source_id: Some(source.id.clone()),
+                statuses: Some(vec![
+                    scrape_core::JobStatus::Scraped,
+                    scrape_core::JobStatus::Viewed,
+                ]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(page.total, batch.len() as i64);
+        report.push(json!({"source":source.identifier,"worker_matches":batch.len(),"discovered_query_total":page.total}));
+    }
+    std::fs::write(
+        "/tmp/incident28-discovered.json",
+        serde_json::to_string_pretty(&report).unwrap(),
+    )
+    .unwrap();
+    println!("{}", json!(report));
+    pool.close().await;
+}

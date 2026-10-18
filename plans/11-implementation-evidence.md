@@ -1037,3 +1037,14 @@ Verification actually run in this workspace:
 
 Explicit boundaries and unperformed checks:
 No user database or application storage was opened or mutated. No physical pointer or IME verification, native OS file chooser interaction, or unrecorded live company crawl was performed in this checkpoint. Original 438/436/2 reproduction remains open due to missing screenshots and configuration. Section 8 is fully implemented and verified; Plan 11 implementation is complete. Next: Plan 08 Section 8 native acceptance & final verification.
+
+
+## Incident 28 — Seeded-workflow investigation (2026-10-18)
+
+At `8d8c45a`, the six seeded templates were investigated without accessing user application data. See [Incident 28](errors/28-empty-seeded-workflows.md) for exact errors, provenance, probe limitations and results, and [Plan 12](12-workflow-ingestion-repair.md) for the requested GPT-6.1 Sol handoff. No product repair or migration was applied.
+
+Actually run: `npm run build:sidecar` (passed); temporary `cargo test -p scrape --test incident28_probe -- --nocapture` (3 diagnostic tests passed); `node /tmp/incident28-replay.mjs` (48 isolated source/filter replays, production 20-job cap); `npm run test:providers` (existing eight-entry command passed, including zero-job Meta gap and excluding Cloudflare). Diagnostic assertions document defects rather than desired contracts; their source is archived outside the test suite. Initial probe setup errors were corrected; loopback tests required elevated local socket access.
+
+Current template accepted counts: Cloudflare 3, Bitwarden 0, Linear 2, SEP 0, Google 0, Apple 0, Netflix 0, Amazon 0. Cloudflare used a newly fetched read-only public listing snapshot; other sites used repository captures. Four-source worker-event → temporary SQLite → Discovered-query replay confirmed 3/0/2/0. Missing multi-source rows reproduced SQLite foreign-key errors; normalization and city worker/repository disagreement were reproduced independently. Raw logs remain under `/tmp/incident28-*`; durable result summaries and probe sources are linked from the incident.
+
+Full regression/frontend/native suites and live workflow ingestion were not run. Original saved-run context remains uninspected, so the universal all-zero user report is not claimed as exactly reproduced. Earlier broad Section 5–7 completion claims are reopened for affected acceptance by Plan 12.
