@@ -18,6 +18,7 @@ struct LeverPosting {
     #[serde(rename = "createdAt")]
     created_at: Option<i64>,
     categories: Option<LeverCategories>,
+    country: Option<String>,
     #[serde(rename = "salaryRange")]
     salary_range: Option<LeverSalaryRange>,
     #[serde(rename = "salaryDescriptionPlain")]
@@ -157,7 +158,18 @@ fn parse_lever_postings_with(
         } else {
             loc_strings.join("; ")
         };
-        let mut locations = loc_enrich::parse(&location_str);
+        let mut locations = loc_strings
+            .iter()
+            .flat_map(|label| {
+                let country = posting
+                    .categories
+                    .as_ref()
+                    .and_then(|c| c.location.as_ref())
+                    .filter(|primary| *primary == label)
+                    .and(posting.country.as_deref());
+                loc_enrich::parse_with_country(label, country)
+            })
+            .collect::<Vec<_>>();
 
         // Combine description texts
         let mut desc_parts = Vec::new();
@@ -390,5 +402,49 @@ mod tests {
         } else {
             panic!("Expected WorkerEvent::Job");
         }
+    }
+}
+
+#[cfg(test)]
+mod country_evidence_tests {
+    use super::*;
+    #[test]
+    fn recorded_sep_retains_primary_country_and_unlisted_city() {
+        let source = WorkerSource {
+            id: "sep".into(),
+            kind: scrape_core::SourceKind::Lever,
+            name: "SEP".into(),
+            identifier: "sep".into(),
+            config: serde_json::Value::Null,
+        };
+        let events = parse_lever_payload(
+            include_str!("../../../../fixtures/providers/lever/sep.json"),
+            &source,
+        )
+        .unwrap();
+        let WorkerEvent::Job {
+            locations,
+            role_type,
+            ..
+        } = &events[0]
+        else {
+            panic!()
+        };
+        assert_eq!(*role_type, RoleType::FullTime);
+        assert_eq!(locations[0].raw, "Westfield, IN");
+        assert_eq!(locations[0].city.as_deref(), Some("Westfield"));
+        assert_eq!(locations[0].country_code.as_deref(), Some("US"));
+        assert_eq!(locations[0].region_code.as_deref(), Some("US-IN"));
+        let events=parse_lever_payload(r#"[{"id":"authored","text":"Engineer","hostedUrl":"https://fixture.test/1","country":"US","categories":{"location":"Westfield, IN","allLocations":["Westfield, IN","Toronto, ON"]}}]"#,&source).unwrap();
+        let WorkerEvent::Job {
+            locations,
+            role_type,
+            ..
+        } = &events[0]
+        else {
+            panic!()
+        };
+        assert_eq!(*role_type, RoleType::Unknown);
+        assert_eq!(locations[1].country_code.as_deref(), Some("CA"));
     }
 }

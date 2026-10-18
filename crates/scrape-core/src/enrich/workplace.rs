@@ -47,16 +47,8 @@ pub fn classify_workplace(
             return WorkplaceType::Remote;
         }
     }
-    let location = normalize(location_str);
-    if location.is_empty()
-        || matches!(location.as_str(), "UNKNOWN" | "N A")
-        || patterns.not_onsite.is_match(&location)
-        || patterns.not_hybrid.is_match(&location)
-    {
-        WorkplaceType::Unknown
-    } else {
-        WorkplaceType::Onsite
-    }
+    // A physical address does not establish an office-attendance policy.
+    WorkplaceType::Unknown
 }
 
 struct Patterns {
@@ -130,7 +122,7 @@ mod tests {
         );
         assert_eq!(
             classify_workplace(None, "Remoteville, US", None),
-            WorkplaceType::Onsite
+            WorkplaceType::Unknown
         );
         assert_eq!(
             classify_workplace(
@@ -244,6 +236,10 @@ mod tests {
     #[test]
     fn test_classify_empty_unknown() {
         assert_eq!(classify_workplace(None, "", None), WorkplaceType::Unknown);
+        assert_eq!(
+            classify_workplace(None, "Westfield, IN", None),
+            WorkplaceType::Unknown
+        );
         assert_eq!(
             classify_workplace(None, "Unknown", None),
             WorkplaceType::Unknown

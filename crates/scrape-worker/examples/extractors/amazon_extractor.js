@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Amazon Jobs API extractor speaking SCRIPT_PROTOCOL_VERSION = 1
+// Amazon Jobs API extractor speaking SCRIPT_PROTOCOL_VERSION = 2
 import { readFileSync } from "node:fs";
 
 async function main() {
@@ -14,7 +14,7 @@ async function main() {
   }
 
   const input = JSON.parse(inputStr);
-  if (input.version !== 1) {
+  if (input.version !== 2) {
     process.stderr.write(`Unsupported protocol version: ${input.version}\n`);
     process.exit(1);
   }
@@ -43,7 +43,7 @@ async function main() {
     const job = jobs[i];
     const candidate = {
       type: "candidate",
-      version: 1,
+      version: 2,
       external_id: String(job.id_icims || job.id || ""),
       title: job.title || "Untitled Role",
       url: job.job_path
@@ -70,7 +70,7 @@ async function main() {
 
   const complete = {
     type: "complete",
-    version: 1,
+    version: 2,
     exhausted: limit >= jobs.length,
   };
   process.stdout.write(JSON.stringify(complete) + "\n");

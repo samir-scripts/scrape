@@ -2218,3 +2218,6 @@ mod execution_outcome_upgrade_tests {
         restarted.close().await;
     }
 }
+
+#[cfg(test)]
+mod geography_parity_tests;

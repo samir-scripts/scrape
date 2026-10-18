@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Netflix Eightfold API extractor speaking SCRIPT_PROTOCOL_VERSION = 1
+// Netflix Eightfold API extractor speaking SCRIPT_PROTOCOL_VERSION = 2
 import { readFileSync } from "node:fs";
 
 async function main() {
@@ -14,7 +14,7 @@ async function main() {
   }
 
   const input = JSON.parse(inputStr);
-  if (input.version !== 1) {
+  if (input.version !== 2) {
     process.stderr.write(`Unsupported protocol version: ${input.version}\n`);
     process.exit(1);
   }
@@ -43,7 +43,7 @@ async function main() {
     const pos = positions[i];
     const candidate = {
       type: "candidate",
-      version: 1,
+      version: 2,
       external_id: String(pos.id || pos.ats_job_id || ""),
       title: pos.name || pos.posting_name || "Untitled Role",
       url: pos.canonicalPositionUrl || `https://explore.jobs.netflix.net/careers/job/${pos.id}`,
@@ -51,6 +51,11 @@ async function main() {
         ? pos.locations.join("; ")
         : (pos.location || null),
       company: "Netflix",
+      // Observed in the recorded Netflix contract; no arrangement is inferred
+      // from a physical office address or a continental location label.
+      workplace_type: pos.work_location_option === "remote_local" ? "remote"
+        : ["onsite", "remote", "hybrid"].includes(pos.work_location_option)
+          ? pos.work_location_option : "unknown",
     };
     if (pos.job_description) {
       candidate.description = pos.job_description;
@@ -63,7 +68,7 @@ async function main() {
 
   const complete = {
     type: "complete",
-    version: 1,
+    version: 2,
     exhausted: limit >= positions.length,
   };
   process.stdout.write(JSON.stringify(complete) + "\n");

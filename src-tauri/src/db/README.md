@@ -62,3 +62,9 @@ historical fixtures. See database recovery for the explicit backed-up ownership
 repair helper.
 Cleanup previews count parent workflows; owned child rows are not additional
 workflows. Child completion resolves retention policy through parent ownership.
+
+`geography_parity_tests.rs` uses independent expected IDs against the worker rule
+and real temporary SQLite queries. Country/region/city/raw predicates stay on one
+job_locations tuple; no aggregate jobs.location city fallback remains. Missing-city
+policy, raw-only evidence, literal wildcard characters, exact parsed-city comparison
+and Unicode whitespace/spelling are explicit. No schema/data migration is needed.

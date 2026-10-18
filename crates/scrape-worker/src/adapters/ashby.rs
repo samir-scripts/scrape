@@ -21,6 +21,7 @@ struct AshbyJob {
     #[serde(rename = "jobUrl")]
     job_url: String,
     location: Option<String>,
+    address: Option<AshbyAddress>,
     #[serde(rename = "secondaryLocations")]
     secondary_locations: Option<Vec<AshbySecondaryLocation>>,
     #[serde(rename = "employmentType")]
@@ -41,6 +42,30 @@ struct AshbyJob {
 #[derive(Debug, Deserialize)]
 struct AshbySecondaryLocation {
     location: Option<String>,
+    address: Option<AshbyAddress>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AshbyAddress {
+    postal_address: Option<Box<AshbyAddress>>,
+    address_locality: Option<String>,
+    address_region: Option<String>,
+    address_country: Option<String>,
+}
+impl AshbyAddress {
+    fn locations(&self, label: &str) -> Vec<scrape_core::enrich::ParsedLocation> {
+        let address = self.postal_address.as_deref().unwrap_or(self);
+        let city = address.address_locality.as_deref().unwrap_or("");
+        let region = address.address_region.as_deref().unwrap_or("");
+        let country = address.address_country.as_deref().unwrap_or("");
+        if let Some(mut parsed) = loc_enrich::from_address(city, region, country) {
+            parsed.raw = format!("{label} [address: {}]", parsed.raw);
+            vec![parsed]
+        } else {
+            loc_enrich::parse(label)
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -162,7 +187,23 @@ fn parse_ashby_jobs_with(
         } else {
             loc_strings.join("; ")
         };
-        let mut locations = loc_enrich::parse(&location_str);
+        let mut locations = job
+            .address
+            .as_ref()
+            .map(|a| a.locations(job.location.as_deref().unwrap_or("")))
+            .unwrap_or_else(|| loc_enrich::parse(job.location.as_deref().unwrap_or("")));
+        if let Some(secondary) = &job.secondary_locations {
+            for entry in secondary {
+                let label = entry.location.as_deref().unwrap_or("");
+                locations.extend(
+                    entry
+                        .address
+                        .as_ref()
+                        .map(|a| a.locations(label))
+                        .unwrap_or_else(|| loc_enrich::parse(label)),
+                );
+            }
+        }
 
         // Description
         let description_is_html = job
@@ -203,11 +244,10 @@ fn parse_ashby_jobs_with(
         }
 
         // Workplace type
-        let explicit = if job.is_remote == Some(true) {
-            Some("Remote")
-        } else {
-            job.workplace_type.as_deref()
-        };
+        let explicit = job
+            .workplace_type
+            .as_deref()
+            .or_else(|| (job.is_remote == Some(true)).then_some("Remote"));
         let workplace_type = classify_workplace(explicit, &location_str, desc_text.as_deref());
 
         // Compensation
@@ -409,5 +449,48 @@ mod tests {
         } else {
             panic!("Expected WorkerEvent::Job");
         }
+    }
+}
+
+#[cfg(test)]
+mod address_evidence_tests {
+    use super::*;
+    #[test]
+    fn primary_secondary_addresses_and_explicit_workplace_remain_distinct() {
+        let source = WorkerSource {
+            id: "fixture".into(),
+            kind: scrape_core::SourceKind::Ashby,
+            name: "Fixture".into(),
+            identifier: "fixture".into(),
+            config: serde_json::Value::Null,
+        };
+        let events=parse_ashby_payload(r#"{"jobs":[{"id":"1","title":"Engineer","jobUrl":"https://fixture.test/1","location":"Primary HQ","address":{"postalAddress":{"addressLocality":"Unlistedville","addressRegion":"Indiana","addressCountry":"USA"}},"secondaryLocations":[{"location":"Secondary HQ","address":{"addressLocality":"Brampton","addressRegion":"Ontario","addressCountry":"Canada"}}],"workplaceType":"Hybrid","isRemote":true,"employmentType":"PartTime"},{"id":"2","title":"Engineer","jobUrl":"https://fixture.test/2","location":"Europe","address":{"postalAddress":{"addressCountry":"European Union"}}}]}"#,&source).unwrap();
+        let WorkerEvent::Job {
+            locations,
+            role_type,
+            workplace_type,
+            ..
+        } = &events[0]
+        else {
+            panic!()
+        };
+        assert_eq!(*role_type, RoleType::PartTime);
+        assert_eq!(*workplace_type, scrape_core::WorkplaceType::Hybrid);
+        assert_eq!(locations[0].city.as_deref(), Some("Unlistedville"));
+        assert_eq!(locations[0].region_code.as_deref(), Some("US-IN"));
+        assert!(locations[0].raw.contains("Primary HQ"));
+        assert!(locations[0].raw.contains("USA"));
+        assert_eq!(locations[1].country_code.as_deref(), Some("CA"));
+        assert_eq!(locations[1].region_code.as_deref(), Some("CA-ON"));
+        let WorkerEvent::Job {
+            locations,
+            role_type,
+            ..
+        } = &events[1]
+        else {
+            panic!()
+        };
+        assert_eq!(*role_type, RoleType::Unknown);
+        assert!(locations.iter().all(|l| l.country_code.is_none()));
     }
 }

@@ -71,6 +71,8 @@ pub fn scraped_job_from_event(event: WorkerEvent) -> Result<ScrapedJob> {
                 ));
             }
             scrape_core::identity::normalized_detail_url(&url).map_err(AppError::Validation)?;
+            scrape_core::enrich::location::validate_locations(&locations)
+                .map_err(AppError::Validation)?;
             let dedupe_key = format!("{}:{}", source_id, external_id);
             let loc_opt = if location.is_empty() {
                 None
@@ -195,5 +197,20 @@ mod budget_tests {
             .to_string()
             .contains("exceeded max_jobs_per_run"));
         assert!(budget.take("two").is_err());
+    }
+}
+
+#[cfg(test)]
+mod geographic_validation_tests {
+    use super::*;
+    #[test]
+    fn host_rejects_conflicting_or_missing_geographic_provenance() {
+        for tuple in [
+            serde_json::json!({"raw":"Conflicting address","city":"Cupertino","country_code":"CA","region_code":"US-CA","is_remote":false}),
+            serde_json::json!({"raw":"","city":"Cupertino","country_code":"US","region_code":"US-CA","is_remote":false}),
+        ] {
+            let event:WorkerEvent=serde_json::from_value(serde_json::json!({"type":"job","source_id":"fixture","external_id":"1","title":"Engineer","company":"Authored fixture","url":"https://fixture.test/1","location":"Cupertino","role_type":"unknown","locations":[tuple]})).unwrap();
+            assert!(scraped_job_from_event(event).is_err());
+        }
     }
 }

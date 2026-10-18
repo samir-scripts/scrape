@@ -193,6 +193,9 @@ impl GreenhouseJob {
         {
             fields.push(FilterField::Location);
         }
+        let description = self.content.as_deref().map(|content| {
+            normalize_description_with_format(content, DescriptionFormat::Html, 32768).plain_text
+        });
         scrape_core::matching::MatchingEvidence {
             fields,
             posting_date: self.first_published.is_some(),
@@ -200,6 +203,19 @@ impl GreenhouseJob {
                 .pay_input_ranges
                 .as_ref()
                 .is_some_and(|ranges| !ranges.is_empty()),
+            known: if classify_workplace(
+                None,
+                self.location
+                    .as_ref()
+                    .and_then(|l| l.name.as_deref())
+                    .unwrap_or(""),
+                description.as_deref(),
+            ) != scrape_core::WorkplaceType::Unknown
+            {
+                vec![scrape_core::matching::RejectionReason::Workplace]
+            } else {
+                vec![]
+            },
             opportunity_exhausted: false,
         }
     }

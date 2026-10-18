@@ -211,3 +211,14 @@ Wait-for selectors (`wait_for`), repeated `load_more` clicks with DOM-growth
 detection, `next_page` links, bounded detail-page rendering, and login-wall
 detection (`CoverageTermination::NeedsLogin`) feed into the same authoritative
 `SelectorAdapter` and matching pipeline as static extraction.
+
+## Script evidence contract (Plan 12 Section 4)
+
+Custom scripts speak protocol **2**, distinct from host/worker protocol 7. Candidate
+frames optionally provide employment_type, a snake-case workplace_type enum and
+validated locations tuples; Rust owns matching/acceptance. Unknown frame fields
+and version-1 frames fail explicitly. The supported pay text field is salary.
+See the [current contract](../../plans/workflow-v3.md#field-evidence-and-script-protocol-2-plan-12-section-4).
+Changed bundled/user scripts invalidate local trust and require review; no workflow
+is automatically rewritten or enabled. Bundled Netflix workplace mapping is based
+on recorded fields and does not establish live pagination/coverage support.

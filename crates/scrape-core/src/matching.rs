@@ -41,6 +41,8 @@ pub struct MatchingEvidence {
     pub fields: Vec<FilterField>,
     pub posting_date: bool,
     pub compensation: bool,
+    /// Individually resolved structured fields, independent of description presence.
+    pub known: Vec<RejectionReason>,
     /// A failed/exhausted opportunity can use explicitly permitted unknown values.
     pub opportunity_exhausted: bool,
 }
@@ -56,18 +58,94 @@ impl MatchingEvidence {
             ],
             posting_date: true,
             compensation: true,
+            known: vec![RejectionReason::Workplace, RejectionReason::Geography],
             opportunity_exhausted: true,
         }
     }
+    pub fn from_event(event: &WorkerEvent, opportunity_exhausted: bool) -> Self {
+        let WorkerEvent::Job {
+            location,
+            description_text,
+            date_posted,
+            salary,
+            workplace_type,
+            location_data_complete,
+            sponsorship,
+            work_auth,
+            clearance,
+            experience,
+            is_new_grad,
+            ..
+        } = event
+        else {
+            return Self::default();
+        };
+        let mut fields = vec![
+            FilterField::Title,
+            FilterField::Company,
+            FilterField::RoleType,
+        ];
+        if !location.trim().is_empty() {
+            fields.push(FilterField::Location);
+        }
+        if description_text
+            .as_ref()
+            .is_some_and(|d| !d.trim().is_empty())
+        {
+            fields.push(FilterField::Description);
+        }
+        let mut known = Vec::new();
+        if *workplace_type != WorkplaceType::Unknown {
+            known.push(RejectionReason::Workplace);
+        }
+        if *location_data_complete {
+            known.push(RejectionReason::Geography);
+        }
+        if sponsorship
+            .as_ref()
+            .is_some_and(|value| value.value != TriState::Unknown)
+        {
+            known.push(RejectionReason::Sponsorship);
+        }
+        if work_auth
+            .as_ref()
+            .is_some_and(|value| value.value != WorkAuthRequirement::Unknown)
+        {
+            known.push(RejectionReason::WorkAuthorization);
+        }
+        if clearance
+            .as_ref()
+            .is_some_and(|value| value.value != TriState::Unknown)
+        {
+            known.push(RejectionReason::Clearance);
+        }
+        if experience
+            .as_ref()
+            .is_some_and(|value| value.min_years.is_some() || value.max_years.is_some())
+        {
+            known.push(RejectionReason::Experience);
+        }
+        if *is_new_grad != TriState::Unknown {
+            known.push(RejectionReason::NewGrad);
+        }
+        Self {
+            fields,
+            known,
+            posting_date: date_posted.is_some(),
+            compensation: salary.is_some(),
+            opportunity_exhausted,
+        }
+    }
     fn knows(&self, reason: RejectionReason) -> bool {
+        if self.known.contains(&reason) {
+            return true;
+        }
         let has = |field| self.fields.contains(&field);
         match reason {
             RejectionReason::PostingDate => self.posting_date,
             RejectionReason::Compensation => self.compensation,
             RejectionReason::RoleType => has(FilterField::RoleType),
-            RejectionReason::Geography | RejectionReason::Workplace => {
-                has(FilterField::Location) && has(FilterField::Description)
-            }
+            RejectionReason::Geography | RejectionReason::Workplace => false,
             RejectionReason::Experience | RejectionReason::NewGrad => {
                 has(FilterField::Description) && has(FilterField::Title)
             }
@@ -409,10 +487,17 @@ impl PostingRules {
                     || loc.city.as_ref().is_some_and(|v| !v.trim().is_empty())
             })
             .collect();
-        if known.is_empty() {
+        // Raw-only tuples can establish a city substring, but must never let a
+        // Remote/unknown row bypass contradictory structured geography elsewhere.
+        let candidates = if known.is_empty() {
+            locations.iter().collect()
+        } else {
+            known
+        };
+        if candidates.is_empty() {
             return self.location_include_unknown;
         }
-        known.into_iter().any(|loc| {
+        candidates.into_iter().any(|loc| {
             let country = loc.effective_country();
             let country_match = self.countries.is_empty()
                 || country.map_or(self.location_include_unknown, |code| {
@@ -421,8 +506,9 @@ impl PostingRules {
             let region_match = self.regions.is_empty()
                 || if let Some(code) = loc.region_code.as_deref().filter(|v| !v.trim().is_empty()) {
                     self.regions.iter().any(|region| {
-                        code.eq_ignore_ascii_case(region)
+                        code.trim().eq_ignore_ascii_case(region)
                             || code
+                                .trim()
                                 .to_ascii_uppercase()
                                 .ends_with(&format!("-{}", region.to_ascii_uppercase()))
                     })
@@ -434,26 +520,25 @@ impl PostingRules {
                             })
                         })
                 };
+            // Parsed cities are exact (ASCII case-insensitive); the same tuple's
+            // raw evidence also supports literal substrings. Non-ASCII characters
+            // are preserved, not transliterated or case-folded by SQLite lower().
             let city_match = self.cities.is_empty()
-                || if let Some(city) = loc.city.as_deref().filter(|v| !v.trim().is_empty()) {
-                    self.cities.iter().any(|target| {
-                        let t = target.trim();
-                        city.eq_ignore_ascii_case(t)
-                            || loc
-                                .raw
-                                .to_ascii_lowercase()
-                                .contains(&t.to_ascii_lowercase())
-                    })
-                } else if self.location_include_unknown {
-                    true
-                } else {
-                    self.cities.iter().any(|target| {
-                        let t = target.trim();
-                        loc.raw
+                || self.cities.iter().any(|target| {
+                    let target = target.trim();
+                    loc.city
+                        .as_deref()
+                        .is_some_and(|city| city.trim().eq_ignore_ascii_case(target))
+                        || loc
+                            .raw
                             .to_ascii_lowercase()
-                            .contains(&t.to_ascii_lowercase())
-                    })
-                };
+                            .contains(&target.to_ascii_lowercase())
+                        || (self.location_include_unknown
+                            && loc
+                                .city
+                                .as_deref()
+                                .is_none_or(|city| city.trim().is_empty()))
+                });
             country_match && region_match && city_match
         })
     }
@@ -677,23 +762,26 @@ impl PostingRules {
                             && self.clearance.contains(&TriState::Unknown)
                     }
                     RejectionReason::Geography => {
-                        !locations.iter().any(|l| {
-                            l.effective_country().is_some()
-                                || l.region_code.is_some()
-                                || l.city.is_some()
-                        }) && self.location_include_unknown
+                        !crate::enrich::location::has_geographic_value(locations)
+                            && self.location_include_unknown
                     }
+                    RejectionReason::Workplace => self.workplaces.contains(&WorkplaceType::Unknown),
                     _ => false,
                 };
-            let known_positive_geography = reason == RejectionReason::Geography
+            let known_geography = reason == RejectionReason::Geography
                 && evidence.fields.contains(&FilterField::Location)
-                && locations.iter().any(|l| {
-                    l.effective_country().is_some() || l.region_code.is_some() || l.city.is_some()
-                })
-                && !failed.contains(&reason);
+                && (crate::enrich::location::has_geographic_value(locations)
+                    || self.cities.iter().any(|city| {
+                        locations.iter().any(|l| {
+                            l.raw
+                                .to_ascii_lowercase()
+                                .contains(&city.trim().to_ascii_lowercase())
+                        })
+                    }))
+                && (evidence.opportunity_exhausted || !failed.contains(&reason));
             assessment.check(
                 reason,
-                (evidence.knows(reason) || allowed_unknown || known_positive_geography)
+                (evidence.knows(reason) || allowed_unknown || known_geography)
                     .then(|| !failed.contains(&reason)),
             );
         }
@@ -836,7 +924,14 @@ impl PostingRules {
         }
         if !self.countries.is_empty() || !self.regions.is_empty() || !self.cities.is_empty() {
             let mut geo = Vec::new();
-            let country = "coalesce(NULLIF(trim(jl.country_code),''), CASE WHEN instr(jl.region_code,'-') > 0 THEN substr(jl.region_code,1,instr(jl.region_code,'-')-1) END)";
+            // SQLite trim's explicit character set mirrors Rust str::trim.
+            let trim = |column: &str| {
+                format!("NULLIF(trim({column},char(9,10,11,12,13,32,133,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288)), '')")
+            };
+            let city_value = trim("jl.city");
+            let region_value = trim("jl.region_code");
+            let country_value = trim("jl.country_code");
+            let country = format!("coalesce({country_value}, CASE WHEN instr({region_value},'-') > 0 THEN substr({region_value},1,instr({region_value},'-')-1) END)");
             if !self.countries.is_empty() {
                 let condition = format!(
                     "upper({country}) IN ({})",
@@ -856,14 +951,14 @@ impl PostingRules {
             if !self.regions.is_empty() {
                 let mut parts = Vec::new();
                 for region in &self.regions {
-                    let condition = "(upper(jl.region_code) = ? OR substr(upper(jl.region_code), instr(jl.region_code, '-') + 1) = ?)";
+                    let condition = format!("(upper({region_value}) = ? OR substr(upper({region_value}), instr({region_value}, '-') + 1) = ?)");
                     bindings.push(Bind::Text(region.to_ascii_uppercase()));
                     bindings.push(Bind::Text(region.to_ascii_uppercase()));
                     parts.push(if self.location_include_unknown {
                         if let Some((prefix,_)) = region.split_once('-') {
                             bindings.push(Bind::Text(prefix.to_ascii_uppercase()));
-                            format!("({condition} OR (NULLIF(trim(jl.region_code),'') IS NULL AND ({country} IS NULL OR upper({country}) = ?)))")
-                        } else { format!("({condition} OR NULLIF(trim(jl.region_code),'') IS NULL)") }
+                            format!("({condition} OR ({region_value} IS NULL AND ({country} IS NULL OR upper({country}) = ?)))")
+                        } else { format!("({condition} OR {region_value} IS NULL)") }
                     } else { condition.to_string() });
                 }
                 geo.push(format!("({})", parts.join(" OR ")));
@@ -871,21 +966,25 @@ impl PostingRules {
             if !self.cities.is_empty() {
                 let mut parts = Vec::new();
                 for city in &self.cities {
-                    let condition = "(instr(lower(coalesce(jl.city, '')), lower(?)) > 0 OR instr(lower(jl.raw), lower(?)) > 0 OR instr(lower(coalesce(jobs.location, '')), lower(?)) > 0)";
-                    bindings.push(Bind::Text(city.clone()));
-                    bindings.push(Bind::Text(city.clone()));
-                    bindings.push(Bind::Text(city.clone()));
+                    let condition = format!(
+                        "(lower({city_value}) = lower(?) OR instr(lower(jl.raw), lower(?)) > 0)"
+                    );
+                    bindings.push(Bind::Text(city.trim().into()));
+                    bindings.push(Bind::Text(city.trim().into()));
                     parts.push(if self.location_include_unknown {
-                        format!("({condition} OR NULLIF(trim(coalesce(jl.city, jl.raw, jobs.location, '')),'') IS NULL)")
+                        format!("({condition} OR {city_value} IS NULL)")
                     } else {
-                        condition.to_string()
+                        condition
                     });
                 }
                 geo.push(format!("({})", parts.join(" OR ")));
             }
-            let known = "(NULLIF(trim(jl.country_code),'') IS NOT NULL OR NULLIF(trim(jl.region_code),'') IS NOT NULL OR NULLIF(trim(jl.city),'') IS NOT NULL)";
-            let exists = format!("EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id=jobs.id AND {known} AND ({}))", geo.join(" AND "));
-            clauses.push(if self.location_include_unknown { format!("({exists} OR NOT EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id=jobs.id AND {known}))") } else { exists });
+            let known = format!("({country_value} IS NOT NULL OR {region_value} IS NOT NULL OR {city_value} IS NOT NULL)");
+            let any_known = format!("EXISTS (SELECT 1 FROM job_locations jl_known WHERE jl_known.job_id=jobs.id AND {})", known.replace("jl.", "jl_known."));
+            let exists = format!("EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id=jobs.id AND ({known} OR NOT {any_known}) AND ({}))", geo.join(" AND "));
+            clauses.push(if self.location_include_unknown {
+                format!("({exists} OR NOT EXISTS (SELECT 1 FROM job_locations jl WHERE jl.job_id=jobs.id))")
+            } else { exists });
         }
         (clauses, bindings)
     }
@@ -1117,5 +1216,34 @@ mod incomplete_evidence_tests {
                     .collect()
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod field_evidence_tests {
+    use super::*;
+    #[test]
+    fn concrete_workplace_does_not_require_description_and_does_not_complete_unrelated_fields() {
+        let event:WorkerEvent=serde_json::from_value(serde_json::json!({"type":"job","source_id":"fixture","external_id":"1","title":"Engineer","company":"Fixture","url":"https://fixture.test/1","location":"","role_type":"unknown","workplace_type":"remote"})).unwrap();
+        let evidence = MatchingEvidence::from_event(&event, true);
+        for (rule, expected) in [
+            (serde_json::json!({"workplaces":["remote"]}), vec![]),
+            (
+                serde_json::json!({"workplaces":["onsite"]}),
+                vec![RejectionReason::Workplace],
+            ),
+        ] {
+            let rules: PostingRules = serde_json::from_value(rule).unwrap();
+            let assessed = rules.assess(&event, chrono::Utc::now(), &evidence);
+            assert!(assessed.unresolved.is_empty());
+            assert_eq!(assessed.rejected, expected);
+        }
+        let rules:PostingRules=serde_json::from_value(serde_json::json!({"countries":["US"],"keywords":{"any":["Rust"],"fields":["description"]}})).unwrap();
+        let assessed = rules.assess(&event, chrono::Utc::now(), &evidence);
+        assert_eq!(
+            assessed.unresolved,
+            vec![RejectionReason::KeywordAny, RejectionReason::Geography]
+        );
+        assert!(assessed.rejected.is_empty());
     }
 }

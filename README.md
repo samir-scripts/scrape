@@ -10,7 +10,9 @@ Its first section adds durable redacted run-preparation/preflight diagnostics an
 seed-service → packaged-worker → temporary-database regressions. Section 2 adds atomic multi-source ownership, workflow-scoped endpoints (migration
 27), and disabled script review. Section 3 preserves independent legacy/structured
 matching constraints, exposes compatibility restrictions in the editor, and confines
-global matching inheritance to legacy imports/upgrades. Field-evidence/extraction defects remain open; see
+global matching inheritance to legacy imports/upgrades. Section 4 retains provider country/address evidence,
+fixes worker/SQLite geography parity, and adds typed script evidence under custom-runner
+protocol 2 (worker protocol stays 7). Template/extraction/provider/native acceptance remains open; see
 [Incident 28](plans/errors/28-empty-seeded-workflows.md).
 
 ---

@@ -231,3 +231,50 @@ custom code runs with local user privileges, and process isolation is not an OS
 sandbox. Trust alone never enables a source or starts a run. Preview, transient
 Test, manual and scheduled runs pass the same trust/content check before any
 subprocess launch. Browser demonstration mode cannot verify these extractors.
+
+
+## Field evidence and script protocol 2 (Plan 12 Section 4)
+
+The host/worker wire protocol remains 7 and WorkflowSpec remains 6. Custom scripts
+now use **SCRIPT_PROTOCOL_VERSION = 2** for every input/output frame. Version 1
+output is rejected with the expected version; it is not silently upgraded. Scripts
+must emit only documented frame fields (`salary`, not `salary_text`); unknown
+fields, including claimed acceptance, fail explicitly.
+
+Candidates may supply `employment_type` (an ATS employment hint), `workplace_type`
+(`remote`, `hybrid`, `onsite`, `unknown`), and `locations` (up to 64 `ParsedLocation`
+tuples with raw evidence, optional city/ISO country/qualified subdivision, and
+`is_remote`). Rust classifies hints, validates tuples, performs matching and owns
+acceptance. The host revalidates the same bounds/country-subdivision consistency
+before persistence. `raw` must be nonblank and at most 8192 bytes; city is bounded
+to 1024 bytes. A physical address alone no longer implies onsite attendance.
+Concrete workplace/eligibility evidence does not require an unrelated description;
+missing descriptions remain missing for description keyword/SQL rules. Unresolved
+required fields retain partial diagnostics, and explicit unknown policies remain
+authoritative after enrichment is exhausted.
+
+Lever's `country` disambiguates only its associated primary location. For example,
+`Westfield, IN` plus `US` yields city Westfield and US-IN while retaining the raw
+label; secondary locations do not inherit another location's country. Ashby primary
+postal addresses and both documented/captured secondary address forms are used
+before free text. Explicit workplaceType takes precedence over the older isRemote
+flag. Continents and unrecognized country labels remain unknown; Greenhouse custom
+metadata is not interpreted as employment without captured field semantics.
+
+Geography checks every requested dimension on one tuple. Parsed city names use
+exact ASCII-case-insensitive comparison after trimming; original raw text on that
+same tuple also permits a literal substring. `%`/`_` are literal city characters.
+Non-ASCII spelling is preserved, with no transliteration or Unicode case folding;
+query trimming and blank-value handling include Unicode whitespace consistently
+in Rust and SQLite. Raw-only city evidence can match when no structured geographic
+tuple is present. Unknown tuples cannot bypass contradictory known tuples, and
+missing-city inclusion follows `location_include_unknown`. Neither another tuple's
+text nor the aggregate job location string can satisfy a tuple's city predicate.
+
+The bundled Netflix/Amazon examples speak version 2. Netflix maps only observed
+work-location options (`onsite`, `remote`, `remote_local`, `hybrid`); this establishes
+arrangement, not residence or authorization. Editing scripts/files invalidates
+local trust through the existing content hash. Users must update/review their own
+version-1 scripts and explicitly trust changed content; saved workflows are never
+rewritten or enabled automatically. Pagination/date/portable-runtime repairs remain
+Plan 12 Sections 5–7 acceptance work.

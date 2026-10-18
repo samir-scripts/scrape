@@ -1643,12 +1643,12 @@ if (!input.continuation) {
     // Turn 1: 1 matching job + continuation
     console.log(JSON.stringify({
         type: 'candidate',
-        version: 1,
+        version: 2,
         external_id: 'script-1',
         title: 'Senior Backend Engineer',
         url: 'https://fixture.test/jobs/backend',
         location: 'Remote',
-        salary_text: '$180,000',
+        salary: '$180,000',
         description: '<p>Backend microservices</p>',
         date_posted: '2026-10-15',
         company: 'Dynamic Systems',
@@ -1656,24 +1656,24 @@ if (!input.continuation) {
     }));
     console.log(JSON.stringify({
         type: 'continuation',
-        version: 1,
+        version: 2,
         cursor: 'page=2'
     }));
     console.log(JSON.stringify({
         type: 'complete',
-        version: 1,
+        version: 2,
         exhausted: false
     }));
 } else {
     // Turn 2: 1 job that will be rejected by filter "Engineer" (Marketing Associate)
     console.log(JSON.stringify({
         type: 'candidate',
-        version: 1,
+        version: 2,
         external_id: 'script-2',
         title: 'Junior Marketing Associate',
         url: 'https://fixture.test/jobs/marketing',
         location: 'New York, NY',
-        salary_text: '$70,000',
+        salary: '$70,000',
         description: '<p>Growth marketing</p>',
         date_posted: '2026-10-16',
         company: 'Dynamic Systems',
@@ -1681,7 +1681,7 @@ if (!input.continuation) {
     }));
     console.log(JSON.stringify({
         type: 'complete',
-        version: 1,
+        version: 2,
         exhausted: true
     }));
 }
@@ -1825,6 +1825,14 @@ if (!input.continuation) {
     assert!(
         titles.contains(&"Senior Backend Engineer"),
         "Missing Senior Backend Engineer in {titles:?}"
+    );
+    assert_eq!(
+        jobs.iter()
+            .find(|job| job.title == "Senior Backend Engineer")
+            .unwrap()
+            .salary_raw
+            .as_deref(),
+        Some("$180,000")
     );
     // Verify Marketing Associate was rejected by filter and not emitted as Job
     assert!(!titles.contains(&"Junior Marketing Associate"));
@@ -2237,9 +2245,9 @@ async fn seeded_workflow_rules_explain_zero_results_through_discovered_query() {
         std::fs::read_to_string(root.join("fixtures/providers/greenhouse/bitwarden.json")).unwrap();
     let sep = std::fs::read_to_string(root.join("fixtures/providers/lever/sep.json")).unwrap();
     let cloudflare = serde_json::json!({"meta":{"total":3},"jobs":[
-        {"id":91001,"title":"Software Engineer","absolute_url":"https://fixture.invalid/cloudflare/91001","location":{"name":"Austin, TX"},"content":"Authored fixture. Hybrid engineering."},
-        {"id":91002,"title":"Software Engineering Intern","absolute_url":"https://fixture.invalid/cloudflare/91002","location":{"name":"Austin, TX"},"content":"Authored fixture. Hybrid internship."},
-        {"id":91003,"title":"Sales Manager","absolute_url":"https://fixture.invalid/cloudflare/91003","location":{"name":"Austin, TX"},"content":"Authored fixture. Hybrid sales."}
+        {"id":91001,"title":"Software Engineer","absolute_url":"https://fixture.invalid/cloudflare/91001","location":{"name":"Austin, TX"},"content":"Authored fixture. Hybrid work model for engineering."},
+        {"id":91002,"title":"Software Engineering Intern","absolute_url":"https://fixture.invalid/cloudflare/91002","location":{"name":"Austin, TX"},"content":"Authored fixture. Hybrid work model for this internship."},
+        {"id":91003,"title":"Sales Manager","absolute_url":"https://fixture.invalid/cloudflare/91003","location":{"name":"Austin, TX"},"content":"Authored fixture. Hybrid work model for sales."}
     ]}).to_string();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
@@ -2287,7 +2295,7 @@ async fn seeded_workflow_rules_explain_zero_results_through_discovered_query() {
     for (board, expected) in [
         ("cloudflare", [3, 2, 1]),
         ("bitwarden", [20, 20, 0]),
-        ("sep", [8, 6, 0]),
+        ("sep", [8, 6, 6]),
     ] {
         for (variant, expected_jobs) in expected.into_iter().enumerate() {
             let directory = tempfile::tempdir().unwrap();
@@ -2346,16 +2354,39 @@ async fn seeded_workflow_rules_explain_zero_results_through_discovered_query() {
                     && r.count == 23));
             }
             if board == "sep" && variant == 2 {
-                assert_eq!((scan.examined, scan.rejected, scan.accepted), (8, 8, 0));
+                assert_eq!((scan.examined, scan.rejected, scan.accepted), (8, 2, 6));
                 assert!(scan.rejections.iter().any(|r| r.reason
-                    == scrape_core::matching::RejectionReason::Geography
-                    && r.count == 6));
+                    == scrape_core::matching::RejectionReason::KeywordAny
+                    && r.count == 2));
+                assert!(!scan
+                    .rejections
+                    .iter()
+                    .any(|r| r.reason == scrape_core::matching::RejectionReason::Geography));
             }
             let batch: Vec<_> = events
                 .into_iter()
                 .filter(|e| matches!(e, WorkerEvent::Job { .. }))
                 .map(|e| scraped_job_from_event(e).unwrap())
                 .collect();
+            if board == "sep" && variant == 2 {
+                let mut ids: Vec<_> = batch
+                    .iter()
+                    .map(|job| job.external_id.as_deref().unwrap())
+                    .collect();
+                ids.sort();
+                assert_eq!(
+                    ids,
+                    [
+                        "0b14158a-68e4-4e94-86f8-3f74c87cb3bd",
+                        "2eb79283-b3fd-4316-9e93-e80dbebfba05",
+                        "4efbdbce-a753-41b5-8ed7-0661cd193178",
+                        "80cd8c15-bafc-49a9-b8f1-5d407e891ec0",
+                        "98fc318a-8ce1-4730-a898-3ca372878bb2",
+                        "f7ad9ffb-03dc-4fb2-9a92-e5f04a85ba08"
+                    ],
+                    "fixed SEP geography must return the independently expected postings"
+                );
+            }
             let mut counts = RunCounts {
                 fetched: scan.examined as i64,
                 rejected: scan.rejected as i64,
@@ -2694,5 +2725,206 @@ async fn compatibility_rules_survive_saved_workflow_preview_run_and_discovered()
     stop.store(true, Ordering::SeqCst);
     server.join().unwrap();
     assert_eq!(pages.load(Ordering::SeqCst), 16);
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn recorded_sep_country_evidence_survives_filtered_preview_run_and_repository() {
+    use scrape_lib::services::{execution_diagnostics, workflow};
+    use serde_json::json;
+    use std::sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc,
+    };
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let stop = Arc::new(AtomicBool::new(false));
+    let stopped = stop.clone();
+    let listings = Arc::new(AtomicUsize::new(0));
+    let observed = listings.clone();
+    let server = std::thread::spawn(move || {
+        listener.set_nonblocking(true).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while !stopped.load(Ordering::SeqCst) && Instant::now() < deadline {
+            let Ok((mut stream, _)) = listener.accept() else {
+                std::thread::sleep(Duration::from_millis(5));
+                continue;
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut bytes = [0; 8192];
+            let n = stream.read(&mut bytes).unwrap();
+            let request = String::from_utf8_lossy(&bytes[..n]);
+            let path = request.split_whitespace().nth(1).unwrap();
+            let body = match path {
+                "/api.lever.co/v0/postings/sep?mode=json" => {
+                    observed.fetch_add(1, Ordering::SeqCst);
+                    include_str!("../../fixtures/providers/lever/sep.json")
+                }
+                "/api.lever.co/robots.txt" | "/jobs.lever.co/robots.txt" => {
+                    "User-agent: *\nAllow: /"
+                }
+                "/jobs.lever.co/sep/7b96b0c6-8429-4861-bf69-a00956e42a8d" => {
+                    "<main>Authored branding-free posting page for recorded SEP replay</main>"
+                }
+                _ => panic!("unexpected recorded SEP route {path}"),
+            };
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+        }
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&dir.path().join("sep-country.db"))
+        .await
+        .unwrap();
+    let spec=workflow::validate(json!({"version":6,"metadata":{"name":"Recorded SEP evidence control","company":"SEP"},"sources":[{"id":"sep","label":"SEP","extractor":{"kind":"lever","url":"sep"}}],"schedule":{"cadence":"manual"},"filters":{"matching":{"keywords":{"any":["Engineer"],"fields":["title"]},"role_types":["full_time"],"countries":["US"],"regions":["US-IN"],"cities":["Westfield"]}}}),"UTC").unwrap();
+    let rules = spec.filters.as_ref().unwrap().matching.clone().unwrap();
+    let parent = workflow::persist(&pool, spec, None, false, "UTC")
+        .await
+        .unwrap();
+    let mut config =
+        execution_diagnostics::prepare(&parent, "UTC", "2026-10-18T00:00:00Z").unwrap();
+    config.limits.per_host_delay_ms = 0;
+    let expected = [
+        "0b14158a-68e4-4e94-86f8-3f74c87cb3bd",
+        "2eb79283-b3fd-4316-9e93-e80dbebfba05",
+        "80cd8c15-bafc-49a9-b8f1-5d407e891ec0",
+        "98fc318a-8ce1-4730-a898-3ca372878bb2",
+        "f7ad9ffb-03dc-4fb2-9a92-e5f04a85ba08",
+    ];
+    for preview in [true, false] {
+        let events = invoke_replay(&config, preview, Some(&origin));
+        let WorkerEvent::Done { stats } = events.last().unwrap() else {
+            panic!()
+        };
+        assert_eq!(
+            (
+                stats.sources[0].examined,
+                stats.sources[0].accepted,
+                stats.sources[0].rejected
+            ),
+            (8, 5, 3)
+        );
+        assert_eq!(stats.sources[0].unresolved, 0);
+        let batch: Vec<_> = events
+            .into_iter()
+            .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+            .map(|e| scraped_job_from_event(e).unwrap())
+            .collect();
+        let mut ids: Vec<_> = batch
+            .iter()
+            .map(|j| j.external_id.as_deref().unwrap())
+            .collect();
+        ids.sort();
+        assert_eq!(ids, expected);
+        if !preview {
+            JobsRepo::upsert_scraped(&pool, &batch).await.unwrap();
+        }
+        let saved = JobsRepo::list(
+            &pool,
+            JobFilter {
+                source_id: Some(parent.id.clone()),
+                matching: Some(rules.clone()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(saved.total, if preview { 0 } else { 5 });
+        for job in saved.items {
+            assert_eq!(job.role_type, scrape_core::RoleType::FullTime);
+            assert_eq!(job.locations[0].raw, "Westfield, IN");
+            assert_eq!(job.locations[0].country_code.as_deref(), Some("US"));
+            assert_eq!(job.locations[0].region_code.as_deref(), Some("US-IN"));
+        }
+    }
+    stop.store(true, Ordering::SeqCst);
+    server.join().unwrap();
+    assert_eq!(listings.load(Ordering::SeqCst), 2);
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn recorded_netflix_workplace_only_evidence_survives_script_trust_and_persistence() {
+    use scrape_lib::services::{execution_diagnostics, script_trust, workflow};
+    use serde_json::json;
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&dir.path().join("netflix-evidence.db"))
+        .await
+        .unwrap();
+    let spec=workflow::validate(json!({"version":6,"metadata":{"name":"Recorded Netflix workplace control"},"sources":[{"id":"netflix","label":"Netflix","extractor":{"kind":"script","url":"https://explore.jobs.netflix.net/api/apply/v2/jobs","script":{"runtime":"js","path":root.join("crates/scrape-worker/examples/extractors/netflix_extractor.js").to_str().unwrap(),"args":[root.join("fixtures/providers/script/netflix.json").to_str().unwrap()]}}}],"schedule":{"cadence":"manual"},"filters":{"matching":{"workplaces":["remote"]}}}),"UTC").unwrap();
+    let parent = workflow::persist(&pool, spec, None, false, "UTC")
+        .await
+        .unwrap();
+    assert!(!parent.enabled);
+    assert!(parent.needs_review);
+    script_trust::trust(
+        &pool,
+        &parent.id,
+        parent.script_sha256.as_deref().unwrap(),
+        true,
+    )
+    .await
+    .unwrap();
+    let mut enabled: workflow::WorkflowSpec =
+        serde_json::from_value(parent.config["__workflow_spec"].clone()).unwrap();
+    enabled.metadata.enabled = Some(true);
+    enabled.sources[0].enabled = true;
+    let parent = workflow::persist(&pool, enabled, Some(parent.id.clone()), false, "UTC")
+        .await
+        .unwrap();
+    let config = execution_diagnostics::prepare(&parent, "UTC", "2026-10-18T00:00:00Z").unwrap();
+    script_trust::validate_execution(&pool, &config.sources)
+        .await
+        .unwrap();
+    let events = invoke(&config, false);
+    let WorkerEvent::Done { stats } = events.last().unwrap() else {
+        panic!()
+    };
+    assert_eq!(
+        (
+            stats.sources[0].examined,
+            stats.sources[0].accepted,
+            stats.sources[0].rejected,
+            stats.sources[0].unresolved
+        ),
+        (10, 2, 8, 0)
+    );
+    let batch: Vec<_> = events
+        .into_iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .map(|e| scraped_job_from_event(e).unwrap())
+        .collect();
+    let mut ids: Vec<_> = batch
+        .iter()
+        .map(|j| j.external_id.as_deref().unwrap())
+        .collect();
+    ids.sort();
+    assert_eq!(ids, ["790318858893", "790318883356"]);
+    assert!(batch
+        .iter()
+        .all(|j| j.role_type == scrape_core::RoleType::Unknown
+            && j.description_text.is_none()
+            && j.workplace_type == scrape_core::WorkplaceType::Remote));
+    JobsRepo::upsert_scraped(&pool, &batch).await.unwrap();
+    let saved = JobsRepo::list(
+        &pool,
+        JobFilter {
+            matching: Some(serde_json::from_value(json!({"workplaces":["remote"]})).unwrap()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(saved.total, 2);
     pool.close().await;
 }

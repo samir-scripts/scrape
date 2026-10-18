@@ -39,3 +39,11 @@ Raw ATS Payload / HTML Page
           ▼
    WorkerEvent::Job (Normalized Domain Event)
 ```
+
+Plan 12 Section 4: a physical city/address does not establish onsite attendance;
+`classify_workplace` retains Unknown without an arrangement cue. Provider country
+context resolves subdivision codes and unlisted cities through `parse_with_country`,
+while `from_address` retains explicit locality even when country is missing.
+Original location/address evidence is stored beside normalized codes. Continental
+labels do not establish a country. Shared location validation bounds executable
+evidence and is repeated by host ingestion.

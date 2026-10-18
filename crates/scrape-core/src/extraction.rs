@@ -172,46 +172,72 @@ pub fn limits(config: &Value) -> Result<crate::WorkerLimits, String> {
     Ok(limits)
 }
 
-pub const SCRIPT_PROTOCOL_VERSION: u32 = 1;
+pub const SCRIPT_PROTOCOL_VERSION: u32 = 2;
 
 /// Input frame written to script stdin as a single-line JSON payload before EOF.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct ScriptInputFrame {
     pub version: u32,
     pub source_id: String,
     pub url: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
     pub continuation: Option<String>,
     pub max_candidates: u32,
+    #[ts(type = "number")]
     pub timeout_ms: u64,
     #[serde(default)]
     pub config: serde_json::Value,
 }
 
+/// Evidence emitted by a script; only Rust can accept it for persistence.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
+#[serde(deny_unknown_fields)]
+pub struct ScriptCandidate {
+    pub version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub external_id: Option<String>,
+    pub title: String,
+    pub url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub location: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub salary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub date_posted: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub company: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub employer_logo_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub employment_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub workplace_type: Option<crate::WorkplaceType>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub locations: Option<Vec<crate::enrich::ParsedLocation>>,
+}
+
 /// Output frames emitted by script stdout as NDJSON lines.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export, tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ScriptOutputFrame {
-    Candidate {
-        version: u32,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        external_id: Option<String>,
-        title: String,
-        url: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        location: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        salary: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        description: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        date_posted: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        company: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        employer_logo_url: Option<String>,
-    },
+    Candidate(Box<ScriptCandidate>),
     Continuation {
         version: u32,
         cursor: String,
@@ -231,8 +257,8 @@ pub enum ScriptOutputFrame {
 impl ScriptOutputFrame {
     pub fn version(&self) -> u32 {
         match self {
-            Self::Candidate { version, .. }
-            | Self::Continuation { version, .. }
+            Self::Candidate(candidate) => candidate.version,
+            Self::Continuation { version, .. }
             | Self::Diagnostic { version, .. }
             | Self::Complete { version, .. } => *version,
         }
@@ -337,8 +363,8 @@ mod tests {
 
     #[test]
     fn script_frames_serialize_and_deserialize_ndjson() {
-        let frame = ScriptOutputFrame::Candidate {
-            version: 1,
+        let frame = ScriptOutputFrame::Candidate(Box::new(ScriptCandidate {
+            version: SCRIPT_PROTOCOL_VERSION,
             external_id: Some("id-1".into()),
             title: "Engineer".into(),
             url: "https://fixture.test/job/1".into(),
@@ -348,21 +374,30 @@ mod tests {
             date_posted: Some("2026-10-17".into()),
             company: Some("Corp".into()),
             employer_logo_url: None,
-        };
+            employment_type: None,
+            workplace_type: None,
+            locations: None,
+        }));
         let serialized = serde_json::to_string(&frame).unwrap();
         assert!(serialized.contains(r#""type":"candidate""#));
+        let declaration = ScriptOutputFrame::decl();
+        assert!(
+            declaration.contains(r#""type": "candidate""#),
+            "{declaration}"
+        );
+        assert!(declaration.contains("ScriptCandidate"), "{declaration}");
         let deserialized: ScriptOutputFrame = serde_json::from_str(&serialized).unwrap();
         assert_eq!(frame, deserialized);
-        assert_eq!(deserialized.version(), 1);
+        assert_eq!(deserialized.version(), SCRIPT_PROTOCOL_VERSION);
 
         let cont = ScriptOutputFrame::Continuation {
-            version: 1,
+            version: SCRIPT_PROTOCOL_VERSION,
             cursor: "page=2".into(),
         };
         let cont_str = serde_json::to_string(&cont).unwrap();
         assert!(cont_str.contains(r#""type":"continuation""#));
         let complete = ScriptOutputFrame::Complete {
-            version: 1,
+            version: SCRIPT_PROTOCOL_VERSION,
             exhausted: true,
         };
         let comp_str = serde_json::to_string(&complete).unwrap();

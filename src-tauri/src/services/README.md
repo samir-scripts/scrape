@@ -113,3 +113,8 @@ explicit legacy upgrade/import paths may inherit old defaults. Validation,
 preview, save and execution preserve the independent predicates and raw values;
 there is no host normalization/compiler copy. `matching_compatibility_tests.rs`
 checks independent acceptance expectations and import/save/reopen/global isolation.
+
+Ingestion revalidates the core location tuple bounds and country/subdivision
+consistency before persistence. Script protocol 2 supplies employment/workplace/
+location evidence through existing WorkerEvent fields; worker protocol stays 7.
+Existing script fingerprints/trust checks remain authoritative.

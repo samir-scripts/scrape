@@ -9,7 +9,7 @@ use scrape_core::{
     matching::{MatchingEvaluator, MatchingEvidence},
     protocol::{CoverageTermination, EnrichmentLimits},
     static_source::StaticSourceConfig,
-    FilterField, WorkerEvent, WorkerFilters, WorkerLimits, WorkerSource,
+    WorkerEvent, WorkerFilters, WorkerLimits, WorkerSource,
 };
 use scraper::Html;
 use std::{
@@ -444,33 +444,7 @@ impl SelectorSession {
     }
 }
 fn evidence(event: &WorkerEvent) -> MatchingEvidence {
-    let mut fields = vec![
-        FilterField::Title,
-        FilterField::Company,
-        FilterField::RoleType,
-    ];
-    let WorkerEvent::Job {
-        location,
-        description_text,
-        date_posted,
-        salary,
-        ..
-    } = event
-    else {
-        return MatchingEvidence::default();
-    };
-    if !location.is_empty() {
-        fields.push(FilterField::Location);
-    }
-    if description_text.is_some() {
-        fields.push(FilterField::Description);
-    }
-    MatchingEvidence {
-        fields,
-        posting_date: date_posted.is_some(),
-        compensation: salary.is_some(),
-        opportunity_exhausted: false,
-    }
+    MatchingEvidence::from_event(event, false)
 }
 fn evidence_for_final(event: &WorkerEvent) -> MatchingEvidence {
     let mut result = evidence(event);

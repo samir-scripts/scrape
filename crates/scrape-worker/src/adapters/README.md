@@ -70,3 +70,14 @@ paginated and single-page sources retain the shared 7/7/6 distribution at cap 20
 Browser/script execution remains pending.
 
 Hydration extraction now uses `scrape-core::hydration` for shared JSON-pointer, field-map and regex validation, with the same raw posting normalizer as DOM extraction. No embedded scripts are executed. See [configuration](../../../../plans/workflow-v3.md#embedded-hydration-json).
+
+Plan 12 Section 4 evidence: Lever deserializes country and applies it to the primary
+location only. Ashby reads primary postalAddress and secondary direct/nested address
+forms, retaining raw labels/address components, employmentType and workplaceType
+(with the explicit workplace enum taking precedence over isRemote). Greenhouse
+keeps ordinary titles Unknown and does not guess custom metadata semantics.
+Selector/script evidence delegates to core's per-field resolver; a concrete workplace
+can be eligible without a description, while unrelated missing fields stay unresolved.
+Primary contracts: [Lever](https://github.com/lever/postings-api),
+[Ashby](https://developers.ashbyhq.com/docs/public-job-posting-api),
+[Greenhouse](https://docs.greenhouse.io/job-board.html).

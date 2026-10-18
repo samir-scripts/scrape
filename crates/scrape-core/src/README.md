@@ -111,3 +111,12 @@ overlay with explicitly opt-in historical inheritance. It preserves every legacy
 predicate alongside structured matching. `compatibility_restrictions()` emits the
 generated `FilterCompatibilityRestriction` descriptions consumed by desktop UI;
 no keyword/role union, location inference or sample-query deletion is performed.
+
+`MatchingEvidence::from_event` records individually known structured fields without
+pretending description/date/pay evidence exists. `ParsedLocation::validate` and
+`location::validate_locations` enforce the shared script/host location contract.
+`parse_with_country` uses provider context and the subdivision registry for unlisted
+cities, preserving raw labels and ambiguous uncontextualized IN/CA as unknown.
+Geographic worker/SQLite predicates share tuple, city exact/raw-literal-substring,
+ASCII case and Unicode-whitespace semantics; aggregate location text is never borrowed.
+Custom script frames are version 2; the worker event/config protocol stays 7.

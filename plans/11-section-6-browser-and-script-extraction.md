@@ -291,11 +291,15 @@ Implement a low-memory, low-CPU headless browser engine in `crates/scrape-worker
 #### 1. Goal
 Implement the versioned stdin/stdout NDJSON script extraction engine (`crates/scrape-worker/src/script_runner.rs`) for custom user scripts (`js`, `python`, or custom executable) with strict process-tree reaping, bounded redacted `stderr`, and the explicit trust gate.
 
-#### 2. Stdin/Stdout NDJSON Protocol (`SCRIPT_PROTOCOL_VERSION = 1`)
+#### 2. Stdin/Stdout NDJSON Protocol (`SCRIPT_PROTOCOL_VERSION = 2`)
+> Plan 12 Section 4 supersedes the original protocol-1 contract. Optional candidate
+> `employment_type`, typed `workplace_type`, and validated `locations` evidence are
+> supported; unknown fields fail. See [current contract](workflow-v3.md#field-evidence-and-script-protocol-2-plan-12-section-4). Existing script edits require renewed local trust.
+
 - **Stdin (1 line JSON sent by `scrape-worker` before closing stdin)**:
   ```json
   {
-    "version": 1,
+    "version": 2,
     "source_id": "src-1",
     "url": "https://careers.example.test/jobs",
     "continuation": null,
@@ -307,19 +311,19 @@ Implement the versioned stdin/stdout NDJSON script extraction engine (`crates/sc
 - **Stdout (NDJSON lines emitted by script)**:
   - Candidate frame:
     ```json
-    {"type":"candidate","version":1,"external_id":"job-42","title":"Staff Data Engineer","url":"https://careers.example.test/jobs/42","location":"Remote - US","salary":"$180,000 - $210,000","description":"<p>Build reliable pipelines.</p>","date_posted":"2026-10-15","company":"Example Corp","employer_logo_url":null}
+    {"type":"candidate","version":2,"external_id":"job-42","title":"Staff Data Engineer","url":"https://careers.example.test/jobs/42","location":"Remote - US","salary":"$180,000 - $210,000","description":"<p>Build reliable pipelines.</p>","date_posted":"2026-10-15","company":"Example Corp","employer_logo_url":null}
     ```
   - Continuation frame (for resumable round-robin turns in `coordinator.rs`):
     ```json
-    {"type":"continuation","version":1,"cursor":"page=2"}
+    {"type":"continuation","version":2,"cursor":"page=2"}
     ```
   - Diagnostic frame:
     ```json
-    {"type":"diagnostic","version":1,"level":"warning","message":"Rate limit header observed; slowing down"}
+    {"type":"diagnostic","version":2,"level":"warning","message":"Rate limit header observed; slowing down"}
     ```
   - Completion frame (required before exit 0):
     ```json
-    {"type":"complete","version":1,"exhausted":false}
+    {"type":"complete","version":2,"exhausted":false}
     ```
 
 #### 3. Safety, Backpressure, & Redaction Rules
@@ -330,7 +334,7 @@ Implement the versioned stdin/stdout NDJSON script extraction engine (`crates/sc
 - **Bounded Redacted `stderr` (Max 16 KiB)**:
   - Read `stderr` up to `16_384` bytes; redact any token matching `(?i)(authorization|cookie|bearer|token|api[_-]?key|secret|password)\s*[:=]\s*\S+` to `$1=[REDACTED]`.
 - **Strict Failure Semantics**:
-  - Any line on `stdout` with invalid JSON, `version != 1`, unknown `type`, non-zero process exit status, or exit without a `{"type":"complete", ...}` frame fails the turn explicitly with a non-silent `WorkerEvent::Error`.
+  - Any line on `stdout` with invalid JSON, `version != 2`, unknown `type`, non-zero process exit status, or exit without a `{"type":"complete", ...}` frame fails the turn explicitly with a non-silent `WorkerEvent::Error`.
 - **Rust Owns Acceptance**:
   - Every `candidate` frame is converted into a raw `WorkerEvent::Job`, validated for non-empty `title` and valid HTTP(S) `url`, transformed by any configured Rust regexes, assigned a canonical `PostingIdentity`, and evaluated by `MatchingEvaluator` in `CoordinatorSession` identically to native adapters.
 

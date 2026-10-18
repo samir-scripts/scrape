@@ -1,13 +1,13 @@
 //! Tier 3: Versioned Stdin/NDJSON script extraction engine.
-//! Speaks SCRIPT_PROTOCOL_VERSION (1) over stdin/stdout NDJSON with structured argv,
+//! Speaks SCRIPT_PROTOCOL_VERSION (2) over stdin/stdout NDJSON with structured argv,
 //! bounded redacted stderr (max 16 KiB), and process tree termination.
 use crate::adapters::selector::{SelectorPosting, UrlPatterns};
 use crate::client::ClientError;
 use chrono::{DateTime, Utc};
 use scrape_core::enrich::DescriptionFormat;
 use scrape_core::extraction::{
-    redact_script_stderr, ScriptInputFrame, ScriptOutputFrame, ScriptRuntime, WorkflowScriptConfig,
-    SCRIPT_PROTOCOL_VERSION,
+    redact_script_stderr, ScriptCandidate, ScriptInputFrame, ScriptOutputFrame, ScriptRuntime,
+    WorkflowScriptConfig, SCRIPT_PROTOCOL_VERSION,
 };
 use scrape_core::locator::apply_regex_capture;
 use scrape_core::matching::MatchingEvidence;
@@ -219,18 +219,22 @@ impl ScriptSession {
                         self.exhausted = true;
                     }
                 }
-                ScriptOutputFrame::Candidate {
-                    external_id,
-                    mut title,
-                    mut url,
-                    location,
-                    salary,
-                    description,
-                    date_posted,
-                    company,
-                    employer_logo_url,
-                    ..
-                } => {
+                ScriptOutputFrame::Candidate(candidate) => {
+                    let ScriptCandidate {
+                        external_id,
+                        mut title,
+                        mut url,
+                        location,
+                        salary,
+                        description,
+                        date_posted,
+                        company,
+                        employer_logo_url,
+                        employment_type,
+                        workplace_type,
+                        locations,
+                        ..
+                    } = *candidate;
                     if title.trim().is_empty() {
                         self.pending.push_back((
                             WorkerEvent::Error {
@@ -373,6 +377,34 @@ impl ScriptSession {
                         }
                     }
 
+                    if let Some(locations) = &locations {
+                        if scrape_core::enrich::location::validate_locations(locations).is_err() {
+                            self.pending.push_back((WorkerEvent::Error {
+                                source_id: self.source.id.clone(), message: "Script candidate contains invalid geographic evidence; provide at most 64 locations with raw text and consistent ISO country/subdivision codes".into(), retryable: false, invalid_posting: Some(true),
+                            }, None));
+                            continue;
+                        }
+                    }
+                    if let WorkerEvent::Job {
+                        role_type,
+                        workplace_type: workplace,
+                        locations: posting_locations,
+                        location_data_complete,
+                        ..
+                    } = &mut event
+                    {
+                        if let Some(hint) = employment_type {
+                            *role_type = scrape_core::RoleType::infer(&title, Some(&hint));
+                        }
+                        if let Some(value) = workplace_type {
+                            *workplace = value;
+                        }
+                        if let Some(values) = locations {
+                            *location_data_complete =
+                                scrape_core::enrich::location::has_geographic_value(&values);
+                            *posting_locations = values;
+                        }
+                    }
                     let evidence = candidate_evidence(&event);
 
                     self.pending.push_back((event, Some(evidence)));
@@ -685,31 +717,5 @@ async fn run_script_turn(
 }
 
 fn candidate_evidence(event: &WorkerEvent) -> MatchingEvidence {
-    let mut fields = vec![
-        scrape_core::FilterField::Title,
-        scrape_core::FilterField::Company,
-        scrape_core::FilterField::RoleType,
-    ];
-    let WorkerEvent::Job {
-        location,
-        description_text,
-        date_posted,
-        salary,
-        ..
-    } = event
-    else {
-        return MatchingEvidence::default();
-    };
-    if !location.is_empty() {
-        fields.push(scrape_core::FilterField::Location);
-    }
-    if description_text.is_some() {
-        fields.push(scrape_core::FilterField::Description);
-    }
-    MatchingEvidence {
-        fields,
-        posting_date: date_posted.is_some(),
-        compensation: salary.is_some(),
-        opportunity_exhausted: true,
-    }
+    MatchingEvidence::from_event(event, true)
 }

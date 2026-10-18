@@ -13,6 +13,42 @@ pub struct ParsedLocation {
 }
 
 impl ParsedLocation {
+    /// Validate evidence supplied by executable scripts and revalidate at host ingestion.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.raw.trim().is_empty()
+            || self.raw.len() > 8192
+            || self.city.as_ref().is_some_and(|v| v.len() > 1024)
+        {
+            return Err("Location evidence requires nonblank raw text (at most 8192 bytes) and a bounded city".into());
+        }
+        if self
+            .country_code
+            .as_ref()
+            .is_some_and(|code| code.len() != 2 || crate::geography::country_code(code).is_none())
+        {
+            return Err("Location country_code must be an ISO alpha-2 country or null".into());
+        }
+        if let Some(region) = &self.region_code {
+            let Some((country, subdivision)) = region.split_once('-') else {
+                return Err("Location region_code must be qualified, such as US-IN".into());
+            };
+            if country.len() != 2
+                || crate::geography::country_code(country).is_none()
+                || subdivision.is_empty()
+                || subdivision.len() > 3
+                || !subdivision.chars().all(|c| c.is_ascii_alphanumeric())
+                || self
+                    .country_code
+                    .as_ref()
+                    .is_some_and(|code| !code.eq_ignore_ascii_case(country))
+            {
+                return Err(
+                    "Location region_code is invalid or conflicts with country_code".into(),
+                );
+            }
+        }
+        Ok(())
+    }
     /// A fully qualified subdivision is country evidence even in a partial legacy row.
     pub fn effective_country(&self) -> Option<&str> {
         self.country_code
@@ -22,10 +58,22 @@ impl ParsedLocation {
             .or_else(|| {
                 self.region_code
                     .as_deref()?
+                    .trim()
                     .split_once('-')
                     .map(|(prefix, _)| prefix)
             })
     }
+}
+
+/// Shared executable/worker boundary bound and tuple validation.
+pub fn validate_locations(locations: &[ParsedLocation]) -> Result<(), String> {
+    if locations.len() > 64 {
+        return Err("At most 64 location evidence tuples are supported per posting".into());
+    }
+    for location in locations {
+        location.validate()?;
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,14 +84,33 @@ pub struct LocationSectionExtraction {
 
 pub fn has_geographic_value(locations: &[ParsedLocation]) -> bool {
     locations.iter().any(|location| {
-        location.city.is_some() || location.region_code.is_some() || location.country_code.is_some()
+        [
+            &location.city,
+            &location.region_code,
+            &location.country_code,
+        ]
+        .into_iter()
+        .any(|value| value.as_ref().is_some_and(|value| !value.trim().is_empty()))
     })
 }
 
 /// Preserve the meaning of explicitly named address fields before free-text inference.
 pub fn from_address(city: &str, region: &str, country: &str) -> Option<ParsedLocation> {
     use crate::geography::{country_code, normalize, REGIONS};
-    let country_code = country_code(country)?;
+    let Some(country_code) = country_code(country) else {
+        // Explicit locality is still evidence when the provider has no country.
+        return (!city.trim().is_empty()).then(|| ParsedLocation {
+            raw: [city, region, country]
+                .into_iter()
+                .filter(|value| !value.trim().is_empty())
+                .collect::<Vec<_>>()
+                .join(", "),
+            city: Some(city.trim().into()),
+            region_code: None,
+            country_code: None,
+            is_remote: false,
+        });
+    };
     let region_code = if region.trim().is_empty() {
         None
     } else {
@@ -470,6 +537,22 @@ pub fn parse(raw_input: &str) -> Vec<ParsedLocation> {
     parts.into_iter().map(parse_single).collect()
 }
 
+/// Provider country context is used only for its associated location, never
+/// inferred from the employer or applied to unrelated secondary locations.
+pub fn parse_with_country(raw: &str, country: Option<&str>) -> Vec<ParsedLocation> {
+    let Some(country) = country.and_then(crate::geography::country_code) else {
+        return parse(raw);
+    };
+    parse(raw)
+        .into_iter()
+        .map(|original| {
+            let mut location = parse_single(&format!("{}, {country}", original.raw));
+            location.raw = original.raw;
+            location
+        })
+        .collect()
+}
+
 /// Extract eligible geography only from explicitly labeled location sections
 /// in a normalized job description. `raw` on each returned location retains
 /// the section label and candidate as its evidence provenance.
@@ -755,11 +838,36 @@ fn parse_single(raw: &str) -> ParsedLocation {
             })
             .map(|c| c.region_code.to_string())
         });
+    let inferred_city = if city.is_none() && country_code.is_some() {
+        let first = evidence.split(',').next().unwrap_or("").trim();
+        let label = normalize(first);
+        (evidence.contains(',')
+            && !label.is_empty()
+            && ![
+                "REMOTE",
+                "HYBRID",
+                "ONSITE",
+                "ON SITE",
+                "EUROPE",
+                "NORTH AMERICA",
+                "EUROPEAN UNION",
+                "WORLDWIDE",
+            ]
+            .contains(&label.as_str())
+            && country(first).is_none()
+            && !REGIONS
+                .iter()
+                .any(|r| normalize(&r.name) == label || r.code == label))
+        .then(|| first.to_owned())
+    } else {
+        None
+    };
     ParsedLocation {
         raw: raw.to_string(),
         city: city
             .filter(|c| Some(c.country_code) == country_code.as_deref())
-            .map(|c| c.city.to_string()),
+            .map(|c| c.city.to_string())
+            .or(inferred_city),
         region_code,
         country_code,
         is_remote,
@@ -893,5 +1001,36 @@ mod tests {
         assert_eq!(locations.len(), 1);
         assert_eq!(locations[0].country_code.as_deref(), Some("US"));
         assert_eq!(locations[0].raw, "Work Location: United States");
+    }
+}
+
+#[cfg(test)]
+mod provider_context_tests {
+    use super::*;
+    #[test]
+    fn provider_country_disambiguates_unlisted_cities_without_rewriting_raw() {
+        let values = parse_with_country("Westfield, IN; Notincatalog, CA", Some("US"));
+        assert_eq!(values[0].raw, "Westfield, IN");
+        assert_eq!(values[0].city.as_deref(), Some("Westfield"));
+        assert_eq!(values[0].region_code.as_deref(), Some("US-IN"));
+        assert_eq!(values[1].city.as_deref(), Some("Notincatalog"));
+        assert_eq!(values[1].region_code.as_deref(), Some("US-CA"));
+        assert_eq!(parse("Westfield, IN")[0].country_code, None);
+        assert_eq!(parse("Notincatalog, CA")[0].country_code, None);
+        assert_eq!(
+            parse_with_country("Brampton, ON", Some("CA"))[0]
+                .region_code
+                .as_deref(),
+            Some("CA-ON")
+        );
+        for label in ["Europe", "North America", "European Union", "Remote"] {
+            let locations = parse_with_country(label, None);
+            assert!(
+                locations
+                    .iter()
+                    .all(|l| l.country_code.is_none() && l.city.is_none()),
+                "{label}"
+            );
+        }
     }
 }

@@ -40,18 +40,18 @@ if (!input.continuation) {
     // Turn 1
     console.log(JSON.stringify({
         type: 'diagnostic',
-        version: 1,
+        version: 2,
         level: 'info',
         message: 'Started turn 1 crawl'
     }));
     console.log(JSON.stringify({
         type: 'candidate',
-        version: 1,
+        version: 2,
         external_id: 'job-1',
         title: 'Senior Data Engineer',
         url: 'https://fixture.test/jobs/1',
         location: 'Remote',
-        salary_text: '$160,000 - $190,000',
+        salary: '$160,000 - $190,000',
         description: '<p>Build pipelines</p>',
         date_posted: '2026-10-15',
         company: 'Acme Corp',
@@ -59,12 +59,12 @@ if (!input.continuation) {
     }));
     console.log(JSON.stringify({
         type: 'candidate',
-        version: 1,
+        version: 2,
         external_id: 'job-2',
         title: 'Staff Rust Engineer',
         url: 'https://fixture.test/jobs/2',
         location: 'San Francisco, CA',
-        salary_text: '$190,000 - $220,000',
+        salary: '$190,000 - $220,000',
         description: '<p>High throughput systems</p>',
         date_posted: '2026-10-16',
         company: 'Acme Corp',
@@ -72,24 +72,24 @@ if (!input.continuation) {
     }));
     console.log(JSON.stringify({
         type: 'continuation',
-        version: 1,
+        version: 2,
         cursor: 'page=2'
     }));
     console.log(JSON.stringify({
         type: 'complete',
-        version: 1,
+        version: 2,
         exhausted: false
     }));
 } else if (input.continuation === 'page=2') {
     // Turn 2
     console.log(JSON.stringify({
         type: 'candidate',
-        version: 1,
+        version: 2,
         external_id: 'job-3',
         title: 'Principal Distributed Systems Engineer',
         url: 'https://fixture.test/jobs/3',
         location: 'Remote',
-        salary_text: '$230,000 - $270,000',
+        salary: '$230,000 - $270,000',
         description: '<p>Architect distributed services</p>',
         date_posted: '2026-10-17',
         company: 'Acme Corp',
@@ -97,7 +97,7 @@ if (!input.continuation) {
     }));
     console.log(JSON.stringify({
         type: 'complete',
-        version: 1,
+        version: 2,
         exhausted: true
     }));
 }
@@ -226,7 +226,7 @@ console.log(JSON.stringify({ type: 'complete', version: 99, exhausted: true }));
     assert!(
         error
             .as_deref()
-            .is_some_and(|msg| msg.contains("unsupported protocol version 99; expected 1")),
+            .is_some_and(|msg| msg.contains("unsupported protocol version 99; expected 2")),
         "Expected protocol version mismatch error, got {error:?}"
     );
 
@@ -234,7 +234,7 @@ console.log(JSON.stringify({ type: 'complete', version: 99, exhausted: true }));
     let incomplete_code = r#"
 console.log(JSON.stringify({
     type: 'candidate',
-    version: 1,
+    version: 2,
     external_id: 'job-1',
     title: 'Staff Engineer',
     url: 'https://fixture.test/jobs/1'
@@ -386,4 +386,67 @@ setTimeout(() => {}, 300000);
         has_timeout_error,
         "Expected timeout error event in {events:?}"
     );
+}
+
+#[test]
+fn script_v2_uses_typed_evidence_and_rejects_invalid_locations_without_acceptance_authority() {
+    let code = r#"
+const fs=require('fs'); const input=JSON.parse(fs.readFileSync(0,'utf8'));
+if(input.version!==2) throw Error('expected version 2');
+const emit=(v)=>console.log(JSON.stringify({version:2,...v}));
+emit({type:'candidate', external_id:'valid',title:'Engineer',url:'https://fixture.test/valid',employment_type:'FullTime',workplace_type:'remote',locations:[{raw:'Westfield, IN (provider country US)',city:'Westfield',region_code:'US-IN',country_code:'US',is_remote:true}]});
+emit({type:'candidate', external_id:'bad',title:'Engineer',url:'https://fixture.test/bad',workplace_type:'remote',locations:[{raw:'Authored conflicting tuple',city:'Cupertino',region_code:'US-CA',country_code:'CA',is_remote:false}]});
+emit({type:'candidate', external_id:'remote-only',title:'Engineer',url:'https://fixture.test/remote-only',workplace_type:'remote'});
+emit({type:'candidate', external_id:'unknown',title:'Engineer',url:'https://fixture.test/unknown',location:'Europe'});
+emit({type:'candidate', external_id:'split',title:'Engineer',url:'https://fixture.test/split',locations:[{raw:'Toronto',city:'Toronto',region_code:'CA-ON',country_code:'CA',is_remote:false},{raw:'Cupertino',city:'Cupertino',region_code:'US-CA',country_code:'US',is_remote:false}]});
+emit({type:'complete',exhausted:true});
+"#;
+    for (rules, expected) in [
+        (
+            json!({"workplaces":["remote"]}),
+            vec!["valid", "remote-only"],
+        ),
+        (
+            json!({"role_types":["full_time"],"workplaces":["remote"],"countries":["US"],"regions":["US-IN"],"cities":["Westfield"]}),
+            vec!["valid"],
+        ),
+        (json!({"countries":["CA"],"cities":["Cupertino"]}), vec![]),
+    ] {
+        let (_, events) = run_worker_with_config(
+            json!({"version":scrape_core::PROTOCOL_VERSION,"sources":[{"id":"script-evidence","kind":"selector","name":"Authored evidence fixture","identifier":"https://fixture.test/jobs","config":{"mode":"script","script":{"runtime":"js","code":code}}}],"filters":{"matching":rules}}),
+        );
+        let jobs: Vec<_> = events
+            .iter()
+            .filter_map(|e| {
+                if let WorkerEvent::Job { external_id, .. } = e {
+                    Some(external_id.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(jobs, expected, "{events:?}");
+        assert!(events.iter().any(|e|matches!(e,WorkerEvent::Error{invalid_posting:Some(true),message,..} if message.contains("invalid geographic evidence"))));
+        let WorkerEvent::Done { stats } = events.last().unwrap() else {
+            panic!()
+        };
+        assert_eq!(stats.sources[0].invalid, 1);
+    }
+    for frame in [
+        json!({"type":"candidate","version":1,"title":"Engineer","url":"https://fixture.test/old"}),
+        json!({"type":"candidate","version":2,"title":"Engineer","url":"https://fixture.test/bad","workplace_type":"invented"}),
+        json!({"type":"candidate","version":2,"title":"Engineer","url":"https://fixture.test/bad","accepted":true}),
+    ] {
+        let code = format!("console.log({:?});", frame.to_string());
+        let (_, events) = run_worker_with_config(
+            json!({"version":scrape_core::PROTOCOL_VERSION,"sources":[{"id":"invalid-script","kind":"selector","name":"Invalid fixture","identifier":"https://fixture.test/jobs","config":{"mode":"script","script":{"runtime":"js","code":code}}}]}),
+        );
+        assert!(!events.iter().any(|e| matches!(e, WorkerEvent::Job { .. })));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, WorkerEvent::Error { .. })),
+            "{events:?}"
+        );
+    }
 }
