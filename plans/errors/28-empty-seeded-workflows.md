@@ -1,6 +1,6 @@
 # Incident 28 — Seeded workflows produce no Discovered jobs
 
-Status: **Sections 1–3 diagnostics, ownership and matching compatibility implemented; field evidence/extraction acceptance remains open.** See [current evidence](../12-implementation-evidence.md). Recorded 2026-10-18 against `8d8c45a49faeb829e2b2d99cd6840ebbe54b243d`, branch `implementation/trustworthy-scraping`. Requested deliverable: diagnosis, research, error log, and an implementation handoff for GPT-6.1 Sol. See [Plan 12](../12-workflow-ingestion-repair.md).
+Status: **Sections 1–4 diagnostics, ownership, matching compatibility and field evidence/geography parity implemented; templates/extraction acceptance remains open.** See [current evidence](../12-implementation-evidence.md). Recorded 2026-10-18 against `8d8c45a49faeb829e2b2d99cd6840ebbe54b243d`, branch `implementation/trustworthy-scraping`. Requested deliverable: diagnosis, research, error log, and an implementation handoff for GPT-6.1 Sol. See [Plan 12](../12-workflow-ingestion-repair.md).
 
 ## Scope and confidence
 
@@ -134,3 +134,8 @@ Migration `456e2b7` scopes endpoint uniqueness to workflow ownership. Atomic per
 ## Section 3 implementation checkpoint
 
 `95c9453` removes automatic rule rewriting in host/core, keeps independent OR/AND groups and search fields intact, and isolates legacy inheritance from modern execution. `a900efa` generates Rust compatibility descriptions; `a5e3b16` replaces the unsafe migration action with visible editable restrictions. `72ebfa7` adds both-theme browser/YAML checks and reviewed captures. All three semantic flips above have independent acceptance regressions and actual packaged-worker/persistence coverage. Full workspace 446 tests, frontend 508 tests and nine browser journeys pass; see [Section 3 evidence](../12-implementation-evidence.md) for exact commands and limits. No live database or already-lost rules were reconstructed. Field evidence/geography parity (Section 4), templates and extraction remain open.
+
+
+## Section 4 implementation checkpoint
+
+`621d495`/`2e4e426` preserve Lever primary country context and Ashby addresses, resolve Westfield/US-IN without adding a city allowlist entry, retain unknown employment/workplace when evidence is absent, and keep geographic constraints on one tuple in Rust/SQLite. `2e06cc8` generates protocol-2 script contracts; `716fb2d` adds bounded contextual missing-country diagnostics and separates required evidence from optional enrichment counts. The existing strict SEP workflow now yields six exact recorded IDs, and a separate full-time control yields five; the Netflix workplace-only control accepts two recorded remote postings with no descriptions or invented employment. See [Section 4 evidence](../12-implementation-evidence.md) for final checks, code changes and limits. No live database was repaired or provider coverage inferred from these bounded captures. Next: Section 5 templates.

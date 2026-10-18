@@ -1,6 +1,6 @@
 # Workflow ingestion repair — implementation handoff for GPT-6.1 Sol
 
-Status: **Sections 1–3 implemented; Section 4 field evidence/geography parity is next.** Section 3 commits: compatibility `95c9453`, generated boundary `a900efa`, editor `a5e3b16`, browser verification `72ebfa7`. See [implementation evidence](12-implementation-evidence.md). Sections 4–8 acceptance remains pending. Investigated 2026-10-18 at `8d8c45a`. The user requested implementation after the six new templates failed to populate Discovered.
+Status: **Sections 1–4 implemented; Section 5 template catalog/defaults is next.** Section 4 commits: evidence/parity `621d495`, generated script protocol-2 contracts `2e06cc8`, explicit country context `2e4e426`, contextual diagnostics/accounting `716fb2d`. See [implementation evidence](12-implementation-evidence.md). Sections 5–8 acceptance remains pending. Investigated 2026-10-18 at `8d8c45a`. The user requested implementation after the six new templates failed to populate Discovered.
 
 This plan reopens plan 11 Sections 5–7 acceptance for seeded workflows, matching compatibility, and real company coverage. Earlier implementation records remain historical evidence; their broad completion/support claims do not establish working seeded workflows. Preserve plans 06–11 identity, provenance, suppression, retention, scheduling, trusted script execution, fair budgeting and protected-user-data requirements. Native acceptance from plans 08/10 remains outstanding.
 
@@ -55,6 +55,8 @@ Files: `crates/scrape-core/src/{protocol,matching,filter}.rs`, `services/{workfl
 **Gate:** independent regression expectations show identical before/after acceptance for every lossless conversion. The three Incident 28 semantic flips disappear. Explicit user edits remain possible and invalidate preview. No silent broadening or narrowing on load/validation/run.
 
 ## 4. Repair field evidence and geographic predicate parity
+
+Implemented: primary Lever country context/unlisted cities, Ashby addresses and explicit workplace precedence, truthful unknowns, same-tuple worker/SQLite geography, per-field evidence and bounded country diagnostics. Script protocol 2 carries typed evidence through shared validation and host ingestion. Recorded SEP and Netflix controls persist the exact expected postings without fabricated fields. Worker protocol 7/WorkflowSpec 6 remain unchanged; no live data/migration was touched.
 
 Files: `adapters/{greenhouse,lever,ashby,selector}.rs`, `script_runner.rs`, `scrape-core/src/{matching,geography,role}.rs`, `enrich/location.rs`, repository query tests.
 

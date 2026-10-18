@@ -1077,3 +1077,12 @@ Commits `95c9453`, `a900efa`, `a5e3b16`, `72ebfa7` remove three destructive matc
 Actually run: rebuilt sidecar; workspace **446 tests**, frontend **508 tests / 81 files**, **9 Chromium journeys** (including two new compatibility/contrast/YAML tests) passed. Workspace Clippy, generated-binding drift, TypeScript/production build, style, Vite startup smoke, formatting and diff checks passed. Four new Paper/Obsidian captures at 1024/480 were visually reviewed under `plans/assets/12-matching-compatibility-review/`. [Plan 12 evidence](12-implementation-evidence.md) records commands, initial failures and sequencing correction for a Vite reload during concurrent binding generation.
 
 No native/live-provider/user-database acceptance or repair was performed. Browser controls are visibly labelled authored demonstrations; no live provider support follows from these results. Earlier unsafe saves cannot be reverse-engineered into lost rules. Field evidence/geography, templates, extraction/URLs/pagination and user-specific saved-run reproduction remain open. Next: Plan 12 Section 4.
+
+
+## Plan 12 Section 4 — Source evidence and geography parity
+
+Commits `621d495`, `2e06cc8`, `2e4e426`, `716fb2d` preserve provider country/address/arrangement evidence, keep unknowns unknown, prevent cross-tuple geography matches, and provide bounded required-evidence diagnostics separately from optional enrichment counts. Script protocol 2 supplies typed evidence with Rust validation repeated at host ingestion; generated tagged contracts reflect actual NDJSON. Worker protocol 7/WorkflowSpec 6 remain unchanged.
+
+Recorded SEP preview/run → SQLite controls assert five full-time engineering IDs and six IDs through its actual existing template. Recorded Netflix uses explicit script trust and persists the two remote IDs without descriptions or fabricated full-time roles. Independent geographic negatives cover Toronto+Cupertino and unknown policies. Full workspace **459 tests**, frontend **508 tests / 81 files**, Clippy, sidecar/frontend build, binding drift, style, Vite startup smoke, formatting and diff checks passed. [Plan 12 evidence](12-implementation-evidence.md) records exact commands, regression failures, corrected authored fixtures and contract details.
+
+No live provider/user-database/native/browser-journey/visual/physical acceptance or data repair occurred. These fixtures do not establish full Netflix pagination or broad six-template support. Next: Plan 12 Section 5 — canonical usable and honestly labelled templates.
