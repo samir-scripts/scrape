@@ -278,3 +278,9 @@ local trust through the existing content hash. Users must update/review their ow
 version-1 scripts and explicitly trust changed content; saved workflows are never
 rewritten or enabled automatically. Pagination/date/portable-runtime repairs remain
 Plan 12 Sections 5–7 acceptance work.
+
+Required unresolved matching evidence emits at most five contextual examples per
+source, including requested country codes and original location text. The existing
+eligibility_incomplete warning flag distinguishes these partial-coverage diagnostics
+from optional enrichment warnings in worker summaries and host run accounting.
+All unresolved candidates remain counted even after the example bound is reached.

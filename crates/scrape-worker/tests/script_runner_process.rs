@@ -431,6 +431,10 @@ emit({type:'complete',exhausted:true});
             panic!()
         };
         assert_eq!(stats.sources[0].invalid, 1);
+        assert_eq!(stats.sources[0].enrichment_warnings, 0);
+        if rules.get("countries") == Some(&json!(["CA"])) {
+            assert!(events.iter().any(|event|matches!(event,WorkerEvent::Warning{message,eligibility_incomplete:true,..} if message.contains("Requested countries: CA") && message.contains("Europe"))));
+        }
     }
     for frame in [
         json!({"type":"candidate","version":1,"title":"Engineer","url":"https://fixture.test/old"}),

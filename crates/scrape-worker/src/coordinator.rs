@@ -876,7 +876,7 @@ impl SourceCoordinator {
                                         ..
                                     } => {
                                         // Coverage diagnostics are not detail-enrichment failures.
-                                        if !session.exhausted {
+                                        if !session.exhausted && !eligibility_incomplete {
                                             session.stats.enrichment_warnings += 1;
                                         }
                                         session.coverage_incomplete |= *eligibility_incomplete;
@@ -955,6 +955,17 @@ impl SourceCoordinator {
                                             .is_some_and(|a| !a.unresolved.is_empty())
                                         {
                                             session.stats.unresolved += 1;
+                                            if session.stats.unresolved <= 5 {
+                                                if let Some(warning) =
+                                                    crate::filter::unresolved_warning(
+                                                        &event,
+                                                        &session.filters,
+                                                        &assessment.as_ref().unwrap().unresolved,
+                                                    )
+                                                {
+                                                    emit(&warning)?;
+                                                }
+                                            }
                                             continue;
                                         }
 

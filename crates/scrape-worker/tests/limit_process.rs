@@ -530,7 +530,7 @@ fn unavailable_required_evidence_is_partial_and_never_broadens_a_negative_rule()
                 scan.unresolved,
                 scan.enrichment_warnings
             ),
-            (1, 0, 1, 1)
+            (1, 0, 1, 0)
         );
         assert_eq!(
             scan.outcome,
@@ -627,7 +627,8 @@ fn request_bound_distinguishes_optional_warnings_from_incomplete_eligibility() {
         assert!(detail_requests(&server).is_empty());
         let scan = &summary(&events)[0];
         scan.validate().unwrap();
-        assert_eq!(scan.enrichment_warnings, 1);
+        assert_eq!(scan.enrichment_warnings, if required { 0 } else { 1 });
+        assert!(events.iter().any(|event|matches!(event, WorkerEvent::Warning { eligibility_incomplete, .. } if *eligibility_incomplete == required)));
         assert_eq!(
             scan.outcome,
             Some(if required {
@@ -898,7 +899,8 @@ fn selector_optional_details_and_required_unknowns_have_separate_outcomes() {
             (scan.accepted, scan.unresolved),
             if required { (0, 2) } else { (2, 0) }
         );
-        assert_eq!(scan.enrichment_warnings, 1);
+        assert_eq!(scan.enrichment_warnings, if required { 0 } else { 1 });
+        assert!(events.iter().any(|event|matches!(event, WorkerEvent::Warning { eligibility_incomplete, .. } if *eligibility_incomplete == required)));
         assert_eq!(
             scan.outcome,
             Some(if required {

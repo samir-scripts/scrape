@@ -27,9 +27,80 @@ impl<'a> FilterMatcher<'a> {
     }
 }
 
+/// Bounded callers use this same explanation for both execution coordinators.
+pub(crate) fn unresolved_warning(
+    event: &scrape_core::WorkerEvent,
+    filters: &WorkerFilters,
+    reasons: &[scrape_core::matching::RejectionReason],
+) -> Option<scrape_core::WorkerEvent> {
+    let scrape_core::WorkerEvent::Job {
+        source_id,
+        title,
+        location,
+        locations,
+        ..
+    } = event
+    else {
+        return None;
+    };
+    let labels = reasons
+        .iter()
+        .map(|reason| {
+            serde_json::to_value(reason)
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let geography = if reasons.contains(&scrape_core::matching::RejectionReason::Geography) {
+        let countries = filters
+            .matching
+            .as_ref()
+            .map(|rules| {
+                let mut values = rules
+                    .countries
+                    .iter()
+                    .take(10)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                if rules.countries.len() > 10 {
+                    values.push_str(", …");
+                }
+                values
+            })
+            .unwrap_or_default();
+        let raw = if location.trim().is_empty() {
+            locations
+                .iter()
+                .take(3)
+                .map(|value| value.raw.chars().take(100).collect::<String>())
+                .collect::<Vec<_>>()
+                .join("; ")
+        } else {
+            location.chars().take(300).collect()
+        };
+        format!(
+            " Requested countries: {}. Extracted location evidence: {}.",
+            if countries.is_empty() {
+                "unconstrained"
+            } else {
+                &countries
+            },
+            if raw.is_empty() { "unavailable" } else { &raw }
+        )
+    } else {
+        String::new()
+    };
+    Some(scrape_core::WorkerEvent::Warning{source_id:source_id.clone(), message:format!("Required matching evidence is unresolved for '{}': {labels}.{geography} This posting was not accepted.",title.chars().take(160).collect::<String>()),eligibility_incomplete:true,termination:None})
+}
+
 /// One source's acceptance budget, shared by every adapter and execution route.
 pub struct PostingGate<'a> {
     matcher: scrape_core::matching::MatchingEvaluator<'a>,
+    filters: &'a WorkerFilters,
     source: &'a scrape_core::WorkerSource,
     blocked: &'a std::collections::HashSet<String>,
     seen: std::collections::HashSet<String>,
@@ -48,6 +119,7 @@ impl<'a> PostingGate<'a> {
         let limit = source.max_jobs_per_run()?;
         Ok(Self {
             matcher: scrape_core::matching::MatchingEvaluator::new(filters)?,
+            filters,
             source,
             blocked,
             seen: Default::default(),
@@ -80,8 +152,15 @@ impl<'a> PostingGate<'a> {
             self.summary.provider_total = *provider_total;
             return None;
         }
-        if let WorkerEvent::Warning { termination, .. } = &event {
-            self.summary.enrichment_warnings += 1;
+        if let WorkerEvent::Warning {
+            termination,
+            eligibility_incomplete,
+            ..
+        } = &event
+        {
+            if !eligibility_incomplete {
+                self.summary.enrichment_warnings += 1;
+            }
             if let Some(termination) = termination {
                 self.summary.termination = *termination;
             }
@@ -161,11 +240,16 @@ impl<'a> PostingGate<'a> {
                 }
                 return None;
             }
-            if assessment
+            if let Some(assessment) = assessment
                 .as_ref()
-                .is_some_and(|assessment| !assessment.unresolved.is_empty())
+                .filter(|value| !value.unresolved.is_empty())
             {
                 self.summary.unresolved += 1;
+                // Required missing evidence is separate from optional enrichment
+                // failures. Bound examples without losing truthful source totals.
+                if self.summary.unresolved <= 5 {
+                    return unresolved_warning(&event, self.filters, &assessment.unresolved);
+                }
                 return None;
             }
             self.summary.matched += 1;
@@ -267,5 +351,43 @@ mod tests {
             role_type: RoleType::FullTime,
         };
         assert!(!matcher.matches_context(&ctx_senior));
+    }
+}
+
+#[cfg(test)]
+mod missing_evidence_diagnostics_tests {
+    use super::*;
+    use scrape_core::WorkerEvent;
+    #[test]
+    fn country_evidence_warnings_are_specific_bounded_and_not_optional_enrichment_failures() {
+        let source = scrape_core::WorkerSource {
+            id: "fixture".into(),
+            kind: scrape_core::SourceKind::Selector,
+            name: "Authored fixture".into(),
+            identifier: "https://fixture.test/jobs".into(),
+            config: serde_json::Value::Null,
+        };
+        let filters: WorkerFilters =
+            serde_json::from_value(serde_json::json!({"matching":{"countries":["US"]}})).unwrap();
+        let blocked = Default::default();
+        let mut gate =
+            PostingGate::new(&source, &filters, &blocked, chrono::Utc::now(), false).unwrap();
+        let mut warnings = 0;
+        for id in 0..7 {
+            let event:WorkerEvent=serde_json::from_value(serde_json::json!({"type":"job","source_id":"fixture","external_id":id.to_string(),"title":"Engineer","company":"Fixture","url":format!("https://fixture.test/{id}"),"location":"Europe","role_type":"unknown","locations":[{"raw":"Europe","city":null,"region_code":null,"country_code":null,"is_remote":false}]})).unwrap();
+            let evidence = scrape_core::matching::MatchingEvidence::from_event(&event, true);
+            if let Some(WorkerEvent::Warning { message, .. }) =
+                gate.accept_with_evidence(event, Some(evidence))
+            {
+                assert!(message.contains("Requested countries: US"));
+                assert!(message.contains("Europe"));
+                assert!(message.contains("geography"));
+                warnings += 1;
+            }
+        }
+        assert_eq!(warnings, 5);
+        assert_eq!(gate.summary.unresolved, 7);
+        assert_eq!(gate.summary.accepted, 0);
+        assert_eq!(gate.summary.enrichment_warnings, 0);
     }
 }

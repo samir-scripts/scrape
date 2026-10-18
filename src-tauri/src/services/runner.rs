@@ -934,11 +934,24 @@ impl ScrapeRunner {
                                     );
                                 }
                                 WorkerEvent::Warning {
-                                    source_id, message, ..
+                                    source_id,
+                                    message,
+                                    eligibility_incomplete,
+                                    ..
                                 } => {
-                                    *counts.enrichment_warnings.get_or_insert(0) += 1;
+                                    if !eligibility_incomplete {
+                                        *counts.enrichment_warnings.get_or_insert(0) += 1;
+                                    }
                                     source_statuses.entry(source_id.clone()).or_insert_with(|| {
-                                        ("success_with_warnings".into(), Some(message.clone()))
+                                        (
+                                            if eligibility_incomplete {
+                                                "partial"
+                                            } else {
+                                                "success_with_warnings"
+                                            }
+                                            .into(),
+                                            Some(message.clone()),
+                                        )
                                     });
                                     self.log_event(
                                         app,

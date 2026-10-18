@@ -81,3 +81,9 @@ can be eligible without a description, while unrelated missing fields stay unres
 Primary contracts: [Lever](https://github.com/lever/postings-api),
 [Ashby](https://developers.ashbyhq.com/docs/public-job-posting-api),
 [Greenhouse](https://docs.greenhouse.io/job-board.html).
+
+Required unresolved matching evidence emits at most five contextual examples per
+source, including requested country codes and original location text. The existing
+eligibility_incomplete warning flag distinguishes these partial-coverage diagnostics
+from optional enrichment warnings in worker summaries and host run accounting.
+All unresolved candidates remain counted even after the example bound is reached.
