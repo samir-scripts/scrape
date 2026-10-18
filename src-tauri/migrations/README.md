@@ -59,3 +59,12 @@ See [database recovery](../../plans/database-recovery.md); a Git revert does not
 reverse database schema changes. Never update `_sqlx_migrations` to bypass errors.
 
 `../historical-migrations/` contains verified immutable migration-12/18, migration-19/20, and migration-23/25 variants. The runner accepts only matching histories and independently rebuilt schemas, then preserves their stored checksums. See incidents 25, 26, and 27 in the recovery documentation.
+
+Migration 27 scopes `(kind, identifier)` uniqueness to `workflow_id`, allowing two
+workflows to reference the same board. It recreates `sources` with all existing
+columns, constraints and indexes, preserving source IDs and rows. Foreign keys
+remain enabled; temporary maps restore `jobs.source_id` and `scrape_runs.source_id`
+after SQLite applies their existing `ON DELETE SET NULL` actions during the table
+replacement. Populated v26 upgrade tests compare every historical table, verify
+foreign-key integrity, backup contents, failure after dropping the old table,
+rollback/retry and restart. Applied migrations 1–26 remain byte-for-byte unchanged.

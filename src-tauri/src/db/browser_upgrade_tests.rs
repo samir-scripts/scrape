@@ -2,7 +2,7 @@
 use super::*;
 use sqlx::Row;
 
-async fn snapshot(pool: &SqlitePool) -> Vec<(String, String, Vec<String>)> {
+pub(super) async fn snapshot(pool: &SqlitePool) -> Vec<(String, String, Vec<String>)> {
     let tables: Vec<String> = sqlx::query_scalar(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
     )
@@ -55,7 +55,7 @@ async fn populated_v25_upgrade_preserves_all_rows_backup_failure_retry_and_resta
             .last()
             .unwrap()
             .version,
-        26
+        27
     );
     for inject_failure in [false, true] {
         let directory = tempfile::tempdir().unwrap();

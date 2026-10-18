@@ -233,3 +233,45 @@ with integrity `ok`. All original records and migration checksums through versio
 were unchanged. Retain backup
 `scrape_data.db.pre-migration-955efef2-348f-4cd4-845d-5ff2c5765ba0.db` beside the
 database.
+
+## Workflow-owned source endpoints (migration 27)
+
+Migration `0027_workflow_source_endpoints.sql` replaces the global endpoint
+uniqueness constraint with `UNIQUE(workflow_id, kind, identifier)`. Existing source
+IDs, provenance, settings, trust fingerprints and job/run relationships are
+preserved. A consistent pre-migration backup is created by normal startup before
+applying pending migrations. No earlier SQL or checksum is changed.
+
+The replacement uses a new table, copies all rows, drops the old table, and
+renames the new table. SQLite's existing `ON DELETE SET NULL` actions are kept
+enabled; transaction-local temporary maps restore the two affected source-link
+columns before commit. See SQLite's [table-replacement procedure](https://www.sqlite.org/lang_altertable.html#otheralter)
+and [DROP TABLE foreign-key behavior](https://www.sqlite.org/foreignkeys.html#fk_schemacommands).
+The populated v26 regression compares all historical rows and checks foreign keys,
+backup contents, injected failure immediately after the old table is dropped,
+rollback/retry, and idempotent restart.
+
+An older executable alone cannot undo this migration. Restore the consistent
+pre-migration database with a compatible build, or use a tested forward repair.
+
+### Explicit ownership data repair
+
+Migration 27 changes the schema; it does not guess how to rewrite existing
+malformed workflow configurations. Normal workflow Save now materializes all
+sources atomically. For an already saved multi-source workflow with missing source
+rows, an explicit helper preserves its existing source ID, name, filters, schedule,
+job state and history while creating missing owned children and canonicalizing the
+embedded source IDs:
+
+```sh
+# Quit Scrape, including the tray process, before invoking against an existing DB.
+cargo run -p scrape --example repair_workflow_ownership -- /absolute/path/to/database.db WORKFLOW_ID
+```
+
+The helper refuses nonexistent databases, uses normal checked migrations/backups,
+creates a separate consistent `pre-ownership-repair-<uuid>.db` snapshot before data
+repair, and aborts on backup failure or conflicting source ownership. A consistent
+workflow is a no-op with no additional ownership backup. Script sources remain
+untrusted and disabled; no extraction or scheduling starts. This helper has been
+tested only on isolated fixtures during this revision; the user's live database
+has not been repaired or opened.

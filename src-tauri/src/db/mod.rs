@@ -13,6 +13,8 @@ mod history;
 pub mod jobs;
 pub mod metrics;
 pub mod notifications;
+#[cfg(test)]
+mod ownership_upgrade_tests;
 pub mod postings;
 pub mod runs;
 pub mod settings;
