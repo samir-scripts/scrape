@@ -153,185 +153,6 @@ pub struct WorkflowExtractor {
 optional_fields!(WorkflowSchedule { cadence: SourceCadence, time: String, cron: String, timezone: String, weekdays: Vec<u8>, run_on_startup: bool });
 optional_fields!(WorkflowFilters { role_types: Vec<RoleType>, include_keywords: Vec<String>, exclude_keywords: Vec<String>, locations: Vec<String>, query: String, policy: Value, compensation: CompensationFilter, matching: PostingRules, experience_min: u32, experience_max: u32 });
 
-impl WorkflowFilters {
-    pub fn normalize_into_matching(&mut self) {
-        if self.matching.is_none()
-            && self.include_keywords.as_ref().is_none_or(|v| v.is_empty())
-            && self.exclude_keywords.as_ref().is_none_or(|v| v.is_empty())
-            && self.locations.as_ref().is_none_or(|v| v.is_empty())
-            && self.role_types.as_ref().is_none_or(|v| v.is_empty())
-        {
-            return;
-        }
-        let matching = self.matching.get_or_insert_with(PostingRules::default);
-
-        // 1. include_keywords -> matching.keywords.any
-        if let Some(includes) = self.include_keywords.take() {
-            if !includes.is_empty() {
-                let kw = matching
-                    .keywords
-                    .get_or_insert_with(scrape_core::matching::KeywordRules::default);
-                for word in includes {
-                    let trimmed = word.trim();
-                    if !trimmed.is_empty()
-                        && !kw
-                            .any
-                            .iter()
-                            .any(|existing| existing.eq_ignore_ascii_case(trimmed))
-                    {
-                        kw.any.push(trimmed.to_string());
-                    }
-                }
-            }
-        }
-
-        // 2. exclude_keywords -> matching.keywords.exclude
-        if let Some(excludes) = self.exclude_keywords.take() {
-            if !excludes.is_empty() {
-                let kw = matching
-                    .keywords
-                    .get_or_insert_with(scrape_core::matching::KeywordRules::default);
-                for word in excludes {
-                    let trimmed = word.trim();
-                    if !trimmed.is_empty()
-                        && !kw
-                            .exclude
-                            .iter()
-                            .any(|existing| existing.eq_ignore_ascii_case(trimmed))
-                    {
-                        kw.exclude.push(trimmed.to_string());
-                    }
-                }
-            }
-        }
-
-        // 3. role_types -> matching.role_types
-        if let Some(roles) = self.role_types.take() {
-            for role in roles {
-                if !matching.role_types.contains(&role) {
-                    matching.role_types.push(role);
-                }
-            }
-        }
-
-        // 4. locations -> partition
-        if let Some(locations) = self.locations.take() {
-            for loc in locations {
-                let trimmed = loc.trim();
-                if trimmed.is_empty() {
-                    continue;
-                }
-                match trimmed.to_ascii_lowercase().as_str() {
-                    "remote" | "telecommute" | "virtual" => {
-                        if !matching
-                            .workplaces
-                            .contains(&scrape_core::WorkplaceType::Remote)
-                        {
-                            matching.workplaces.push(scrape_core::WorkplaceType::Remote);
-                        }
-                    }
-                    "hybrid" => {
-                        if !matching
-                            .workplaces
-                            .contains(&scrape_core::WorkplaceType::Hybrid)
-                        {
-                            matching.workplaces.push(scrape_core::WorkplaceType::Hybrid);
-                        }
-                    }
-                    "on-site" | "onsite" | "in-office" | "in office" | "in-person"
-                    | "in person" => {
-                        if !matching
-                            .workplaces
-                            .contains(&scrape_core::WorkplaceType::Onsite)
-                        {
-                            matching.workplaces.push(scrape_core::WorkplaceType::Onsite);
-                        }
-                    }
-                    _ => {
-                        if let Some(code) = scrape_core::geography::country_code(trimmed) {
-                            if !matching
-                                .countries
-                                .iter()
-                                .any(|c| c.eq_ignore_ascii_case(&code))
-                            {
-                                matching.countries.push(code);
-                            }
-                        } else if trimmed.contains('-')
-                            && scrape_core::geography::REGIONS.iter().any(|r| {
-                                format!("{}-{}", r.country_code, r.code)
-                                    .eq_ignore_ascii_case(trimmed)
-                            })
-                        {
-                            if !matching
-                                .regions
-                                .iter()
-                                .any(|r| r.eq_ignore_ascii_case(trimmed))
-                            {
-                                matching.regions.push(trimmed.to_ascii_uppercase());
-                            }
-                        } else {
-                            let parsed = scrape_core::enrich::location::parse(trimmed);
-                            if let Some(first) = parsed.first() {
-                                if let Some(ref c) = first.country_code {
-                                    if !matching
-                                        .countries
-                                        .iter()
-                                        .any(|existing| existing.eq_ignore_ascii_case(c))
-                                    {
-                                        matching.countries.push(c.clone());
-                                    }
-                                }
-                                if let Some(ref r) = first.region_code {
-                                    if !matching
-                                        .regions
-                                        .iter()
-                                        .any(|existing| existing.eq_ignore_ascii_case(r))
-                                    {
-                                        matching.regions.push(r.clone());
-                                    }
-                                }
-                                if let Some(ref city) = first.city {
-                                    if !matching
-                                        .cities
-                                        .iter()
-                                        .any(|existing| existing.eq_ignore_ascii_case(city))
-                                    {
-                                        matching.cities.push(city.clone());
-                                    }
-                                } else if first.country_code.is_none()
-                                    && first.region_code.is_none()
-                                    && !matching
-                                        .cities
-                                        .iter()
-                                        .any(|existing| existing.eq_ignore_ascii_case(trimmed))
-                                {
-                                    matching.cities.push(trimmed.to_string());
-                                }
-                            } else if !matching
-                                .cities
-                                .iter()
-                                .any(|existing| existing.eq_ignore_ascii_case(trimmed))
-                            {
-                                matching.cities.push(trimmed.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 5. If query was the known default sample query string, clear it
-        if let Some(ref q) = self.query {
-            let trimmed = q.trim();
-            if trimmed
-                == "title LIKE '%Engineer%' OR title LIKE '%Developer%' OR title LIKE '%Intern%'"
-                || trimmed == "title LIKE '%Engineer%' OR title LIKE '%Intern%'"
-            {
-                self.query = None;
-            }
-        }
-    }
-}
 optional_fields!(WorkflowRetention {
     days: u32,
     policy: String
@@ -605,9 +426,6 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
             .get_or_insert_with(|| default_timezone.into());
         schedule.run_on_startup.get_or_insert(false);
         let filters = spec.filters.get_or_insert_with(WorkflowFilters::default);
-        if filters.matching.is_some() {
-            filters.normalize_into_matching();
-        }
         filters.role_types.get_or_insert_with(Vec::new);
         filters.include_keywords.get_or_insert_with(Vec::new);
         filters.exclude_keywords.get_or_insert_with(Vec::new);
@@ -674,7 +492,6 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
         let input = extract_source_input(&spec, source, default_timezone)?;
         crate::services::runner::resolve_worker_filters(
             input.filters.as_ref().unwrap_or(&Value::Null),
-            WorkerFilters::default(),
         )?;
     }
     Ok(spec)
@@ -771,7 +588,6 @@ pub fn validate_legacy_import(
             .as_object()
             .cloned()
             .ok_or_else(|| AppError::Validation("workflow.filters: expected mapping".into()))?;
-        let defaults = serde_json::to_value(global_filters)?;
         for key in [
             "include_keywords",
             "exclude_keywords",
@@ -782,20 +598,29 @@ pub fn validate_legacy_import(
                 .get(key)
                 .is_none_or(|value| value.is_null())
             {
-                if let Some(value) = defaults.get(key) {
-                    merged.insert(key.into(), value.clone());
-                }
+                merged.remove(key);
             }
         }
-        *filters = serde_json::from_value(Value::Object(merged))
-            .map_err(|e| AppError::Validation(format!("workflow.filters: {e}")))?;
+        // Legacy application defaults consisted only of these four fields.
+        // The shared core resolver owns overlay/validation; modern workflows
+        // never enter this branch or consult application matching settings.
+        let inherited = WorkerFilters {
+            include_keywords: global_filters.include_keywords.clone(),
+            exclude_keywords: global_filters.exclude_keywords.clone(),
+            locations: global_filters.locations.clone(),
+            role_types: global_filters.role_types.clone(),
+            ..Default::default()
+        };
+        let resolved =
+            WorkerFilters::resolve_compatibility(&Value::Object(merged), Some(&inherited))
+                .map_err(AppError::Validation)?;
+        *filters = serde_json::from_value(serde_json::to_value(resolved)?)?;
     }
     spec.version = WORKFLOW_SPEC_VERSION;
     let spec = validate(serde_json::to_value(spec)?, default_timezone)?;
     let input = source_input(&spec, default_timezone)?;
     crate::services::runner::resolve_worker_filters(
         input.filters.as_ref().unwrap_or(&Value::Null),
-        WorkerFilters::default(),
     )?;
     Ok(spec)
 }

@@ -316,7 +316,6 @@ pub async fn test_source_transient(
     let _guard = state.runner.try_acquire_lock()?;
     let filters = crate::services::runner::resolve_worker_filters(
         &input.filters.unwrap_or(serde_json::Value::Null),
-        scrape_core::WorkerFilters::default(),
     )?;
     let worker_source = WorkerSource {
         id: "transient-test".to_string(),
@@ -353,10 +352,7 @@ pub async fn test_source(
             "Workflow needs review before it can run.".into(),
         ));
     }
-    let filters = crate::services::runner::resolve_worker_filters(
-        &source.filters,
-        scrape_core::WorkerFilters::default(),
-    )?;
+    let filters = crate::services::runner::resolve_worker_filters(&source.filters)?;
     let worker_source = WorkerSource {
         id: source.id,
         kind: source.kind,
@@ -390,6 +386,14 @@ pub async fn validate_workflow(
     spec: serde_json::Value,
 ) -> Result<crate::services::workflow::WorkflowSpec> {
     validate_workflow_spec(&state.db, spec).await
+}
+
+/// Describe retained restrictions without inferring or replacing their semantics.
+#[tauri::command]
+pub fn describe_workflow_filters(
+    filters: serde_json::Value,
+) -> Result<Vec<scrape_core::protocol::FilterCompatibilityRestriction>> {
+    Ok(crate::services::runner::resolve_worker_filters(&filters)?.compatibility_restrictions())
 }
 
 #[tauri::command]
@@ -494,10 +498,9 @@ pub async fn preview_workflow(
         .unwrap_or_else(|| "UTC".into());
     let spec = validate_workflow_spec(&state.db, spec).await?;
     let inputs = crate::services::workflow::workflow_source_inputs(&spec, &timezone)?;
-    let filters = crate::services::runner::resolve_worker_filters(
-        &serde_json::to_value(spec.filters.clone().unwrap_or_default())?,
-        scrape_core::WorkerFilters::default(),
-    )?;
+    let filters = crate::services::runner::resolve_worker_filters(&serde_json::to_value(
+        spec.filters.clone().unwrap_or_default(),
+    )?)?;
 
     let worker_sources: Vec<WorkerSource> = spec
         .sources

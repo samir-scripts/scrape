@@ -10,7 +10,7 @@ The editor holds one draft. Simple creation follows Source → Matches → Sched
 
 New editor workflows default to daily 09:00 in the device IANA timezone. Calendar scheduling uses that stored timezone. Manual workflows have no automatic next run. Global pause stops automatic dispatch; manual execution remains available.
 
-Absent matching properties inherit global defaults, and explicit empty arrays remove inherited restrictions. Enriched `filters.matching` supports keywords (`any`, `all`, `exclude`, explicit fields), original compensation ranges, role/workplace/experience/eligibility/geography, and posting dates. Relative ages use one run-start instant. Date-only boundaries use the date filter's timezone, with the final date inclusive through the next midnight. Unknown posting dates are excluded unless requested.
+Only legacy versions 1–3 resolve omitted keyword/location/role properties from global defaults at import or historical upgrade; explicit empty arrays remove inherited restrictions. Versions 4–6 and every saved execution are independent of global matching defaults. Enriched `filters.matching` supports keywords (`any`, `all`, `exclude`, explicit fields), original compensation ranges, role/workplace/experience/eligibility/geography, and posting dates. Relative ages use one run-start instant. Date-only boundaries use the date filter's timezone, with the final date inclusive through the next midnight. Unknown posting dates are excluded unless requested.
 
 Simple Matching exposes searchable Country and dependent State/province controls plus Remote/Hybrid/In-person workplace choices. Countries use ISO alpha-2 codes; newly selected subdivisions use qualified codes such as `US-CA` or `CA-ON`. Geography and workplace apply together, selected workplaces match with OR, and country/subdivision must match the same location entry. Changing country clears incompatible subdivisions. Imported multiple-country rules and legacy short subdivision codes remain intact until explicitly edited. The generated [catalog](../crates/scrape-core/data/README.md) has all 249 countries but a bounded subdivision list; Advanced retains raw codes for other subdivisions. Additional free-text location restrictions live in Advanced and still apply with AND.
 
@@ -21,6 +21,21 @@ Extraction prioritizes structured address country/subdivision fields over text i
 `max_jobs_per_run` is an optional top-level whole number from 1 to 10,000, defaulting to **20** for new and existing workflows. It counts unique matching, valid, unblocked postings, including existing records refreshed by a run. Each workflow in Run all has its own budget. This is not a total saved-job capacity limit and does not remove existing jobs. The worker stops candidate processing and further detail/page requests when its budget is reached; downloading a provider's single complete-board response can be unavoidable. Matching follows provider order, so repeated runs may refresh the same first postings. Source summaries explicitly identify the limit and whether processing stopped there; totals describe examined records only.
 
 Preview and Test use the same effective filters, block snapshot and worker acceptance pipeline, capped at the smaller of `max_jobs_per_run` and **10**. Preview has a bounded worker lifetime and cancellation, and writes no jobs, retention changes or scheduling state. A limit-reached result is labeled as potentially incomplete source coverage, rather than a complete-board count. Provider failures remain visible as errors. Browser demonstration previews use fictional fixtures and cannot verify date/eligibility extraction or expert rules.
+
+Compatibility retains legacy keyword, location, role, expert query/policy and
+compensation predicates alongside structured rules. Every active group applies
+with AND. Legacy includes use OR across terms and title/location; excludes reject
+matches in either field; location terms use OR on original location text. SQL LIKE
+wildcards retain their meaning. Independent legacy and structured role/keyword
+sets are never unioned, locations are never inferred into workplace/geography,
+and queries from old samples are never removed by matching their text. Simple
+Matching shows the retained restrictions, with Rust-owned explanations from
+`describe_workflow_filters`. Users may edit/remove them explicitly (individual
+legacy roles/compensation remain editable in YAML); these edits invalidate preview.
+There is no automatic “migrate to structured rules” action. This restores the
+existing v6 predicate contract without changing wire/spec versions or stored data.
+It cannot reconstruct restrictions already discarded by an earlier unsafe save;
+those require review against a known original/backup, never guessed restoration.
 
 YAML is decoded with the existing YAML library and sent to the backend validator. Form/YAML serialization preserves supported hidden configuration and source metadata. The source configuration object accepts only implemented adapter fields. Retention always protects tracked jobs, favorites and nonblank notes.
 

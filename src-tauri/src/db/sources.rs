@@ -261,7 +261,6 @@ impl SourcesRepo {
         .await?;
         crate::services::runner::resolve_worker_filters(
             input.filters.as_ref().unwrap_or(&serde_json::Value::Null),
-            scrape_core::WorkerFilters::default(),
         )?;
         let has_workflows = sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='workflows'",
@@ -406,10 +405,7 @@ impl SourcesRepo {
         let retention_policy = input.retention_policy.unwrap_or(existing.retention_policy);
         let filters = input.filters.unwrap_or(existing.filters);
         let filters_str = serde_json::to_string(&filters)?;
-        crate::services::runner::resolve_worker_filters(
-            &filters,
-            scrape_core::WorkerFilters::default(),
-        )?;
+        crate::services::runner::resolve_worker_filters(&filters)?;
         let next_run =
             Self::next_run_for_schedule(pool, cadence, cadence_cron.as_deref(), enabled, &config)
                 .await?;

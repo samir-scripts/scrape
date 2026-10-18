@@ -76,26 +76,18 @@ fn aggregate_run_status(
     }
 }
 
-pub fn resolve_worker_filters(
+/// Modern execution is independent of global matching defaults.
+pub fn resolve_worker_filters(source_filters: &serde_json::Value) -> Result<WorkerFilters> {
+    WorkerFilters::resolve_compatibility(source_filters, None).map_err(AppError::Validation)
+}
+
+/// Only historical upgrades/imports may opt into inheritance.
+pub fn resolve_legacy_worker_filters(
     source_filters: &serde_json::Value,
     global_filters: WorkerFilters,
 ) -> Result<WorkerFilters> {
-    let mut effective = serde_json::to_value(global_filters)?;
-    if !source_filters.is_null() {
-        let overrides = source_filters
-            .as_object()
-            .ok_or_else(|| AppError::Validation("Workflow filters must be an object".into()))?;
-        for (key, value) in overrides {
-            effective[key] = value.clone();
-        }
-    }
-    let mut filters: WorkerFilters = serde_json::from_value(effective)
-        .map_err(|e| AppError::Validation(format!("workflow.filters: {e}")))?;
-    if filters.matching.is_some() {
-        filters.normalize_into_matching();
-    }
-    filters.to_expr().map_err(AppError::Validation)?;
-    Ok(filters)
+    WorkerFilters::resolve_compatibility(source_filters, Some(&global_filters))
+        .map_err(AppError::Validation)
 }
 
 pub async fn load_global_filters(pool: &SqlitePool) -> Result<WorkerFilters> {
@@ -515,7 +507,7 @@ impl ScrapeRunner {
         }
         super::workflow::validated_stored_config(source.kind, &source.config)?;
         // Invalid saved filters must fail before opening a run record.
-        resolve_worker_filters(&source.filters, Default::default())?;
+        resolve_worker_filters(&source.filters)?;
         let run = RunsRepo::start_with_source(&self.pool, trigger, Some(source_id)).await?;
         let _ = app.emit(
             "scrape://started",
@@ -1345,7 +1337,7 @@ mod tests {
             "query": "title LIKE '%Engineer%' AND location LIKE '%Remote%'"
         });
 
-        let resolved = resolve_worker_filters(&source_filters, global).unwrap();
+        let resolved = resolve_legacy_worker_filters(&source_filters, global).unwrap();
         assert_eq!(
             resolved.include_keywords,
             vec!["CustomKW".to_string(), "Rust".to_string()]
@@ -1366,16 +1358,18 @@ mod tests {
             include_keywords: vec!["Engineer".into()],
             ..Default::default()
         };
-        let result =
-            resolve_worker_filters(&serde_json::json!({"include_keywords": []}), global.clone())
-                .unwrap();
+        let result = resolve_legacy_worker_filters(
+            &serde_json::json!({"include_keywords": []}),
+            global.clone(),
+        )
+        .unwrap();
         assert!(result.include_keywords.is_empty());
         for invalid in [
             serde_json::json!({"include_keywords": "Engineer"}),
             serde_json::json!({"query": "title LIKE"}),
             serde_json::json!({"unsupported": true}),
         ] {
-            assert!(resolve_worker_filters(&invalid, global.clone()).is_err());
+            assert!(resolve_legacy_worker_filters(&invalid, global.clone()).is_err());
         }
     }
 
@@ -1393,14 +1387,14 @@ mod tests {
         };
 
         let null_filters = serde_json::Value::Null;
-        let resolved = resolve_worker_filters(&null_filters, global.clone()).unwrap();
+        let resolved = resolve_legacy_worker_filters(&null_filters, global.clone()).unwrap();
         assert_eq!(resolved.include_keywords, global.include_keywords);
         assert_eq!(resolved.exclude_keywords, global.exclude_keywords);
         assert_eq!(resolved.locations, global.locations);
         assert_eq!(resolved.role_types, global.role_types);
 
         let empty_filters = serde_json::json!({});
-        let resolved_empty = resolve_worker_filters(&empty_filters, global.clone()).unwrap();
+        let resolved_empty = resolve_legacy_worker_filters(&empty_filters, global.clone()).unwrap();
         assert_eq!(resolved_empty.include_keywords, global.include_keywords);
     }
 

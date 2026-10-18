@@ -106,3 +106,10 @@ Retention resolves completed child IDs to their parent and deduplicates by
 workflow before applying the parent's retention policy. Bulk-cleanup previews
 count workflow parents rather than extraction-source rows. The regression keeps
 tracked/favorited/annotated jobs while expiring an eligible child posting.
+
+Matching compatibility delegates to `WorkerFilters::resolve_compatibility` in
+scrape-core. Normal `resolve_worker_filters` has no global argument; only the
+explicit legacy upgrade/import paths may inherit old defaults. Validation,
+preview, save and execution preserve the independent predicates and raw values;
+there is no host normalization/compiler copy. `matching_compatibility_tests.rs`
+checks independent acceptance expectations and import/save/reopen/global isolation.

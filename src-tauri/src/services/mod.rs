@@ -20,3 +20,6 @@ pub mod execution_diagnostics;
 pub mod sample_workflows;
 
 pub mod workflow_store;
+
+#[cfg(test)]
+mod matching_compatibility_tests;

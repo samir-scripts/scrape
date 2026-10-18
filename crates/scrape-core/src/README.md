@@ -105,3 +105,9 @@ Shared validation of static next/detail locators, detail field maps, readiness,
 page/source bounds and identity immutability. Global `WorkerLimits` in protocol
 v7 owns default/hard maxima; source settings can lower them. Browser limit
 configuration is published, but browser-process/context enforcement awaits 6C.
+
+`protocol.rs` owns `WorkerFilters::resolve_compatibility`: a validated, non-destructive
+overlay with explicitly opt-in historical inheritance. It preserves every legacy
+predicate alongside structured matching. `compatibility_restrictions()` emits the
+generated `FilterCompatibilityRestriction` descriptions consumed by desktop UI;
+no keyword/role union, location inference or sample-query deletion is performed.

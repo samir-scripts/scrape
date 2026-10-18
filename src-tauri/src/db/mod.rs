@@ -251,8 +251,10 @@ async fn upgrade_workflow_settings_v4(pool: &SqlitePool) -> Result<()> {
         let converted = (|| -> Result<WorkflowUpgradeResult> {
             let mut config: Value = serde_json::from_str(&config_text)?;
             let source_filters: Value = serde_json::from_str(&filters_text)?;
-            let resolved =
-                crate::services::runner::resolve_worker_filters(&source_filters, global.clone())?;
+            let resolved = crate::services::runner::resolve_legacy_worker_filters(
+                &source_filters,
+                global.clone(),
+            )?;
             let filters = serde_json::to_string(&resolved)?;
             let mut cron_value = cadence_cron;
             let mut effective_cadence = cadence.clone();

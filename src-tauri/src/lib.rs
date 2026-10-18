@@ -213,6 +213,7 @@ pub fn run() {
             commands::scrape::test_source,
             commands::scrape::test_source_transient,
             commands::scrape::validate_workflow,
+            commands::scrape::describe_workflow_filters,
             commands::scrape::import_workflow,
             commands::scrape::trust_workflow_script,
             commands::scrape::preview_workflow,

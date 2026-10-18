@@ -186,7 +186,7 @@ pub(super) async fn save(
     } else {
         root.filters.clone().unwrap_or(json!({}))
     };
-    super::runner::resolve_worker_filters(&filters, Default::default())?;
+    super::runner::resolve_worker_filters(&filters)?;
     if repair {
         let old = old
             .as_ref()

@@ -67,7 +67,7 @@ pub fn prepare(source: &Source, timezone: &str, started_at: &str) -> Result<Work
     Ok(WorkerConfig {
         version: PROTOCOL_VERSION,
         sources,
-        filters: super::runner::resolve_worker_filters(&source.filters, Default::default())?,
+        filters: super::runner::resolve_worker_filters(&source.filters)?,
         run_started_at: Some(started_at.into()),
         limits: WorkerLimits::default(),
         max_jobs_per_run: cap,

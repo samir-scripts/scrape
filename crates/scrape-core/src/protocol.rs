@@ -204,181 +204,56 @@ pub struct WorkerFilters {
     pub matching: Option<crate::matching::PostingRules>,
 }
 
+/// Visible restrictions retained verbatim during compatibility resolution.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export)]
+pub struct FilterCompatibilityRestriction {
+    pub field: String,
+    pub explanation: String,
+}
+
 impl WorkerFilters {
-    pub fn normalize_into_matching(&mut self) {
-        if self.matching.is_none()
-            && self.include_keywords.is_empty()
-            && self.exclude_keywords.is_empty()
-            && self.locations.is_empty()
-            && self.role_types.is_empty()
-        {
-            return;
+    /// Resolve compatibility without rewriting independently ANDed predicates.
+    /// Inheritance is explicit and reserved for historical imports/upgrades.
+    pub fn resolve_compatibility(
+        value: &serde_json::Value,
+        inherited: Option<&Self>,
+    ) -> Result<Self, String> {
+        let mut effective = serde_json::to_value(inherited.cloned().unwrap_or_default())
+            .map_err(|e| e.to_string())?;
+        if !value.is_null() {
+            let overrides = value
+                .as_object()
+                .ok_or("Workflow filters must be an object")?;
+            for (key, value) in overrides {
+                effective[key] = value.clone();
+            }
         }
-        let matching = self
-            .matching
-            .get_or_insert_with(crate::matching::PostingRules::default);
+        let filters: Self =
+            serde_json::from_value(effective).map_err(|e| format!("workflow.filters: {e}"))?;
+        filters.to_expr()?;
+        Ok(filters)
+    }
 
-        // 1. include_keywords -> matching.keywords.any
-        if !self.include_keywords.is_empty() {
-            let kw = matching
-                .keywords
-                .get_or_insert_with(crate::matching::KeywordRules::default);
-            for word in self.include_keywords.drain(..) {
-                let trimmed = word.trim();
-                if !trimmed.is_empty()
-                    && !kw
-                        .any
-                        .iter()
-                        .any(|existing| existing.eq_ignore_ascii_case(trimmed))
-                {
-                    kw.any.push(trimmed.to_string());
-                }
+    /// Descriptions come from the same domain owner as predicate compilation.
+    /// No automatic structured replacement is offered: these restrictions have
+    /// different fields, OR groups, LIKE semantics or independent intersections.
+    pub fn compatibility_restrictions(&self) -> Vec<FilterCompatibilityRestriction> {
+        let mut restrictions = Vec::new();
+        for (active, field, explanation) in [
+            (!self.include_keywords.is_empty(), "include_keywords", "Any legacy include term must match the title OR location, in addition to the structured keyword groups. SQL LIKE wildcards remain active."),
+            (!self.exclude_keywords.is_empty(), "exclude_keywords", "No legacy exclude term may match the title OR location. SQL LIKE wildcards remain active."),
+            (!self.locations.is_empty(), "locations", "Any legacy location term may match the original location text (OR). These terms are not inferred as workplace, country or city constraints."),
+            (!self.role_types.is_empty(), "role_types", "A legacy role type AND a structured role type must both match when both groups are present. The groups are not combined."),
+            (self.query.as_ref().is_some_and(|q| !q.trim().is_empty()), "query", "This expert query applies with AND, including queries from old examples. It is never removed by recognizing its text."),
+            (self.policy.as_ref().is_some_and(|p| !p.is_null()), "policy", "This expert policy applies with AND alongside every other restriction."),
+            (self.compensation.is_some(), "compensation", "Legacy compensation and structured compensation must both match when both are present."),
+        ] {
+            if active {
+                restrictions.push(FilterCompatibilityRestriction { field: field.into(), explanation: explanation.into() });
             }
         }
-
-        // 2. exclude_keywords -> matching.keywords.exclude
-        if !self.exclude_keywords.is_empty() {
-            let kw = matching
-                .keywords
-                .get_or_insert_with(crate::matching::KeywordRules::default);
-            for word in self.exclude_keywords.drain(..) {
-                let trimmed = word.trim();
-                if !trimmed.is_empty()
-                    && !kw
-                        .exclude
-                        .iter()
-                        .any(|existing| existing.eq_ignore_ascii_case(trimmed))
-                {
-                    kw.exclude.push(trimmed.to_string());
-                }
-            }
-        }
-
-        // 3. role_types -> matching.role_types
-        for role in self.role_types.drain(..) {
-            if !matching.role_types.contains(&role) {
-                matching.role_types.push(role);
-            }
-        }
-
-        // 4. locations -> partition
-        for loc in self.locations.drain(..) {
-            let trimmed = loc.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            match trimmed.to_ascii_lowercase().as_str() {
-                "remote" | "telecommute" | "virtual" => {
-                    if !matching
-                        .workplaces
-                        .contains(&crate::types::WorkplaceType::Remote)
-                    {
-                        matching
-                            .workplaces
-                            .push(crate::types::WorkplaceType::Remote);
-                    }
-                }
-                "hybrid" => {
-                    if !matching
-                        .workplaces
-                        .contains(&crate::types::WorkplaceType::Hybrid)
-                    {
-                        matching
-                            .workplaces
-                            .push(crate::types::WorkplaceType::Hybrid);
-                    }
-                }
-                "on-site" | "onsite" | "in-office" | "in office" | "in-person" | "in person" => {
-                    if !matching
-                        .workplaces
-                        .contains(&crate::types::WorkplaceType::Onsite)
-                    {
-                        matching
-                            .workplaces
-                            .push(crate::types::WorkplaceType::Onsite);
-                    }
-                }
-                _ => {
-                    if let Some(code) = crate::geography::country_code(trimmed) {
-                        if !matching
-                            .countries
-                            .iter()
-                            .any(|c| c.eq_ignore_ascii_case(&code))
-                        {
-                            matching.countries.push(code);
-                        }
-                    } else if trimmed.contains('-')
-                        && crate::geography::REGIONS.iter().any(|r| {
-                            format!("{}-{}", r.country_code, r.code).eq_ignore_ascii_case(trimmed)
-                        })
-                    {
-                        if !matching
-                            .regions
-                            .iter()
-                            .any(|r| r.eq_ignore_ascii_case(trimmed))
-                        {
-                            matching.regions.push(trimmed.to_ascii_uppercase());
-                        }
-                    } else {
-                        let parsed = crate::enrich::location::parse(trimmed);
-                        if let Some(first) = parsed.first() {
-                            if let Some(ref c) = first.country_code {
-                                if !matching
-                                    .countries
-                                    .iter()
-                                    .any(|existing| existing.eq_ignore_ascii_case(c))
-                                {
-                                    matching.countries.push(c.clone());
-                                }
-                            }
-                            if let Some(ref r) = first.region_code {
-                                if !matching
-                                    .regions
-                                    .iter()
-                                    .any(|existing| existing.eq_ignore_ascii_case(r))
-                                {
-                                    matching.regions.push(r.clone());
-                                }
-                            }
-                            if let Some(ref city) = first.city {
-                                if !matching
-                                    .cities
-                                    .iter()
-                                    .any(|existing| existing.eq_ignore_ascii_case(city))
-                                {
-                                    matching.cities.push(city.clone());
-                                }
-                            } else if first.country_code.is_none()
-                                && first.region_code.is_none()
-                                && !matching
-                                    .cities
-                                    .iter()
-                                    .any(|existing| existing.eq_ignore_ascii_case(trimmed))
-                            {
-                                matching.cities.push(trimmed.to_string());
-                            }
-                        } else if !matching
-                            .cities
-                            .iter()
-                            .any(|existing| existing.eq_ignore_ascii_case(trimmed))
-                        {
-                            matching.cities.push(trimmed.to_string());
-                        }
-                    }
-                }
-            }
-        }
-
-        // 5. If query was the known default sample query string, clear it
-        if let Some(ref q) = self.query {
-            let trimmed = q.trim();
-            if trimmed
-                == "title LIKE '%Engineer%' OR title LIKE '%Developer%' OR title LIKE '%Intern%'"
-                || trimmed == "title LIKE '%Engineer%' OR title LIKE '%Intern%'"
-            {
-                self.query = None;
-            }
-        }
+        restrictions
     }
 
     pub fn to_expr(&self) -> Result<crate::filter::FilterExpr, String> {

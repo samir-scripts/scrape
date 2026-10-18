@@ -1039,11 +1039,7 @@ async fn late_greenhouse_matches_refresh_with_provenance_and_protected_state() {
             identifier: source.identifier.clone(),
             config: source.config.clone(),
         }],
-        filters: scrape_lib::services::runner::resolve_worker_filters(
-            &source.filters,
-            WorkerFilters::default(),
-        )
-        .unwrap(),
+        filters: scrape_lib::services::runner::resolve_worker_filters(&source.filters).unwrap(),
         filters_by_source: Default::default(),
         run_started_at: Some("2026-10-16T00:00:00Z".into()),
         limits: WorkerLimits {
@@ -1251,11 +1247,7 @@ async fn verify_static_worker_persistence(hydration: bool, paginated: bool) {
             identifier: source.identifier.clone(),
             config: source.config.clone(),
         }],
-        filters: scrape_lib::services::runner::resolve_worker_filters(
-            &source.filters,
-            WorkerFilters::default(),
-        )
-        .unwrap(),
+        filters: scrape_lib::services::runner::resolve_worker_filters(&source.filters).unwrap(),
         run_started_at: Some("2026-10-16T00:00:00Z".into()),
         limits: WorkerLimits {
             per_host_delay_ms: 0,
@@ -2533,5 +2525,174 @@ async fn seeded_multi_source_selector_jobs_persist_with_parent_attribution() {
         .items
         .iter()
         .any(|j| j.title == "Authored Apple Engineer"));
+    pool.close().await;
+}
+
+/// Labelled authored fixtures: exact compatibility rules through import/save,
+/// preview and run worker processes, ingestion and the Discovered parent query.
+#[tokio::test]
+async fn compatibility_rules_survive_saved_workflow_preview_run_and_discovered() {
+    use scrape_lib::services::{execution_diagnostics, workflow};
+    use serde_json::json;
+    use std::sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc,
+    };
+    let cases = [
+        (
+            json!({"locations":["Remote","Austin"],"matching":{}}),
+            vec!["1", "2", "3", "5", "6"],
+        ),
+        (
+            json!({"include_keywords":["Software"],"matching":{"keywords":{"any":["Engineer"],"fields":["title"]}}}),
+            vec!["2", "5", "6"],
+        ),
+        (
+            json!({"query":"title LIKE '%Engineer%' OR title LIKE '%Developer%' OR title LIKE '%Intern%'","matching":{}}),
+            vec!["2", "3", "5", "6"],
+        ),
+        (
+            json!({"query":"title LIKE '%Engineer%' OR title LIKE '%Intern%'","matching":{}}),
+            vec!["2", "3", "5", "6"],
+        ),
+        (
+            json!({"include_keywords":["Austin"],"matching":{"keywords":{"any":["Engineer","Developer"],"all":["Software"],"exclude":["Senior"],"fields":["title"]}}}),
+            vec!["2"],
+        ),
+        (
+            json!({"exclude_keywords":["Remote"],"matching":{"keywords":{"any":["Systems"],"fields":["description"]}}}),
+            vec!["1", "2", "4", "6"],
+        ),
+        (
+            json!({"role_types":["full_time"],"matching":{"role_types":["internship"]}}),
+            vec![],
+        ),
+        (
+            json!({"query":"location LIKE '%Austin%'","policy":{"title":"%Software%"},"matching":{"keywords":{"exclude":["Senior"],"fields":["title"]}}}),
+            vec!["1", "2"],
+        ),
+    ];
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let stop = Arc::new(AtomicBool::new(false));
+    let pages = Arc::new(AtomicUsize::new(0));
+    let server_stop = stop.clone();
+    let served = pages.clone();
+    let server = std::thread::spawn(move || {
+        listener.set_nonblocking(true).unwrap();
+        while !server_stop.load(Ordering::SeqCst) {
+            let Ok((mut stream, _)) = listener.accept() else {
+                std::thread::sleep(Duration::from_millis(5));
+                continue;
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut bytes = [0; 8192];
+            let n = stream.read(&mut bytes).unwrap();
+            let request = String::from_utf8_lossy(&bytes[..n]);
+            let path = request.split_whitespace().nth(1).unwrap();
+            let body = match path {
+                "/fixture.test/robots.txt" => "User-agent: *\nAllow: /".to_string(),
+                "/fixture.test/compatibility" => {
+                    served.fetch_add(1, Ordering::SeqCst);
+                    [("1","Software Designer","Austin"),("2","Software Engineer","Austin"),("3","Engineer","Remote"),("4","Designer","London"),("5","Software Engineer","Remote"),("6","Senior Software Engineer","Austin")].into_iter().map(|(id,title,location)|format!("<article data-id='{id}'><h2>{title}</h2><a href='/jobs/{id}'>Apply</a><span>{location}</span><p>Systems work</p></article>")).collect::<String>()
+                }
+                _ => panic!("unexpected compatibility fixture route {path}"),
+            };
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+        }
+    });
+    let directory = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&directory.path().join("compatibility.db"))
+        .await
+        .unwrap();
+    for (index, (filters, expected)) in cases.iter().enumerate() {
+        let document = json!({"version":6,"metadata":{"name":format!("Authored compatibility {index}")},"sources":[{"id":"fixture","label":"Fixture","employer_hint":"Fixture","extractor":{"kind":"selector","url":"https://fixture.test/compatibility","source_config":{"item":"article","id":".","id_attribute":"data-id","title":"h2","link":"a","location":"span","description":"p","description_attribute":"text"}}}],"schedule":{"cadence":"manual"},"filters":filters});
+        let spec = workflow::validate_legacy_import(
+            document,
+            "UTC",
+            "0 0 9 * * *",
+            &WorkerFilters {
+                include_keywords: vec!["must-not-inherit".into()],
+                ..Default::default()
+            },
+            false,
+        )
+        .unwrap();
+        let saved = workflow::persist(&pool, spec, None, true, "UTC")
+            .await
+            .unwrap();
+        let reopened = SourcesRepo::get(&pool, &saved.id).await.unwrap();
+        let mut config =
+            execution_diagnostics::prepare(&reopened, "UTC", "2026-10-18T00:00:00Z").unwrap();
+        config.limits.per_host_delay_ms = 0;
+        let original: WorkerFilters = serde_json::from_value(filters.clone()).unwrap();
+        assert_eq!(config.filters, original);
+        for preview in [true, false] {
+            let events = invoke_replay(&config, preview, Some(&origin));
+            let WorkerEvent::Done { stats } = events.last().unwrap() else {
+                panic!("missing completion")
+            };
+            let scan = &stats.sources[0];
+            scan.validate().unwrap();
+            assert_eq!(
+                (scan.examined, scan.rejected, scan.unresolved, scan.accepted),
+                (6, 6 - expected.len() as u64, 0, expected.len() as u64),
+                "case {index}"
+            );
+            assert_eq!(
+                scan.termination,
+                scrape_core::protocol::CoverageTermination::Exhausted
+            );
+            assert!(
+                !events
+                    .iter()
+                    .any(|event| matches!(event, WorkerEvent::Error { .. })),
+                "case {index}: {events:?}"
+            );
+            let batch: Vec<_> = events
+                .into_iter()
+                .filter(|event| matches!(event, WorkerEvent::Job { .. }))
+                .map(|event| scraped_job_from_event(event).unwrap())
+                .collect();
+            let mut ids: Vec<_> = batch
+                .iter()
+                .map(|job| job.external_id.as_deref().unwrap())
+                .collect();
+            ids.sort();
+            assert_eq!(&ids, expected, "case {index}, preview {preview}");
+            if !preview {
+                let stats = JobsRepo::upsert_scraped(&pool, &batch).await.unwrap();
+                assert_eq!(stats.inserted, expected.len() as i64);
+            }
+            let discovered = JobsRepo::list(
+                &pool,
+                JobFilter {
+                    source_id: Some(saved.id.clone()),
+                    statuses: Some(vec![
+                        scrape_core::JobStatus::Scraped,
+                        scrape_core::JobStatus::Viewed,
+                    ]),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                discovered.total,
+                if preview { 0 } else { expected.len() as i64 }
+            );
+        }
+    }
+    stop.store(true, Ordering::SeqCst);
+    server.join().unwrap();
+    assert_eq!(pages.load(Ordering::SeqCst), 16);
     pool.close().await;
 }
