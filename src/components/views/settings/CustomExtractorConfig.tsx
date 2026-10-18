@@ -923,10 +923,10 @@ export function CustomExtractorConfig({
           {/* Interpreter and Bounds */}
           <div className="grid grid-cols-2 gap-2 text-xs">
             <label className="flex flex-col gap-1">
-              Interpreter path
+              Interpreter path (absolute)
               <Input
                 aria-label={`Source ${sourceIndex + 1} Script interpreter`}
-                placeholder="/usr/bin/python3 or node"
+                placeholder="Absolute executable path, e.g. /usr/bin/python3"
                 value={extractor.script?.interpreter || ""}
                 onChange={(e) =>
                   updateExtractor({

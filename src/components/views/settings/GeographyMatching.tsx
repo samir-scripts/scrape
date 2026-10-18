@@ -82,9 +82,9 @@ export function GeographyMatching({ rules, onChange, onDraftChange }: { rules: P
     </div>
     <p className="text-[var(--color-ink-mute)]">Country, state, city, and workplace apply together. Remote alone does not imply a country. Leave a field empty for no restriction.</p>
     <fieldset className="flex gap-4 flex-wrap"><legend className="mb-1">Workplace — match any selected</legend>
-      {([['remote','Remote'],['hybrid','Hybrid'],['onsite','In-person / On-site']] as const).map(([code,label]) => <label key={code} className="flex gap-2 items-center min-h-8"><input type="checkbox" checked={rules.workplaces.includes(code)} onChange={event => onChange({ workplaces: event.target.checked ? [...rules.workplaces,code] : rules.workplaces.filter(value => value !== code) })} />{label}</label>)}
+      {([['remote','Remote'],['hybrid','Hybrid'],['onsite','In-person / On-site'],['unknown','Unknown workplace']] as const).map(([code,label]) => <label key={code} className="flex gap-2 items-center min-h-8"><input type="checkbox" checked={rules.workplaces.includes(code)} onChange={event => onChange({ workplaces: event.target.checked ? [...rules.workplaces,code] : rules.workplaces.filter(value => value !== code) })} />{label}</label>)}
     </fieldset>
-    <p className="text-[var(--color-ink-mute)]">In-person, in-office and on-site use the same category.</p>
+    <p className="text-[var(--color-ink-mute)]">In-person, in-office and on-site use the same category. Leave all unchecked for any workplace, including unknown. Unknown workplace is separate from unknown location.</p>
     <label className="flex items-start gap-2"><input type="checkbox" checked={rules.location_include_unknown} onChange={event => onChange({ location_include_unknown: event.target.checked })} />Include postings with unknown location</label>
   </fieldset>;
 }

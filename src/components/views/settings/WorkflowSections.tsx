@@ -103,7 +103,7 @@ export function WorkflowSections({
               <span className="text-xs font-normal text-[var(--color-ink-mute)]">Quick setup</span>
             </label>
             <p className="text-xs text-[var(--color-ink-mute)]">
-              Choose a preconfigured workflow template across ATS, static selectors, and custom scripts.
+              ATS templates use title keywords only. Restrictive examples and unverified static/script examples are labelled separately.
             </p>
             <Select
               aria-label="Choose sample workflow template"
@@ -115,12 +115,13 @@ export function WorkflowSections({
               onChange={(id) => {
                 const tpl = SAMPLE_WORKFLOW_TEMPLATES.find((t) => t.id === id);
                 if (tpl) {
-                  change(tpl.spec);
+                  change(structuredClone(tpl.spec));
                 }
               }}
             />
           </div>
         )}
+        {SAMPLE_WORKFLOW_TEMPLATES.filter(t => t.spec.metadata.name === draft.metadata.name).map(t => <p key={t.id} role="status" className="text-sm text-[var(--color-ink-mute)]">{t.description}</p>)}
         {field("Workflow name", draft.metadata.name, (name) =>
           change({ ...draft, metadata: { ...draft.metadata, name } }),
         )}
@@ -405,6 +406,7 @@ export function WorkflowSections({
               ["contract", "Contract"],
               ["part_time", "Part-time"],
               ["seasonal", "Seasonal"],
+              ["unknown", "Unknown employment"],
             ] as const
           ).map(([value, label]) => (
             <label key={value} className="flex min-h-8 items-center gap-2">
@@ -423,7 +425,7 @@ export function WorkflowSections({
           ))}
         </fieldset>
         <p className="text-xs text-[var(--color-ink-mute)]">
-          Leave all unchecked to match any role type.
+          Leave all unchecked to match any role type, including unknown. Select Unknown employment alongside known types to include both.
         </p>
         <GeographyMatching rules={rules} onChange={setRules} onDraftChange={() => change({ ...draft })} />
         {advanced && (

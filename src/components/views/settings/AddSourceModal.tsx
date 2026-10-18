@@ -1,3 +1,4 @@
+import { stringify } from "yaml";
 import { INGESTION_LIMITS } from "../../../bindings/ingestionLimits";
 import { useLayoutEffect, useRef } from "react";
 import { api } from "../../../lib/api";
@@ -43,6 +44,10 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
       ? "native pay rules"
       : null,
     rules?.posting_date ? "posting dates" : null,
+    rules?.workplaces?.length ? `workplace: ${rules.workplaces.join(", ")}` : null,
+    rules?.countries?.length ? `countries: ${rules.countries.join(", ")}` : null,
+    rules?.regions?.length ? `regions: ${rules.regions.join(", ")}` : null,
+    rules?.cities?.length ? `cities: ${rules.cities.join(", ")}` : null,
     rules?.experience_min != null ||
     rules?.experience_max != null ||
     rules?.sponsorship?.length ||
@@ -131,6 +136,11 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
           </div>
           <p>{draft.metadata.enabled === false ? "Disabled" : "Enabled"} · {draft.schedule?.cadence || "daily"} {draft.schedule?.time || ""} · {draft.schedule?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}</p>
           <p>Retention: {draft.retention?.days ?? 30} days. Tracked jobs, notes and favorites are protected.</p>
+          <section aria-label="Matching rules summary" className="grid gap-1">
+            <h4 className="font-semibold">Matching rules</h4>
+            <p>Every configured restriction applies together. Empty groups do not restrict matching.</p>
+            <pre className="font-code whitespace-pre-wrap break-words text-xs">{stringify(draft.filters || {})}</pre>
+          </section>
           <details><summary className="cursor-pointer min-h-9">All configured rules</summary><pre className="font-code whitespace-pre-wrap break-words text-xs">{workflowSpecToYaml(draft)}</pre></details>
           <p>Saving creates or updates the workflow. It does not run a scrape.</p>
         </section>}

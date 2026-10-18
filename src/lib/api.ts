@@ -108,12 +108,15 @@ let devNotifications: AppNotification[] = [
   },
 ];
 
+// This historical demonstration is deliberately restrictive. It is not the new
+// default seed; its configuration comes from the labelled canonical example.
+const demoSampleInput = workflowSpecToCreateInput(SAMPLE_WORKFLOW_TEMPLATES.find(template => template.id === "software-engineering-internships")!.spec);
 export const SAMPLE_SWE_SOURCE: Source = {
   id: "sample-swe-internships-1",
   kind: "greenhouse",
   name: "Cloudflare — Software Engineering Internships",
   identifier: "cloudflare",
-  config: { url: "https://boards.greenhouse.io/cloudflare" },
+  config: SAMPLE_WORKFLOW_TEMPLATES.find(template => template.id === "software-engineering-internships")!.extractors[0].config,
   enabled: true,
   last_run_at: null,
   last_status: null,
@@ -125,12 +128,7 @@ export const SAMPLE_SWE_SOURCE: Source = {
   last_run_duration_ms: null,
   retention_days: BigInt(45),
   retention_policy: "untracked_only",
-  filters: {
-    role_types: ["internship"],
-    include_keywords: ["Software", "Engineer", "Intern"],
-    exclude_keywords: ["MBA", "Sales", "Marketing"],
-    locations: ["Remote", "San Francisco, CA", "Austin, TX"],
-  },
+  filters: demoSampleInput.filters ?? {},
   needs_review: false, script_trusted: false,
 };
 
@@ -802,7 +800,7 @@ const apiImplementation = {
     if (!isTauri()) {
       const before = new Set(devSources.map(source => source.id));
       const selected: Source[] = [];
-      for (const tpl of SAMPLE_WORKFLOW_TEMPLATES) {
+      for (const tpl of SAMPLE_WORKFLOW_TEMPLATES.filter(template => template.seed)) {
         const executable = tpl.spec.sources.some(source => source.extractor.script || source.extractor.mode === "script");
         const input = workflowSpecToCreateInput(executable ? { ...tpl.spec, metadata: { ...tpl.spec.metadata, enabled: false } } : tpl.spec);
         if (!devSources.some((s) => s.name === tpl.name || (s.identifier === input.identifier && s.kind === input.kind))) {
