@@ -7,8 +7,8 @@ Scrape is a high-performance, local-first desktop application that runs in the b
 
 Workflow ingestion repair is tracked in [Plan 12](plans/12-workflow-ingestion-repair.md).
 Its first section adds durable redacted run-preparation/preflight diagnostics and
-seed-service → packaged-worker → temporary-database regressions. Existing seeded
-multi-source ownership and matching/extraction defects remain open; see
+seed-service → packaged-worker → temporary-database regressions. Section 2 adds atomic multi-source ownership, workflow-scoped endpoints (migration
+27), and disabled script review. Matching/extraction defects remain open; see
 [Incident 28](plans/errors/28-empty-seeded-workflows.md).
 
 ---

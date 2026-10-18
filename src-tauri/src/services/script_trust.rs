@@ -415,7 +415,7 @@ pub async fn reconcile_workflow(pool: &SqlitePool, source_id: &str) -> Result<()
             .await?
             .flatten();
     if let Some(id) = workflow_id {
-        let pending: i64 = sqlx::query_scalar("SELECT count(*) FROM sources WHERE workflow_id=? AND (needs_review=1 OR (script_sha256 IS NOT NULL AND script_trusted=0))").bind(&id).fetch_one(pool).await?;
+        let pending: i64 = sqlx::query_scalar("SELECT count(*) FROM sources WHERE workflow_id=? AND (needs_review=1 OR (script_sha256 IS NOT NULL AND script_trusted=0)) AND (json_type((SELECT config FROM sources WHERE id=?),'$.__workflow_spec.sources') IS NULL OR id IN (SELECT json_extract(value,'$.id') FROM json_each((SELECT config FROM sources WHERE id=?),'$.__workflow_spec.sources')))").bind(&id).bind(&id).bind(&id).fetch_one(pool).await?;
         sqlx::query("UPDATE workflows SET needs_review=?, enabled=CASE WHEN ? THEN 0 ELSE enabled END, next_run_at=CASE WHEN ? THEN NULL ELSE next_run_at END WHERE id=?")
             .bind(pending > 0).bind(pending > 0).bind(pending > 0).bind(&id).execute(pool).await?;
         // The current IPC presents the parent's source row as the workflow.
@@ -584,7 +584,10 @@ mod tests {
                 .unwrap(),
             2
         );
-        let child = SourcesRepo::get(&pool, "child-script").await.unwrap();
+        let child_id = parent.config["__workflow_spec"]["sources"][1]["id"]
+            .as_str()
+            .unwrap();
+        let child = SourcesRepo::get(&pool, child_id).await.unwrap();
         assert!(!child.script_trusted && !child.enabled && child.needs_review);
         trust(
             &pool,

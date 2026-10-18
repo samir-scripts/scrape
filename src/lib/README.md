@@ -47,3 +47,8 @@ Workflow file/YAML import uses the desktop `import_workflow` quarantine command.
 The single draft preserves import origin through Save, so an imported executable
 configuration cannot inherit previously stored trust. Browser demonstrations
 reject browser/script extraction and cannot grant script trust.
+
+Plan 12 section 2 adds generated `SeedWorkflowReport` IPC results. The seed UI
+reports created, retained and needs-review workflows. Script review uses the
+owned child's saved configuration/fingerprint; aggregate parent review retains
+the validated multi-source draft. Existing raw/invalid originals remain guarded.

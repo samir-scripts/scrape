@@ -142,7 +142,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     if (invalidInputs()) return;
     if (step === "Source") {
       if (!draft.sources || draft.sources.length === 0) { report("At least one source is required.", "Source"); return; }
-      if (!draft.sources.some(s => s.enabled)) { report("At least one source must be enabled.", "Source"); return; }
+      if (draft.metadata.enabled !== false && !draft.sources.some(s => s.enabled)) { report("At least one source must be enabled.", "Source"); return; }
       for (let i = 0; i < draft.sources.length; i++) {
         const s = draft.sources[i];
         if (!s.label.trim()) { report(`Source ${i + 1} label is required.`, "Source"); return; }
@@ -200,6 +200,20 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     } catch (error) { if (revision.current === current) report(error); }
     finally { if (revision.current === current) setOperation(null); }
   };
+  const saveDisabled = async () => {
+    if (operation || pendingImport || yaml != null || invalidInputs()) return;
+    const input = commitInputs();
+    const current = revision.current; setOperation("save"); setError("");
+    try {
+      const disabled = await api.validateWorkflow({ ...input, metadata: { ...input.metadata, enabled: false },
+        sources: input.sources.map(source => source.extractor.script || source.extractor.mode === "script" ? { ...source, enabled: false } : source) });
+      if (revision.current !== current) return;
+      const source = await api.saveWorkflow(disabled, initialSource?.id, imported.current);
+      onSourceSaved();
+      if (revision.current === current) { setSaved(source); setDirty(false); }
+    } catch (error) { if (revision.current === current) report(error); }
+    finally { if (revision.current === current) setOperation(null); }
+  };
   const runSaved = async () => {
     if (!saved) return false;
     setOperation("run"); setError("");
@@ -207,5 +221,5 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     catch (error) { report(error); return false; }
     finally { setOperation(null); }
   };
-  return { draft, change, commitInputs, inputSession, step, visited, navigate, next, advanced, setAdvanced, yaml, setYaml, detected, preview, error, errorStep, setError, operation, busy: !!operation, saved, content, cancel, invalidate, detect, applyYaml, runPreview, save, canSave, replaceImport, pendingImport, confirmImport, cancelImport, runSaved };
+  return { draft, change, commitInputs, inputSession, step, visited, navigate, next, advanced, setAdvanced, yaml, setYaml, detected, preview, error, errorStep, setError, operation, busy: !!operation, saved, content, cancel, invalidate, detect, applyYaml, runPreview, save, saveDisabled, canSave, replaceImport, pendingImport, confirmImport, cancelImport, runSaved };
 }

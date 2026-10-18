@@ -77,6 +77,7 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
       <Button onClick={close} disabled={locked}>Cancel</Button>
       <div className="flex flex-wrap gap-2">
         {model.operation === "preview" && <Button onClick={model.cancel}>Cancel preview</Button>}
+        {draft.sources.some(s => s.extractor.script || s.extractor.mode === "script") && <Button disabled={busy || !!model.pendingImport || yaml != null} onClick={() => void model.saveDisabled()}>Save disabled for review</Button>}
         {index > 0 && <Button disabled={busy || !!model.pendingImport} onClick={() => model.navigate(WORKFLOW_STEPS[index - 1])}>Back</Button>}
         {yaml == null && (step === "Matching" || step === "Review") && <Button disabled={busy || !!model.pendingImport || isRecordedMode()} onClick={() => void model.runPreview()}>{preview ? "Refresh preview" : "Preview matches"}</Button>}
         {step !== "Review" ? <Button variant="inverted" disabled={busy || !!model.pendingImport || yaml != null} onClick={() => void model.next()}>{step === "Schedule" ? "Review workflow" : `Continue to ${WORKFLOW_STEPS[index + 1]}`}</Button>
@@ -87,9 +88,9 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
       {isDemoMode() && <p className="text-[var(--color-ink-mute)]">Example mode. Open the desktop application to test a live source.</p>}
       {error && <div role="alert" className="text-[var(--color-danger)]"><p>{error}</p><button type="button" className="underline min-h-8" onClick={() => { model.navigate(model.errorStep); requestAnimationFrame(() => model.content.current?.querySelector<HTMLElement>(`[data-workflow-step="${model.errorStep}"] input`)?.focus()); }}>Go to {model.errorStep}</button></div>}
       {saved ? <>
-        <p>Saved {saved.name}. Saving has not started a scrape.</p>
-        <p>Next run: {saved.next_run_at ? new Date(saved.next_run_at).toLocaleString() : saved.cadence === "manual" ? "Manual only" : "Calculated by the desktop scheduler"}.</p>
-        <div className="flex gap-2"><Button variant="inverted" disabled={busy || !!model.pendingImport || isRecordedMode()} onClick={async () => { if (await model.runSaved()) onClose(); }}>Run now</Button>{model.operation === "run" && <Button variant="danger" onClick={() => void api.cancelScrape().catch(error => setError(String(error)))}>Cancel run</Button>}<Button disabled={busy} onClick={close}>Done</Button></div>
+        <p>Saved {saved.name}. Saving has not started a scrape.</p>{saved.needs_review && <p>Saved disabled. Reopen this workflow to review and trust each saved script. Trust keeps the workflow disabled until you explicitly enable it.</p>}
+        <p>Next run: {!saved.enabled ? "Disabled" : saved.next_run_at ? new Date(saved.next_run_at).toLocaleString() : saved.cadence === "manual" ? "Manual only" : "Calculated by the desktop scheduler"}.</p>
+        <div className="flex gap-2"><Button variant="inverted" disabled={busy || !!model.pendingImport || isRecordedMode() || saved.needs_review || !saved.enabled} onClick={async () => { if (await model.runSaved()) onClose(); }}>Run now</Button>{model.operation === "run" && <Button variant="danger" onClick={() => void api.cancelScrape().catch(error => setError(String(error)))}>Cancel run</Button>}<Button disabled={busy} onClick={close}>Done</Button></div>
       </> : <>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <nav aria-label="Workflow steps"><ol className="flex flex-wrap items-center gap-2">

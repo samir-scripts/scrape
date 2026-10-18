@@ -498,6 +498,16 @@ impl ScrapeRunner {
         let _guard = self.try_acquire_lock()?;
 
         let source = SourcesRepo::get(&self.pool, source_id).await?;
+        let owner: Option<String> =
+            sqlx::query_scalar("SELECT workflow_id FROM sources WHERE id=?")
+                .bind(source_id)
+                .fetch_one(&self.pool)
+                .await?;
+        if owner.as_deref().is_some_and(|id| id != source_id) {
+            return Err(AppError::Validation(
+                "Run the parent workflow; child sources do not own execution or schedules.".into(),
+            ));
+        }
         if source.needs_review {
             return Err(AppError::Validation(
                 "Workflow needs review before it can run. Open its configuration and save a valid specification.".into(),

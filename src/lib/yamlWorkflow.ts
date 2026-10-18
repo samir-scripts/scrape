@@ -897,10 +897,13 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
   // keep ignoring their possibly invalid snapshot. Script sources awaiting trust
   // have a fingerprint written only after Rust validation, so their snapshot is
   // authoritative and must be editable and reviewable.
-  const awaitingScriptTrust = !!source.script_sha256 && !source.script_trusted;
-  const snapshot = source.needs_review && !awaitingScriptTrust
+  const storedSpec = config.__workflow_spec as WorkflowSpec | undefined;
+  const awaitingScriptTrust = (!!source.script_sha256 && !source.script_trusted) ||
+    storedSpec?.sources?.some(entry => !!entry.extractor?.script);
+  const invalidOriginal = config.__invalid_original_config != null || config.__invalid_original_filters != null;
+  const snapshot = invalidOriginal || (source.needs_review && !awaitingScriptTrust)
     ? undefined
-    : (config.__workflow_spec as WorkflowSpec | undefined);
+    : storedSpec;
   const sourceConfig = Object.fromEntries(
     Object.entries(config).filter(([key]) => !key.startsWith("__")),
   );

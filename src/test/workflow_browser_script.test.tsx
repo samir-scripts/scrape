@@ -327,8 +327,8 @@ describe("Workflow Editor — Custom Extractor, Browser Sessions, & Script Trust
       expect(screen.getByText(/Python 3\.12\.3/i)).toBeTruthy();
     });
 
-    // Trust and enable script button
-    const trustBtn = screen.getByRole("button", { name: "Trust and enable script" });
+    // Trust saved script button
+    const trustBtn = screen.getByRole("button", { name: "Trust saved script" });
     await user.click(trustBtn);
     await waitFor(() => {
       expect(trustSpy).toHaveBeenCalledWith(
@@ -338,7 +338,7 @@ describe("Workflow Editor — Custom Extractor, Browser Sessions, & Script Trust
       );
     });
 
-    expect(screen.getByText("Script trusted and enabled.")).toBeTruthy();
+    expect(screen.getByText("Saved script trusted. Enable the workflow explicitly when ready.")).toBeTruthy();
     expect(
       screen.queryByText(/This script configuration requires review and explicit trust/i)
     ).toBeNull();
@@ -368,8 +368,55 @@ describe("Workflow Editor — Custom Extractor, Browser Sessions, & Script Trust
     expect(
       screen.getByText(/Save the workflow to fingerprint your changes, then trust it/i)
     ).toBeTruthy();
-    const trustBtn = screen.getByRole("button", { name: "Trust and enable script" });
+    const trustBtn = screen.getByRole("button", { name: "Trust saved script" });
     expect((trustBtn as HTMLButtonElement).disabled).toBe(true);
     expect(trustSpy).not.toHaveBeenCalled();
   });
+});
+
+it("saves an executable draft disabled for review without previewing or running it", async () => {
+  const user = userEvent.setup({ delay: null });
+  const validate = vi.spyOn(api,"validateWorkflow").mockImplementation(async spec => spec as WorkflowSpec);
+  const save = vi.spyOn(api,"saveWorkflow").mockResolvedValue({...sampleScriptSource,enabled:false});
+  const preview = vi.spyOn(api,"previewWorkflow");
+  const run = vi.spyOn(api,"runSourceNow");
+  render(<AddSourceModal isOpen initialSpec={sampleScriptWorkflow} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+  await user.click(screen.getByRole("button",{name:"Save disabled for review"}));
+  await screen.findByText(/Saved disabled\. Reopen this workflow/);
+  expect(validate).toHaveBeenCalled();
+  expect(save.mock.calls[0][0].metadata.enabled).toBe(false);
+  expect(save.mock.calls[0][0].sources.every(s=>!s.enabled)).toBe(true);
+  expect(preview).not.toHaveBeenCalled();expect(run).not.toHaveBeenCalled();
+  expect((screen.getByRole("button",{name:"Run now"}) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("reviews a multi-source child's stored fingerprint instead of the parent's fingerprint", async () => {
+  const user=userEvent.setup({delay:null});
+  const parentId="parent-static";
+  const parentSpec:WorkflowSpec={...sampleScriptWorkflow,sources:[{...sampleSelectorWorkflow.sources[0],id:parentId},...sampleScriptWorkflow.sources]};
+  const parent:Source={...sampleScriptSource,id:parentId,script_sha256:null,config:{__workflow_spec:parentSpec}};
+  const child:Source={...sampleScriptSource,enabled:false};
+  const read=vi.spyOn(api,"getSource").mockResolvedValue(child);
+  const trust=vi.spyOn(api,"trustWorkflowScript").mockResolvedValue({...child,script_trusted:true,needs_review:false});
+  render(<AddSourceModal isOpen initialSource={parent} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+  await user.click(screen.getByRole("button",{name:"Advanced settings"}));
+  await user.click(await screen.findByRole("button",{name:"Trust saved script"}));
+  expect(read).toHaveBeenCalledWith(child.id);
+  expect(trust).toHaveBeenCalledWith(child.id,child.script_sha256,true);
+  expect(trust.mock.calls[0][0]).not.toBe(parentId);
+  expect(await screen.findByText(/Saved script trusted\. Enable the workflow explicitly/)).toBeTruthy();
+});
+
+it("requires saving when the owned child's script differs from the parent snapshot being displayed", async () => {
+  const user=userEvent.setup({delay:null});
+  const parentId="parent-static";
+  const parentSpec:WorkflowSpec={...sampleScriptWorkflow,sources:[{...sampleSelectorWorkflow.sources[0],id:parentId},...sampleScriptWorkflow.sources]};
+  const parent:Source={...sampleScriptSource,id:parentId,script_sha256:null,config:{__workflow_spec:parentSpec}};
+  vi.spyOn(api,"getSource").mockResolvedValue({...sampleScriptSource,config:{script:{runtime:"js",code:"different saved executable"}}});
+  const trust=vi.spyOn(api,"trustWorkflowScript");
+  render(<AddSourceModal isOpen initialSource={parent} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+  await user.click(screen.getByRole("button",{name:"Advanced settings"}));
+  const button=await screen.findByRole("button",{name:"Trust saved script"});
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  await user.click(button);expect(trust).not.toHaveBeenCalled();
 });

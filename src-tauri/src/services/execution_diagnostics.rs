@@ -250,6 +250,26 @@ pub async fn preflight(
     config: &WorkerConfig,
 ) -> Result<()> {
     record_context(pool, run_id, workflow_id, config).await?;
+    if crate::db::sources::SourcesRepo::get(pool, workflow_id)
+        .await?
+        .needs_review
+    {
+        let message = "Execution preflight failed before discovery: workflow needs review. Save and explicitly trust each executable source before enabling it.";
+        RunsRepo::add_log(pool, run_id, LogLevel::Error, Some(workflow_id), message).await?;
+        return Err(crate::error::AppError::Validation(message.into()));
+    }
+    for source in &config.sources {
+        let owner: Option<Option<String>> =
+            sqlx::query_scalar("SELECT workflow_id FROM sources WHERE id=?")
+                .bind(&source.id)
+                .fetch_optional(pool)
+                .await?;
+        if owner.as_ref().and_then(|id| id.as_deref()) != Some(workflow_id) {
+            let message = format!("Execution preflight failed before discovery: source {} has no owned record in workflow {}. Open and save the workflow, or use the backed-up ownership repair. No worker was launched.",source.id,workflow_id);
+            RunsRepo::add_log(pool, run_id, LogLevel::Error, Some(workflow_id), &message).await?;
+            return Err(crate::error::AppError::Validation(message));
+        }
+    }
     if let Err(error) = super::script_trust::validate_execution(pool, &config.sources).await {
         RunsRepo::add_log(
             pool,

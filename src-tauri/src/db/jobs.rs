@@ -535,7 +535,8 @@ impl JobsRepo {
             &mut bindings,
         )?;
         if let Some(source) = &filter.source_id {
-            conditions.push("source_id = ?".into());
+            conditions.push("(source_id = ? OR workflow_id = ?)".into());
+            bindings.push(Bind::Text(source.clone()));
             bindings.push(Bind::Text(source.clone()));
         }
         if filter.favorited_only == Some(true) {

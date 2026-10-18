@@ -57,9 +57,9 @@ pub async fn seed_sample_workflow(app: AppHandle, state: State<'_, AppState>) ->
 pub async fn seed_all_sample_workflows(
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<Vec<Source>> {
+) -> Result<crate::services::sample_workflows::SeedWorkflowReport> {
     let _permit = state.runner.write_permit()?;
-    let result = crate::services::sample_workflows::seed_all(&state.db).await;
+    let result = crate::services::sample_workflows::seed_all_report(&state.db).await;
     // Also refresh after a partial batch failure: earlier creations may be saved.
     let _ = app.emit("sources://changed", ());
     result

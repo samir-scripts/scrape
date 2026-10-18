@@ -79,6 +79,16 @@ export function CustomExtractorConfig({
   const [trustError, setTrustError] = useState<string | null>(null);
   const [trustedSource, setTrustedSource] = useState<Source | null>(null);
 
+  const [ownedSource, setOwnedSource] = useState<Source | null>(null);
+  useEffect(() => {
+    let active = true;
+    setTrustedSource(null); setOwnedSource(null); setTrustSuccess(null); setTrustError(null);
+    if (initialSource?.id === source.id) setOwnedSource(initialSource);
+    else if (initialSource?.id) void api.getSource(source.id).then(value => { if (active) setOwnedSource(value); }).catch(() => {});
+    return () => { active = false; };
+  }, [initialSource, source.id]);
+  const reviewSource = trustedSource ?? ownedSource;
+
   const savedWorkflowSpec =
     initialSource?.config &&
     typeof initialSource.config === "object" &&
@@ -86,7 +96,9 @@ export function CustomExtractorConfig({
       ? ((initialSource.config as Record<string, unknown>).__workflow_spec as WorkflowSpec | undefined)
       : undefined;
   const savedSource = savedWorkflowSpec?.sources?.find((s) => s.id === source.id);
-  const savedScript = savedSource?.extractor?.script;
+  const ownedConfig = reviewSource?.config && typeof reviewSource.config === "object" && !Array.isArray(reviewSource.config)
+    ? reviewSource.config as Record<string, unknown> : undefined;
+  const savedScript = (ownedConfig?.script as WorkflowScriptConfig | undefined) ?? savedSource?.extractor?.script;
 
   const isScriptEqual = (
     a?: WorkflowScriptConfig | null,
@@ -94,7 +106,7 @@ export function CustomExtractorConfig({
   ) => {
     if (!a && !b) return true;
     if (!a || !b) return false;
-    const norm = (v: string | null | undefined) => (v ?? "").trim();
+    const norm = (v: string | null | undefined) => (v ?? "");
     if (a.runtime !== b.runtime) return false;
     if (norm(a.interpreter) !== norm(b.interpreter)) return false;
     if (norm(a.path) !== norm(b.path)) return false;
@@ -227,17 +239,17 @@ export function CustomExtractorConfig({
   };
 
   const handleTrustScript = async () => {
-    if (!initialSource?.id || !initialSource.script_sha256) return;
+    if (!reviewSource?.id || !reviewSource.script_sha256) return;
     setTrustBusy(true);
     setTrustError(null);
     try {
       const updated = await api.trustWorkflowScript(
-        initialSource.id,
-        initialSource.script_sha256,
+        reviewSource.id,
+        reviewSource.script_sha256,
         true
       );
       setTrustedSource(updated);
-      setTrustSuccess("Script trusted and enabled.");
+      setTrustSuccess("Saved script trusted. Enable the workflow explicitly when ready.");
       if (onTrustChanged) onTrustChanged();
     } catch (err) {
       setTrustError(String(err));
@@ -1084,8 +1096,8 @@ export function CustomExtractorConfig({
           )}
 
           {/* Trust Banner for Untrusted / Imported Scripts */}
-          {((trustedSource ?? initialSource)?.needs_review ||
-            !(trustedSource ?? initialSource)?.script_trusted) && (
+          {(reviewSource?.needs_review ||
+            !reviewSource?.script_trusted) && (
             <div
               role="alert"
               className="border border-[var(--color-warning)] p-3 grid gap-2 text-xs bg-[var(--color-paper)]"
@@ -1095,18 +1107,18 @@ export function CustomExtractorConfig({
                 before it can run or be scheduled.
               </p>
 
-              {initialSource?.id && initialSource?.script_sha256 ? (
+              {reviewSource?.id && reviewSource?.script_sha256 ? (
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
                       size="sm"
                       variant="inverted"
-                      aria-label="Trust and enable script"
+                      aria-label="Trust saved script"
                       disabled={trustBusy || scriptDirty}
                       onClick={handleTrustScript}
                     >
-                      {trustBusy ? "Trusting…" : "Trust and enable script"}
+                      {trustBusy ? "Trusting…" : "Trust saved script"}
                     </Button>
                     {trustError && (
                       <span className="text-[var(--color-danger)]">

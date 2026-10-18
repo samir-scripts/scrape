@@ -329,9 +329,9 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
             disabled={isRecordedMode()}
             onClick={async () => {
               try {
-                await api.seedAllSampleWorkflows();
+                const report = await api.seedAllSampleWorkflows();
                 fetchSources();
-                notifySuccess("Loaded test workflows suite across ATS, selectors, and scripts.");
+                notifySuccess(`Created ${report.created.length} workflows; kept ${report.already_present.length} existing workflows. ${report.needs_review.length} need review. Scripts remain disabled until reviewed and explicitly enabled.`);
               } catch (err) {
                 notifyError(`Failed to load test workflows: ${err}`);
               }

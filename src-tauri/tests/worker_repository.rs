@@ -1744,7 +1744,10 @@ if (!input.continuation) {
     assert!(parent.needs_review);
     assert!(!parent.enabled);
 
-    let script_child = SourcesRepo::get(&pool, "src-script").await.unwrap();
+    let script_id = parent.config["__workflow_spec"]["sources"][1]["id"]
+        .as_str()
+        .unwrap();
+    let script_child = SourcesRepo::get(&pool, script_id).await.unwrap();
     assert!(!script_child.script_trusted);
     assert!(script_child.needs_review);
     assert!(!script_child.enabled);
@@ -2423,4 +2426,112 @@ async fn seeded_workflow_rules_explain_zero_results_through_discovered_query() {
             "each variant must use the same listing once"
         );
     }
+}
+
+/// Authored selector control using the actual seeded Google/Apple configuration.
+/// Unrestricted matching isolates ownership/persistence from the known strict rules.
+#[tokio::test]
+async fn seeded_multi_source_selector_jobs_persist_with_parent_attribution() {
+    use scrape_lib::{
+        db::runs::{RunCounts, RunsRepo, TriggerType},
+        services::{execution_diagnostics, sample_workflows},
+    };
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        listener.set_nonblocking(true).unwrap();
+        let mut pages = 0;
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while pages < 2 && Instant::now() < deadline {
+            let Ok((mut stream, _)) = listener.accept() else {
+                std::thread::sleep(Duration::from_millis(5));
+                continue;
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut bytes = [0; 8192];
+            let n = stream.read(&mut bytes).unwrap();
+            let request = String::from_utf8_lossy(&bytes[..n]);
+            let path = request.split_whitespace().nth(1).unwrap();
+            let body = match path {
+                "/www.google.com/about/careers/applications/jobs/results/" => {
+                    pages += 1;
+                    "<ul><li class='lLd3Je'><h3 class='QJPWVe'>Authored Google Engineer</h3><a href='https://www.google.com/about/careers/applications/jobs/results/authored-1'>Job</a><span class='r0wTof'>Austin</span></li></ul>"
+                }
+                "/jobs.apple.com/en-us/search" => {
+                    pages += 1;
+                    "<ul id='search-job-list'><li class='rc-accordion-item'><h3><a class='link-inline' href='https://jobs.apple.com/en-us/details/authored-2'>Authored Apple Engineer</a></h3></li></ul>"
+                }
+                _ if path.ends_with("/robots.txt") => "User-agent: *\nAllow: /",
+                _ => panic!("unexpected fixture route {path}"),
+            };
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+        }
+        assert_eq!(pages, 2);
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&dir.path().join("multi.db"))
+        .await
+        .unwrap();
+    let parent = sample_workflows::seed_all(&pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|s| s.name.starts_with("Google & Apple"))
+        .unwrap();
+    let run = RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&parent.id))
+        .await
+        .unwrap();
+    let mut config = execution_diagnostics::prepare(&parent, "UTC", &run.started_at).unwrap();
+    config.filters = Default::default();
+    config.limits.per_host_delay_ms = 0;
+    execution_diagnostics::preflight(&pool, &run.id, &parent.id, &config)
+        .await
+        .unwrap();
+    let events = invoke_replay(&config, false, Some(&origin));
+    server.join().unwrap();
+    let batch: Vec<_> = events
+        .into_iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .map(|e| scraped_job_from_event(e).unwrap())
+        .collect();
+    assert_eq!(batch.len(), 2);
+    assert_ne!(batch[0].source_id, batch[1].source_id);
+    execution_diagnostics::persist_batch(&pool, &run.id, &batch, &mut RunCounts::default())
+        .await
+        .unwrap();
+    let saved = JobsRepo::list(
+        &pool,
+        JobFilter {
+            source_id: Some(parent.id.clone()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(saved.total, 2);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM jobs WHERE workflow_id=?")
+            .bind(&parent.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        2
+    );
+    assert!(saved
+        .items
+        .iter()
+        .any(|j| j.title == "Authored Google Engineer"));
+    assert!(saved
+        .items
+        .iter()
+        .any(|j| j.title == "Authored Apple Engineer"));
+    pool.close().await;
 }

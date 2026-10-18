@@ -156,6 +156,7 @@ impl SourcesRepo {
                    cadence, cadence_cron, next_run_at, last_run_duration_ms, retention_days, retention_policy, filters, needs_review, script_trusted, script_sha256,
                    COALESCE((SELECT needs_review FROM workflows WHERE workflows.id=sources.id),0) AS workflow_needs_review
             FROM sources
+            WHERE workflow_id = id OR workflow_id IS NULL
             ORDER BY created_at DESC
             "#
         )
@@ -564,6 +565,7 @@ impl SourcesRepo {
                    COALESCE((SELECT needs_review FROM workflows WHERE workflows.id=sources.id),0) AS workflow_needs_review
             FROM sources
             WHERE enabled = 1
+              AND (workflow_id = id OR workflow_id IS NULL)
               AND cadence != 'global'
               AND cadence != 'manual'
               AND next_run_at IS NOT NULL
@@ -1067,8 +1069,7 @@ impl SourcesRepo {
             return Ok(None);
         }
 
-        let input = Self::default_sample_workflow_input();
-        let source = Self::create(pool, input).await?;
+        let source = crate::services::sample_workflows::seed_default(pool).await?;
         tracing::info!(
             "Seeded sample Software Engineering Internships workflow: {}",
             source.id
@@ -1243,7 +1244,11 @@ mod tests {
         assert_eq!(sample.kind, SourceKind::Greenhouse);
         assert_eq!(sample.cadence, SourceCadence::Daily);
         assert_eq!(sample.retention_days, 45);
-        assert_eq!(sample.filters["role_types"][0], "internship");
+        assert_eq!(sample.filters["role_types"], serde_json::json!([]));
+        assert_eq!(
+            sample.filters["matching"]["role_types"],
+            serde_json::json!(["internship", "full_time"])
+        );
 
         // 2. Second invocation should be a no-op since sources exist
         let second = SourcesRepo::seed_default_sample_if_empty(&pool)

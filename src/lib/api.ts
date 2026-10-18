@@ -1,3 +1,4 @@
+import type { SeedWorkflowReport } from "../bindings/SeedWorkflowReport";
 import { INGESTION_LIMITS } from "../bindings/ingestionLimits";
 import { errorMessage } from "./errors";
 import type { WorkflowSpec } from "../bindings/WorkflowSpec";
@@ -795,10 +796,13 @@ const apiImplementation = {
     return invoke<Source>("seed_sample_workflow");
   },
 
-  seedAllSampleWorkflows: (): Promise<Source[]> => {
+  seedAllSampleWorkflows: (): Promise<SeedWorkflowReport> => {
     if (!isTauri()) {
+      const before = new Set(devSources.map(source => source.id));
+      const selected: Source[] = [];
       for (const tpl of SAMPLE_WORKFLOW_TEMPLATES) {
-        const input = workflowSpecToCreateInput(tpl.spec);
+        const executable = tpl.spec.sources.some(source => source.extractor.script || source.extractor.mode === "script");
+        const input = workflowSpecToCreateInput(executable ? { ...tpl.spec, metadata: { ...tpl.spec.metadata, enabled: false } } : tpl.spec);
         if (!devSources.some((s) => s.name === tpl.name || (s.identifier === input.identifier && s.kind === input.kind))) {
           const newSource: Source = {
             id: `sample-${crypto.randomUUID()}`,
@@ -818,16 +822,18 @@ const apiImplementation = {
             retention_days: BigInt(input.retention_days || 45),
             retention_policy: input.retention_policy || "untracked_only",
             filters: (input.filters || {}) as any,
-            needs_review: false,
+            needs_review: executable,
             script_trusted: false,
           };
           devSources.push(newSource);
         }
+        const selectedSource = devSources.find(s => s.name === tpl.name || (s.identifier === input.identifier && s.kind === input.kind));
+        if (selectedSource) selected.push(selectedSource);
       }
       saveDevSources();
-      return Promise.resolve([...devSources]);
+      return Promise.resolve({ created: selected.filter(source => !before.has(source.id)), already_present: selected.filter(source => before.has(source.id)), needs_review: selected.filter(source => source.needs_review).map(source => source.id) });
     }
-    return invoke<Source[]>("seed_all_sample_workflows");
+    return invoke<SeedWorkflowReport>("seed_all_sample_workflows");
   },
 
   createSource: (input: {

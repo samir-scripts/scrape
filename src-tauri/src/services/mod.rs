@@ -18,3 +18,5 @@ pub mod startup;
 
 pub mod execution_diagnostics;
 pub mod sample_workflows;
+
+pub mod workflow_store;

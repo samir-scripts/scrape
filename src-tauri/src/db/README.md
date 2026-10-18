@@ -51,3 +51,12 @@ are retained in `scrape_logs`, including contexts from Run all; persistence fail
 logs and counters retain earlier committed batches. No schema migration is needed
 for Plan 12 section 1. These snapshots describe attempted execution and are not
 executable workflow exports.
+
+Migration 27 scopes source endpoint uniqueness to the owning workflow and preserves
+job/run links through table replacement. Workflow listings and due-source queries
+select parent rows; direct `get` still retrieves children for exact local trust.
+Filtering jobs by a parent source ID also includes its workflow-owned children.
+The typed workflow service owns atomic parent/child writes; the low-level source
+repository remains available for legacy single-source commands and isolated
+historical fixtures. See database recovery for the explicit backed-up ownership
+repair helper.

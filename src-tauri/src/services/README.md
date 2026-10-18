@@ -11,8 +11,9 @@ The `src-tauri/src/services` directory contains long-running background tasks, p
 | File | Service Domain | Core Responsibilities & Implementation |
 |---|---|---|
 | [`mod.rs`](mod.rs) | Service Root | Consolidates service modules and exports public service constructs. |
-| [`sample_workflows.rs`](sample_workflows.rs) | Built-in Seeding | Shared callable service behind both seed commands and deterministic seed-path tests; ownership repair remains Plan 12 section 2. |
+| [`sample_workflows.rs`](sample_workflows.rs) | Built-in Seeding | Shared callable service behind both seed commands; canonical atomic saves and created/already-present/needs-review reports. |
 | [`execution_diagnostics.rs`](execution_diagnostics.rs) | Run Preparation & Diagnostics | Shared workflow-to-worker preparation, redacted context/config snapshots before preflight, and durable batch-persistence failure evidence. |
+| [`workflow_store.rs`](workflow_store.rs) | Atomic Workflow Ownership | Validates and saves parent/child records in one transaction, canonicalizes IDs, preserves owned identities/trust, retires removed sources, and performs explicit backed-up ownership repair. |
 | [`workflow.rs`](workflow.rs) | Authoritative Workflow Specification | Defines and validates `WorkflowSpec` (v6) with path-specific diagnostics, converts legacy v1–v5 configurations through a single compatibility resolver, and prepares worker execution inputs and previews. |
 | [`script_trust.rs`](script_trust.rs) | Local Script Trust | Quarantines imports, hashes executable inputs/file bytes, persists explicit confirmation, rechecks trust before previews/runs and reconciles workflow review state. Trust never enables execution automatically. |
 | [`runner.rs`](runner.rs) | Worker Process Orchestration | `ScrapeRunner`: Spawns the `scrape-worker` sidecar with `PROTOCOL_VERSION = 7`, streams and revalidates NDJSON events (`Job`, `Branding`, `Warning`, `SourceCompleted`, `Completed`), enforces write coordination, and broadcasts `scrape://event` updates. |
@@ -56,8 +57,8 @@ Calendar scheduling (`calendar.rs`) computes next runs from local time, ISO week
 ## Seeded-workflow diagnostics (Plan 12 section 1)
 
 `sample_workflows.rs` is the service used by both seed IPC commands and isolated
-regressions. It currently preserves the existing seeding behavior; multi-source
-ownership repair is the next Plan 12 section.
+regressions. It uses canonical atomic workflow persistence for each template and reports
+created/already-present/review states without overwriting existing workflows.
 
 `execution_diagnostics.rs` shares workflow-to-worker preparation between manual,
 scheduled and Run all execution. Before trust/runtime validation, each attempted
@@ -78,3 +79,25 @@ Batch persistence uses the shared diagnostic writer to retain earlier committed
 counters and record the failure stage if a later transaction rolls back. Database
 errors retain their database error classification. See
 [Plan 12](../../../plans/12-workflow-ingestion-repair.md) for remaining repairs.
+
+## Atomic ownership (Plan 12 section 2)
+
+`workflow::persist` delegates to `workflow_store.rs`. One transaction validates
+ownership, assigns collision-safe IDs, writes the parent and all children, and
+stores the canonical IDs in the spec. Existing owned IDs and protected job data
+are retained. Removed children are disabled and unscheduled; re-adding the same
+endpoint reuses its owned ID. Foreign ownership and saving a child as a new parent
+are rejected. Only parent records appear in workflow lists and scheduling; children
+have manual cadence and cannot be launched as independent workflows. Parent job
+filters include jobs from every owned child.
+
+Executable sources are saved disabled and need explicit local trust. Imports and
+executable edits reset trust; unchanged local scripts retain it. Trust does not
+enable execution. The editor can save disabled without a preview, then reopen each
+child's exact saved script for trust. Parent aggregate review does not hide the
+validated multi-source draft. The UI checks the child's saved executable, not a
+stale parent snapshot, before offering trust.
+
+Existing malformed records are repaired only by explicit Save or the backed-up
+`repair_workflow_ownership` helper documented in database recovery. This revision
+does not run that helper against application data.
