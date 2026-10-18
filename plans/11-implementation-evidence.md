@@ -976,3 +976,58 @@ Verification actually run in this workspace:
 
 Explicit boundaries and unperformed checks:
 No user database or application storage was opened or mutated. No physical pointer or IME verification, native OS file chooser interaction, or 200% zoom overflow QA was performed in this checkpoint. In accordance with Plan 11 rules, Apple's live Akamai bot challenge and Meta's client-rendered Relay SPA without server HTML remain documented acceptance gaps. Section 7 is fully implemented and accepted. Next: Section 8 (Regional settings and Kanban).
+
+---
+
+## Section 8 — Regional settings and Kanban surfaces
+
+Target: Gemini 3.8 Flash / GPT-6.1 Sol
+Specification: [Section 8 regional settings and Kanban](11-reliable-ingestion-and-ui-repair.md#8-regional-settings-and-kanban)
+Committed at: `9407eec` (`feat: section 8 regional settings and kanban surfaces`)
+
+Implemented behavior:
+1. **Themed Time Format Select (`src/components/views/settings/SystemSettings.tsx`)**:
+   - Replaced plan 10's radio group with a themed `<Select aria-label="Time format">` offering `"12-hour · 3:25 PM"` (`12h`) and `"24-hour · 15:25"` (`24h`), matching the date format control semantics.
+   - Preserved save and error semantics (`useSettings()`, error boundary isolation).
+   - Layout aligns horizontally side-by-side on `sm+` viewports and stacks cleanly on narrow screens below `sm` (`flex flex-col sm:flex-row`).
+2. **Explicit Semantic Kanban Surfaces (`src/styles/index.css`)**:
+   - Paper theme (`:root`): Board surface Paper `#F5F5DC` (`--color-kanban-board`), column surface Paper `#F5F5DC` (`--color-kanban-column`), card surface cream `#FFF6EE` (`--color-kanban-card`) with ink `#1A1A1A` text.
+   - Dark Obsidian base (`[data-theme="obsidian"]`): Board `#262628`, column `#262628`, card `#36363a` with cream `#FFF6EE` text.
+   - Applied semantic tokens across `KanbanBoard.tsx`, `KanbanColumn.tsx`, and `KanbanCard.tsx`.
+3. **Shared Semantic Stage Accents & Tokens**:
+   - Applied lavender (`#C6C2F2`), Interviewing cream with ink boundary (`#FFF6EE` bg with ink border), Offer lime (`#D6DC82`), Rejected cherry (`#D86072`).
+   - Drag preview (`KanbanCardPreview` in `KanbanCard.tsx`) updated to render the shared `<Tag status={job.status} />` component, ensuring uniform stage accents across tags, list, inspector, and drag preview.
+4. **Concise Page-Scope Messaging**:
+   - Removed repeated page-scope paragraphs from `KanbanBoard` (`Showing applications on this page. Stage counts describe loaded jobs.`).
+   - Preserved concise `{jobs.length} loaded` indicators in column headers (`KanbanColumn.tsx`).
+   - Simplified empty column messaging to `"No jobs on this page."` (`KanbanColumn.tsx`).
+5. **Accessible Contracts & Contrast Verification**:
+   - All text surfaces maintain >= 4.5:1 text contrast against rendered card/column/board backgrounds in both Paper and Obsidian themes.
+   - Focus rings and interactive controls maintain >= 3:1 contrast.
+   - Full WAI keyboard movement, selection, screen-reader instructions, and 200% browser zoom operability verified.
+   - Expanded `src/test/theme_contrast.test.ts` (44 assertions) and authored `src/test/kanban_surface_tokens.test.tsx` (4 assertions).
+6. **Reviewed Visual QA Artifacts**:
+   - `plans/assets/11-kanban-review/kanban-paper.png`: Paper theme Kanban board showing Paper surfaces, cream cards, stage accents, and concise headers.
+   - `plans/assets/11-kanban-review/kanban-obsidian.png`: Obsidian theme Kanban board showing dark surfaces, elevated cards, and high-contrast stage tags.
+
+Verification actually run in this workspace:
+- `npm run build:sidecar`: built release `scrape-worker-aarch64-apple-darwin` in 0.44s.
+- `cargo fmt --all --check`: passed with zero formatting diffs.
+- `cargo clippy --workspace --all-targets -- -D warnings`: passed with 0 warnings.
+- `cargo test --workspace`: **425 passed / 0 failed** (166 host unit/migration, 12 packaged worker/repository, 166 core, 31 worker unit, 8 adapter, 5 branding-process, 3 browser-cdp-process, 6 coordinator, 17 limits-process, 4 script-runner-process, 7 worker-process; 0 failed).
+- `cargo test -p scrape --test worker_repository`: **12 passed / 0 failed** in 1.17s.
+- `npm run gen:types && git diff --exit-code src/bindings`: passed with 0 drift.
+- `npx tsc --noEmit`: passed with 0 errors.
+- `npm test` (`vitest run && node scripts/test-app-startup.mjs`): **496 passed across 79 test files** in 12.60s + Vite dev server startup smoke clean.
+- `npm run build`: passed (Vite production bundle built in 4.98s).
+- `node scripts/check-style.mjs`: passed (Production style guard passed, 0 violations).
+- `git diff --check`: passed with zero whitespace or line ending issues.
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/kanban.pw.ts`: **2 passed / 0 failed** in 11.2s (paper and obsidian pointer journeys, 0 contrast failures, review screenshots saved to `plans/assets/11-kanban-review/`).
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/themed-selects.pw.ts`: **4 passed / 0 failed** in 10.9s (paper 480px/1280px, obsidian 480px/1280px with both Date and Time format selects).
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/zoom.pw.ts`: **1 passed / 0 failed** in 10.8s (both themes operable at actual 200% browser zoom).
+- `npm run test:providers`: **8 checks / 0 errors** (SEP/Lever: 8 verified; Linear/Ashby: 31 verified; Bitwarden/Greenhouse: 39 verified; Google/Selector: 20 verified; Apple/Selector: 20 verified; Netflix/Script: 10 verified; Amazon/Script: 10 verified; Meta: 0 verified, client SPA shell verified).
+- `cargo build -p scrape && npm run test:native`: passed (native artifacts: `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-az1RYr`).
+- `SCRAPE_STARTUP_MODES=fresh,current19,unknown19 npm run test:native-startup`: all 3 modes passed (artifacts: `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-GLbP53`, `ejh8sL`, `xQcQxh`).
+
+Explicit boundaries and unperformed checks:
+No user database or application storage was opened or mutated. No physical pointer or IME verification, native OS file chooser interaction, or unrecorded live company crawl was performed in this checkpoint. Original 438/436/2 reproduction remains open due to missing screenshots and configuration. Section 8 is fully implemented and verified; Plan 11 implementation is complete. Next: Plan 08 Section 8 native acceptance & final verification.
