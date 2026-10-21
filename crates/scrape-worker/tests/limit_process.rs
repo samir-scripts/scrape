@@ -940,3 +940,289 @@ fn selector_bad_next_destination_keeps_valid_jobs_and_reports_partial_coverage()
         |e| matches!(e,WorkerEvent::Warning{message,..} if message.contains("Invalid next-page"))
     ));
 }
+
+#[test]
+fn test_workday_cxs_pagination_and_budget() {
+    let server = Server::new(|path| {
+        if !path.contains("/wday/cxs/") {
+            return "<html><head><title>TestCorp</title></head><body><h1>Careers</h1></body></html>".into();
+        }
+        if path.contains("/job/") {
+            return json!({"jobPostingInfo":{"jobReqId":"JR101","timeType":"Full time","jobDescription":"<p>5 years of professional experience required.</p>"}}).to_string();
+        }
+        json!({
+            "total": 1,
+            "jobPostings": [
+                {
+                    "title": "Software Engineer",
+                    "externalPath": "/job/101",
+                    "locationsText": "Remote",
+                    "postedOn": "Posted Today",
+                    "bulletFields": ["JR101"]
+                }
+            ]
+        })
+        .to_string()
+    });
+
+    let events = run(
+        &server,
+        vec![
+            json!({"id":"wd-src","name":"TestCorp","kind":"workday","identifier":"https://testcorp.wd5.myworkdayjobs.com/Careers"}),
+        ],
+        json!({"matching":{"keywords":{"any":["Software"],"fields":["title"]}}}),
+        vec![],
+        false,
+    );
+
+    assert_eq!(jobs(&events), 1);
+    assert!(events.iter().any(|event| matches!(event,
+        WorkerEvent::Job { external_id, url, role_type: scrape_core::RoleType::FullTime,
+            experience: Some(experience), description_text: Some(text), .. }
+        if external_id == "JR101" && url.ends_with("/Careers/job/101")
+            && experience.min_years == Some(5) && text.contains("professional experience")
+    )));
+    assert_eq!(
+        server
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|path| path.contains("/job/"))
+            .count(),
+        1
+    );
+    let scan = &summary(&events)[0];
+    scan.validate().unwrap();
+    assert_eq!(
+        scan.outcome,
+        Some(scrape_core::protocol::ScanOutcome::Success)
+    );
+}
+
+fn workday_source(limit: u32) -> Value {
+    json!({"id":"workday","name":"Fixture","kind":"workday",
+        "identifier":"https://fixture.myworkdayjobs.com/Careers",
+        "config":{"__company":"Fixture","__workflow_spec":{"max_jobs_per_run":limit}}})
+}
+
+fn workday_listing(id: u32, title: &str) -> Value {
+    json!({"title":title,"externalPath":format!("/job/{id}"),
+        "bulletFields":[format!("JR{id}")],"locationsText":"Remote"})
+}
+
+#[test]
+fn workday_hydrates_only_eligible_candidates_and_stops_at_acceptance_cap() {
+    let server = Server::new(|path| {
+        if path.ends_with("/jobs") {
+            return json!({"total":4,"jobPostings":[workday_listing(1,"Sales"),
+                workday_listing(2,"Engineer III"),workday_listing(3,"Engineer"),
+                workday_listing(4,"Engineer")]})
+            .to_string();
+        }
+        if path.contains("/job/") {
+            let id = path.rsplit('/').next().unwrap();
+            return json!({"jobPostingInfo":{"jobReqId":format!("JR{id}"),
+                "timeType":"Contract","jobDescription":"<p>3 years of professional experience required.</p>"}}).to_string();
+        }
+        "<html>Fixture careers</html>".into()
+    });
+    let events = run(
+        &server,
+        vec![workday_source(1)],
+        json!({"matching":{"keywords":{"any":["Engineer"],"fields":["title"]},"role_types":["contract"],
+            "experience_min":3,"experience_max":5,"experience_match_mode":"required_minimum"}}),
+        vec![],
+        false,
+    );
+    assert_eq!(jobs(&events), 1);
+    assert!(events.iter().any(|event| matches!(event, WorkerEvent::Job {
+        external_id, title, role_type: scrape_core::RoleType::Contract,
+        experience: Some(experience), .. } if external_id == "JR2" && title == "Engineer III" && experience.min_years == Some(3))));
+    let requests = server.requests.lock().unwrap();
+    let details: Vec<_> = requests
+        .iter()
+        .filter(|path| path.contains("/job/"))
+        .collect();
+    assert_eq!(details.len(), 1);
+    assert!(details[0].ends_with("/job/2"));
+    assert!(summary(&events)[0].limit_reached);
+}
+
+#[test]
+fn workday_request_bound_keeps_unknown_policy_without_fabricating_details() {
+    for include_unknown in [false, true] {
+        let server = Server::new(|path| {
+            if path.ends_with("/jobs") {
+                return json!({"total":2,"jobPostings":[workday_listing(1,"Engineer"),workday_listing(2,"Engineer")]}).to_string();
+            }
+            if path.contains("/job/") {
+                return json!({"jobPostingInfo":{"jobReqId":"JR1","timeType":"FullTime",
+                    "jobDescription":"<p>3 years of professional experience required.</p>"}})
+                .to_string();
+            }
+            "<html>Fixture careers</html>".into()
+        });
+        let events = run_with_limits(
+            &server,
+            vec![workday_source(10)],
+            json!({"matching":{"experience_min":3,"experience_max":5,
+                "experience_match_mode":"required_minimum","experience_include_unknown":include_unknown}}),
+            vec![],
+            false,
+            json!({"max_requests":1,"timeout_ms":10000}),
+        );
+        assert_eq!(jobs(&events), if include_unknown { 2 } else { 1 });
+        assert_eq!(
+            server
+                .requests
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|path| path.contains("/job/"))
+                .count(),
+            1
+        );
+        assert!(events.iter().any(|event| matches!(
+            event,
+            WorkerEvent::Warning {
+                termination: Some(scrape_core::protocol::CoverageTermination::RequestLimit),
+                ..
+            }
+        )));
+        assert!(
+            !events.iter().any(|event| matches!(event, WorkerEvent::Job {
+            external_id, description_text: Some(_), .. } if external_id == "JR2"))
+        );
+    }
+}
+
+#[test]
+fn workday_mismatched_detail_never_replaces_listing_identity_or_evidence() {
+    let server = Server::new(|path| {
+        if path.ends_with("/jobs") {
+            return json!({"total":1,"jobPostings":[workday_listing(1,"Engineer")]}).to_string();
+        }
+        if path.contains("/job/") {
+            return json!({"jobPostingInfo":{"jobReqId":"OTHER","title":"Changed",
+                "externalUrl":"https://fixture.myworkdayjobs.com/Careers/job/other",
+                "timeType":"FullTime","jobDescription":"<p>9 years required.</p>"}})
+            .to_string();
+        }
+        "<html>Fixture careers</html>".into()
+    });
+    let events = run(&server, vec![workday_source(10)], json!({}), vec![], false);
+    assert_eq!(jobs(&events), 1);
+    assert!(events.iter().any(|event| matches!(event, WorkerEvent::Job {
+        external_id, title, url, description_text: None, role_type: scrape_core::RoleType::Unknown, ..
+    } if external_id == "JR1" && title == "Engineer" && url.ends_with("/Careers/job/1"))));
+    assert!(events
+        .iter()
+        .any(|event| matches!(event, WorkerEvent::Warning { message, .. }
+        if message.contains("identity differs"))));
+}
+
+#[test]
+fn workday_failed_or_timed_out_details_preserve_unknown_policy() {
+    for slow in [false, true] {
+        for include_unknown in [false, true] {
+            let server = Server::new(move |path| {
+                if path.ends_with("/jobs") {
+                    return json!({"total":1,"jobPostings":[workday_listing(1,"Engineer")]})
+                        .to_string();
+                }
+                if path.contains("/job/") {
+                    if slow {
+                        thread::sleep(Duration::from_millis(200));
+                    }
+                    return "not a valid detail response".into();
+                }
+                "<html>Fixture careers</html>".into()
+            });
+            let events = run_with_limits(
+                &server,
+                vec![workday_source(10)],
+                json!({"matching":{"experience_max":2,"experience_match_mode":"required_minimum",
+                    "experience_include_unknown":include_unknown}}),
+                vec![],
+                false,
+                json!({"max_requests":1,"timeout_ms":if slow { 50 } else { 10000 }}),
+            );
+            assert_eq!(jobs(&events), usize::from(include_unknown));
+            assert!(events
+                .iter()
+                .any(|event| matches!(event, WorkerEvent::Warning { message, .. }
+                if message.contains("Workday detail"))));
+            if slow {
+                assert!(events.iter().any(|event| matches!(
+                    event,
+                    WorkerEvent::Warning {
+                        termination: Some(scrape_core::protocol::CoverageTermination::TimeLimit),
+                        ..
+                    }
+                )));
+            }
+            assert!(!events.iter().any(|event| matches!(
+                event,
+                WorkerEvent::Job {
+                    description_text: Some(_),
+                    ..
+                }
+            )));
+        }
+    }
+}
+
+#[test]
+fn workday_maximum_only_detail_is_unknown_for_required_minimum() {
+    for include_unknown in [false, true] {
+        let server = Server::new(|path| {
+            if path.ends_with("/jobs") {
+                return json!({"total":2,"jobPostings":[
+                    workday_listing(1,"Engineer"), workday_listing(2,"Engineer")
+                ]})
+                .to_string();
+            }
+            if path.contains("/job/") {
+                let id = path.rsplit('/').next().unwrap();
+                let description = if id == "1" {
+                    "<p>At most 5 years of professional experience.</p>"
+                } else {
+                    "<p>3 years of professional experience required.</p>"
+                };
+                return json!({"jobPostingInfo":{"jobReqId":format!("JR{id}"),
+                    "timeType":"FullTime","jobDescription":description}})
+                .to_string();
+            }
+            "<html>Fixture careers</html>".into()
+        });
+        let events = run(
+            &server,
+            vec![workday_source(10)],
+            json!({"matching":{"experience_min":3,"experience_max":5,
+                "experience_match_mode":"required_minimum",
+                "experience_include_unknown":include_unknown}}),
+            vec![],
+            false,
+        );
+        assert_eq!(jobs(&events), if include_unknown { 2 } else { 1 });
+        assert_eq!(
+            server
+                .requests
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|path| path.contains("/job/"))
+                .count(),
+            2
+        );
+        assert!(events.iter().any(|event| matches!(event, WorkerEvent::Job {
+            external_id, experience: Some(experience), ..
+        } if external_id == "JR2" && experience.min_years == Some(3))));
+        if include_unknown {
+            assert!(events.iter().any(|event| matches!(event, WorkerEvent::Job {
+                external_id, experience: Some(experience), description_text: Some(_), ..
+            } if external_id == "JR1" && experience.min_years.is_none() && experience.max_years == Some(5))));
+        }
+    }
+}

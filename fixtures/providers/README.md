@@ -18,3 +18,8 @@
 ## Regressions and Projections
 
 `regressions/remote-us-availability-authored.json` is an authored Greenhouse-shaped case paired with a negative company-prose control. `regressions/cloudflare-8024849.json` is a minimal projection of the official Cloudflare Greenhouse API response captured on 2026-10-15. Its SHA-256 is recorded in the fixture; the complete 18,972-byte response was retained locally for verification. The captured posting ID, title, `absolute_url`, Remote label, `first_published`, update timestamp, and labeled “Available Locations: US” excerpt match the official site.
+
+`regressions/cloudflare-board-authored.json` is an authored three-record Greenhouse-shaped control used to isolate template matching from full live board counts.
+`regressions/google-page1-authored.html` and `regressions/google-page2-authored.html` are authored multi-page HTML controls exercising document-base resolution and pagination across early non-matching to later matching postings.
+`regressions/apple-page1-authored.html` and `regressions/apple-page2-authored.html` are authored multi-page HTML controls exercising `link[rel="next"]` navigation and `div.job-title-location span:not(.a11y)` location extraction.
+`regressions/netflix-missing-total-authored.json` and `regressions/amazon-missing-total-authored.json` are authored script controls with omitted pagination totals exercising truthful bounded/partial termination rather than fabricated board exhaustion.

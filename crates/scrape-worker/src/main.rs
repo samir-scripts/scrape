@@ -39,6 +39,9 @@ struct Cli {
     /// Auto-detect ATS or JSON-LD configuration for a given URL
     #[arg(long)]
     detect: Option<String>,
+    /// On-demand employer branding lookup for <company> and optional <url>
+    #[arg(long, num_args = 1..=2)]
+    branding: Option<Vec<String>>,
 }
 
 #[tokio::main]
@@ -64,6 +67,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("{}", serde_json::to_string(&result)?);
         return Ok(());
     }
+    if let Some(parts) = args.branding {
+        let company = parts.first().cloned().unwrap_or_default();
+        let page_url = parts.get(1).cloned().unwrap_or_default();
+        let client = HttpClient::new(5, 500);
+        let source = WorkerSource {
+            id: "on_demand".into(),
+            kind: SourceKind::Selector,
+            name: company.clone(),
+            identifier: page_url.clone(),
+            config: serde_json::json!({"url": page_url}),
+        };
+        let branding = scrape_worker::adapters::branding::CompanyBranding::fetch_source(
+            &client,
+            &page_url,
+            &company,
+            &source,
+        )
+        .await;
+        let mut logo = scrape_core::branding::CompanyLogo {
+            evidence: branding.evidence.clone(),
+            checked_at: chrono::Utc::now().to_rfc3339(),
+            status: scrape_core::branding::LogoStatus::MissingMetadata,
+            asset: None,
+            cached_asset_reference: None,
+            diagnostic: branding.warning.clone(),
+        };
+        if let Some(evidence) = &branding.evidence {
+            match client.fetch_logo(&evidence.url).await {
+                Ok(bytes) => match scrape_core::branding::cache_asset(&bytes) {
+                    Ok(asset) => {
+                        logo.asset = Some(asset);
+                        logo.status = scrape_core::branding::LogoStatus::Verified;
+                    }
+                    Err(e) => {
+                        logo.status = scrape_core::branding::LogoStatus::DecodeFailed;
+                        logo.diagnostic = Some(e);
+                    }
+                },
+                Err(e) => {
+                    logo.status = scrape_core::branding::LogoStatus::DownloadFailed;
+                    logo.diagnostic = Some(e.to_string());
+                }
+            }
+        }
+        println!("{}", serde_json::to_string(&logo)?);
+        return Ok(());
+    }
+
 
     if let Some(source_spec) = args.source {
         run_single_source(
@@ -130,6 +181,7 @@ async fn run_single_source(
         "ashby" => SourceKind::Ashby,
         "jsonld" => SourceKind::Jsonld,
         "selector" => SourceKind::Selector,
+        "workday" => SourceKind::Workday,
         other => {
             eprintln!("Unknown source kind: {}", other);
             std::process::exit(1);

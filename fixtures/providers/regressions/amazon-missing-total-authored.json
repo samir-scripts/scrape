@@ -1,0 +1,12 @@
+{
+  "fixture_kind": "authored_regression_not_raw_provider_capture",
+  "jobs": [
+    {
+      "id_icims": "section7-amazon",
+      "title": "Software Engineer",
+      "job_path": "/en/jobs/section7-amazon",
+      "normalized_location": "Cupertino, CA, United States",
+      "company_name": "Amazon"
+    }
+  ]
+}

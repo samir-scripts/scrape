@@ -97,5 +97,3164 @@
       "source_capture": "https://boards-api.greenhouse.io/v1/boards/cloudflare/jobs/8024849?questions=false",
       "sha256": "20e0e48e9e2ca890b690bcf5232ad8ca7a1f5ef5cd05c372104ca6f32eef8bcc"
     }
+  },
+  "schema_version": 2,
+  "routes": [
+    {
+      "url": "https://api.lever.co/v0/postings/sep?mode=json",
+      "path": "/api.lever.co/v0/postings/sep?mode=json",
+      "role": "listing",
+      "status": 200,
+      "file": "fixtures/providers/lever/sep.json",
+      "sha256": "dbda1f6de673d485bb313f973afca5023f17a55b3ac536ecf8d9d1f1425e3989",
+      "set": "shared"
+    },
+    {
+      "url": "https://api.ashbyhq.com/posting-api/job-board/linear?includeCompensation=true",
+      "path": "/api.ashbyhq.com/posting-api/job-board/linear?includeCompensation=true",
+      "role": "listing",
+      "status": 200,
+      "file": "fixtures/providers/ashby/linear.json",
+      "sha256": "c312aacc520506ff64c227452540daa7036f92bb215bbf0a56ba8fededbc2a38",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs?content=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs?content=true",
+      "role": "listing",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "set": "shared"
+    },
+    {
+      "url": "https://www.google.com/about/careers/applications/jobs/results/",
+      "path": "/www.google.com/about/careers/applications/jobs/results/",
+      "role": "listing",
+      "status": 200,
+      "file": "fixtures/providers/selector/google.html",
+      "sha256": "b4d8c19bbafdda8fa6db42c5f89fe5ee5d05bef9c78b381cd1698e2686a9cae0",
+      "set": "recorded"
+    },
+    {
+      "url": "https://jobs.apple.com/en-us/search",
+      "path": "/jobs.apple.com/en-us/search",
+      "role": "listing",
+      "status": 200,
+      "file": "fixtures/providers/selector/apple.html",
+      "sha256": "0d43425ca5ecb5c36b402c5807ea7b9103ddba618d44d363374c399ea4d269c9",
+      "set": "recorded"
+    },
+    {
+      "url": "https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10",
+      "path": "/explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10",
+      "role": "listing",
+      "status": 200,
+      "file": "fixtures/providers/script/netflix.json",
+      "sha256": "43730b244926a29ea382ed47e367c650c09f327b7af558f639bf4caa660112a7",
+      "set": "recorded"
+    },
+    {
+      "url": "https://www.amazon.jobs/en/search.json?offset=0&result_limit=10",
+      "path": "/www.amazon.jobs/en/search.json?offset=0&result_limit=10",
+      "role": "listing",
+      "status": 200,
+      "file": "fixtures/providers/script/amazon.json",
+      "sha256": "c455ca49307ac32a6c6dccb635913d2e0e4f1499a2ec6b90c442cf9becec3d20",
+      "set": "recorded"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/cloudflare/jobs?content=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/cloudflare/jobs?content=true",
+      "role": "listing",
+      "status": 200,
+      "file": "fixtures/providers/regressions/cloudflare-board-authored.json",
+      "sha256": "d0a1ef5dad16dc87953bdc641669ab37b8529e1799a4736d1b41d1228918e0ef",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7930504003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7930504003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/0",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7930504003/?gh_jid=7930504003",
+      "path": "/bitwarden.com/careers/7930504003/?gh_jid=7930504003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7824401003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7824401003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/1",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7824401003/?gh_jid=7824401003",
+      "path": "/bitwarden.com/careers/7824401003/?gh_jid=7824401003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7961595003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7961595003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/2",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7961595003/?gh_jid=7961595003",
+      "path": "/bitwarden.com/careers/7961595003/?gh_jid=7961595003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7932121003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7932121003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/3",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7932121003/?gh_jid=7932121003",
+      "path": "/bitwarden.com/careers/7932121003/?gh_jid=7932121003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7861359003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7861359003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/4",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7861359003/?gh_jid=7861359003",
+      "path": "/bitwarden.com/careers/7861359003/?gh_jid=7861359003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7930653003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7930653003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/5",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7930653003/?gh_jid=7930653003",
+      "path": "/bitwarden.com/careers/7930653003/?gh_jid=7930653003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7782533003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7782533003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/6",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7782533003/?gh_jid=7782533003",
+      "path": "/bitwarden.com/careers/7782533003/?gh_jid=7782533003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7989370003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7989370003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/7",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7989370003/?gh_jid=7989370003",
+      "path": "/bitwarden.com/careers/7989370003/?gh_jid=7989370003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7985622003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7985622003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/8",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7985622003/?gh_jid=7985622003",
+      "path": "/bitwarden.com/careers/7985622003/?gh_jid=7985622003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7770756003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7770756003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/9",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7770756003/?gh_jid=7770756003",
+      "path": "/bitwarden.com/careers/7770756003/?gh_jid=7770756003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7886191003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7886191003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/10",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7886191003/?gh_jid=7886191003",
+      "path": "/bitwarden.com/careers/7886191003/?gh_jid=7886191003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/8005324003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/8005324003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/11",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/8005324003/?gh_jid=8005324003",
+      "path": "/bitwarden.com/careers/8005324003/?gh_jid=8005324003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7872037003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7872037003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/12",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7872037003/?gh_jid=7872037003",
+      "path": "/bitwarden.com/careers/7872037003/?gh_jid=7872037003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/8009583003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/8009583003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/13",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/8009583003/?gh_jid=8009583003",
+      "path": "/bitwarden.com/careers/8009583003/?gh_jid=8009583003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7792382003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7792382003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/14",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7792382003/?gh_jid=7792382003",
+      "path": "/bitwarden.com/careers/7792382003/?gh_jid=7792382003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7867094003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7867094003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/15",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7867094003/?gh_jid=7867094003",
+      "path": "/bitwarden.com/careers/7867094003/?gh_jid=7867094003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/8013635003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/8013635003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/16",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/8013635003/?gh_jid=8013635003",
+      "path": "/bitwarden.com/careers/8013635003/?gh_jid=8013635003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/8013629003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/8013629003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/17",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/8013629003/?gh_jid=8013629003",
+      "path": "/bitwarden.com/careers/8013629003/?gh_jid=8013629003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/8013615003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/8013615003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/18",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/8013615003/?gh_jid=8013615003",
+      "path": "/bitwarden.com/careers/8013615003/?gh_jid=8013615003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7985613003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7985613003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/19",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7985613003/?gh_jid=7985613003",
+      "path": "/bitwarden.com/careers/7985613003/?gh_jid=7985613003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7996319003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7996319003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/20",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7996319003/?gh_jid=7996319003",
+      "path": "/bitwarden.com/careers/7996319003/?gh_jid=7996319003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7824330003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7824330003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/21",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7824330003/?gh_jid=7824330003",
+      "path": "/bitwarden.com/careers/7824330003/?gh_jid=7824330003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/8002617003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/8002617003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/22",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/8002617003/?gh_jid=8002617003",
+      "path": "/bitwarden.com/careers/8002617003/?gh_jid=8002617003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7896808003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7896808003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/23",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7896808003/?gh_jid=7896808003",
+      "path": "/bitwarden.com/careers/7896808003/?gh_jid=7896808003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7981764003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7981764003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/24",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7981764003/?gh_jid=7981764003",
+      "path": "/bitwarden.com/careers/7981764003/?gh_jid=7981764003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7872031003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7872031003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/25",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7872031003/?gh_jid=7872031003",
+      "path": "/bitwarden.com/careers/7872031003/?gh_jid=7872031003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7866857003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7866857003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/26",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7866857003/?gh_jid=7866857003",
+      "path": "/bitwarden.com/careers/7866857003/?gh_jid=7866857003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7886272003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7886272003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/27",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7886272003/?gh_jid=7886272003",
+      "path": "/bitwarden.com/careers/7886272003/?gh_jid=7886272003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7866918003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7866918003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/28",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7866918003/?gh_jid=7866918003",
+      "path": "/bitwarden.com/careers/7866918003/?gh_jid=7866918003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7886240003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7886240003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/29",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7886240003/?gh_jid=7886240003",
+      "path": "/bitwarden.com/careers/7886240003/?gh_jid=7886240003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7829720003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7829720003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/30",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7829720003/?gh_jid=7829720003",
+      "path": "/bitwarden.com/careers/7829720003/?gh_jid=7829720003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7881159003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7881159003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/31",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7881159003/?gh_jid=7881159003",
+      "path": "/bitwarden.com/careers/7881159003/?gh_jid=7881159003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7896737003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7896737003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/32",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7896737003/?gh_jid=7896737003",
+      "path": "/bitwarden.com/careers/7896737003/?gh_jid=7896737003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/8008706003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/8008706003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/33",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/8008706003/?gh_jid=8008706003",
+      "path": "/bitwarden.com/careers/8008706003/?gh_jid=8008706003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7896465003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7896465003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/34",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7896465003/?gh_jid=7896465003",
+      "path": "/bitwarden.com/careers/7896465003/?gh_jid=7896465003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7896696003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7896696003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/35",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7896696003/?gh_jid=7896696003",
+      "path": "/bitwarden.com/careers/7896696003/?gh_jid=7896696003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7872214003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7872214003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/36",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7872214003/?gh_jid=7872214003",
+      "path": "/bitwarden.com/careers/7872214003/?gh_jid=7872214003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/8001613003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/8001613003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/37",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/8001613003/?gh_jid=8001613003",
+      "path": "/bitwarden.com/careers/8001613003/?gh_jid=8001613003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7820709003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs/7820709003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/greenhouse/bitwarden.json",
+      "sha256": "3a003b29a42085238bd10f2d3d5fee226df6f69ae39ca7a0c0555379b4dd71b3",
+      "json_pointer": "/jobs/38",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/careers/7820709003/?gh_jid=7820709003",
+      "path": "/bitwarden.com/careers/7820709003/?gh_jid=7820709003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards.greenhouse.io/bitwarden",
+      "path": "/boards.greenhouse.io/bitwarden",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding board",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/cloudflare/jobs/91001?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/cloudflare/jobs/91001?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/regressions/cloudflare-board-authored.json",
+      "sha256": "d0a1ef5dad16dc87953bdc641669ab37b8529e1799a4736d1b41d1228918e0ef",
+      "json_pointer": "/jobs/0",
+      "set": "shared"
+    },
+    {
+      "url": "https://fixture.invalid/cloudflare/91001",
+      "path": "/fixture.invalid/cloudflare/91001",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/cloudflare/jobs/91002?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/cloudflare/jobs/91002?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/regressions/cloudflare-board-authored.json",
+      "sha256": "d0a1ef5dad16dc87953bdc641669ab37b8529e1799a4736d1b41d1228918e0ef",
+      "json_pointer": "/jobs/1",
+      "set": "shared"
+    },
+    {
+      "url": "https://fixture.invalid/cloudflare/91002",
+      "path": "/fixture.invalid/cloudflare/91002",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/v1/boards/cloudflare/jobs/91003?pay_transparency=true",
+      "path": "/boards-api.greenhouse.io/v1/boards/cloudflare/jobs/91003?pay_transparency=true",
+      "role": "detail_projection",
+      "status": 200,
+      "file": "fixtures/providers/regressions/cloudflare-board-authored.json",
+      "sha256": "d0a1ef5dad16dc87953bdc641669ab37b8529e1799a4736d1b41d1228918e0ef",
+      "json_pointer": "/jobs/2",
+      "set": "shared"
+    },
+    {
+      "url": "https://fixture.invalid/cloudflare/91003",
+      "path": "/fixture.invalid/cloudflare/91003",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards.greenhouse.io/cloudflare",
+      "path": "/boards.greenhouse.io/cloudflare",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding board",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/d3bc1ced-3ce4-4086-a050-555055dbb1ff",
+      "path": "/jobs.ashbyhq.com/linear/d3bc1ced-3ce4-4086-a050-555055dbb1ff",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/cd5ae036-0223-427a-b038-ba16ef9dcb32",
+      "path": "/jobs.ashbyhq.com/linear/cd5ae036-0223-427a-b038-ba16ef9dcb32",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/069c4628-88d7-4e4d-b393-c996fc7f3076",
+      "path": "/jobs.ashbyhq.com/linear/069c4628-88d7-4e4d-b393-c996fc7f3076",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/f04f398b-6320-499d-8a60-290239d62da8",
+      "path": "/jobs.ashbyhq.com/linear/f04f398b-6320-499d-8a60-290239d62da8",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/ea0b5868-6d7a-46fa-99d8-207cd19357a6",
+      "path": "/jobs.ashbyhq.com/linear/ea0b5868-6d7a-46fa-99d8-207cd19357a6",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/12f8f208-0b9c-4569-bb3d-41c8a197029e",
+      "path": "/jobs.ashbyhq.com/linear/12f8f208-0b9c-4569-bb3d-41c8a197029e",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/0c7c2e26-0a98-42cf-a47c-9a3999fb513b",
+      "path": "/jobs.ashbyhq.com/linear/0c7c2e26-0a98-42cf-a47c-9a3999fb513b",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/b7669c4b-eeca-421d-ba9a-d90203f6fcb2",
+      "path": "/jobs.ashbyhq.com/linear/b7669c4b-eeca-421d-ba9a-d90203f6fcb2",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/86abcce0-04b2-405c-9a8e-e0ca84813914",
+      "path": "/jobs.ashbyhq.com/linear/86abcce0-04b2-405c-9a8e-e0ca84813914",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/d062065e-05bb-42ce-a430-ec205695cc2e",
+      "path": "/jobs.ashbyhq.com/linear/d062065e-05bb-42ce-a430-ec205695cc2e",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/c21af93e-210f-4969-8eaa-90fb16a5b720",
+      "path": "/jobs.ashbyhq.com/linear/c21af93e-210f-4969-8eaa-90fb16a5b720",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/b4a7764e-c680-4bdf-9956-dc78f2ca94d5",
+      "path": "/jobs.ashbyhq.com/linear/b4a7764e-c680-4bdf-9956-dc78f2ca94d5",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/a264869e-f058-487c-ab7f-9b77dffa427c",
+      "path": "/jobs.ashbyhq.com/linear/a264869e-f058-487c-ab7f-9b77dffa427c",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/ba8a41d2-4198-481a-a7f4-e09c5364ff7f",
+      "path": "/jobs.ashbyhq.com/linear/ba8a41d2-4198-481a-a7f4-e09c5364ff7f",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/26c77e48-b4ef-455d-a02c-3ef68fc6f9f9",
+      "path": "/jobs.ashbyhq.com/linear/26c77e48-b4ef-455d-a02c-3ef68fc6f9f9",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/d37b3d76-3080-47f9-8a19-60505573112c",
+      "path": "/jobs.ashbyhq.com/linear/d37b3d76-3080-47f9-8a19-60505573112c",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/1d652292-04d9-405c-8101-578efd020e94",
+      "path": "/jobs.ashbyhq.com/linear/1d652292-04d9-405c-8101-578efd020e94",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/62a4524c-75da-499e-b150-7f68ce9f2da3",
+      "path": "/jobs.ashbyhq.com/linear/62a4524c-75da-499e-b150-7f68ce9f2da3",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/820d0d5a-0930-475c-b494-23e18ad2aa68",
+      "path": "/jobs.ashbyhq.com/linear/820d0d5a-0930-475c-b494-23e18ad2aa68",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/370d9605-f02f-44f9-97fa-ebf769bed93d",
+      "path": "/jobs.ashbyhq.com/linear/370d9605-f02f-44f9-97fa-ebf769bed93d",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/c0abc97e-b4d7-4ad7-bd13-bc40f4023227",
+      "path": "/jobs.ashbyhq.com/linear/c0abc97e-b4d7-4ad7-bd13-bc40f4023227",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/b3346acf-44be-4565-b1c0-10d482d3ad4e",
+      "path": "/jobs.ashbyhq.com/linear/b3346acf-44be-4565-b1c0-10d482d3ad4e",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/cec84487-60f2-4216-a514-dcf190c86c1e",
+      "path": "/jobs.ashbyhq.com/linear/cec84487-60f2-4216-a514-dcf190c86c1e",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/eac7f181-d658-4943-9430-51bae2bcd110",
+      "path": "/jobs.ashbyhq.com/linear/eac7f181-d658-4943-9430-51bae2bcd110",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/5b9997fd-7507-4437-8fd7-14178c99ab5d",
+      "path": "/jobs.ashbyhq.com/linear/5b9997fd-7507-4437-8fd7-14178c99ab5d",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/b32de590-06ce-47d4-8994-66b936df908d",
+      "path": "/jobs.ashbyhq.com/linear/b32de590-06ce-47d4-8994-66b936df908d",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/1aa6f672-5917-49aa-b015-70ebff901923",
+      "path": "/jobs.ashbyhq.com/linear/1aa6f672-5917-49aa-b015-70ebff901923",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/f272fc4a-91a7-4dcf-9cb5-3600ebaf14e1",
+      "path": "/jobs.ashbyhq.com/linear/f272fc4a-91a7-4dcf-9cb5-3600ebaf14e1",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/fb4b6076-b943-4d95-bb9b-a66aef8275f2",
+      "path": "/jobs.ashbyhq.com/linear/fb4b6076-b943-4d95-bb9b-a66aef8275f2",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/cb8e77a6-4316-45c6-ac8d-7ade980cd65e",
+      "path": "/jobs.ashbyhq.com/linear/cb8e77a6-4316-45c6-ac8d-7ade980cd65e",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear/6dd5500a-4bd4-4f57-ba09-7b07acefecf4",
+      "path": "/jobs.ashbyhq.com/linear/6dd5500a-4bd4-4f57-ba09-7b07acefecf4",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/linear",
+      "path": "/jobs.ashbyhq.com/linear",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding board",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.lever.co/sep/7b96b0c6-8429-4861-bf69-a00956e42a8d",
+      "path": "/jobs.lever.co/sep/7b96b0c6-8429-4861-bf69-a00956e42a8d",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.lever.co/sep/2eb79283-b3fd-4316-9e93-e80dbebfba05",
+      "path": "/jobs.lever.co/sep/2eb79283-b3fd-4316-9e93-e80dbebfba05",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.lever.co/sep/80cd8c15-bafc-49a9-b8f1-5d407e891ec0",
+      "path": "/jobs.lever.co/sep/80cd8c15-bafc-49a9-b8f1-5d407e891ec0",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.lever.co/sep/0b14158a-68e4-4e94-86f8-3f74c87cb3bd",
+      "path": "/jobs.lever.co/sep/0b14158a-68e4-4e94-86f8-3f74c87cb3bd",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.lever.co/sep/98fc318a-8ce1-4730-a898-3ca372878bb2",
+      "path": "/jobs.lever.co/sep/98fc318a-8ce1-4730-a898-3ca372878bb2",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.lever.co/sep/0eccbd97-a731-4912-8856-a92942897be9",
+      "path": "/jobs.lever.co/sep/0eccbd97-a731-4912-8856-a92942897be9",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.lever.co/sep/f7ad9ffb-03dc-4fb2-9a92-e5f04a85ba08",
+      "path": "/jobs.lever.co/sep/f7ad9ffb-03dc-4fb2-9a92-e5f04a85ba08",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.lever.co/sep/4efbdbce-a753-41b5-8ed7-0661cd193178",
+      "path": "/jobs.lever.co/sep/4efbdbce-a753-41b5-8ed7-0661cd193178",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding page",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.lever.co/sep",
+      "path": "/jobs.lever.co/sep",
+      "role": "optional_absent_branding",
+      "status": 404,
+      "body": "Uncaptured optional branding board",
+      "set": "shared"
+    },
+    {
+      "url": "https://www.google.com/about/careers/applications/jobs/results/?page=2",
+      "path": "/www.google.com/about/careers/applications/jobs/results/?page=2",
+      "role": "missing_capture_page",
+      "status": 404,
+      "body": "Next provider page was not captured; incomplete coverage",
+      "set": "recorded"
+    },
+    {
+      "url": "https://jobs.apple.com/en-us/searchlocation=united-states-USA&page=2",
+      "path": "/jobs.apple.com/en-us/searchlocation=united-states-USA&page=2",
+      "role": "missing_capture_page",
+      "status": 404,
+      "body": "Next provider page was not captured; incomplete coverage",
+      "set": "recorded"
+    },
+    {
+      "url": "https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=10&num=10",
+      "path": "/explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=10&num=10",
+      "role": "missing_capture_page",
+      "status": 404,
+      "body": "Next provider page was not captured; incomplete coverage",
+      "set": "recorded"
+    },
+    {
+      "url": "https://www.amazon.jobs/en/search.json?offset=10&result_limit=10",
+      "path": "/www.amazon.jobs/en/search.json?offset=10&result_limit=10",
+      "role": "missing_capture_page",
+      "status": 404,
+      "body": "Next provider page was not captured; incomplete coverage",
+      "set": "recorded"
+    },
+    {
+      "url": "https://api.ashbyhq.com/robots.txt",
+      "path": "/api.ashbyhq.com/robots.txt",
+      "role": "authored_robots_policy",
+      "status": 200,
+      "body": "User-agent: *\nAllow: /\n",
+      "set": "shared"
+    },
+    {
+      "url": "https://api.lever.co/robots.txt",
+      "path": "/api.lever.co/robots.txt",
+      "role": "authored_robots_policy",
+      "status": 200,
+      "body": "User-agent: *\nAllow: /\n",
+      "set": "shared"
+    },
+    {
+      "url": "https://bitwarden.com/robots.txt",
+      "path": "/bitwarden.com/robots.txt",
+      "role": "authored_robots_policy",
+      "status": 200,
+      "body": "User-agent: *\nAllow: /\n",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards-api.greenhouse.io/robots.txt",
+      "path": "/boards-api.greenhouse.io/robots.txt",
+      "role": "authored_robots_policy",
+      "status": 200,
+      "body": "User-agent: *\nAllow: /\n",
+      "set": "shared"
+    },
+    {
+      "url": "https://boards.greenhouse.io/robots.txt",
+      "path": "/boards.greenhouse.io/robots.txt",
+      "role": "authored_robots_policy",
+      "status": 200,
+      "body": "User-agent: *\nAllow: /\n",
+      "set": "shared"
+    },
+    {
+      "url": "https://explore.jobs.netflix.net/robots.txt",
+      "path": "/explore.jobs.netflix.net/robots.txt",
+      "role": "authored_robots_policy",
+      "status": 200,
+      "body": "User-agent: *\nAllow: /\n",
+      "set": "shared"
+    },
+    {
+      "url": "https://fixture.invalid/robots.txt",
+      "path": "/fixture.invalid/robots.txt",
+      "role": "authored_robots_policy",
+      "status": 200,
+      "body": "User-agent: *\nAllow: /\n",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.apple.com/robots.txt",
+      "path": "/jobs.apple.com/robots.txt",
+      "role": "authored_robots_policy",
+      "status": 200,
+      "body": "User-agent: *\nAllow: /\n",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.ashbyhq.com/robots.txt",
+      "path": "/jobs.ashbyhq.com/robots.txt",
+      "role": "authored_robots_policy",
+      "status": 200,
+      "body": "User-agent: *\nAllow: /\n",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.lever.co/robots.txt",
+      "path": "/jobs.lever.co/robots.txt",
+      "role": "authored_robots_policy",
+      "status": 200,
+      "body": "User-agent: *\nAllow: /\n",
+      "set": "shared"
+    },
+    {
+      "url": "https://www.amazon.jobs/robots.txt",
+      "path": "/www.amazon.jobs/robots.txt",
+      "role": "authored_robots_policy",
+      "status": 200,
+      "body": "User-agent: *\nAllow: /\n",
+      "set": "shared"
+    },
+    {
+      "url": "https://www.google.com/robots.txt",
+      "path": "/www.google.com/robots.txt",
+      "role": "authored_robots_policy",
+      "status": 200,
+      "body": "User-agent: *\nAllow: /\n",
+      "set": "shared"
+    },
+    {
+      "url": "https://www.google.com/about/careers/applications/jobs/results/",
+      "path": "/www.google.com/about/careers/applications/jobs/results/",
+      "role": "listing",
+      "status": 200,
+      "file": "fixtures/providers/regressions/google-page1-authored.html",
+      "sha256": "24c348b057d634fa2a5cf7b3fd9c2279dbacec7663221be99938fec05dbc4253",
+      "set": "authored_static"
+    },
+    {
+      "url": "https://www.google.com/about/careers/applications/jobs/results/?page=2",
+      "path": "/www.google.com/about/careers/applications/jobs/results/?page=2",
+      "role": "next_page",
+      "status": 200,
+      "file": "fixtures/providers/regressions/google-page2-authored.html",
+      "sha256": "3aa020f64af9f8766fb7072474463e05f7bbbdcd6363bf96ec7315608558a54f",
+      "set": "authored_static"
+    },
+    {
+      "url": "https://jobs.apple.com/en-us/search",
+      "path": "/jobs.apple.com/en-us/search",
+      "role": "listing",
+      "status": 200,
+      "file": "fixtures/providers/regressions/apple-page1-authored.html",
+      "sha256": "4773f0e822e235b1afb947db2f08590353a743cc31b14993311e31270d99475c",
+      "set": "authored_static"
+    },
+    {
+      "url": "https://jobs.apple.com/en-us/search?page=2",
+      "path": "/jobs.apple.com/en-us/search?page=2",
+      "role": "next_page",
+      "status": 200,
+      "file": "fixtures/providers/regressions/apple-page2-authored.html",
+      "sha256": "5db857cea52c03dd7425109542f599b2c5b2a3a58680dd604afbc9183f7d04b9",
+      "set": "authored_static"
+    },
+    {
+      "url": "https://www.google.com/favicon.ico",
+      "path": "/www.google.com/favicon.ico",
+      "role": "optional_absent_asset",
+      "status": 404,
+      "body": "Uncaptured optional branding asset",
+      "set": "shared"
+    },
+    {
+      "url": "https://www.gstatic.com/hiring/CportalUi/google_logo_dark.png",
+      "path": "/www.gstatic.com/hiring/CportalUi/google_logo_dark.png",
+      "role": "optional_absent_asset",
+      "status": 404,
+      "body": "Uncaptured optional branding asset",
+      "set": "shared"
+    },
+    {
+      "url": "https://jobs.apple.com/static/favicon.ico",
+      "path": "/jobs.apple.com/static/favicon.ico",
+      "role": "optional_absent_asset",
+      "status": 404,
+      "body": "Uncaptured optional branding asset",
+      "set": "shared"
+    },
+    {
+      "url": "https://www.gstatic.com/robots.txt",
+      "path": "/www.gstatic.com/robots.txt",
+      "role": "authored_robots_policy",
+      "status": 200,
+      "body": "User-agent: *\nAllow: /\n",
+      "set": "shared"
+    },
+    {
+      "url": "https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10",
+      "path": "/explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10",
+      "role": "listing",
+      "status": 200,
+      "file": "fixtures/providers/regressions/netflix-missing-total-authored.json",
+      "sha256": "e9eb781447a629eb872ede8dc761ccbc367ac5e9b4a7a0a4a680654cc28371e7",
+      "set": "authored_missing_metadata"
+    },
+    {
+      "url": "https://www.amazon.jobs/en/search.json?offset=0&result_limit=10",
+      "path": "/www.amazon.jobs/en/search.json?offset=0&result_limit=10",
+      "role": "listing",
+      "status": 200,
+      "file": "fixtures/providers/regressions/amazon-missing-total-authored.json",
+      "sha256": "776df6a5a3972b19f0bb04c1cd535910d85e5648116264cbadcd84022f3080fb",
+      "set": "authored_missing_metadata"
+    }
+  ],
+  "workflow_cases": [
+    {
+      "id": "cloudflare-template",
+      "template_id": "cloudflare-systems-network",
+      "companies": [
+        "Cloudflare"
+      ],
+      "control": "template",
+      "fixture_class": "authored_regression_not_raw_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "passed",
+        "coverage": "authored_three_row_exhausted_not_live_coverage",
+        "jobs": [
+          {
+            "external_id": "91001",
+            "url": "https://fixture.invalid/cloudflare/91001",
+            "posting_identity": "[\"greenhouse\",\"cloudflare\",\"91001\"]"
+          },
+          {
+            "external_id": "91002",
+            "url": "https://fixture.invalid/cloudflare/91002",
+            "posting_identity": "[\"greenhouse\",\"cloudflare\",\"91002\"]"
+          }
+        ],
+        "terminal": "exhausted",
+        "errors": [],
+        "required_routes": [
+          "/boards-api.greenhouse.io/v1/boards/cloudflare/jobs?content=true"
+        ],
+        "source_counts": {
+          "Cloudflare": {
+            "examined": 3,
+            "accepted": 2,
+            "rejected": 1,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 0,
+        "outcomes": [
+          "success",
+          "success_with_warnings"
+        ]
+      },
+      "reason": "Authored three-row regression only; not a durable full Cloudflare capture or live provider acceptance.",
+      "live": true
+    },
+    {
+      "id": "cloudflare-unrestricted",
+      "template_id": "cloudflare-systems-network",
+      "companies": [
+        "Cloudflare"
+      ],
+      "control": "unrestricted",
+      "fixture_class": "authored_regression_not_raw_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "passed",
+        "coverage": "authored_three_row_exhausted_not_live_coverage",
+        "jobs": [
+          {
+            "external_id": "91001",
+            "url": "https://fixture.invalid/cloudflare/91001",
+            "posting_identity": "[\"greenhouse\",\"cloudflare\",\"91001\"]"
+          },
+          {
+            "external_id": "91002",
+            "url": "https://fixture.invalid/cloudflare/91002",
+            "posting_identity": "[\"greenhouse\",\"cloudflare\",\"91002\"]"
+          },
+          {
+            "external_id": "91003",
+            "url": "https://fixture.invalid/cloudflare/91003",
+            "posting_identity": "[\"greenhouse\",\"cloudflare\",\"91003\"]"
+          }
+        ],
+        "terminal": "exhausted",
+        "errors": [],
+        "required_routes": [
+          "/boards-api.greenhouse.io/v1/boards/cloudflare/jobs?content=true"
+        ],
+        "source_counts": {
+          "Cloudflare": {
+            "examined": 3,
+            "accepted": 3,
+            "rejected": 0,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 0,
+        "outcomes": [
+          "success",
+          "success_with_warnings"
+        ]
+      },
+      "reason": "Authored three-row regression only; not a durable full Cloudflare capture or live provider acceptance.",
+      "live": false
+    },
+    {
+      "id": "cloudflare-strict",
+      "template_id": "cloudflare-systems-network",
+      "companies": [
+        "Cloudflare"
+      ],
+      "control": "strict",
+      "fixture_class": "authored_regression_not_raw_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "passed",
+        "coverage": "authored_three_row_exhausted_not_live_coverage",
+        "jobs": [],
+        "terminal": "exhausted",
+        "errors": [],
+        "required_routes": [
+          "/boards-api.greenhouse.io/v1/boards/cloudflare/jobs?content=true"
+        ],
+        "source_counts": {
+          "Cloudflare": {
+            "examined": 3,
+            "accepted": 0,
+            "rejected": 3,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 0,
+        "outcomes": [
+          "success",
+          "success_with_warnings"
+        ]
+      },
+      "reason": "Authored three-row regression only; not a durable full Cloudflare capture or live provider acceptance.",
+      "live": false
+    },
+    {
+      "id": "bitwarden-template",
+      "template_id": "bitwarden-remote-security",
+      "companies": [
+        "Bitwarden"
+      ],
+      "control": "template",
+      "fixture_class": "recorded_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "passed",
+        "coverage": "bounded_workflow_acceptance",
+        "jobs": [
+          {
+            "external_id": "7932121003",
+            "url": "https://bitwarden.com/careers/7932121003/?gh_jid=7932121003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7932121003\"]"
+          },
+          {
+            "external_id": "7861359003",
+            "url": "https://bitwarden.com/careers/7861359003/?gh_jid=7861359003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7861359003\"]"
+          },
+          {
+            "external_id": "7930653003",
+            "url": "https://bitwarden.com/careers/7930653003/?gh_jid=7930653003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7930653003\"]"
+          },
+          {
+            "external_id": "7782533003",
+            "url": "https://bitwarden.com/careers/7782533003/?gh_jid=7782533003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7782533003\"]"
+          },
+          {
+            "external_id": "7985622003",
+            "url": "https://bitwarden.com/careers/7985622003/?gh_jid=7985622003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7985622003\"]"
+          },
+          {
+            "external_id": "7770756003",
+            "url": "https://bitwarden.com/careers/7770756003/?gh_jid=7770756003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7770756003\"]"
+          },
+          {
+            "external_id": "7886191003",
+            "url": "https://bitwarden.com/careers/7886191003/?gh_jid=7886191003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7886191003\"]"
+          },
+          {
+            "external_id": "8005324003",
+            "url": "https://bitwarden.com/careers/8005324003/?gh_jid=8005324003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"8005324003\"]"
+          },
+          {
+            "external_id": "7872037003",
+            "url": "https://bitwarden.com/careers/7872037003/?gh_jid=7872037003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7872037003\"]"
+          },
+          {
+            "external_id": "7867094003",
+            "url": "https://bitwarden.com/careers/7867094003/?gh_jid=7867094003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7867094003\"]"
+          },
+          {
+            "external_id": "8002617003",
+            "url": "https://bitwarden.com/careers/8002617003/?gh_jid=8002617003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"8002617003\"]"
+          },
+          {
+            "external_id": "7866857003",
+            "url": "https://bitwarden.com/careers/7866857003/?gh_jid=7866857003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7866857003\"]"
+          },
+          {
+            "external_id": "7886272003",
+            "url": "https://bitwarden.com/careers/7886272003/?gh_jid=7886272003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7886272003\"]"
+          },
+          {
+            "external_id": "7866918003",
+            "url": "https://bitwarden.com/careers/7866918003/?gh_jid=7866918003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7866918003\"]"
+          },
+          {
+            "external_id": "7886240003",
+            "url": "https://bitwarden.com/careers/7886240003/?gh_jid=7886240003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7886240003\"]"
+          },
+          {
+            "external_id": "7829720003",
+            "url": "https://bitwarden.com/careers/7829720003/?gh_jid=7829720003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7829720003\"]"
+          },
+          {
+            "external_id": "7881159003",
+            "url": "https://bitwarden.com/careers/7881159003/?gh_jid=7881159003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7881159003\"]"
+          },
+          {
+            "external_id": "7896737003",
+            "url": "https://bitwarden.com/careers/7896737003/?gh_jid=7896737003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7896737003\"]"
+          },
+          {
+            "external_id": "8008706003",
+            "url": "https://bitwarden.com/careers/8008706003/?gh_jid=8008706003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"8008706003\"]"
+          },
+          {
+            "external_id": "7896465003",
+            "url": "https://bitwarden.com/careers/7896465003/?gh_jid=7896465003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7896465003\"]"
+          }
+        ],
+        "terminal": "job_limit",
+        "errors": [],
+        "required_routes": [
+          "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs?content=true"
+        ],
+        "source_counts": {
+          "Bitwarden": {
+            "examined": 35,
+            "accepted": 20,
+            "rejected": 15,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 0,
+        "outcomes": [
+          "success",
+          "success_with_warnings"
+        ]
+      },
+      "reason": null,
+      "live": true
+    },
+    {
+      "id": "bitwarden-unrestricted",
+      "template_id": "bitwarden-remote-security",
+      "companies": [
+        "Bitwarden"
+      ],
+      "control": "unrestricted",
+      "fixture_class": "recorded_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "passed",
+        "coverage": "bounded_workflow_acceptance",
+        "jobs": [
+          {
+            "external_id": "7930504003",
+            "url": "https://bitwarden.com/careers/7930504003/?gh_jid=7930504003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7930504003\"]"
+          },
+          {
+            "external_id": "7824401003",
+            "url": "https://bitwarden.com/careers/7824401003/?gh_jid=7824401003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7824401003\"]"
+          },
+          {
+            "external_id": "7961595003",
+            "url": "https://bitwarden.com/careers/7961595003/?gh_jid=7961595003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7961595003\"]"
+          },
+          {
+            "external_id": "7932121003",
+            "url": "https://bitwarden.com/careers/7932121003/?gh_jid=7932121003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7932121003\"]"
+          },
+          {
+            "external_id": "7861359003",
+            "url": "https://bitwarden.com/careers/7861359003/?gh_jid=7861359003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7861359003\"]"
+          },
+          {
+            "external_id": "7930653003",
+            "url": "https://bitwarden.com/careers/7930653003/?gh_jid=7930653003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7930653003\"]"
+          },
+          {
+            "external_id": "7782533003",
+            "url": "https://bitwarden.com/careers/7782533003/?gh_jid=7782533003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7782533003\"]"
+          },
+          {
+            "external_id": "7989370003",
+            "url": "https://bitwarden.com/careers/7989370003/?gh_jid=7989370003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7989370003\"]"
+          },
+          {
+            "external_id": "7985622003",
+            "url": "https://bitwarden.com/careers/7985622003/?gh_jid=7985622003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7985622003\"]"
+          },
+          {
+            "external_id": "7770756003",
+            "url": "https://bitwarden.com/careers/7770756003/?gh_jid=7770756003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7770756003\"]"
+          },
+          {
+            "external_id": "7886191003",
+            "url": "https://bitwarden.com/careers/7886191003/?gh_jid=7886191003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7886191003\"]"
+          },
+          {
+            "external_id": "8005324003",
+            "url": "https://bitwarden.com/careers/8005324003/?gh_jid=8005324003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"8005324003\"]"
+          },
+          {
+            "external_id": "7872037003",
+            "url": "https://bitwarden.com/careers/7872037003/?gh_jid=7872037003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7872037003\"]"
+          },
+          {
+            "external_id": "8009583003",
+            "url": "https://bitwarden.com/careers/8009583003/?gh_jid=8009583003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"8009583003\"]"
+          },
+          {
+            "external_id": "7792382003",
+            "url": "https://bitwarden.com/careers/7792382003/?gh_jid=7792382003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7792382003\"]"
+          },
+          {
+            "external_id": "7867094003",
+            "url": "https://bitwarden.com/careers/7867094003/?gh_jid=7867094003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7867094003\"]"
+          },
+          {
+            "external_id": "8013635003",
+            "url": "https://bitwarden.com/careers/8013635003/?gh_jid=8013635003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"8013635003\"]"
+          },
+          {
+            "external_id": "8013629003",
+            "url": "https://bitwarden.com/careers/8013629003/?gh_jid=8013629003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"8013629003\"]"
+          },
+          {
+            "external_id": "8013615003",
+            "url": "https://bitwarden.com/careers/8013615003/?gh_jid=8013615003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"8013615003\"]"
+          },
+          {
+            "external_id": "7985613003",
+            "url": "https://bitwarden.com/careers/7985613003/?gh_jid=7985613003",
+            "posting_identity": "[\"greenhouse\",\"bitwarden\",\"7985613003\"]"
+          }
+        ],
+        "terminal": "job_limit",
+        "errors": [],
+        "required_routes": [
+          "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs?content=true"
+        ],
+        "source_counts": {
+          "Bitwarden": {
+            "examined": 20,
+            "accepted": 20,
+            "rejected": 0,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 0,
+        "outcomes": [
+          "success",
+          "success_with_warnings"
+        ]
+      },
+      "reason": null,
+      "live": false
+    },
+    {
+      "id": "bitwarden-strict",
+      "template_id": "bitwarden-remote-security",
+      "companies": [
+        "Bitwarden"
+      ],
+      "control": "strict",
+      "fixture_class": "recorded_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "passed",
+        "coverage": "listing_exhausted",
+        "jobs": [],
+        "terminal": "exhausted",
+        "errors": [],
+        "required_routes": [
+          "/boards-api.greenhouse.io/v1/boards/bitwarden/jobs?content=true"
+        ],
+        "source_counts": {
+          "Bitwarden": {
+            "examined": 39,
+            "accepted": 0,
+            "rejected": 39,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 0,
+        "outcomes": [
+          "success",
+          "success_with_warnings"
+        ]
+      },
+      "reason": null,
+      "live": false
+    },
+    {
+      "id": "linear-template",
+      "template_id": "linear-product-engineering",
+      "companies": [
+        "Linear"
+      ],
+      "control": "template",
+      "fixture_class": "recorded_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "passed",
+        "coverage": "bounded_workflow_acceptance",
+        "jobs": [
+          {
+            "external_id": "d3bc1ced-3ce4-4086-a050-555055dbb1ff",
+            "url": "https://jobs.ashbyhq.com/linear/d3bc1ced-3ce4-4086-a050-555055dbb1ff",
+            "posting_identity": "[\"ashby\",\"linear\",\"d3bc1ced-3ce4-4086-a050-555055dbb1ff\"]"
+          },
+          {
+            "external_id": "cd5ae036-0223-427a-b038-ba16ef9dcb32",
+            "url": "https://jobs.ashbyhq.com/linear/cd5ae036-0223-427a-b038-ba16ef9dcb32",
+            "posting_identity": "[\"ashby\",\"linear\",\"cd5ae036-0223-427a-b038-ba16ef9dcb32\"]"
+          },
+          {
+            "external_id": "069c4628-88d7-4e4d-b393-c996fc7f3076",
+            "url": "https://jobs.ashbyhq.com/linear/069c4628-88d7-4e4d-b393-c996fc7f3076",
+            "posting_identity": "[\"ashby\",\"linear\",\"069c4628-88d7-4e4d-b393-c996fc7f3076\"]"
+          },
+          {
+            "external_id": "f04f398b-6320-499d-8a60-290239d62da8",
+            "url": "https://jobs.ashbyhq.com/linear/f04f398b-6320-499d-8a60-290239d62da8",
+            "posting_identity": "[\"ashby\",\"linear\",\"f04f398b-6320-499d-8a60-290239d62da8\"]"
+          },
+          {
+            "external_id": "ea0b5868-6d7a-46fa-99d8-207cd19357a6",
+            "url": "https://jobs.ashbyhq.com/linear/ea0b5868-6d7a-46fa-99d8-207cd19357a6",
+            "posting_identity": "[\"ashby\",\"linear\",\"ea0b5868-6d7a-46fa-99d8-207cd19357a6\"]"
+          },
+          {
+            "external_id": "12f8f208-0b9c-4569-bb3d-41c8a197029e",
+            "url": "https://jobs.ashbyhq.com/linear/12f8f208-0b9c-4569-bb3d-41c8a197029e",
+            "posting_identity": "[\"ashby\",\"linear\",\"12f8f208-0b9c-4569-bb3d-41c8a197029e\"]"
+          },
+          {
+            "external_id": "0c7c2e26-0a98-42cf-a47c-9a3999fb513b",
+            "url": "https://jobs.ashbyhq.com/linear/0c7c2e26-0a98-42cf-a47c-9a3999fb513b",
+            "posting_identity": "[\"ashby\",\"linear\",\"0c7c2e26-0a98-42cf-a47c-9a3999fb513b\"]"
+          },
+          {
+            "external_id": "b7669c4b-eeca-421d-ba9a-d90203f6fcb2",
+            "url": "https://jobs.ashbyhq.com/linear/b7669c4b-eeca-421d-ba9a-d90203f6fcb2",
+            "posting_identity": "[\"ashby\",\"linear\",\"b7669c4b-eeca-421d-ba9a-d90203f6fcb2\"]"
+          },
+          {
+            "external_id": "86abcce0-04b2-405c-9a8e-e0ca84813914",
+            "url": "https://jobs.ashbyhq.com/linear/86abcce0-04b2-405c-9a8e-e0ca84813914",
+            "posting_identity": "[\"ashby\",\"linear\",\"86abcce0-04b2-405c-9a8e-e0ca84813914\"]"
+          },
+          {
+            "external_id": "d062065e-05bb-42ce-a430-ec205695cc2e",
+            "url": "https://jobs.ashbyhq.com/linear/d062065e-05bb-42ce-a430-ec205695cc2e",
+            "posting_identity": "[\"ashby\",\"linear\",\"d062065e-05bb-42ce-a430-ec205695cc2e\"]"
+          },
+          {
+            "external_id": "b4a7764e-c680-4bdf-9956-dc78f2ca94d5",
+            "url": "https://jobs.ashbyhq.com/linear/b4a7764e-c680-4bdf-9956-dc78f2ca94d5",
+            "posting_identity": "[\"ashby\",\"linear\",\"b4a7764e-c680-4bdf-9956-dc78f2ca94d5\"]"
+          },
+          {
+            "external_id": "a264869e-f058-487c-ab7f-9b77dffa427c",
+            "url": "https://jobs.ashbyhq.com/linear/a264869e-f058-487c-ab7f-9b77dffa427c",
+            "posting_identity": "[\"ashby\",\"linear\",\"a264869e-f058-487c-ab7f-9b77dffa427c\"]"
+          },
+          {
+            "external_id": "ba8a41d2-4198-481a-a7f4-e09c5364ff7f",
+            "url": "https://jobs.ashbyhq.com/linear/ba8a41d2-4198-481a-a7f4-e09c5364ff7f",
+            "posting_identity": "[\"ashby\",\"linear\",\"ba8a41d2-4198-481a-a7f4-e09c5364ff7f\"]"
+          },
+          {
+            "external_id": "d37b3d76-3080-47f9-8a19-60505573112c",
+            "url": "https://jobs.ashbyhq.com/linear/d37b3d76-3080-47f9-8a19-60505573112c",
+            "posting_identity": "[\"ashby\",\"linear\",\"d37b3d76-3080-47f9-8a19-60505573112c\"]"
+          },
+          {
+            "external_id": "820d0d5a-0930-475c-b494-23e18ad2aa68",
+            "url": "https://jobs.ashbyhq.com/linear/820d0d5a-0930-475c-b494-23e18ad2aa68",
+            "posting_identity": "[\"ashby\",\"linear\",\"820d0d5a-0930-475c-b494-23e18ad2aa68\"]"
+          },
+          {
+            "external_id": "c0abc97e-b4d7-4ad7-bd13-bc40f4023227",
+            "url": "https://jobs.ashbyhq.com/linear/c0abc97e-b4d7-4ad7-bd13-bc40f4023227",
+            "posting_identity": "[\"ashby\",\"linear\",\"c0abc97e-b4d7-4ad7-bd13-bc40f4023227\"]"
+          },
+          {
+            "external_id": "b3346acf-44be-4565-b1c0-10d482d3ad4e",
+            "url": "https://jobs.ashbyhq.com/linear/b3346acf-44be-4565-b1c0-10d482d3ad4e",
+            "posting_identity": "[\"ashby\",\"linear\",\"b3346acf-44be-4565-b1c0-10d482d3ad4e\"]"
+          },
+          {
+            "external_id": "eac7f181-d658-4943-9430-51bae2bcd110",
+            "url": "https://jobs.ashbyhq.com/linear/eac7f181-d658-4943-9430-51bae2bcd110",
+            "posting_identity": "[\"ashby\",\"linear\",\"eac7f181-d658-4943-9430-51bae2bcd110\"]"
+          },
+          {
+            "external_id": "5b9997fd-7507-4437-8fd7-14178c99ab5d",
+            "url": "https://jobs.ashbyhq.com/linear/5b9997fd-7507-4437-8fd7-14178c99ab5d",
+            "posting_identity": "[\"ashby\",\"linear\",\"5b9997fd-7507-4437-8fd7-14178c99ab5d\"]"
+          },
+          {
+            "external_id": "b32de590-06ce-47d4-8994-66b936df908d",
+            "url": "https://jobs.ashbyhq.com/linear/b32de590-06ce-47d4-8994-66b936df908d",
+            "posting_identity": "[\"ashby\",\"linear\",\"b32de590-06ce-47d4-8994-66b936df908d\"]"
+          }
+        ],
+        "terminal": "job_limit",
+        "errors": [],
+        "required_routes": [
+          "/api.ashbyhq.com/posting-api/job-board/linear?includeCompensation=true"
+        ],
+        "source_counts": {
+          "Linear": {
+            "examined": 26,
+            "accepted": 20,
+            "rejected": 6,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 0,
+        "outcomes": [
+          "success",
+          "success_with_warnings"
+        ]
+      },
+      "reason": null,
+      "live": true
+    },
+    {
+      "id": "linear-unrestricted",
+      "template_id": "linear-product-engineering",
+      "companies": [
+        "Linear"
+      ],
+      "control": "unrestricted",
+      "fixture_class": "recorded_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "passed",
+        "coverage": "bounded_workflow_acceptance",
+        "jobs": [
+          {
+            "external_id": "d3bc1ced-3ce4-4086-a050-555055dbb1ff",
+            "url": "https://jobs.ashbyhq.com/linear/d3bc1ced-3ce4-4086-a050-555055dbb1ff",
+            "posting_identity": "[\"ashby\",\"linear\",\"d3bc1ced-3ce4-4086-a050-555055dbb1ff\"]"
+          },
+          {
+            "external_id": "cd5ae036-0223-427a-b038-ba16ef9dcb32",
+            "url": "https://jobs.ashbyhq.com/linear/cd5ae036-0223-427a-b038-ba16ef9dcb32",
+            "posting_identity": "[\"ashby\",\"linear\",\"cd5ae036-0223-427a-b038-ba16ef9dcb32\"]"
+          },
+          {
+            "external_id": "069c4628-88d7-4e4d-b393-c996fc7f3076",
+            "url": "https://jobs.ashbyhq.com/linear/069c4628-88d7-4e4d-b393-c996fc7f3076",
+            "posting_identity": "[\"ashby\",\"linear\",\"069c4628-88d7-4e4d-b393-c996fc7f3076\"]"
+          },
+          {
+            "external_id": "f04f398b-6320-499d-8a60-290239d62da8",
+            "url": "https://jobs.ashbyhq.com/linear/f04f398b-6320-499d-8a60-290239d62da8",
+            "posting_identity": "[\"ashby\",\"linear\",\"f04f398b-6320-499d-8a60-290239d62da8\"]"
+          },
+          {
+            "external_id": "ea0b5868-6d7a-46fa-99d8-207cd19357a6",
+            "url": "https://jobs.ashbyhq.com/linear/ea0b5868-6d7a-46fa-99d8-207cd19357a6",
+            "posting_identity": "[\"ashby\",\"linear\",\"ea0b5868-6d7a-46fa-99d8-207cd19357a6\"]"
+          },
+          {
+            "external_id": "12f8f208-0b9c-4569-bb3d-41c8a197029e",
+            "url": "https://jobs.ashbyhq.com/linear/12f8f208-0b9c-4569-bb3d-41c8a197029e",
+            "posting_identity": "[\"ashby\",\"linear\",\"12f8f208-0b9c-4569-bb3d-41c8a197029e\"]"
+          },
+          {
+            "external_id": "0c7c2e26-0a98-42cf-a47c-9a3999fb513b",
+            "url": "https://jobs.ashbyhq.com/linear/0c7c2e26-0a98-42cf-a47c-9a3999fb513b",
+            "posting_identity": "[\"ashby\",\"linear\",\"0c7c2e26-0a98-42cf-a47c-9a3999fb513b\"]"
+          },
+          {
+            "external_id": "b7669c4b-eeca-421d-ba9a-d90203f6fcb2",
+            "url": "https://jobs.ashbyhq.com/linear/b7669c4b-eeca-421d-ba9a-d90203f6fcb2",
+            "posting_identity": "[\"ashby\",\"linear\",\"b7669c4b-eeca-421d-ba9a-d90203f6fcb2\"]"
+          },
+          {
+            "external_id": "86abcce0-04b2-405c-9a8e-e0ca84813914",
+            "url": "https://jobs.ashbyhq.com/linear/86abcce0-04b2-405c-9a8e-e0ca84813914",
+            "posting_identity": "[\"ashby\",\"linear\",\"86abcce0-04b2-405c-9a8e-e0ca84813914\"]"
+          },
+          {
+            "external_id": "d062065e-05bb-42ce-a430-ec205695cc2e",
+            "url": "https://jobs.ashbyhq.com/linear/d062065e-05bb-42ce-a430-ec205695cc2e",
+            "posting_identity": "[\"ashby\",\"linear\",\"d062065e-05bb-42ce-a430-ec205695cc2e\"]"
+          },
+          {
+            "external_id": "c21af93e-210f-4969-8eaa-90fb16a5b720",
+            "url": "https://jobs.ashbyhq.com/linear/c21af93e-210f-4969-8eaa-90fb16a5b720",
+            "posting_identity": "[\"ashby\",\"linear\",\"c21af93e-210f-4969-8eaa-90fb16a5b720\"]"
+          },
+          {
+            "external_id": "b4a7764e-c680-4bdf-9956-dc78f2ca94d5",
+            "url": "https://jobs.ashbyhq.com/linear/b4a7764e-c680-4bdf-9956-dc78f2ca94d5",
+            "posting_identity": "[\"ashby\",\"linear\",\"b4a7764e-c680-4bdf-9956-dc78f2ca94d5\"]"
+          },
+          {
+            "external_id": "a264869e-f058-487c-ab7f-9b77dffa427c",
+            "url": "https://jobs.ashbyhq.com/linear/a264869e-f058-487c-ab7f-9b77dffa427c",
+            "posting_identity": "[\"ashby\",\"linear\",\"a264869e-f058-487c-ab7f-9b77dffa427c\"]"
+          },
+          {
+            "external_id": "ba8a41d2-4198-481a-a7f4-e09c5364ff7f",
+            "url": "https://jobs.ashbyhq.com/linear/ba8a41d2-4198-481a-a7f4-e09c5364ff7f",
+            "posting_identity": "[\"ashby\",\"linear\",\"ba8a41d2-4198-481a-a7f4-e09c5364ff7f\"]"
+          },
+          {
+            "external_id": "26c77e48-b4ef-455d-a02c-3ef68fc6f9f9",
+            "url": "https://jobs.ashbyhq.com/linear/26c77e48-b4ef-455d-a02c-3ef68fc6f9f9",
+            "posting_identity": "[\"ashby\",\"linear\",\"26c77e48-b4ef-455d-a02c-3ef68fc6f9f9\"]"
+          },
+          {
+            "external_id": "d37b3d76-3080-47f9-8a19-60505573112c",
+            "url": "https://jobs.ashbyhq.com/linear/d37b3d76-3080-47f9-8a19-60505573112c",
+            "posting_identity": "[\"ashby\",\"linear\",\"d37b3d76-3080-47f9-8a19-60505573112c\"]"
+          },
+          {
+            "external_id": "1d652292-04d9-405c-8101-578efd020e94",
+            "url": "https://jobs.ashbyhq.com/linear/1d652292-04d9-405c-8101-578efd020e94",
+            "posting_identity": "[\"ashby\",\"linear\",\"1d652292-04d9-405c-8101-578efd020e94\"]"
+          },
+          {
+            "external_id": "62a4524c-75da-499e-b150-7f68ce9f2da3",
+            "url": "https://jobs.ashbyhq.com/linear/62a4524c-75da-499e-b150-7f68ce9f2da3",
+            "posting_identity": "[\"ashby\",\"linear\",\"62a4524c-75da-499e-b150-7f68ce9f2da3\"]"
+          },
+          {
+            "external_id": "820d0d5a-0930-475c-b494-23e18ad2aa68",
+            "url": "https://jobs.ashbyhq.com/linear/820d0d5a-0930-475c-b494-23e18ad2aa68",
+            "posting_identity": "[\"ashby\",\"linear\",\"820d0d5a-0930-475c-b494-23e18ad2aa68\"]"
+          },
+          {
+            "external_id": "370d9605-f02f-44f9-97fa-ebf769bed93d",
+            "url": "https://jobs.ashbyhq.com/linear/370d9605-f02f-44f9-97fa-ebf769bed93d",
+            "posting_identity": "[\"ashby\",\"linear\",\"370d9605-f02f-44f9-97fa-ebf769bed93d\"]"
+          }
+        ],
+        "terminal": "job_limit",
+        "errors": [],
+        "required_routes": [
+          "/api.ashbyhq.com/posting-api/job-board/linear?includeCompensation=true"
+        ],
+        "source_counts": {
+          "Linear": {
+            "examined": 20,
+            "accepted": 20,
+            "rejected": 0,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 0,
+        "outcomes": [
+          "success",
+          "success_with_warnings"
+        ]
+      },
+      "reason": null,
+      "live": false
+    },
+    {
+      "id": "linear-strict",
+      "template_id": "linear-product-engineering",
+      "companies": [
+        "Linear"
+      ],
+      "control": "strict",
+      "fixture_class": "recorded_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "passed",
+        "coverage": "listing_exhausted",
+        "jobs": [],
+        "terminal": "exhausted",
+        "errors": [],
+        "required_routes": [
+          "/api.ashbyhq.com/posting-api/job-board/linear?includeCompensation=true"
+        ],
+        "source_counts": {
+          "Linear": {
+            "examined": 31,
+            "accepted": 0,
+            "rejected": 31,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 0,
+        "outcomes": [
+          "success",
+          "success_with_warnings"
+        ]
+      },
+      "reason": null,
+      "live": false
+    },
+    {
+      "id": "sep-template",
+      "template_id": "sep-midwest-consulting",
+      "companies": [
+        "SEP"
+      ],
+      "control": "template",
+      "fixture_class": "recorded_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "passed",
+        "coverage": "listing_exhausted",
+        "jobs": [
+          {
+            "external_id": "2eb79283-b3fd-4316-9e93-e80dbebfba05",
+            "url": "https://jobs.lever.co/sep/2eb79283-b3fd-4316-9e93-e80dbebfba05",
+            "posting_identity": "[\"lever\",\"sep\",\"2eb79283-b3fd-4316-9e93-e80dbebfba05\"]",
+            "required_country": "US",
+            "required_region": "US-IN"
+          },
+          {
+            "external_id": "80cd8c15-bafc-49a9-b8f1-5d407e891ec0",
+            "url": "https://jobs.lever.co/sep/80cd8c15-bafc-49a9-b8f1-5d407e891ec0",
+            "posting_identity": "[\"lever\",\"sep\",\"80cd8c15-bafc-49a9-b8f1-5d407e891ec0\"]",
+            "required_country": "US",
+            "required_region": "US-IN"
+          },
+          {
+            "external_id": "0b14158a-68e4-4e94-86f8-3f74c87cb3bd",
+            "url": "https://jobs.lever.co/sep/0b14158a-68e4-4e94-86f8-3f74c87cb3bd",
+            "posting_identity": "[\"lever\",\"sep\",\"0b14158a-68e4-4e94-86f8-3f74c87cb3bd\"]",
+            "required_country": "US",
+            "required_region": "US-IN"
+          },
+          {
+            "external_id": "98fc318a-8ce1-4730-a898-3ca372878bb2",
+            "url": "https://jobs.lever.co/sep/98fc318a-8ce1-4730-a898-3ca372878bb2",
+            "posting_identity": "[\"lever\",\"sep\",\"98fc318a-8ce1-4730-a898-3ca372878bb2\"]",
+            "required_country": "US",
+            "required_region": "US-IN"
+          },
+          {
+            "external_id": "f7ad9ffb-03dc-4fb2-9a92-e5f04a85ba08",
+            "url": "https://jobs.lever.co/sep/f7ad9ffb-03dc-4fb2-9a92-e5f04a85ba08",
+            "posting_identity": "[\"lever\",\"sep\",\"f7ad9ffb-03dc-4fb2-9a92-e5f04a85ba08\"]",
+            "required_country": "US",
+            "required_region": "US-IN"
+          },
+          {
+            "external_id": "4efbdbce-a753-41b5-8ed7-0661cd193178",
+            "url": "https://jobs.lever.co/sep/4efbdbce-a753-41b5-8ed7-0661cd193178",
+            "posting_identity": "[\"lever\",\"sep\",\"4efbdbce-a753-41b5-8ed7-0661cd193178\"]",
+            "required_country": "US",
+            "required_region": "US-IN"
+          }
+        ],
+        "terminal": "exhausted",
+        "errors": [],
+        "required_routes": [
+          "/api.lever.co/v0/postings/sep?mode=json"
+        ],
+        "source_counts": {
+          "SEP": {
+            "examined": 8,
+            "accepted": 6,
+            "rejected": 2,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 0,
+        "outcomes": [
+          "success",
+          "success_with_warnings"
+        ]
+      },
+      "reason": null,
+      "live": true
+    },
+    {
+      "id": "sep-unrestricted",
+      "template_id": "sep-midwest-consulting",
+      "companies": [
+        "SEP"
+      ],
+      "control": "unrestricted",
+      "fixture_class": "recorded_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "passed",
+        "coverage": "listing_exhausted",
+        "jobs": [
+          {
+            "external_id": "7b96b0c6-8429-4861-bf69-a00956e42a8d",
+            "url": "https://jobs.lever.co/sep/7b96b0c6-8429-4861-bf69-a00956e42a8d",
+            "posting_identity": "[\"lever\",\"sep\",\"7b96b0c6-8429-4861-bf69-a00956e42a8d\"]",
+            "required_country": "US",
+            "required_region": "US-IN"
+          },
+          {
+            "external_id": "2eb79283-b3fd-4316-9e93-e80dbebfba05",
+            "url": "https://jobs.lever.co/sep/2eb79283-b3fd-4316-9e93-e80dbebfba05",
+            "posting_identity": "[\"lever\",\"sep\",\"2eb79283-b3fd-4316-9e93-e80dbebfba05\"]",
+            "required_country": "US",
+            "required_region": "US-IN"
+          },
+          {
+            "external_id": "80cd8c15-bafc-49a9-b8f1-5d407e891ec0",
+            "url": "https://jobs.lever.co/sep/80cd8c15-bafc-49a9-b8f1-5d407e891ec0",
+            "posting_identity": "[\"lever\",\"sep\",\"80cd8c15-bafc-49a9-b8f1-5d407e891ec0\"]",
+            "required_country": "US",
+            "required_region": "US-IN"
+          },
+          {
+            "external_id": "0b14158a-68e4-4e94-86f8-3f74c87cb3bd",
+            "url": "https://jobs.lever.co/sep/0b14158a-68e4-4e94-86f8-3f74c87cb3bd",
+            "posting_identity": "[\"lever\",\"sep\",\"0b14158a-68e4-4e94-86f8-3f74c87cb3bd\"]",
+            "required_country": "US",
+            "required_region": "US-IN"
+          },
+          {
+            "external_id": "98fc318a-8ce1-4730-a898-3ca372878bb2",
+            "url": "https://jobs.lever.co/sep/98fc318a-8ce1-4730-a898-3ca372878bb2",
+            "posting_identity": "[\"lever\",\"sep\",\"98fc318a-8ce1-4730-a898-3ca372878bb2\"]",
+            "required_country": "US",
+            "required_region": "US-IN"
+          },
+          {
+            "external_id": "0eccbd97-a731-4912-8856-a92942897be9",
+            "url": "https://jobs.lever.co/sep/0eccbd97-a731-4912-8856-a92942897be9",
+            "posting_identity": "[\"lever\",\"sep\",\"0eccbd97-a731-4912-8856-a92942897be9\"]",
+            "required_country": "US",
+            "required_region": "US-IN"
+          },
+          {
+            "external_id": "f7ad9ffb-03dc-4fb2-9a92-e5f04a85ba08",
+            "url": "https://jobs.lever.co/sep/f7ad9ffb-03dc-4fb2-9a92-e5f04a85ba08",
+            "posting_identity": "[\"lever\",\"sep\",\"f7ad9ffb-03dc-4fb2-9a92-e5f04a85ba08\"]",
+            "required_country": "US",
+            "required_region": "US-IN"
+          },
+          {
+            "external_id": "4efbdbce-a753-41b5-8ed7-0661cd193178",
+            "url": "https://jobs.lever.co/sep/4efbdbce-a753-41b5-8ed7-0661cd193178",
+            "posting_identity": "[\"lever\",\"sep\",\"4efbdbce-a753-41b5-8ed7-0661cd193178\"]",
+            "required_country": "US",
+            "required_region": "US-IN"
+          }
+        ],
+        "terminal": "exhausted",
+        "errors": [],
+        "required_routes": [
+          "/api.lever.co/v0/postings/sep?mode=json"
+        ],
+        "source_counts": {
+          "SEP": {
+            "examined": 8,
+            "accepted": 8,
+            "rejected": 0,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 0,
+        "outcomes": [
+          "success",
+          "success_with_warnings"
+        ]
+      },
+      "reason": null,
+      "live": false
+    },
+    {
+      "id": "sep-strict",
+      "template_id": "sep-midwest-consulting",
+      "companies": [
+        "SEP"
+      ],
+      "control": "strict",
+      "fixture_class": "recorded_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "passed",
+        "coverage": "listing_exhausted",
+        "jobs": [],
+        "terminal": "exhausted",
+        "errors": [],
+        "required_routes": [
+          "/api.lever.co/v0/postings/sep?mode=json"
+        ],
+        "source_counts": {
+          "SEP": {
+            "examined": 8,
+            "accepted": 0,
+            "rejected": 8,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 0,
+        "outcomes": [
+          "success",
+          "success_with_warnings"
+        ]
+      },
+      "reason": null,
+      "live": false
+    },
+    {
+      "id": "google-apple-authored-template",
+      "template_id": "bigtech-static-swe",
+      "companies": [
+        "Google",
+        "Apple"
+      ],
+      "control": "template",
+      "fixture_class": "authored_regression_not_raw_provider_capture",
+      "route_set": "authored_static",
+      "expected": {
+        "status": "passed",
+        "coverage": "authored_two_page_exhausted_not_live_coverage",
+        "jobs": [
+          {
+            "external_id": "https://www.google.com/about/careers/applications/jobs/results/131138433534829254-google-rust-engineer",
+            "url": "https://www.google.com/about/careers/applications/jobs/results/131138433534829254-google-rust-engineer",
+            "posting_identity": "[\"url\",\"https://www.google.com/about/careers/applications/jobs/results/131138433534829254-google-rust-engineer\"]"
+          },
+          {
+            "external_id": "https://jobs.apple.com/en-us/details/200689992/coreos-firmware-engineer",
+            "url": "https://jobs.apple.com/en-us/details/200689992/coreos-firmware-engineer",
+            "location": "Cupertino",
+            "posting_identity": "[\"url\",\"https://jobs.apple.com/en-us/details/200689992/coreos-firmware-engineer\"]"
+          }
+        ],
+        "terminal": "exhausted",
+        "errors": [],
+        "required_routes": [
+          "/www.google.com/about/careers/applications/jobs/results/",
+          "/www.google.com/about/careers/applications/jobs/results/?page=2",
+          "/jobs.apple.com/en-us/search",
+          "/jobs.apple.com/en-us/search?page=2"
+        ],
+        "source_counts": {
+          "Google": {
+            "examined": 2,
+            "accepted": 1,
+            "rejected": 1,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          },
+          "Apple": {
+            "examined": 2,
+            "accepted": 1,
+            "rejected": 1,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 0,
+        "outcomes": [
+          "success",
+          "success_with_warnings"
+        ]
+      },
+      "reason": null,
+      "live": true
+    },
+    {
+      "id": "google-apple-authored-unrestricted",
+      "template_id": "bigtech-static-swe",
+      "companies": [
+        "Google",
+        "Apple"
+      ],
+      "control": "unrestricted",
+      "fixture_class": "authored_regression_not_raw_provider_capture",
+      "route_set": "authored_static",
+      "expected": {
+        "status": "passed",
+        "coverage": "authored_two_page_exhausted_not_live_coverage",
+        "jobs": [
+          {
+            "external_id": "https://www.google.com/about/careers/applications/jobs/results/google-sales",
+            "url": "https://www.google.com/about/careers/applications/jobs/results/google-sales",
+            "posting_identity": "[\"url\",\"https://www.google.com/about/careers/applications/jobs/results/google-sales\"]"
+          },
+          {
+            "external_id": "https://jobs.apple.com/en-us/details/apple-retail",
+            "url": "https://jobs.apple.com/en-us/details/apple-retail",
+            "location": "Cupertino",
+            "posting_identity": "[\"url\",\"https://jobs.apple.com/en-us/details/apple-retail\"]"
+          },
+          {
+            "external_id": "https://www.google.com/about/careers/applications/jobs/results/131138433534829254-google-rust-engineer",
+            "url": "https://www.google.com/about/careers/applications/jobs/results/131138433534829254-google-rust-engineer",
+            "posting_identity": "[\"url\",\"https://www.google.com/about/careers/applications/jobs/results/131138433534829254-google-rust-engineer\"]"
+          },
+          {
+            "external_id": "https://jobs.apple.com/en-us/details/200689992/coreos-firmware-engineer",
+            "url": "https://jobs.apple.com/en-us/details/200689992/coreos-firmware-engineer",
+            "location": "Cupertino",
+            "posting_identity": "[\"url\",\"https://jobs.apple.com/en-us/details/200689992/coreos-firmware-engineer\"]"
+          }
+        ],
+        "terminal": "exhausted",
+        "errors": [],
+        "required_routes": [
+          "/www.google.com/about/careers/applications/jobs/results/",
+          "/www.google.com/about/careers/applications/jobs/results/?page=2",
+          "/jobs.apple.com/en-us/search",
+          "/jobs.apple.com/en-us/search?page=2"
+        ],
+        "source_counts": {
+          "Google": {
+            "examined": 2,
+            "accepted": 2,
+            "rejected": 0,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          },
+          "Apple": {
+            "examined": 2,
+            "accepted": 2,
+            "rejected": 0,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 0,
+        "outcomes": [
+          "success",
+          "success_with_warnings"
+        ]
+      },
+      "reason": null,
+      "live": false
+    },
+    {
+      "id": "google-apple-authored-strict",
+      "template_id": "bigtech-static-swe",
+      "companies": [
+        "Google",
+        "Apple"
+      ],
+      "control": "strict",
+      "fixture_class": "authored_regression_not_raw_provider_capture",
+      "route_set": "authored_static",
+      "expected": {
+        "status": "passed",
+        "coverage": "authored_two_page_exhausted_not_live_coverage",
+        "jobs": [],
+        "terminal": "exhausted",
+        "errors": [],
+        "required_routes": [
+          "/www.google.com/about/careers/applications/jobs/results/",
+          "/www.google.com/about/careers/applications/jobs/results/?page=2",
+          "/jobs.apple.com/en-us/search",
+          "/jobs.apple.com/en-us/search?page=2"
+        ],
+        "source_counts": {
+          "Google": {
+            "examined": 2,
+            "accepted": 0,
+            "rejected": 2,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          },
+          "Apple": {
+            "examined": 2,
+            "accepted": 0,
+            "rejected": 2,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 0,
+        "outcomes": [
+          "success",
+          "success_with_warnings"
+        ]
+      },
+      "reason": null,
+      "live": false
+    },
+    {
+      "id": "google-recorded-template",
+      "template_id": "bigtech-static-swe",
+      "companies": [
+        "Google"
+      ],
+      "source_company": "Google",
+      "control": "template",
+      "fixture_class": "recorded_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "partial",
+        "coverage": "first_page_only_missing_captured_next_page",
+        "jobs": [
+          {
+            "external_id": "https://www.google.com/about/careers/applications/jobs/results/131138433534829254-senior-software-engineer-ask-google-pay",
+            "url": "https://www.google.com/about/careers/applications/jobs/results/131138433534829254-senior-software-engineer-ask-google-pay",
+            "posting_identity": "[\"url\",\"https://www.google.com/about/careers/applications/jobs/results/131138433534829254-senior-software-engineer-ask-google-pay\"]"
+          },
+          {
+            "external_id": "https://www.google.com/about/careers/applications/jobs/results/127473847178797766-software-engineer-google-pay-growth-and-communications",
+            "url": "https://www.google.com/about/careers/applications/jobs/results/127473847178797766-software-engineer-google-pay-growth-and-communications",
+            "posting_identity": "[\"url\",\"https://www.google.com/about/careers/applications/jobs/results/127473847178797766-software-engineer-google-pay-growth-and-communications\"]"
+          },
+          {
+            "external_id": "https://www.google.com/about/careers/applications/jobs/results/113322960730628806-software-engineering-manager-cloud-and-thirdparty-platform-security",
+            "url": "https://www.google.com/about/careers/applications/jobs/results/113322960730628806-software-engineering-manager-cloud-and-thirdparty-platform-security",
+            "posting_identity": "[\"url\",\"https://www.google.com/about/careers/applications/jobs/results/113322960730628806-software-engineering-manager-cloud-and-thirdparty-platform-security\"]"
+          },
+          {
+            "external_id": "https://www.google.com/about/careers/applications/jobs/results/85289301167743686-data-center-site-lead-data-center-operations",
+            "url": "https://www.google.com/about/careers/applications/jobs/results/85289301167743686-data-center-site-lead-data-center-operations",
+            "posting_identity": "[\"url\",\"https://www.google.com/about/careers/applications/jobs/results/85289301167743686-data-center-site-lead-data-center-operations\"]"
+          },
+          {
+            "external_id": "https://www.google.com/about/careers/applications/jobs/results/86771764964532934-staff-software-engineer-reef-intent-engine",
+            "url": "https://www.google.com/about/careers/applications/jobs/results/86771764964532934-staff-software-engineer-reef-intent-engine",
+            "posting_identity": "[\"url\",\"https://www.google.com/about/careers/applications/jobs/results/86771764964532934-staff-software-engineer-reef-intent-engine\"]"
+          },
+          {
+            "external_id": "https://www.google.com/about/careers/applications/jobs/results/86029336917746374-group-product-manager-wearables-platform-wear-os",
+            "url": "https://www.google.com/about/careers/applications/jobs/results/86029336917746374-group-product-manager-wearables-platform-wear-os",
+            "posting_identity": "[\"url\",\"https://www.google.com/about/careers/applications/jobs/results/86029336917746374-group-product-manager-wearables-platform-wear-os\"]"
+          },
+          {
+            "external_id": "https://www.google.com/about/careers/applications/jobs/results/114395727597052614-data-center-technician-night-shift",
+            "url": "https://www.google.com/about/careers/applications/jobs/results/114395727597052614-data-center-technician-night-shift",
+            "posting_identity": "[\"url\",\"https://www.google.com/about/careers/applications/jobs/results/114395727597052614-data-center-technician-night-shift\"]"
+          },
+          {
+            "external_id": "https://www.google.com/about/careers/applications/jobs/results/77173853087769286-software-engineer-iii-pixel-performance",
+            "url": "https://www.google.com/about/careers/applications/jobs/results/77173853087769286-software-engineer-iii-pixel-performance",
+            "posting_identity": "[\"url\",\"https://www.google.com/about/careers/applications/jobs/results/77173853087769286-software-engineer-iii-pixel-performance\"]"
+          }
+        ],
+        "terminal": "failed",
+        "errors": [
+          "404"
+        ],
+        "required_routes": [
+          "/www.google.com/about/careers/applications/jobs/results/",
+          "/www.google.com/about/careers/applications/jobs/results/?page=2"
+        ],
+        "source_counts": {
+          "Google": {
+            "examined": 20,
+            "accepted": 8,
+            "rejected": 12,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 1,
+        "outcomes": [
+          "partial"
+        ]
+      },
+      "reason": "Only the original first page was captured. Missing next pages are explicit 404s; this is not full provider coverage.",
+      "live": false
+    },
+    {
+      "id": "apple-recorded-template",
+      "template_id": "bigtech-static-swe",
+      "companies": [
+        "Apple"
+      ],
+      "source_company": "Apple",
+      "control": "template",
+      "fixture_class": "recorded_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "partial",
+        "coverage": "first_page_only_missing_captured_next_page",
+        "jobs": [
+          {
+            "external_id": "https://jobs.apple.com/en-us/details/200687787-0836/data-scientist-intelligent-experiences-mlo?team=MLAI",
+            "url": "https://jobs.apple.com/en-us/details/200687787-0836/data-scientist-intelligent-experiences-mlo?team=MLAI",
+            "posting_identity": "[\"url\",\"https://jobs.apple.com/en-us/details/200687787-0836/data-scientist-intelligent-experiences-mlo?team=MLAI\"]",
+            "location": "Cupertino"
+          },
+          {
+            "external_id": "https://jobs.apple.com/en-us/details/200689896/software-engineer-internal-tools-media-graphics-compute-tech?team=SFTWR",
+            "url": "https://jobs.apple.com/en-us/details/200689896/software-engineer-internal-tools-media-graphics-compute-tech?team=SFTWR",
+            "posting_identity": "[\"url\",\"https://jobs.apple.com/en-us/details/200689896/software-engineer-internal-tools-media-graphics-compute-tech?team=SFTWR\"]",
+            "location": "Various Locations within San Diego Metro Area"
+          },
+          {
+            "external_id": "https://jobs.apple.com/en-us/details/200689630-0157/senior-security-software-engineer-datacenter-infrastructure-security?team=SFTWR",
+            "url": "https://jobs.apple.com/en-us/details/200689630-0157/senior-security-software-engineer-datacenter-infrastructure-security?team=SFTWR",
+            "posting_identity": "[\"url\",\"https://jobs.apple.com/en-us/details/200689630-0157/senior-security-software-engineer-datacenter-infrastructure-security?team=SFTWR\"]",
+            "location": "Austin"
+          }
+        ],
+        "terminal": "failed",
+        "errors": [
+          "404"
+        ],
+        "required_routes": [
+          "/jobs.apple.com/en-us/search",
+          "/jobs.apple.com/en-us/searchlocation=united-states-USA&page=2"
+        ],
+        "source_counts": {
+          "Apple": {
+            "examined": 20,
+            "accepted": 3,
+            "rejected": 17,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 1,
+        "outcomes": [
+          "partial"
+        ]
+      },
+      "reason": "Only the original first page was captured. Missing next pages are explicit 404s; this is not full provider coverage.",
+      "live": false
+    },
+    {
+      "id": "netflix-amazon-template",
+      "template_id": "streaming-cloud-script",
+      "companies": [
+        "Netflix",
+        "Amazon"
+      ],
+      "control": "template",
+      "fixture_class": "recorded_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "partial",
+        "coverage": "first_page_only_missing_captured_next_page",
+        "jobs": [
+          {
+            "external_id": "790318858893",
+            "url": "https://explore.jobs.netflix.net/careers/job/790318858893",
+            "posting_identity": "[\"publisher\",\"https://explore.jobs.netflix.net\",\"790318858893\"]",
+            "role_type": "unknown",
+            "date_posted": null,
+            "workplace_type": "remote"
+          },
+          {
+            "external_id": "10582075",
+            "url": "https://www.amazon.jobs/en/jobs/10582075/systems-development-engineer-oisl-test-automation",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10582075\"]",
+            "role_type": "unknown"
+          },
+          {
+            "external_id": "10489389",
+            "url": "https://www.amazon.jobs/en/jobs/10489389/software-development-engineer-alexa-connections",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10489389\"]",
+            "role_type": "unknown"
+          },
+          {
+            "external_id": "10421270",
+            "url": "https://www.amazon.jobs/en/jobs/10421270/sr-software-development-engineer-amazon-shopping-rufus",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10421270\"]",
+            "role_type": "unknown"
+          },
+          {
+            "external_id": "10524143",
+            "url": "https://www.amazon.jobs/en/jobs/10524143/software-development-engineer-alexa-communications",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10524143\"]",
+            "role_type": "unknown"
+          },
+          {
+            "external_id": "10582071",
+            "url": "https://www.amazon.jobs/en/jobs/10582071/software-development-engineer-aws-security-epoxy",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10582071\"]",
+            "role_type": "unknown"
+          },
+          {
+            "external_id": "10507775",
+            "url": "https://www.amazon.jobs/en/jobs/10507775/data-center-infrastructure-engineering-intern-colocation-regional-engineering",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10507775\"]",
+            "role_type": "internship"
+          },
+          {
+            "external_id": "10436388",
+            "url": "https://www.amazon.jobs/en/jobs/10436388/data-center-technician-dcc-communities",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10436388\"]",
+            "role_type": "unknown"
+          }
+        ],
+        "terminal": "failed",
+        "errors": [
+          "404"
+        ],
+        "required_routes": [
+          "/explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10",
+          "/www.amazon.jobs/en/search.json?offset=0&result_limit=10",
+          "/explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=10&num=10",
+          "/www.amazon.jobs/en/search.json?offset=10&result_limit=10"
+        ],
+        "source_counts": {
+          "Netflix": {
+            "examined": 10,
+            "accepted": 1,
+            "rejected": 9,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          },
+          "Amazon": {
+            "examined": 10,
+            "accepted": 7,
+            "rejected": 3,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 2,
+        "outcomes": [
+          "partial"
+        ]
+      },
+      "reason": "Original captures contain ten rows each but totals of 405/10000. Missing next pages are explicit, never fabricated as exhausted.",
+      "live": true
+    },
+    {
+      "id": "netflix-amazon-unrestricted",
+      "template_id": "streaming-cloud-script",
+      "companies": [
+        "Netflix",
+        "Amazon"
+      ],
+      "control": "unrestricted",
+      "fixture_class": "recorded_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "partial",
+        "coverage": "first_page_only_missing_captured_next_page",
+        "jobs": [
+          {
+            "external_id": "790318993870",
+            "url": "https://explore.jobs.netflix.net/careers/job/790318993870",
+            "posting_identity": "[\"publisher\",\"https://explore.jobs.netflix.net\",\"790318993870\"]",
+            "role_type": "unknown",
+            "date_posted": null,
+            "workplace_type": "onsite"
+          },
+          {
+            "external_id": "790318993874",
+            "url": "https://explore.jobs.netflix.net/careers/job/790318993874",
+            "posting_identity": "[\"publisher\",\"https://explore.jobs.netflix.net\",\"790318993874\"]",
+            "role_type": "unknown",
+            "date_posted": null,
+            "workplace_type": "onsite"
+          },
+          {
+            "external_id": "790318998848",
+            "url": "https://explore.jobs.netflix.net/careers/job/790318998848",
+            "posting_identity": "[\"publisher\",\"https://explore.jobs.netflix.net\",\"790318998848\"]",
+            "role_type": "unknown",
+            "date_posted": null,
+            "workplace_type": "onsite"
+          },
+          {
+            "external_id": "790318999845",
+            "url": "https://explore.jobs.netflix.net/careers/job/790318999845",
+            "posting_identity": "[\"publisher\",\"https://explore.jobs.netflix.net\",\"790318999845\"]",
+            "role_type": "unknown",
+            "date_posted": null,
+            "workplace_type": "onsite"
+          },
+          {
+            "external_id": "790318936895",
+            "url": "https://explore.jobs.netflix.net/careers/job/790318936895",
+            "posting_identity": "[\"publisher\",\"https://explore.jobs.netflix.net\",\"790318936895\"]",
+            "role_type": "unknown",
+            "date_posted": null,
+            "workplace_type": "onsite"
+          },
+          {
+            "external_id": "790318907811",
+            "url": "https://explore.jobs.netflix.net/careers/job/790318907811",
+            "posting_identity": "[\"publisher\",\"https://explore.jobs.netflix.net\",\"790318907811\"]",
+            "role_type": "unknown",
+            "date_posted": null,
+            "workplace_type": "onsite"
+          },
+          {
+            "external_id": "790318883356",
+            "url": "https://explore.jobs.netflix.net/careers/job/790318883356",
+            "posting_identity": "[\"publisher\",\"https://explore.jobs.netflix.net\",\"790318883356\"]",
+            "role_type": "unknown",
+            "date_posted": null,
+            "workplace_type": "remote"
+          },
+          {
+            "external_id": "790318883368",
+            "url": "https://explore.jobs.netflix.net/careers/job/790318883368",
+            "posting_identity": "[\"publisher\",\"https://explore.jobs.netflix.net\",\"790318883368\"]",
+            "role_type": "unknown",
+            "date_posted": null,
+            "workplace_type": "onsite"
+          },
+          {
+            "external_id": "790318858625",
+            "url": "https://explore.jobs.netflix.net/careers/job/790318858625",
+            "posting_identity": "[\"publisher\",\"https://explore.jobs.netflix.net\",\"790318858625\"]",
+            "role_type": "unknown",
+            "date_posted": null,
+            "workplace_type": "onsite"
+          },
+          {
+            "external_id": "790318858893",
+            "url": "https://explore.jobs.netflix.net/careers/job/790318858893",
+            "posting_identity": "[\"publisher\",\"https://explore.jobs.netflix.net\",\"790318858893\"]",
+            "role_type": "unknown",
+            "date_posted": null,
+            "workplace_type": "remote"
+          },
+          {
+            "external_id": "10582075",
+            "url": "https://www.amazon.jobs/en/jobs/10582075/systems-development-engineer-oisl-test-automation",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10582075\"]",
+            "role_type": "unknown"
+          },
+          {
+            "external_id": "10489389",
+            "url": "https://www.amazon.jobs/en/jobs/10489389/software-development-engineer-alexa-connections",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10489389\"]",
+            "role_type": "unknown"
+          },
+          {
+            "external_id": "10421270",
+            "url": "https://www.amazon.jobs/en/jobs/10421270/sr-software-development-engineer-amazon-shopping-rufus",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10421270\"]",
+            "role_type": "unknown"
+          },
+          {
+            "external_id": "10524143",
+            "url": "https://www.amazon.jobs/en/jobs/10524143/software-development-engineer-alexa-communications",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10524143\"]",
+            "role_type": "unknown"
+          },
+          {
+            "external_id": "10582071",
+            "url": "https://www.amazon.jobs/en/jobs/10582071/software-development-engineer-aws-security-epoxy",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10582071\"]",
+            "role_type": "unknown"
+          },
+          {
+            "external_id": "10582066",
+            "url": "https://www.amazon.jobs/en/jobs/10582066/operations-manager",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10582066\"]",
+            "role_type": "unknown"
+          },
+          {
+            "external_id": "10445291",
+            "url": "https://www.amazon.jobs/en/jobs/10445291/network-deployment-technician-dcc-communities",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10445291\"]",
+            "role_type": "unknown"
+          },
+          {
+            "external_id": "10524046",
+            "url": "https://www.amazon.jobs/en/jobs/10524046/manager-dpo-technical-operations-device-postponement-operations-dpo",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10524046\"]",
+            "role_type": "unknown"
+          },
+          {
+            "external_id": "10507775",
+            "url": "https://www.amazon.jobs/en/jobs/10507775/data-center-infrastructure-engineering-intern-colocation-regional-engineering",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10507775\"]",
+            "role_type": "internship"
+          },
+          {
+            "external_id": "10436388",
+            "url": "https://www.amazon.jobs/en/jobs/10436388/data-center-technician-dcc-communities",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"10436388\"]",
+            "role_type": "unknown"
+          }
+        ],
+        "terminal": "job_limit",
+        "errors": [],
+        "required_routes": [
+          "/explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10",
+          "/www.amazon.jobs/en/search.json?offset=0&result_limit=10"
+        ],
+        "source_counts": {
+          "Netflix": {
+            "examined": 10,
+            "accepted": 10,
+            "rejected": 0,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          },
+          "Amazon": {
+            "examined": 10,
+            "accepted": 10,
+            "rejected": 0,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 0,
+        "outcomes": [
+          "success",
+          "success_with_warnings"
+        ]
+      },
+      "reason": "Original captures contain ten rows each but totals of 405/10000. Missing next pages are explicit, never fabricated as exhausted.",
+      "live": false
+    },
+    {
+      "id": "netflix-amazon-strict",
+      "template_id": "streaming-cloud-script",
+      "companies": [
+        "Netflix",
+        "Amazon"
+      ],
+      "control": "strict",
+      "fixture_class": "recorded_provider_capture",
+      "route_set": "recorded",
+      "expected": {
+        "status": "partial",
+        "coverage": "first_page_only_missing_captured_next_page",
+        "jobs": [],
+        "terminal": "failed",
+        "errors": [
+          "404"
+        ],
+        "required_routes": [
+          "/explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10",
+          "/www.amazon.jobs/en/search.json?offset=0&result_limit=10",
+          "/explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=10&num=10",
+          "/www.amazon.jobs/en/search.json?offset=10&result_limit=10"
+        ],
+        "source_counts": {
+          "Netflix": {
+            "examined": 10,
+            "accepted": 0,
+            "rejected": 10,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          },
+          "Amazon": {
+            "examined": 10,
+            "accepted": 0,
+            "rejected": 10,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "error_count": 2,
+        "outcomes": [
+          "partial"
+        ]
+      },
+      "reason": "Original captures contain ten rows each but totals of 405/10000. Missing next pages are explicit, never fabricated as exhausted.",
+      "live": false
+    },
+    {
+      "id": "netflix-amazon-missing-pagination-metadata",
+      "template_id": "streaming-cloud-script",
+      "companies": [
+        "Netflix",
+        "Amazon"
+      ],
+      "control": "template",
+      "fixture_class": "authored_regression_not_raw_provider_capture",
+      "route_set": "authored_missing_metadata",
+      "live": false,
+      "expected": {
+        "status": "partial",
+        "coverage": "missing_provider_total_not_exhausted",
+        "jobs": [
+          {
+            "external_id": "section7-netflix",
+            "url": "https://explore.jobs.netflix.net/careers/job/section7-netflix",
+            "posting_identity": "[\"publisher\",\"https://explore.jobs.netflix.net\",\"section7-netflix\"]",
+            "role_type": "unknown",
+            "workplace_type": "remote",
+            "date_posted": null
+          },
+          {
+            "external_id": "section7-amazon",
+            "url": "https://www.amazon.jobs/en/jobs/section7-amazon",
+            "posting_identity": "[\"publisher\",\"https://www.amazon.jobs\",\"section7-amazon\"]",
+            "role_type": "unknown"
+          }
+        ],
+        "terminal": "page_limit",
+        "errors": [],
+        "error_count": 0,
+        "required_routes": [
+          "/explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10",
+          "/www.amazon.jobs/en/search.json?offset=0&result_limit=10"
+        ],
+        "source_counts": {
+          "Netflix": {
+            "examined": 1,
+            "accepted": 1,
+            "rejected": 0,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          },
+          "Amazon": {
+            "examined": 1,
+            "accepted": 1,
+            "rejected": 0,
+            "unresolved": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "blocked": 0
+          }
+        },
+        "outcomes": [
+          "partial"
+        ]
+      },
+      "reason": "Authored regression: absent provider pagination totals must not be inferred from one page length. Complete(false) without a cursor is explicit partial coverage."
+    }
+  ],
+  "explicit_gaps": [
+    {
+      "id": "meta-unsupported",
+      "companies": [
+        "Meta"
+      ],
+      "status": "unsupported",
+      "fixture_class": "dynamic_spa_bot_shielded",
+      "reason": "Meta Careers renders via client-side React/Relay SPA with empty HTML container (<div id=\"root\"></div>) and bot-shielded GraphQL endpoints. Documented as an open acceptance gap per Plan 11.",
+      "capture": "meta",
+      "live_attempted": false,
+      "workflow_available": false,
+      "observed": {
+        "jobs": [],
+        "diagnostic": "No canonical Meta workflow/extractor exists. The captured empty shell is not successful ingestion."
+      }
+    }
+  ],
+  "extractors": {
+    "worker_protocol": 8,
+    "script_protocol": 2,
+    "catalog_version": 2,
+    "netflix": {
+      "file": "crates/scrape-worker/examples/extractors/netflix_extractor.js",
+      "sha256": "62e7c0401f5317e138bf2cc09e0404f3efae44db2cea99a83297cabcb03a0b97",
+      "version": "bundled-script-protocol-2-section7-pagination"
+    },
+    "amazon": {
+      "file": "crates/scrape-worker/examples/extractors/amazon_extractor.js",
+      "sha256": "04a680edea3115ce005e7ccb56ede89bac711f112fb165e483abe9a00fdaa7b2",
+      "version": "bundled-script-protocol-2-section7-pagination"
+    }
+  },
+  "cloudflare": {
+    "kind": "greenhouse",
+    "board": "cloudflare",
+    "classification": "authored_regression_not_raw_provider_capture",
+    "file": "fixtures/providers/regressions/cloudflare-board-authored.json",
+    "sha256": "d0a1ef5dad16dc87953bdc641669ab37b8529e1799a4736d1b41d1228918e0ef",
+    "captured_at": null,
+    "capture_url": null,
+    "note": "Authored three-row fixture, not a durable full board capture. Raw Cloudflare live board coverage remains unverified."
   }
 }

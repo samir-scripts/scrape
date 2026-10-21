@@ -190,12 +190,26 @@ fn parse_job_posting_map(
         .unwrap_or("Unknown company")
         .to_string();
 
-    let emp_type = map.get("employmentType").and_then(|et| match et {
-        Value::String(s) => Some(s.as_str()),
-        Value::Array(arr) => arr.first().and_then(|v| v.as_str()),
-        _ => None,
-    });
-    let role_type = RoleType::infer(&title, emp_type);
+    let role_type = match map.get("employmentType") {
+        Some(Value::Array(values)) => {
+            let mut known = None;
+            let mut conflict = false;
+            for value in values {
+                if let Some(role) = value.as_str().and_then(RoleType::from_hint) {
+                    if known.is_some_and(|previous| previous != role) {
+                        conflict = true;
+                    }
+                    known = Some(role);
+                }
+            }
+            if conflict {
+                RoleType::Unknown
+            } else {
+                known.unwrap_or_else(|| RoleType::infer(&title, None))
+            }
+        }
+        value => RoleType::infer(&title, value.and_then(Value::as_str)),
+    };
 
     let location = extract_location(map.get("jobLocation"));
 
@@ -588,6 +602,44 @@ mod tests {
         }
     }
     use scrape_core::SourceKind;
+
+    #[test]
+    fn employment_arrays_use_all_top_level_aliases_and_reject_conflicts() {
+        let source = WorkerSource {
+            id: "jsonld".into(),
+            kind: SourceKind::Jsonld,
+            name: "Fixture".into(),
+            identifier: "https://fixture.test/careers".into(),
+            config: Value::Null,
+        };
+        for (types, expected) in [
+            (
+                serde_json::json!(["unsupported", "FULL_TIME", "Full time"]),
+                RoleType::FullTime,
+            ),
+            (
+                serde_json::json!(["FULL_TIME", "Contract"]),
+                RoleType::Unknown,
+            ),
+            (
+                serde_json::json!(["Intern", "Internship", "Co-op"]),
+                RoleType::Internship,
+            ),
+            (
+                serde_json::json!(["Internal", "Temperature", "irregular schedule"]),
+                RoleType::Unknown,
+            ),
+        ] {
+            let posting = serde_json::json!({
+                "@type":"JobPosting", "title":"Engineer", "url":"/jobs/1",
+                "employmentType":types, "hiringOrganization":{"name":"Fixture"}
+            });
+            let event =
+                parse_job_posting_map(posting.as_object().unwrap(), &source.identifier, &source)
+                    .unwrap();
+            assert!(matches!(event, WorkerEvent::Job { role_type, .. } if role_type == expected));
+        }
+    }
 
     #[test]
     fn test_extract_jsonld() {

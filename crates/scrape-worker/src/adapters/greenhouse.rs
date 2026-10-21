@@ -913,7 +913,7 @@ mod tests {
                     "absolute_url": "https://boards.greenhouse.io/acme/jobs/999123",
                     "location": { "name": "San Francisco, CA (Hybrid)" },
                     "updated_at": "2026-10-01T12:00:00Z",
-                    "content": "Must have an active Secret clearance. We do not provide visa sponsorship. Requires 6+ years experience in Rust.",
+                    "content": "Must have an active Secret clearance. We do not provide visa sponsorship. Requires 6+ years of software engineering experience.",
                     "pay_input_ranges": [
                         {
                             "min_cents": 16000000,

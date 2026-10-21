@@ -46,12 +46,16 @@ pub enum SourceKind {
     Ashby,
     Jsonld,
     Selector,
+    Workday,
 }
 
 impl SourceKind {
     /// ATS kinds take a board slug as identifier; page kinds take a URL.
     pub fn expects_url(self) -> bool {
-        matches!(self, SourceKind::Jsonld | SourceKind::Selector)
+        matches!(
+            self,
+            SourceKind::Jsonld | SourceKind::Selector | SourceKind::Workday
+        )
     }
 }
 
@@ -191,6 +195,10 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&SourceKind::Jsonld).unwrap(),
             "\"jsonld\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SourceKind::Workday).unwrap(),
+            "\"workday\""
         );
         assert_eq!(
             serde_json::to_string(&SourceCadence::Every12h).unwrap(),

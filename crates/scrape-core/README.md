@@ -17,7 +17,7 @@ scrape-core/
 ├── data/           # Pinned ISO country and subdivision catalog (regions.json)
 ├── examples/       # Reproducible branding asset validator (cache-logo-fixture.rs)
 └── src/            # Core domain modules
-    ├── branding.rs     # Employer logo evidence resolution, decoding, and PNG normalization
+    ├── branding.rs     # Employer logo evidence resolution, decoding, and bounded lossless WebP/PNG normalization
     ├── browser.rs      # Local browser runtime discovery, isolated session storage, and RFC 6455 CDP WebSocket client
     ├── enrich/         # Heuristic analysis algorithms (salary, location, workplace, HTML, etc.)
     ├── extraction.rs   # Extraction modes, script validation, canonical hashes and shared bounds
@@ -29,7 +29,7 @@ scrape-core/
     ├── locator.rs      # Unified CSS and XPath locator grammar, parsing, and attributes
     ├── matching.rs     # Authoritative keyword/geography/workplace/partial-evidence matcher & diagnostics
     ├── posting_date.rs # Publication timestamp normalization and timezone-aware date rules
-    ├── protocol.rs     # Subprocess IPC contracts (WorkerConfig, WorkerEvent, NDJSON v7)
+    ├── protocol.rs     # Subprocess IPC contracts (WorkerConfig, WorkerEvent, NDJSON v8)
     ├── role.rs         # Role category classification heuristics (SWE, Data, etc.)
     ├── static_source.rs # Bounded static selector source configuration and transforms
     ├── types.rs        # Core enums and domain structures (JobStatus, RoleType, etc.)
@@ -47,7 +47,7 @@ scrape-core/
 | [`examples/cache-logo-fixture.rs`](examples/cache-logo-fixture.rs) | CLI example that runs raw logo bytes through production `branding` validation to reproduce review PNGs. |
 | [`src/lib.rs`](src/README.md) | Crate root. Re-exports public submodules and shared utilities (`now_iso()`, `INGESTION_LIMITS`, `PROTOCOL_VERSION`). |
 | [`src/types.rs`](src/README.md#typesrs) | Canonical domain enumerations: `JobStatus`, `RoleType`, `TriState`, `SalaryInterval`, `SalarySource`, `SourceKind`, `SourceCadence`, `ClearanceLevel`, `WorkAuthRequirement`, and `WorkplaceType`. |
-| [`src/protocol.rs`](src/README.md#protocolrs) | IPC protocol v7 definitions for host-worker communication: `WorkerConfig`, `WorkerLimits`, `EnrichmentLimits`, `WorkerFilters`, `WorkerSource`, `WorkerEvent`, `WorkerStats`, `SourceScanStats`, `ScanOutcome`, `CoverageTermination`, and `ScrapedJob`. |
+| [`src/protocol.rs`](src/README.md#protocolrs) | IPC protocol v8 definitions for host-worker communication: `WorkerConfig`, `WorkerLimits`, `EnrichmentLimits`, `WorkerFilters`, `WorkerSource`, `WorkerEvent`, `WorkerStats`, `SourceScanStats`, `ScanOutcome`, `CoverageTermination`, and `ScrapedJob`. Script protocol remains v2. |
 | [`src/matching.rs`](src/README.md#matchingrs) | Single authoritative owner of `PostingRules` evaluation, `KeywordRules` (Any/All/Exclude/fields), partial-evidence decisions for bounded enrichment, primary `RejectionReason` categorization, and `RejectionExample` diagnostics. |
 | [`src/filter.rs`](src/README.md#filterrs) | SQL-style filter parser and evaluator plus parameterized SQLite `WHERE` clause compilation for saved-job queries and `PostingRules`. |
 | [`src/identity.rs`](src/README.md#identityrs) | Canonical `PostingIdentity` derivation across ATS providers, JSON-LD, and custom selectors so deduplication, rescraping, and suppression share one identity rule. |

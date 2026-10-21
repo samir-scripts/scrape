@@ -2,6 +2,7 @@ use crate::adapters::branding::CompanyBranding;
 use crate::adapters::greenhouse::GreenhouseJob;
 use crate::client::{ClientError, HttpClient};
 use chrono::{DateTime, Utc};
+use futures::{stream, StreamExt};
 use scrape_core::branding::{CompanyLogo, LogoStatus};
 use scrape_core::matching::{MatchingEvaluator, MatchingEvidence, RejectionReason};
 use scrape_core::protocol::{
@@ -40,6 +41,7 @@ pub struct CoordinatorSession {
     jsonld_link_index: usize,
     selector_session: Option<crate::adapters::selector_session::SelectorSession>,
     script_session: Option<crate::script_runner::ScriptSession>,
+    workday_session: Option<crate::adapters::workday::WorkdaySession>,
     coverage_incomplete: bool,
     yield_after_candidate: bool,
 }
@@ -112,6 +114,7 @@ impl CoordinatorSession {
             jsonld_link_index: 0,
             selector_session: None,
             script_session: None,
+            workday_session: None,
             coverage_incomplete: false,
             yield_after_candidate: false,
         };
@@ -230,6 +233,28 @@ impl CoordinatorSession {
                     session.exhausted = session.selector_session.as_ref().unwrap().is_exhausted();
                 }
             }
+            SourceKind::Workday => {
+                let ws = crate::adapters::workday::WorkdaySession::new(
+                    client,
+                    &session.source,
+                    extraction_limits,
+                    &enrichment_limits,
+                    workflow_deadline,
+                )
+                .await?;
+                if let Some(total) = ws.total() {
+                    session.stats.provider_total = Some(total);
+                    session.pending_events.push_back((
+                        WorkerEvent::SourceInfo {
+                            source_id: session.source.id.clone(),
+                            provider_total: Some(total),
+                        },
+                        None,
+                    ));
+                }
+                session.exhausted = ws.is_exhausted();
+                session.workday_session = Some(ws);
+            }
         }
 
         Ok(session)
@@ -243,6 +268,10 @@ impl CoordinatorSession {
                 .is_some_and(|s| s.has_pending())
             || self
                 .script_session
+                .as_ref()
+                .is_some_and(|s| s.has_pending())
+            || self
+                .workday_session
                 .as_ref()
                 .is_some_and(|s| s.has_pending())
     }
@@ -304,6 +333,20 @@ impl CoordinatorSession {
                 }
                 crate::script_runner::ScriptStep::Yield => Ok(None),
                 crate::script_runner::ScriptStep::Exhausted => {
+                    self.exhausted = true;
+                    Ok(None)
+                }
+            };
+        }
+        if let Some(workday) = &mut self.workday_session {
+            let step = workday.next(client, &self.filters, started).await?;
+            return match step {
+                crate::adapters::workday::WorkdayStep::Event(event) => {
+                    self.exhausted = workday.is_exhausted();
+                    Ok(Some(*event))
+                }
+                crate::adapters::workday::WorkdayStep::Yield => Ok(None),
+                crate::adapters::workday::WorkdayStep::Exhausted => {
                     self.exhausted = true;
                     Ok(None)
                 }
@@ -832,6 +875,7 @@ impl SourceCoordinator {
                         }
                         let next = if session.selector_session.is_some()
                             || session.script_session.is_some()
+                            || session.workday_session.is_some()
                             || session.has_pending()
                         {
                             session.next_candidate(&self.client, self.started).await
@@ -895,6 +939,9 @@ impl SourceCoordinator {
                                         ..
                                     } => {
                                         session.stats.examined += 1;
+                                        if !company.is_empty() && company != "Unknown company" {
+                                            session.record_logo(company, company_logo);
+                                        }
 
                                         let identity = match PostingIdentity::for_posting(
                                             Some(session.source.kind),
@@ -1037,6 +1084,52 @@ impl SourceCoordinator {
         let mut final_stats = WorkerStats::default();
         let logo_deadline =
             workflow_deadline.min(Instant::now() + std::time::Duration::from_secs(4));
+        // Round-robin sources before deduplicating assets: a large board must not
+        // monopolize the bounded download slots ahead of another employer.
+        let mut per_source = sessions
+            .iter()
+            .map(|session| session.logos.values())
+            .collect::<Vec<_>>();
+        let mut asset_urls = Vec::new();
+        let mut seen_urls = HashSet::new();
+        loop {
+            let mut remaining = false;
+            for logos in &mut per_source {
+                if let Some((_, evidence)) = logos.next() {
+                    remaining = true;
+                    if let Some(evidence) = evidence {
+                        if seen_urls.insert(evidence.url.clone()) {
+                            asset_urls.push(evidence.url.clone());
+                        }
+                    }
+                }
+            }
+            if !remaining {
+                break;
+            }
+        }
+        let client = &self.client;
+        let assets: HashMap<_, _> = stream::iter(asset_urls.into_iter().map(|url| async move {
+            let result = if Instant::now() >= logo_deadline {
+                Err((
+                    LogoStatus::DownloadFailed,
+                    "Source branding deadline reached; no new download scheduled".into(),
+                ))
+            } else {
+                match tokio::time::timeout_at(logo_deadline, client.fetch_logo(&url)).await {
+                    Ok(Ok(bytes)) => scrape_core::branding::cache_asset(&bytes)
+                        .map_err(|error| (LogoStatus::DecodeFailed, error)),
+                    result => Err((
+                        LogoStatus::DownloadFailed,
+                        format!("Logo download unavailable or deadline reached: {result:?}"),
+                    )),
+                }
+            };
+            (url, result)
+        }))
+        .buffer_unordered(4)
+        .collect()
+        .await;
 
         for mut session in sessions {
             session.stats.limit_reached = session.stats.accepted == u64::from(session.stats.limit);
@@ -1071,34 +1164,14 @@ impl SourceCoordinator {
                 };
 
                 if let Some(evidence) = &logo.evidence {
-                    if Instant::now() >= logo_deadline {
-                        logo.status = LogoStatus::DownloadFailed;
-                        logo.diagnostic = Some(
-                            "Source branding deadline reached; no new download scheduled".into(),
-                        );
-                    } else {
-                        match tokio::time::timeout_at(
-                            logo_deadline,
-                            self.client.fetch_logo(&evidence.url),
-                        )
-                        .await
-                        {
-                            Ok(Ok(bytes)) => match scrape_core::branding::cache_asset(&bytes) {
-                                Ok(asset) => {
-                                    logo.asset = Some(asset);
-                                    logo.status = LogoStatus::Verified;
-                                }
-                                Err(error) => {
-                                    logo.status = LogoStatus::DecodeFailed;
-                                    logo.diagnostic = Some(error);
-                                }
-                            },
-                            result => {
-                                logo.status = LogoStatus::DownloadFailed;
-                                logo.diagnostic = Some(format!(
-                                    "Logo download unavailable or deadline reached: {result:?}"
-                                ));
-                            }
+                    match &assets[&evidence.url] {
+                        Ok(asset) => {
+                            logo.asset = Some(asset.clone());
+                            logo.status = LogoStatus::Verified;
+                        }
+                        Err((status, diagnostic)) => {
+                            logo.status = *status;
+                            logo.diagnostic = Some(diagnostic.clone());
                         }
                     }
                 }

@@ -82,8 +82,10 @@ pub(crate) struct ScriptSession {
     source_deadline: Instant,
     turn_timeout: Duration,
     continuation_cursor: Option<String>,
+    seen_cursors: std::collections::HashSet<String>,
     exhausted: bool,
     turns_run: u32,
+    max_turns: u32,
     pending: VecDeque<(WorkerEvent, Option<MatchingEvidence>)>,
 }
 
@@ -131,8 +133,10 @@ impl ScriptSession {
             source_deadline,
             turn_timeout,
             continuation_cursor: None,
+            seen_cursors: std::collections::HashSet::new(),
             exhausted: false,
             turns_run: 0,
+            max_turns: source_limits.max_pages_per_source,
             pending: VecDeque::new(),
         })
     }
@@ -173,6 +177,20 @@ impl ScriptSession {
                             .into(),
                     eligibility_incomplete: true,
                     termination: Some(CoverageTermination::TimeLimit),
+                },
+                None,
+            ))));
+        }
+
+        if self.turns_run >= self.max_turns {
+            self.exhausted = true;
+            return Ok(ScriptStep::Event(Box::new((
+                WorkerEvent::Warning {
+                    source_id: self.source.id.clone(),
+                    message: "Script page limit reached; remaining candidates were not examined"
+                        .into(),
+                    eligibility_incomplete: true,
+                    termination: Some(CoverageTermination::PageLimit),
                 },
                 None,
             ))));
@@ -412,8 +430,35 @@ impl ScriptSession {
             }
         }
 
+        if let Some(cursor) = &saw_continuation {
+            if !self.seen_cursors.insert(cursor.clone()) {
+                self.exhausted = true;
+                self.continuation_cursor = None;
+                self.turns_run += 1;
+                return Ok(ScriptStep::Event(Box::new((
+                    WorkerEvent::Warning {
+                        source_id: self.source.id.clone(),
+                        message: "Script pagination loop detected; continuation cursor has already been visited".into(),
+                        eligibility_incomplete: true,
+                        termination: Some(CoverageTermination::Failed),
+                    },
+                    None,
+                ))));
+            }
+        }
         self.continuation_cursor = saw_continuation;
         if self.continuation_cursor.is_none() {
+            if !self.exhausted {
+                self.pending.push_back((
+                    WorkerEvent::Warning {
+                        source_id: self.source.id.clone(),
+                        message: "Script reported incomplete coverage without a continuation cursor; remaining provider pages were not scanned".into(),
+                        eligibility_incomplete: true,
+                        termination: Some(CoverageTermination::PageLimit),
+                    },
+                    None,
+                ));
+            }
             self.exhausted = true;
         }
         self.turns_run += 1;

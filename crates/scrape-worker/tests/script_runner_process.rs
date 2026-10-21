@@ -1,5 +1,6 @@
 use scrape_core::WorkerEvent;
 use serde_json::json;
+use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -453,4 +454,250 @@ emit({type:'complete',exhausted:true});
             "{events:?}"
         );
     }
+}
+
+#[test]
+fn script_loop_detection_fails_with_coverage_failed() {
+    let loop_script = r#"
+const fs = require('fs');
+const input = JSON.parse(fs.readFileSync(0, 'utf-8'));
+console.log(JSON.stringify({
+    type: 'candidate',
+    version: 2,
+    external_id: 'job-1',
+    title: 'Software Engineer',
+    url: 'https://fixture.test/jobs/1'
+}));
+console.log(JSON.stringify({
+    type: 'continuation',
+    version: 2,
+    cursor: 'same-cursor-loop'
+}));
+console.log(JSON.stringify({
+    type: 'complete',
+    version: 2,
+    exhausted: false
+}));
+"#;
+    let config = json!({
+        "version": scrape_core::PROTOCOL_VERSION,
+        "sources": [{
+            "id": "script-loop",
+            "name": "Loop Test",
+            "kind": "selector",
+            "identifier": "https://fixture.test/jobs",
+            "config": {
+                "mode": "script",
+                "script": {
+                    "runtime": "js",
+                    "code": loop_script
+                }
+            }
+        }]
+    });
+    let (_, events) = run_worker_with_config(config);
+    let loop_warning = events.iter().find(|e| match e {
+        WorkerEvent::Warning {
+            message,
+            termination,
+            ..
+        } => {
+            message.contains("loop detected")
+                && *termination == Some(scrape_core::protocol::CoverageTermination::Failed)
+        }
+        _ => false,
+    });
+    assert!(
+        loop_warning.is_some(),
+        "Expected loop detection warning with Failed termination in: {events:?}"
+    );
+}
+
+#[test]
+fn script_page_turn_limit_terminates_with_page_limit() {
+    let multi_script = r#"
+const fs = require('fs');
+const input = JSON.parse(fs.readFileSync(0, 'utf-8'));
+const turn = input.continuation ? parseInt(input.continuation) + 1 : 1;
+console.log(JSON.stringify({
+    type: 'candidate',
+    version: 2,
+    external_id: 'job-' + turn,
+    title: 'Engineer ' + turn,
+    url: 'https://fixture.test/jobs/' + turn
+}));
+console.log(JSON.stringify({
+    type: 'continuation',
+    version: 2,
+    cursor: String(turn)
+}));
+console.log(JSON.stringify({
+    type: 'complete',
+    version: 2,
+    exhausted: false
+}));
+"#;
+    let config = json!({
+        "version": scrape_core::PROTOCOL_VERSION,
+        "sources": [{
+            "id": "script-page-limit",
+            "name": "Page Limit Test",
+            "kind": "selector",
+            "identifier": "https://fixture.test/jobs",
+            "config": {
+                "mode": "script",
+                "max_pages": 2,
+                "script": {
+                    "runtime": "js",
+                    "code": multi_script
+                }
+            }
+        }]
+    });
+    let (_, events) = run_worker_with_config(config);
+    let limit_warning = events.iter().find(|e| match e {
+        WorkerEvent::Warning {
+            message,
+            termination,
+            ..
+        } => {
+            message.contains("page limit reached")
+                && *termination == Some(scrape_core::protocol::CoverageTermination::PageLimit)
+        }
+        _ => false,
+    });
+    assert!(
+        limit_warning.is_some(),
+        "Expected page limit warning with PageLimit termination in: {events:?}"
+    );
+}
+
+#[test]
+fn script_extractors_pagination_and_provenance_regressions() {
+    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
+
+    // 1. Netflix extractor: verifies multi-turn pagination from fixture,
+    // no fabricated "Untitled Role", and t_create is NOT emitted as date_posted.
+    let netflix_code = fs::read_to_string(
+        repo_root.join("crates/scrape-worker/examples/extractors/netflix_extractor.js"),
+    )
+    .unwrap();
+    let netflix_fixture = repo_root
+        .join("fixtures/providers/script/netflix.json")
+        .to_string_lossy()
+        .to_string();
+
+    let netflix_config = json!({
+        "version": scrape_core::PROTOCOL_VERSION,
+        "sources": [{
+            "id": "netflix-src",
+            "name": "Netflix",
+            "kind": "selector",
+            "identifier": "https://explore.jobs.netflix.net/api/apply/v2/jobs",
+            "config": {
+                "mode": "script",
+                "fixture_path": netflix_fixture,
+                "script": {
+                    "runtime": "js",
+                    "code": netflix_code
+                }
+            }
+        }]
+    });
+
+    let (_, netflix_events) = run_worker_with_config(netflix_config);
+    let netflix_jobs: Vec<_> = netflix_events
+        .iter()
+        .filter_map(|e| match e {
+            WorkerEvent::Job {
+                external_id,
+                title,
+                date_posted,
+                ..
+            } => Some((external_id.clone(), title.clone(), date_posted.clone())),
+            _ => None,
+        })
+        .collect();
+
+    // All 10 recorded positions should be extracted across turns
+    assert_eq!(netflix_jobs.len(), 10, "Expected all 10 Netflix jobs");
+    for (id, title, date_posted) in &netflix_jobs {
+        assert!(!id.is_empty(), "Expected non-empty external ID");
+        assert_ne!(
+            title, "Untitled Role",
+            "Must not use fabricated 'Untitled Role'"
+        );
+        assert!(
+            date_posted.is_none(),
+            "t_create is an internal ATS timestamp and must NOT be emitted as date_posted"
+        );
+    }
+
+    // 2. Amazon extractor: verifies multi-turn pagination, explicit posted_date preservation,
+    // and salary extraction from preferred qualifications.
+    let amazon_code = fs::read_to_string(
+        repo_root.join("crates/scrape-worker/examples/extractors/amazon_extractor.js"),
+    )
+    .unwrap();
+    let amazon_fixture = repo_root
+        .join("fixtures/providers/script/amazon.json")
+        .to_string_lossy()
+        .to_string();
+
+    let amazon_config = json!({
+        "version": scrape_core::PROTOCOL_VERSION,
+        "sources": [{
+            "id": "amazon-src",
+            "name": "Amazon",
+            "kind": "selector",
+            "identifier": "https://www.amazon.jobs/en/search.json",
+            "config": {
+                "mode": "script",
+                "fixture_path": amazon_fixture,
+                "script": {
+                    "runtime": "js",
+                    "code": amazon_code
+                }
+            }
+        }]
+    });
+
+    let (_, amazon_events) = run_worker_with_config(amazon_config);
+    let amazon_jobs: Vec<_> = amazon_events
+        .iter()
+        .filter_map(|e| match e {
+            WorkerEvent::Job {
+                external_id,
+                title,
+                date_posted,
+                salary,
+                ..
+            } => Some((
+                external_id.clone(),
+                title.clone(),
+                date_posted.clone(),
+                salary.clone(),
+            )),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(amazon_jobs.len(), 10, "Expected all 10 Amazon jobs");
+    for (id, title, date_posted, _) in &amazon_jobs {
+        assert!(!id.is_empty(), "Expected non-empty external ID");
+        assert_ne!(
+            title, "Untitled Role",
+            "Must not use fabricated 'Untitled Role'"
+        );
+        assert!(
+            date_posted.is_some(),
+            "Amazon posted_date should be preserved as publication evidence"
+        );
+    }
+    // Verify at least one Amazon job extracted salary
+    assert!(
+        amazon_jobs.iter().any(|(_, _, _, salary)| salary.is_some()),
+        "Expected at least one Amazon job to have extracted salary"
+    );
 }

@@ -112,29 +112,66 @@ pub fn extract_jobs_with_selectors_with(
         &scrape_core::WorkerLimits::default(),
     )
     .map_err(ClientError::Configuration)?;
-    extract_candidates(&document, base_url, source, &config, &mut |candidate| {
-        sink(candidate.event(source))
-    })
+    let doc_base = resolve_document_base(&document, base_url);
+    extract_candidates(
+        &document,
+        &doc_base,
+        base_url.as_str(),
+        source,
+        &config,
+        &mut |candidate| sink(candidate.event(source)),
+    )
 }
 
-pub(crate) struct SelectorPage {
+pub struct SelectorPage {
     pub candidates: std::collections::VecDeque<SelectorCandidate>,
     pub next_page: Option<Url>,
     pub next_page_error: Option<String>,
 }
-pub(crate) enum SelectorCandidate {
+
+#[derive(Debug, Clone)]
+pub enum SelectorCandidate {
     Posting(Box<SelectorPosting>),
     Invalid(Box<WorkerEvent>),
 }
+
 impl SelectorCandidate {
-    fn event(self, source: &WorkerSource) -> WorkerEvent {
+    pub fn event(self, source: &WorkerSource) -> WorkerEvent {
         match self {
             Self::Posting(posting) => posting.event(source),
             Self::Invalid(error) => *error,
         }
     }
 }
-pub(crate) fn extract_page(
+
+pub fn resolve_document_base(document: &Html, response_url: &Url) -> Url {
+    let selector = match scraper::Selector::parse("base[href]") {
+        Ok(s) => s,
+        Err(_) => return response_url.clone(),
+    };
+    if let Some(element) = document.select(&selector).next() {
+        if let Some(href) = element.value().attr("href") {
+            let trimmed = href.trim();
+            if !trimmed.is_empty() {
+                if let Ok(mut resolved) = response_url.join(trimmed) {
+                    if matches!(resolved.scheme(), "http" | "https")
+                        && resolved.host_str().is_some()
+                        && resolved.username().is_empty()
+                        && resolved.password().is_none()
+                        && resolved.host_str() == response_url.host_str()
+                        && resolved.port() == response_url.port()
+                    {
+                        resolved.set_fragment(None);
+                        return resolved;
+                    }
+                }
+            }
+        }
+    }
+    response_url.clone()
+}
+
+pub fn extract_page(
     html: &str,
     base: &Url,
     source: &WorkerSource,
@@ -148,16 +185,24 @@ pub(crate) fn extract_page(
     {
         return Err(ClientError::Extraction("Static readiness locator did not match; inspect the selector or choose browser extraction".into()));
     }
+    let doc_base = resolve_document_base(&document, base);
     let mut candidates = std::collections::VecDeque::new();
-    extract_candidates(&document, base, source, config, &mut |candidate| {
-        candidates.push_back(candidate);
-        true
-    })?;
+    extract_candidates(
+        &document,
+        &doc_base,
+        base.as_str(),
+        source,
+        config,
+        &mut |candidate| {
+            candidates.push_back(candidate);
+            true
+        },
+    )?;
     let navigation = config
         .next_page
         .as_ref()
         .and_then(|field| field.extract(&document, None, "href"))
-        .map(|raw| page_url(base, &raw))
+        .map(|raw| page_url(&doc_base, &raw))
         .transpose();
     let (next_page, next_page_error) = match navigation {
         Ok(url) => (url, None),
@@ -169,7 +214,8 @@ pub(crate) fn extract_page(
         next_page_error,
     })
 }
-pub(crate) fn page_url(base: &Url, raw: &str) -> Result<Url, ClientError> {
+
+pub fn page_url(base: &Url, raw: &str) -> Result<Url, ClientError> {
     let mut url = base.join(raw)?;
     if !scrape_core::branding::http_url(url.as_str()) {
         return Err(ClientError::Extraction(
@@ -179,9 +225,11 @@ pub(crate) fn page_url(base: &Url, raw: &str) -> Result<Url, ClientError> {
     url.set_fragment(None);
     Ok(url)
 }
+
 fn extract_candidates(
     document: &Html,
     base_url: &Url,
+    evidence_page_url: &str,
     source: &WorkerSource,
     config: &scrape_core::static_source::StaticSourceConfig,
     sink: &mut dyn FnMut(SelectorCandidate) -> bool,
@@ -197,8 +245,9 @@ fn extract_candidates(
             ClientError::Extraction(format!("Hydration script is not JSON: {e}"))
         })?;
         let jobs = payload.pointer(&hydration.pointer).and_then(serde_json::Value::as_array).ok_or_else(|| ClientError::Extraction("hydration_pointer did not select a candidate array; flattened/reference-encoded state must be decoded by a custom script".into()))?;
-        let logo = super::branding::resolve_document(
+        let logo = super::branding::resolve_document_with_base(
             document,
+            evidence_page_url,
             base_url.as_str(),
             &super::branding::employer_name(source),
             source.config.get("employer_logo").and_then(|v| v.as_str()),
@@ -218,11 +267,21 @@ fn extract_candidates(
                         continue;
                     }
                     match url {
-                        Some(url) if !hydration.fields.contains_key("id") || get("id").is_some() => SelectorCandidate::Posting(Box::new(SelectorPosting {
-                            detail_url: config.has_details().then(|| url.to_string()), title, external_id: get("id").unwrap_or_else(|| url.to_string()), url: url.into(), location: get("location").unwrap_or_default(),
-                            salary_text: get("salary"), description_source: get("description"), description_format: Some(if hydration.description_is_text { DescriptionFormat::PlainText } else { DescriptionFormat::Html }),
-                            date_posted: get("date").filter(|raw| scrape_core::posting_date::posting_instant(raw,"UTC").is_some()), company_logo: logo.clone(),
-                        })),
+                        Some(mut url) if !hydration.fields.contains_key("id") || get("id").is_some() => {
+                            url.set_fragment(None);
+                            SelectorCandidate::Posting(Box::new(SelectorPosting {
+                                detail_url: config.has_details().then(|| url.to_string()),
+                                title,
+                                external_id: get("id").unwrap_or_else(|| url.to_string()),
+                                url: url.into(),
+                                location: get("location").unwrap_or_default(),
+                                salary_text: get("salary"),
+                                description_source: get("description"),
+                                description_format: Some(if hydration.description_is_text { DescriptionFormat::PlainText } else { DescriptionFormat::Html }),
+                                date_posted: get("date").filter(|raw| scrape_core::posting_date::posting_instant(raw,"UTC").is_some()),
+                                company_logo: logo.clone(),
+                            }))
+                        }
                         _ => invalid_candidate(source, "Hydration candidate has an invalid HTTP(S) destination or missing configured ID"),
                     }
                 }
@@ -261,8 +320,9 @@ fn extract_candidates(
     let date_sel = field("date", None)?;
     let id_sel = field("id", None)?;
 
-    let company_logo = super::branding::resolve_document(
+    let company_logo = super::branding::resolve_document_with_base(
         document,
+        evidence_page_url,
         base_url.as_str(),
         &super::branding::employer_name(source),
         source.config.get("employer_logo").and_then(|v| v.as_str()),
@@ -304,7 +364,10 @@ fn extract_candidates(
             continue;
         };
         let job_url = match base_url.join(&clean_href) {
-            Ok(u) if matches!(u.scheme(), "http" | "https") => u.to_string(),
+            Ok(mut u) if matches!(u.scheme(), "http" | "https") => {
+                u.set_fragment(None);
+                u.to_string()
+            }
             _ => {
                 if !sink(SelectorCandidate::Invalid(Box::new(WorkerEvent::Error {
                     invalid_posting: Some(true),
@@ -429,7 +492,7 @@ impl UrlPatterns {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct SelectorPosting {
+pub struct SelectorPosting {
     pub title: String,
     pub url: String,
     pub external_id: String,

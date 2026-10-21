@@ -5,6 +5,7 @@ pub mod jsonld;
 pub mod lever;
 pub mod selector;
 pub(crate) mod selector_session;
+pub mod workday;
 
 use crate::client::{ClientError, HttpClient};
 use scrape_core::{SourceKind, WorkerEvent, WorkerSource};
@@ -96,6 +97,9 @@ pub async fn scrape_source_with_evidence(
         SourceKind::Selector => {
             selector::scrape_selector_with(client, source, &mut |event| validated(event, None))
                 .await
+        }
+        SourceKind::Workday => {
+            workday::scrape_workday_with(client, source, &mut |event| validated(event, None)).await
         }
     }
 }

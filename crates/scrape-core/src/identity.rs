@@ -41,7 +41,12 @@ impl PostingIdentity {
         let normalized = normalized_detail_url(destination)?;
         let key = match (kind, board, external_id.filter(|id| !id.trim().is_empty())) {
             (
-                Some(kind @ (SourceKind::Greenhouse | SourceKind::Lever | SourceKind::Ashby)),
+                Some(
+                    kind @ (SourceKind::Greenhouse
+                    | SourceKind::Lever
+                    | SourceKind::Ashby
+                    | SourceKind::Workday),
+                ),
                 Some(board),
                 Some(id),
             ) => serde_json::to_string(&(kind, board.trim().to_ascii_lowercase(), id.trim()))
@@ -78,6 +83,22 @@ mod tests {
         assert_eq!(
             identity("https://boards.greenhouse.io/acme/jobs/42"),
             identity("https://careers.acme.test/?gh_jid=42")
+        );
+        assert_eq!(
+            PostingIdentity::for_posting(
+                Some(SourceKind::Workday),
+                Some("nvidia/NVIDIAExternalCareerSite"),
+                Some("JR2020731"),
+                "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite/job/123",
+            )
+            .unwrap()
+            .key,
+            serde_json::to_string(&(
+                SourceKind::Workday,
+                "nvidia/nvidiaexternalcareersite",
+                "JR2020731"
+            ))
+            .unwrap()
         );
     }
     #[test]

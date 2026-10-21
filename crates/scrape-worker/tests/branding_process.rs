@@ -167,7 +167,7 @@ fn all_extraction_paths_validate_one_shared_asset_and_ignore_workflow_display_na
             .asset
             .as_ref()
             .unwrap()
-            .starts_with("data:image/png;base64,"));
+            .starts_with("data:image/webp;base64,"));
         assert_eq!(
             paths.iter().filter(|p| p.ends_with("/logo.png")).count(),
             1,
@@ -268,4 +268,197 @@ fn empty_provider_employer_names_use_the_explicit_hint_without_trusting_nameless
         assert!(events.iter().any(|event|matches!(event,WorkerEvent::Branding{logo,..} if logo.status==LogoStatus::MissingMetadata)));
         assert!(!paths.iter().any(|path| path.ends_with("/logo.png")));
     }
+}
+
+#[test]
+fn large_branding_page_under_2mib_succeeds_without_warning() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    listener.set_nonblocking(true).unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let stopping = stop.clone();
+    let server = thread::spawn(move || {
+        while !stopping.load(Ordering::SeqCst) {
+            if let Ok((mut socket, _)) = listener.accept() {
+                socket.set_nonblocking(false).unwrap();
+                socket
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                let mut buffer = [0; 4096];
+                let n = socket.read(&mut buffer).unwrap();
+                let request = String::from_utf8_lossy(&buffer[..n]);
+                let path = request.split_whitespace().nth(1).unwrap();
+                let body = if path.ends_with("robots.txt") {
+                    b"User-agent: *\nAllow: /".to_vec()
+                } else {
+                    format!(
+                        "<html><head><title>Acme Corp</title></head><body><!-- {} --></body></html>",
+                        "padding".repeat(100 * 1024)
+                    )
+                    .into_bytes()
+                };
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = socket.write_all(response.as_bytes());
+                let _ = socket.write_all(&body);
+            } else {
+                thread::sleep(Duration::from_millis(10));
+            }
+        }
+    });
+
+    let client = scrape_worker::client::HttpClient::new(1, 0)
+        .with_replay_origin(&origin)
+        .unwrap();
+    let res = tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(client.fetch_branding_page(&format!("{}/careers", origin)));
+    stop.store(true, Ordering::SeqCst);
+    let _ = server.join();
+    assert!(
+        res.is_ok(),
+        "Page under 2 MiB should succeed: {:?}",
+        res.err()
+    );
+    let (html, _) = res.unwrap();
+    assert!(html.len() > 600 * 1024);
+}
+
+#[test]
+fn slow_employer_artwork_does_not_starve_other_sources_or_duplicate_asset_requests() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    listener.set_nonblocking(true).unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let stopping = stop.clone();
+    let paths = Arc::new(Mutex::new(Vec::<String>::new()));
+    let requests = paths.clone();
+    let server = thread::spawn(move || {
+        let mut handlers = Vec::new();
+        while !stopping.load(Ordering::SeqCst) {
+            if let Ok((mut socket, _)) = listener.accept() {
+                let requests = requests.clone();
+                handlers.push(thread::spawn(move || {
+                    socket.set_nonblocking(false).unwrap();
+                    socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+                    let mut buffer = [0; 4096];
+                    let count = socket.read(&mut buffer).unwrap();
+                    let request = String::from_utf8_lossy(&buffer[..count]);
+                    let path = request.split_whitespace().nth(1).unwrap();
+                    requests.lock().unwrap().push(path.to_string());
+                    let body = if path.ends_with("/robots.txt") {
+                        b"User-agent: *\nAllow: /".to_vec()
+                    } else if path == "/slow.test/logo.svg" {
+                        thread::sleep(Duration::from_secs(5));
+                        b"<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12'><path fill='red' d='M0 0h12v12H0z'/></svg>".to_vec()
+                    } else if path == "/fast.test/logo.svg" {
+                        b"<svg xmlns='http://www.w3.org/2000/svg' width='24' height='12'><path fill='blue' d='M0 0h24v12H0z'/></svg>".to_vec()
+                    } else {
+                        let slow = path.ends_with("/slow");
+                        let company = if slow { "Slow Employer" } else { "Fast Employer" };
+                        let asset = if slow { "https://slow.test/logo.svg" } else { "https://fast.test/logo.svg" };
+                        format!("<script type='application/ld+json'>{}</script>", json!({
+                            "@type":"JobPosting", "identifier":path, "title":"Engineer",
+                            "url":format!("https://board.test/apply{path}"),
+                            "hiringOrganization":{"name":company,"logo":asset}
+                        })).into_bytes()
+                    };
+                    let _ = write!(socket, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
+                    let _ = socket.write_all(&body);
+                }));
+            } else {
+                thread::sleep(Duration::from_millis(3));
+            }
+        }
+        for handler in handlers {
+            handler.join().unwrap();
+        }
+    });
+    let sources: Vec<_> = ["slow", "fast", "fast-copy"]
+        .into_iter()
+        .map(|id| {
+            json!({
+                "id":id, "kind":"jsonld", "name":id,
+                "identifier":format!("https://board.test/{id}"),
+                "config":{}
+            })
+        })
+        .collect();
+    let config = json!({"version":PROTOCOL_VERSION,"sources":sources,"limits":{"per_host_delay_ms":0,"request_timeout_s":2}});
+    let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+        .args(["--stdin", "--replay-origin", &origin])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(&serde_json::to_vec(&config).unwrap())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    stop.store(true, Ordering::SeqCst);
+    server.join().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let events: Vec<WorkerEvent> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let reports: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            WorkerEvent::Branding {
+                source_id,
+                company,
+                logo,
+            } => Some((source_id.as_str(), company.as_str(), logo)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(reports.len(), 3);
+    assert_eq!(
+        reports
+            .iter()
+            .find(|(id, _, _)| *id == "slow")
+            .unwrap()
+            .2
+            .status,
+        LogoStatus::DownloadFailed
+    );
+    for (id, company, logo) in &reports {
+        if *id != "slow" {
+            assert_eq!(*company, "Fast Employer");
+            assert_eq!(logo.status, LogoStatus::Verified);
+            assert_eq!(
+                logo.evidence.as_ref().unwrap().url,
+                "https://fast.test/logo.svg"
+            );
+            logo.validate().unwrap();
+        }
+    }
+    assert_eq!(
+        paths
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|path| path.as_str() == "/fast.test/logo.svg")
+            .count(),
+        1
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event, WorkerEvent::Job { .. }))
+            .count(),
+        3
+    );
 }

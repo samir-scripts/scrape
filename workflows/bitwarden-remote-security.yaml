@@ -1,6 +1,6 @@
-# Generated from Rust template catalog v1. Do not edit.
+# Generated from Rust template catalog v2. Do not edit.
 # Title keywords only. Employment, workplace and geography are unrestricted, including unknown evidence. Preview before saving; live availability varies.
-version: 6
+version: 7
 max_jobs_per_run: 20
 metadata:
   name: Bitwarden — Engineering (title keywords)
@@ -44,6 +44,7 @@ filters:
     experience_min: null
     experience_max: null
     experience_include_unknown: false
+    experience_match_mode: advertised_range_overlap
     new_grad: null
     sponsorship: []
     work_auth: []

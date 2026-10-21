@@ -1,0 +1,12 @@
+{
+  "fixture_kind": "authored_regression_not_raw_provider_capture",
+  "positions": [
+    {
+      "id": "section7-netflix",
+      "name": "Software Engineer",
+      "canonicalPositionUrl": "https://explore.jobs.netflix.net/careers/job/section7-netflix",
+      "locations": ["Cupertino, CA, United States"],
+      "work_location_option": "remote"
+    }
+  ]
+}

@@ -5,5 +5,5 @@
   "sha256": "9c485970db243694eca6551489882bd582ade9361ec6ca1ef69462faf84d57bc",
   "decoded_format": "JPEG (the original URL ends in .png)",
   "canonical_png_sha256": "cdd06f9b4a3aa18e1e531935476b75452e29ee963aa80a7607ee9e1199f7f6e5",
-  "canonical_generator": "cargo run -p scrape-core --example cache-logo-fixture -- INPUT OUTPUT"
+  "canonical_generator": "Historical PNG capture; current cargo run -p scrape-core --example cache-logo-fixture -- INPUT OUTPUT.webp emits bounded lossless WebP"
 }

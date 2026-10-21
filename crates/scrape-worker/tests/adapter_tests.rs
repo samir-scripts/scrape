@@ -75,6 +75,55 @@ fn test_ashby_fixture() {
 }
 
 #[test]
+fn test_workday_fixture() {
+    let path = fixtures_dir().join("workday_jobs.json");
+    let json_str = fs::read_to_string(path).expect("Failed to read workday fixture");
+
+    let resp: scrape_worker::adapters::workday::WorkdayListResponse =
+        serde_json::from_str(&json_str).unwrap();
+    assert_eq!(resp.total, Some(3));
+    assert_eq!(resp.job_postings.len(), 3);
+
+    let p0 = &resp.job_postings[0];
+    let p1 = &resp.job_postings[1];
+    let p2 = &resp.job_postings[2];
+
+    assert_eq!(
+        p0.title.as_deref(),
+        Some("Senior Distributed Systems Engineer")
+    );
+    assert_eq!(p0.bullet_fields.first().map(String::as_str), Some("JR1001"));
+    assert_eq!(
+        RoleType::infer(p0.title.as_deref().unwrap(), Some("Full time")),
+        RoleType::FullTime
+    );
+    assert_eq!(
+        RoleType::infer(p0.title.as_deref().unwrap(), None),
+        RoleType::Unknown
+    );
+    assert_eq!(
+        scrape_worker::adapters::workday::workplace_from_locations(&[p0
+            .locations_text
+            .as_deref()
+            .unwrap()]),
+        WorkplaceType::Onsite
+    );
+
+    assert_eq!(
+        scrape_worker::adapters::workday::workplace_from_locations(&[p1
+            .locations_text
+            .as_deref()
+            .unwrap()]),
+        WorkplaceType::Remote
+    );
+
+    assert_eq!(
+        RoleType::infer(p2.title.as_deref().unwrap(), None),
+        RoleType::Internship
+    );
+}
+
+#[test]
 fn test_jsonld_single_fixture() {
     let path = fixtures_dir().join("jsonld_single.html");
     let html = fs::read_to_string(path).expect("Failed to read jsonld_single fixture");
@@ -344,4 +393,220 @@ fn test_jsonld_enrichment() {
     } else {
         panic!("Expected WorkerEvent::Job");
     }
+}
+
+#[test]
+fn test_google_document_base_resolution_and_safeguards() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let google_path = manifest_dir
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("fixtures/providers/selector/google.html");
+    let html = fs::read_to_string(&google_path).expect("Failed to read google fixture");
+
+    let config = serde_json::json!({
+        "item": "li.lLd3Je",
+        "title": "h3.QJPWVe",
+        "link": "a[href*=\"jobs/results/\"]",
+        "location": "span.r0wTof",
+        "description": "div.Xsxa1e",
+        "next_page": "a[aria-label=\"Go to next page\"]"
+    });
+    let source = WorkerSource {
+        id: "google-test".to_string(),
+        kind: SourceKind::Selector,
+        name: "Google Careers".to_string(),
+        identifier: "https://www.google.com/about/careers/applications/jobs/results/".to_string(),
+        config,
+    };
+
+    let response_url =
+        Url::parse("https://www.google.com/about/careers/applications/jobs/results/").unwrap();
+    let events = extract_jobs_with_selectors(&html, &response_url, &source).unwrap();
+    assert!(!events.is_empty(), "Expected extracted Google events");
+
+    let first_job = events
+        .iter()
+        .find_map(|e| match e {
+            WorkerEvent::Job { title, url, .. } => Some((title, url)),
+            _ => None,
+        })
+        .expect("Expected at least one valid Job event");
+
+    assert_eq!(first_job.0, "Senior Software Engineer, Ask Google Pay");
+    // Crucial: Destination URL must NOT contain duplicate `jobs/results/jobs/results/`!
+    assert_eq!(
+        first_job.1,
+        "https://www.google.com/about/careers/applications/jobs/results/131138433534829254-senior-software-engineer-ask-google-pay"
+    );
+    assert!(!first_job.1.contains("jobs/results/jobs/results/"));
+    let desc = events
+        .iter()
+        .find_map(|e| match e {
+            WorkerEvent::Job { description_text, .. } => description_text.as_deref(),
+            _ => None,
+        })
+        .expect("Expected extracted Google description");
+    assert!(desc.contains("Minimum qualifications"));
+    assert!(desc.contains("Bachelor's degree"));
+}
+
+#[test]
+fn test_document_base_relative_multiple_and_unsafe_tags() {
+    let response_url = Url::parse("https://example.com/sub/dir/page.html").unwrap();
+    let source = WorkerSource {
+        id: "base-test".to_string(),
+        kind: SourceKind::Selector,
+        name: "Base Test".to_string(),
+        identifier: response_url.to_string(),
+        config: serde_json::json!({
+            "item": ".item",
+            "title": "h2",
+            "link": "a"
+        }),
+    };
+
+    // 1. Relative base tag
+    let rel_html = r#"
+        <html>
+        <head><base href="/app/v1/"></head>
+        <body><div class="item"><h2>Job 1</h2><a href="roles/1">Apply</a></div></body>
+        </html>
+    "#;
+    let events = extract_jobs_with_selectors(rel_html, &response_url, &source).unwrap();
+    if let WorkerEvent::Job { url, .. } = &events[0] {
+        assert_eq!(url, "https://example.com/app/v1/roles/1");
+    } else {
+        panic!("Expected Job event");
+    }
+
+    // 2. Multiple base tags (first wins)
+    let multi_html = r#"
+        <html>
+        <head>
+            <base href="https://example.com/first/">
+            <base href="https://example.com/second/">
+        </head>
+        <body><div class="item"><h2>Job 2</h2><a href="roles/2">Apply</a></div></body>
+        </html>
+    "#;
+    let events = extract_jobs_with_selectors(multi_html, &response_url, &source).unwrap();
+    if let WorkerEvent::Job { url, .. } = &events[0] {
+        assert_eq!(url, "https://example.com/first/roles/2");
+    } else {
+        panic!("Expected Job event");
+    }
+
+    // 3. Unsafe base tag: different foreign host must be ignored
+    let foreign_html = r#"
+        <html>
+        <head><base href="https://attacker.evil.com/jobs/"></head>
+        <body><div class="item"><h2>Job 3</h2><a href="roles/3">Apply</a></div></body>
+        </html>
+    "#;
+    let events = extract_jobs_with_selectors(foreign_html, &response_url, &source).unwrap();
+    if let WorkerEvent::Job { url, .. } = &events[0] {
+        assert_eq!(url, "https://example.com/sub/dir/roles/3");
+    } else {
+        panic!("Expected Job event");
+    }
+
+    // 4. Unsafe base tag: javascript: scheme must be ignored
+    let js_html = r#"
+        <html>
+        <head><base href="javascript:alert(1)"></head>
+        <body><div class="item"><h2>Job 4</h2><a href="roles/4">Apply</a></div></body>
+        </html>
+    "#;
+    let events = extract_jobs_with_selectors(js_html, &response_url, &source).unwrap();
+    if let WorkerEvent::Job { url, .. } = &events[0] {
+        assert_eq!(url, "https://example.com/sub/dir/roles/4");
+    } else {
+        panic!("Expected Job event");
+    }
+
+    // 5. Unsafe base tag: credentials must be ignored
+    let cred_html = r#"
+        <html>
+        <head><base href="https://user:pass@example.com/safe/"></head>
+        <body><div class="item"><h2>Job 5</h2><a href="roles/5">Apply</a></div></body>
+        </html>
+    "#;
+    let events = extract_jobs_with_selectors(cred_html, &response_url, &source).unwrap();
+    if let WorkerEvent::Job { url, .. } = &events[0] {
+        assert_eq!(url, "https://example.com/sub/dir/roles/5");
+    } else {
+        panic!("Expected Job event");
+    }
+}
+
+#[test]
+fn test_apple_selectors_and_pagination() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let apple_path = manifest_dir
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("fixtures/providers/selector/apple.html");
+    let html = fs::read_to_string(&apple_path).expect("Failed to read apple fixture");
+
+    let config = serde_json::json!({
+        "item": "ul#search-job-list > li.rc-accordion-item",
+        "title": "h3 a.link-inline",
+        "link": "a.link-inline",
+        "location": "div.job-title-location span:not(.a11y)",
+        "date": "span.job-posted-date",
+        "description": "p.text-align-start",
+        "next_page": "link[rel=\"next\"]"
+    });
+    let source = WorkerSource {
+        id: "apple-test".to_string(),
+        kind: SourceKind::Selector,
+        name: "Apple Jobs".to_string(),
+        identifier: "https://jobs.apple.com/en-us/search".to_string(),
+        config,
+    };
+
+    let response_url = Url::parse("https://jobs.apple.com/en-us/search").unwrap();
+    let static_config = scrape_core::static_source::StaticSourceConfig::parse(
+        &source.config,
+        &scrape_core::WorkerLimits::default(),
+    )
+    .unwrap();
+
+    let page = scrape_worker::adapters::selector::extract_page(
+        &html,
+        &response_url,
+        &source,
+        &static_config,
+    )
+    .unwrap();
+
+    assert_eq!(page.candidates.len(), 20, "Expected 20 Apple jobs");
+    for cand in &page.candidates {
+        let event = cand.clone().event(&source);
+        if let WorkerEvent::Job {
+            location, title, description_text, ..
+        } = event
+        {
+            assert!(
+                !location.trim().is_empty(),
+                "Posting '{title}' should have extracted location"
+            );
+            assert!(
+                !description_text.as_deref().unwrap_or_default().trim().is_empty(),
+                "Posting '{title}' should have extracted description"
+            );
+        } else {
+            panic!("Expected Job event");
+        }
+    }
+
+    assert_eq!(
+        page.next_page.as_ref().map(|u| u.as_str()),
+        Some("https://jobs.apple.com/en-us/searchlocation=united-states-USA&page=2")
+    );
 }

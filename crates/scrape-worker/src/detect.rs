@@ -71,6 +71,15 @@ pub async fn detect_source(client: &HttpClient, target_url: &str) -> DetectResul
                 }
             }
         }
+
+        if host.ends_with(".myworkdayjobs.com") {
+            let tenant = host.split('.').next().unwrap_or("Workday");
+            return DetectResult {
+                kind: SourceKind::Workday,
+                identifier: target_url.to_string(),
+                name: capitalize(tenant),
+            };
+        }
     }
 
     // 2. Fetch page HTML and detect embeds / links / JSON-LD
@@ -122,6 +131,18 @@ pub fn detect_from_html(html: &str, parsed: &Url) -> DetectResult {
         return DetectResult {
             kind: SourceKind::Ashby,
             identifier: name,
+            name: company_name,
+        };
+    }
+
+    // Look for Workday embed / links
+    if let Some(workday_url) = find_regex_match(
+        html,
+        r#"https://[a-zA-Z0-9_\-\.]+\.myworkdayjobs\.com/[a-zA-Z0-9_\-]+"#,
+    ) {
+        return DetectResult {
+            kind: SourceKind::Workday,
+            identifier: workday_url,
             name: company_name,
         };
     }
@@ -227,5 +248,16 @@ mod tests {
         let res = rt.block_on(detect_source(&client, "https://jobs.ashbyhq.com/openai"));
         assert_eq!(res.kind, SourceKind::Ashby);
         assert_eq!(res.identifier, "openai");
+
+        let res = rt.block_on(detect_source(
+            &client,
+            "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite",
+        ));
+        assert_eq!(res.kind, SourceKind::Workday);
+        assert_eq!(
+            res.identifier,
+            "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite"
+        );
+        assert_eq!(res.name, "Nvidia");
     }
 }

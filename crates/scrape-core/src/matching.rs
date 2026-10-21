@@ -368,6 +368,16 @@ impl KeywordRules {
     }
 }
 
+/// Numeric experience rules retain overlap semantics unless explicitly converted.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ExperienceMatchMode {
+    #[default]
+    AdvertisedRangeOverlap,
+    RequiredMinimum,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 #[ts(export)]
@@ -382,6 +392,7 @@ pub struct PostingRules {
     #[ts(type = "number | null")]
     pub experience_max: Option<i64>,
     pub experience_include_unknown: bool,
+    pub experience_match_mode: ExperienceMatchMode,
     /// "any", "only", or "exclude". Exclusion retains unknown classifications.
     pub new_grad: Option<String>,
     pub sponsorship: Vec<TriState>,
@@ -607,17 +618,30 @@ impl PostingRules {
         if self.experience_min.is_some() || self.experience_max.is_some() {
             let min = experience.as_ref().and_then(|e| e.min_years);
             let max = experience.as_ref().and_then(|e| e.max_years);
-            if min.is_none() && max.is_none() {
+            let unknown = match self.experience_match_mode {
+                ExperienceMatchMode::AdvertisedRangeOverlap => min.is_none() && max.is_none(),
+                ExperienceMatchMode::RequiredMinimum => min.is_none(),
+            };
+            if unknown {
                 if !self.experience_include_unknown {
                     reasons.push(RejectionReason::Experience);
                 }
-            } else if self
-                .experience_min
-                .is_some_and(|lo| max.is_some_and(|hi| hi < lo))
-                || self
-                    .experience_max
-                    .is_some_and(|hi| min.is_some_and(|lo| lo > hi))
-            {
+            } else if match self.experience_match_mode {
+                ExperienceMatchMode::AdvertisedRangeOverlap => {
+                    self.experience_min
+                        .is_some_and(|lo| max.is_some_and(|hi| hi < lo))
+                        || self
+                            .experience_max
+                            .is_some_and(|hi| min.is_some_and(|lo| lo > hi))
+                }
+                ExperienceMatchMode::RequiredMinimum => {
+                    self.experience_min
+                        .is_some_and(|lo| min.is_some_and(|value| value < lo))
+                        || self
+                            .experience_max
+                            .is_some_and(|hi| min.is_some_and(|value| value > hi))
+                }
+            } {
                 reasons.push(RejectionReason::Experience);
             }
         }
@@ -738,10 +762,12 @@ impl PostingRules {
                                 .is_some_and(|rule| rule.include_unknown)
                     }
                     RejectionReason::Experience => {
-                        experience
-                            .as_ref()
-                            .is_none_or(|e| e.min_years.is_none() && e.max_years.is_none())
-                            && self.experience_include_unknown
+                        experience.as_ref().is_none_or(|e| {
+                            e.min_years.is_none()
+                                && (self.experience_match_mode
+                                    == ExperienceMatchMode::RequiredMinimum
+                                    || e.max_years.is_none())
+                        }) && self.experience_include_unknown
                     }
                     RejectionReason::Sponsorship => {
                         sponsorship
@@ -781,7 +807,13 @@ impl PostingRules {
                 && (evidence.opportunity_exhausted || !failed.contains(&reason));
             assessment.check(
                 reason,
-                (evidence.knows(reason) || allowed_unknown || known_geography)
+                ((evidence.knows(reason)
+                    && !(reason == RejectionReason::Experience
+                        && self.experience_match_mode == ExperienceMatchMode::RequiredMinimum
+                        && experience.as_ref().is_none_or(|e| e.min_years.is_none())
+                        && !evidence.opportunity_exhausted))
+                    || allowed_unknown
+                    || known_geography)
                     .then(|| !failed.contains(&reason)),
             );
         }
@@ -902,14 +934,24 @@ impl PostingRules {
         if self.experience_min.is_some() || self.experience_max.is_some() {
             let mut overlap = Vec::new();
             if let Some(lo) = self.experience_min {
-                overlap.push("(experience_max IS NULL OR experience_max >= ?)");
+                overlap.push(match self.experience_match_mode {
+                    ExperienceMatchMode::AdvertisedRangeOverlap => {
+                        "(experience_max IS NULL OR experience_max >= ?)"
+                    }
+                    ExperienceMatchMode::RequiredMinimum => "experience_min >= ?",
+                });
                 bindings.push(Bind::Integer(lo));
             }
             if let Some(hi) = self.experience_max {
                 overlap.push("(experience_min IS NULL OR experience_min <= ?)");
                 bindings.push(Bind::Integer(hi));
             }
-            let known = "(experience_min IS NOT NULL OR experience_max IS NOT NULL)";
+            let known = match self.experience_match_mode {
+                ExperienceMatchMode::AdvertisedRangeOverlap => {
+                    "(experience_min IS NOT NULL OR experience_max IS NOT NULL)"
+                }
+                ExperienceMatchMode::RequiredMinimum => "(experience_min IS NOT NULL)",
+            };
             let overlap = overlap.join(" AND ");
             clauses.push(if self.experience_include_unknown {
                 format!("(NOT {known} OR ({overlap}))")
@@ -1141,6 +1183,86 @@ mod incomplete_evidence_tests {
     use super::*;
     fn event(title: &str, description: Option<&str>) -> WorkerEvent {
         serde_json::from_value(serde_json::json!({"type":"job","source_id":"fixture","external_id":"1","title":title,"company":"Fixture","location":"Remote","role_type":"full_time","url":"https://fixture.test/1","description_text":description})).unwrap()
+    }
+    #[test]
+    fn minimum_required_is_not_overlap_and_maximum_only_waits_for_details() {
+        let mut rules = PostingRules {
+            experience_min: Some(3),
+            experience_max: Some(5),
+            experience_match_mode: ExperienceMatchMode::RequiredMinimum,
+            ..Default::default()
+        };
+        let clock = chrono::Utc::now();
+        for (min, max, accepted) in [
+            (Some(1), Some(5), false),
+            (Some(3), None, true),
+            (Some(6), None, false),
+        ] {
+            let mut candidate = event("Engineer", None);
+            if let WorkerEvent::Job { experience, .. } = &mut candidate {
+                *experience = Some(crate::enrich::experience::ExperienceClassification {
+                    min_years: min,
+                    max_years: max,
+                    raw: None,
+                    evidence: None,
+                    is_new_grad: TriState::Unknown,
+                });
+            }
+            assert_eq!(rules.matches_event_at(&candidate, clock), accepted);
+            if min == Some(1) {
+                let mut overlap = rules.clone();
+                overlap.experience_match_mode = ExperienceMatchMode::AdvertisedRangeOverlap;
+                assert!(overlap.matches_event_at(&candidate, clock));
+            }
+        }
+        let mut candidate = event("Engineer", None);
+        if let WorkerEvent::Job { experience, .. } = &mut candidate {
+            *experience = Some(crate::enrich::experience::ExperienceClassification {
+                min_years: None,
+                max_years: Some(5),
+                raw: None,
+                evidence: None,
+                is_new_grad: TriState::Unknown,
+            });
+        }
+        for include_unknown in [false, true] {
+            rules.experience_include_unknown = include_unknown;
+            let pending = MatchingEvidence::from_event(&candidate, false);
+            assert_eq!(
+                rules.assess(&candidate, clock, &pending).unresolved,
+                vec![RejectionReason::Experience]
+            );
+            let exhausted = MatchingEvidence::from_event(&candidate, true);
+            assert_eq!(
+                rules
+                    .assess(&candidate, clock, &exhausted)
+                    .rejected
+                    .is_empty(),
+                include_unknown
+            );
+            assert_eq!(rules.matches_event_at(&candidate, clock), include_unknown);
+        }
+        if let WorkerEvent::Job {
+            experience: Some(experience),
+            ..
+        } = &mut candidate
+        {
+            experience.min_years = Some(1);
+        }
+        let hydrated = MatchingEvidence::from_event(&candidate, false);
+        assert_eq!(
+            rules.assess(&candidate, clock, &hydrated).rejected,
+            vec![RejectionReason::Experience]
+        );
+        assert!(!rules.matches_event_at(&candidate, clock));
+        let legacy: PostingRules =
+            serde_json::from_value(serde_json::json!({"experience_min":3,"experience_max":5}))
+                .unwrap();
+        assert_eq!(
+            legacy.experience_match_mode,
+            ExperienceMatchMode::AdvertisedRangeOverlap
+        );
+        assert!(legacy.matches_event_at(&candidate, clock));
     }
     #[test]
     fn missing_description_is_unresolved_even_under_exclusion_and_not() {

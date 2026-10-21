@@ -20,27 +20,15 @@ impl RoleType {
             .filter(|c| c.is_ascii_alphanumeric())
             .map(|c| c.to_ascii_lowercase())
             .collect();
-        if squashed.is_empty() {
-            return None;
-        }
-        if squashed.contains("seasonal") {
-            Some(RoleType::Seasonal)
-        } else if squashed.contains("intern") || squashed.contains("coop") {
-            Some(RoleType::Internship)
-        } else if squashed.contains("parttime") {
-            Some(RoleType::PartTime)
-        } else if ["contract", "temporary", "temp", "freelance", "fixedterm"]
-            .iter()
-            .any(|k| squashed.contains(k))
-        {
-            Some(RoleType::Contract)
-        } else if ["fulltime", "permanent", "regular"]
-            .iter()
-            .any(|k| squashed.contains(k))
-        {
-            Some(RoleType::FullTime)
-        } else {
-            None
+        match squashed.as_str() {
+            "seasonal" => Some(RoleType::Seasonal),
+            "intern" | "internship" | "coop" => Some(RoleType::Internship),
+            "parttime" => Some(RoleType::PartTime),
+            "contract" | "contractor" | "temporary" | "temp" | "freelance" | "fixedterm" => {
+                Some(RoleType::Contract)
+            }
+            "fulltime" | "permanent" | "regular" => Some(RoleType::FullTime),
+            _ => None,
         }
     }
 
@@ -66,8 +54,9 @@ impl RoleType {
             Some(RoleType::Internship)
         } else if has_pair("part", "time") || has("parttime") {
             Some(RoleType::PartTime)
-        } else if has("contract")
-            || has("contractor")
+        } else if tokens.iter().enumerate().any(|(index, token)| {
+            *token == "contract" && (index == 0 || tokens[index - 1] != "smart")
+        }) || has("contractor")
             || has("freelance")
             || has("temporary")
             || has("temp")
@@ -101,10 +90,12 @@ mod tests {
         assert_eq!(RoleType::from_hint("Temporary"), Some(RoleType::Contract));
         assert_eq!(RoleType::from_hint("Contractor"), Some(RoleType::Contract));
         assert_eq!(RoleType::from_hint("Seasonal"), Some(RoleType::Seasonal));
-        assert_eq!(
-            RoleType::from_hint("Seasonal / Temp"),
-            Some(RoleType::Seasonal)
-        );
+        assert_eq!(RoleType::from_hint("Seasonal / Temp"), None);
+        assert_eq!(RoleType::from_hint("Internal"), None);
+        assert_eq!(RoleType::from_hint("Temperature"), None);
+        assert_eq!(RoleType::from_hint("irregular hours"), None);
+        assert_eq!(RoleType::from_hint("Regular"), Some(RoleType::FullTime));
+        assert_eq!(RoleType::from_hint("FIXED_TERM"), Some(RoleType::Contract));
         assert_eq!(RoleType::from_hint("Hybrid"), None);
         assert_eq!(RoleType::from_hint(""), None);
     }
@@ -128,6 +119,12 @@ mod tests {
             Some(RoleType::Internship)
         );
         assert_eq!(RoleType::from_title("Internal Tools Engineer"), None);
+        assert_eq!(RoleType::from_title("Smart Contract Engineer"), None);
+        assert_eq!(RoleType::from_title("SmartContract Engineer"), None);
+        assert_eq!(
+            RoleType::from_title("Smart Contract Engineer (Contract)"),
+            Some(RoleType::Contract)
+        );
         assert_eq!(
             RoleType::from_title("Backend Engineer (Contract)"),
             Some(RoleType::Contract)

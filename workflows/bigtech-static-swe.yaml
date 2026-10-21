@@ -1,6 +1,6 @@
-# Generated from Rust template catalog v1. Do not edit.
+# Generated from Rust template catalog v2. Do not edit.
 # Static selector example, disabled for review. Google URL resolution and Apple selectors/pagination still need verification; this is not verified full-site ingestion.
-version: 6
+version: 7
 max_jobs_per_run: 20
 metadata:
   name: Google & Apple — Static extraction example (Needs review)
@@ -18,7 +18,9 @@ sources:
       title_selector: h3.QJPWVe
       url_selector: a[href*="jobs/results/"]
       location_selector: span.r0wTof
+      description_selector: div.Xsxa1e
       mode: static
+      next_page_selector: a[aria-label="Go to next page"]
   - id: apple
     label: Apple Jobs
     enabled: false
@@ -29,9 +31,11 @@ sources:
       job_container: ul#search-job-list > li.rc-accordion-item
       title_selector: h3 a.link-inline
       url_selector: a.link-inline
-      location_selector: span.table--advanced-search__location-sub
+      location_selector: div.job-title-location span:not(.a11y)
+      description_selector: p.text-align-start
       date_selector: span.job-posted-date
       mode: static
+      next_page_selector: link[rel="next"]
 schedule:
   cadence: daily
   time: 09:00
@@ -62,6 +66,7 @@ filters:
     experience_min: null
     experience_max: null
     experience_include_unknown: false
+    experience_match_mode: advertised_range_overlap
     new_grad: null
     sponsorship: []
     work_auth: []

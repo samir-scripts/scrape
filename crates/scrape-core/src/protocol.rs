@@ -6,7 +6,7 @@ use crate::{RoleType, SourceKind, TriState, WorkplaceType};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 7;
+pub const PROTOCOL_VERSION: u32 = 8;
 pub const DEFAULT_NAVIGATION_TIMEOUT_S: u64 = 30;
 pub const MAX_PAGES_PER_SOURCE: u32 = 100;
 pub const DEFAULT_SOURCE_DURATION_S: u64 = 180;

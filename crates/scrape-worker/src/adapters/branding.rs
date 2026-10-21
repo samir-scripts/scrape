@@ -26,19 +26,25 @@ fn platform(name: &str) -> bool {
     )
 }
 /// One evidence resolver, shared by ATS pages, structured data and custom sources.
+#[derive(Clone)]
 pub struct CompanyBranding {
-    company: String,
-    evidence: Option<LogoEvidence>,
-    warning: Option<String>,
+    pub company: String,
+    pub evidence: Option<LogoEvidence>,
+    pub warning: Option<String>,
 }
 impl CompanyBranding {
-    pub async fn fetch(client: &HttpClient, page_url: &str, company: &str) -> Self {
-        match tokio::time::timeout(Duration::from_secs(4),client.fetch_branding_page(page_url)).await {
+    async fn fetch_until(
+        client: &HttpClient,
+        page_url: &str,
+        company: &str,
+        deadline: tokio::time::Instant,
+    ) -> Self {
+        match tokio::time::timeout_at(deadline, client.fetch_branding_page(page_url)).await {
             Ok(Ok((html, actual_page))) => {
-                let actual_company=if company.trim().is_empty() { page_employer(&html).unwrap_or_default() } else { company.into() };
-                Self { evidence: resolve_page(&html,&actual_page,&actual_company,None), company:actual_company,warning:None }
+                let actual_company = if company.trim().is_empty() { page_employer(&html).unwrap_or_default() } else { company.into() };
+                Self { evidence: resolve_page(&html, &actual_page, &actual_company, None), company: actual_company, warning: None }
             }
-            result => Self { company:company.into(),evidence:None,warning:Some(format!("Company branding page unavailable for {page_url}: {result:?}. Retain any previously verified logo.")) }
+            result => Self { company: company.into(), evidence: None, warning: Some(format!("Company branding page unavailable for {page_url}: {result:?}. Retain any previously verified logo.")) }
         }
     }
     pub async fn fetch_source(
@@ -48,7 +54,7 @@ impl CompanyBranding {
         source: &WorkerSource,
     ) -> Self {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(4);
-        let original = Self::fetch(client, page_url, company).await;
+        let original = Self::fetch_until(client, page_url, company, deadline).await;
         if original.evidence.is_some() {
             return original;
         }
@@ -68,11 +74,11 @@ impl CompanyBranding {
         } else {
             &original.company
         };
-        match tokio::time::timeout(Duration::from_secs(4), Self::fetch(client, board, employer))
-            .await
-        {
-            Ok(fallback) if fallback.evidence.is_some() => fallback,
-            _ => original,
+        let fallback = Self::fetch_until(client, board, employer, deadline).await;
+        if fallback.evidence.is_some() {
+            fallback
+        } else {
+            original
         }
     }
     pub fn warning(&self, source_id: &str) -> Option<WorkerEvent> {
@@ -110,7 +116,8 @@ impl CompanyBranding {
 pub fn logo_url(value: &Value, page_url: &str) -> Option<String> {
     let raw = value
         .as_str()
-        .or_else(|| value.get("url")?.as_str())?
+        .or_else(|| value.get("url").and_then(Value::as_str))
+        .or_else(|| value.get("contentUrl").and_then(Value::as_str))?
         .trim();
     if raw.is_empty() {
         return None;
@@ -191,9 +198,10 @@ pub fn resolve_page(
     resolve_document(&Html::parse_document(html), page_url, company, configured)
 }
 /// Reuse the caller's HTML5 tree when a custom source already parsed this page.
-pub fn resolve_document(
+pub fn resolve_document_with_base(
     document: &Html,
     page_url: &str,
+    base_url: &str,
     company: &str,
     configured: Option<&str>,
 ) -> Option<LogoEvidence> {
@@ -206,13 +214,17 @@ pub fn resolve_document(
     }
     for script in document.select(&Selector::parse("script[type='application/ld+json']").unwrap()) {
         if let Ok(value) = serde_json::from_str::<Value>(&script.inner_html()) {
-            if let Some(logo) = structured_logo(&value, page_url, company) {
-                return Some(logo);
+            if let Some(logo) = structured_logo(&value, base_url, company) {
+                return Some(LogoEvidence {
+                    url: logo.url,
+                    page_url: page_url.into(),
+                    method: logo.method,
+                });
             }
         }
     }
     let normalized = company.trim().to_lowercase();
-    for image in document.select(&Selector::parse("img[alt][src]").unwrap()) {
+    for image in document.select(&Selector::parse("img[alt]").unwrap()) {
         let alt = image
             .value()
             .attr("alt")
@@ -223,10 +235,7 @@ pub fn resolve_document(
             || alt == format!("{normalized} logo")
             || alt == format!("{normalized}'s logo")
         {
-            if let Some(url) = logo_url(
-                &Value::String(image.value().attr("src").unwrap_or_default().into()),
-                page_url,
-            ) {
+            if let Some(url) = image_url(image, base_url) {
                 return Some(LogoEvidence {
                     url,
                     page_url: page_url.into(),
@@ -235,15 +244,89 @@ pub fn resolve_document(
             }
         }
     }
+    for anchor in document.select(&Selector::parse("a[aria-label]").unwrap()) {
+        let label = anchor
+            .value()
+            .attr("aria-label")
+            .unwrap_or_default()
+            .trim()
+            .to_lowercase();
+        if label == normalized || label == format!("{normalized} home") || label == format!("{normalized} careers") {
+            if let Some(img) = anchor.select(&Selector::parse("img").unwrap()).next() {
+                if let Some(url) = image_url(img, base_url) {
+                    return Some(LogoEvidence {
+                        url,
+                        page_url: page_url.into(),
+                        method: LogoMethod::EmployerLabel,
+                    });
+                }
+            }
+        }
+    }
+    for link in document.select(&Selector::parse("link[rel*='icon']").unwrap()) {
+        let rel = link.value().attr("rel").unwrap_or_default().to_lowercase();
+        if rel.contains("apple-touch-icon") || (rel.contains("icon") && link.value().attr("type").map_or(false, |t| t.contains("png") || t.contains("webp"))) {
+            if let Some(href) = link.value().attr("href") {
+                if let Some(url) = logo_url(&Value::String(href.into()), base_url) {
+                    return Some(LogoEvidence {
+                        url,
+                        page_url: page_url.into(),
+                        method: LogoMethod::EmployerLabel,
+                    });
+                }
+            }
+        }
+    }
     let selector = Selector::parse(configured?).ok()?;
     let url = document
         .select(&selector)
-        .find_map(|e| logo_url(&Value::String(e.value().attr("src")?.into()), page_url))?;
+        .find_map(|e| image_url(e, base_url))?;
     Some(LogoEvidence {
         url,
         page_url: page_url.into(),
         method: LogoMethod::ConfiguredSelector,
     })
+}
+/// Only called after the surrounding markup has established employer identity.
+fn image_url(image: scraper::ElementRef<'_>, base_url: &str) -> Option<String> {
+    if let Some(srcset) = image.value().attr("srcset") {
+        let candidates = srcset
+            .split(',')
+            .filter_map(|part| {
+                let mut fields = part.split_whitespace();
+                let raw = fields.next()?;
+                let width = fields.next()?.strip_suffix('w')?.parse::<u32>().ok()?;
+                if fields.next().is_some() || width == 0 {
+                    return None;
+                }
+                Some((width, logo_url(&Value::String(raw.into()), base_url)?))
+            })
+            .collect::<Vec<_>>();
+        if let Some((_, url)) = candidates
+            .iter()
+            .find(|(width, _)| *width >= 128)
+            .or_else(|| candidates.iter().max_by_key(|(width, _)| *width))
+        {
+            return Some(url.clone());
+        }
+    }
+    ["src", "data-src"].iter().find_map(|attribute| {
+        logo_url(
+            &Value::String(image.value().attr(attribute)?.into()),
+            base_url,
+        )
+    })
+}
+
+pub fn resolve_document(
+    document: &Html,
+    page_url: &str,
+    company: &str,
+    configured: Option<&str>,
+) -> Option<LogoEvidence> {
+    let response_url = Url::parse(page_url).ok()?;
+    let base = super::selector::resolve_document_base(document, &response_url);
+    resolve_document_with_base(document, page_url, base.as_str(), company, configured)
 }
 pub fn extract_company_logo(html: &str, page_url: &str, company: &str) -> Option<String> {
     resolve_page(html, page_url, company, None).map(|e| e.url)
@@ -292,6 +375,31 @@ mod tests {
             ),
             None
         );
+    }
+    #[test]
+    fn employer_lazy_assets_follow_document_base_without_aliasing_companies() {
+        let html = r#"<base href="/assets/"><img alt="Acme Labs Logo" src="wrong.svg"><img alt="Acme Logo" srcset="javascript:bad 256w, small.webp 64w, medium.webp 128w, huge.webp 512w" data-src="fallback.webp">"#;
+        let evidence = resolve_page(html, "https://fixture.test/jobs/1", "Acme", None).unwrap();
+        assert_eq!(evidence.url, "https://fixture.test/assets/medium.webp");
+        assert_eq!(evidence.page_url, "https://fixture.test/jobs/1");
+        let structured = resolve_page(r#"<base href="/assets/"><script type="application/ld+json">{"@type":"JobPosting","hiringOrganization":{"name":"Acme","logo":{"@type":"ImageObject","contentUrl":"employer.webp"}}}</script>"#, "https://fixture.test/jobs/1", "Acme", None).unwrap();
+        assert_eq!(structured.url, "https://fixture.test/assets/employer.webp");
+        assert_eq!(structured.page_url, "https://fixture.test/jobs/1");
+        assert_eq!(
+            extract_company_logo(
+                "<img alt='Acme Logo' data-src='../logo.webp'>",
+                "https://fixture.test/jobs/1",
+                "Acme"
+            )
+            .as_deref(),
+            Some("https://fixture.test/logo.webp")
+        );
+        assert!(extract_company_logo(
+            "<img alt='Acme Labs Logo' src='/wrong.webp'>",
+            "https://fixture.test/jobs/1",
+            "Acme"
+        )
+        .is_none());
     }
 }
 

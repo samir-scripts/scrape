@@ -1,0 +1,26 @@
+{
+  "total": 3,
+  "jobPostings": [
+    {
+      "title": "Senior Distributed Systems Engineer",
+      "externalPath": "/job/US-CA-Santa-Clara/Senior-Distributed-Systems-Engineer_JR1001",
+      "locationsText": "Santa Clara, CA, US",
+      "postedOn": "Posted Today",
+      "bulletFields": ["JR1001"]
+    },
+    {
+      "title": "Staff AI Infrastructure Engineer",
+      "externalPath": "/job/Remote-US/Staff-AI-Infrastructure-Engineer_JR1002",
+      "locationsText": "Remote, US",
+      "postedOn": "Posted Yesterday",
+      "bulletFields": ["JR1002"]
+    },
+    {
+      "title": "Software Engineering Intern",
+      "externalPath": "/job/US-WA-Seattle/Software-Engineering-Intern_JR1003",
+      "locationsText": "Seattle, WA, US",
+      "postedOn": "Posted 5 Days Ago",
+      "bulletFields": ["JR1003"]
+    }
+  ]
+}

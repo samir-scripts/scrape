@@ -324,6 +324,32 @@ impl HttpClient {
         let bytes = resp.bytes().await?;
         Ok(serde_json::from_slice(&bytes)?)
     }
+
+    pub async fn post_json<B: serde::Serialize, T: serde::de::DeserializeOwned>(
+        &self,
+        url: &str,
+        body: &B,
+    ) -> Result<T, ClientError> {
+        let parsed_url = Url::parse(url)?;
+        let host = parsed_url.host_str().unwrap_or("").to_string();
+
+        let _guard = self.rate_limit(&host).await;
+
+        let transport = self.transport_url(url)?;
+        let resp = self
+            .execute_with_retries(|| {
+                self.client
+                    .post(transport.clone())
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json")
+                    .json(body)
+                    .send()
+            })
+            .await?;
+
+        let bytes = resp.bytes().await?;
+        Ok(serde_json::from_slice(&bytes)?)
+    }
 }
 
 impl HttpClient {
@@ -396,8 +422,8 @@ impl HttpClient {
         };
         let mut bytes = Vec::new();
         while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
-            if bytes.len() + chunk.len() > 512 * 1024 {
-                return Err("Branding page exceeds 512 KiB".into());
+            if bytes.len() + chunk.len() > 2 * 1024 * 1024 {
+                return Err("Branding page exceeds 2 MiB".into());
             }
             bytes.extend_from_slice(&chunk);
         }

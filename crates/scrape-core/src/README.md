@@ -33,7 +33,7 @@ The `crates/scrape-core/src` directory contains the core source modules that def
 - **Behavior**: CSS and a documented XPath 1.0 location-path subset operate on the same `scraper::Html` tree. Supports relative/absolute paths, child/self/parent/following-sibling steps, descendant shorthand, attribute/text tests, positional predicates, field attributes and named regex captures. Unsupported syntax fails explicitly. XPath is bounded to 4096 bytes, 64 steps and 32 predicates per step; this is not a full XPath implementation.
 
 ### [`protocol.rs`](protocol.rs)
-- **Role**: Versioned IPC message contracts (`PROTOCOL_VERSION = 7`) exchanged between the Tauri host (`src-tauri`) and the scraper sidecar (`scrape-worker`).
+- **Role**: Versioned IPC message contracts (`PROTOCOL_VERSION = 8`) exchanged between the Tauri host (`src-tauri`) and the scraper sidecar (`scrape-worker`).
 - **Key Types**:
   - `WorkerConfig`: JSON payload sent via `stdin` to configure a scrape run (protocol version, sources, limits, filters, suppression keys).
   - `WorkerLimits` & `EnrichmentLimits`: Concurrency caps, per-host request delays, global timeouts, and bounded detail enrichment limits (`max_requests` 0–100, `timeout_ms` 1–45,000).
@@ -119,4 +119,9 @@ pretending description/date/pay evidence exists. `ParsedLocation::validate` and
 cities, preserving raw labels and ambiguous uncontextualized IN/CA as unknown.
 Geographic worker/SQLite predicates share tuple, city exact/raw-literal-substring,
 ASCII case and Unicode-whitespace semantics; aggregate location text is never borrowed.
-Custom script frames are version 2; the worker event/config protocol stays 7.
+Custom script frames are version 2; the worker event/config protocol is 8.
+Numeric experience rules expose `ExperienceMatchMode`: omitted domain/filter modes
+retain `advertised_range_overlap`, while workflow v7 omissions resolve to
+`required_minimum`. Workflow versions 1–6 explicitly retain overlap on upgrade.
+Required-minimum rules compare inclusive bounds against `experience_min`;
+maximum-only evidence follows the unknown policy after detail opportunities end.

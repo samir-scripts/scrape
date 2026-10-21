@@ -42,7 +42,7 @@ When spawned as a sidecar:
 scrape-worker/
 ├── Cargo.toml      # Sidecar dependencies (reqwest, scraper, tokio, clap, etc.)
 ├── src/            # Core worker modules and binary entry point
-│   ├── adapters/   # Target-specific parsers (Greenhouse, Lever, Ashby, JSON-LD, Selector)
+│   ├── adapters/   # Target-specific parsers (Greenhouse, Lever, Ashby, Workday, JSON-LD, Selector)
 │   ├── browser/    # Direct Rust CDP browser engine (stealth, blocking, pagination)
 │   ├── client.rs   # Rate-limited HTTP client with robots.txt enforcement
 │   ├── coordinator.rs # Multi-source round-robin coordinator and fair budget manager

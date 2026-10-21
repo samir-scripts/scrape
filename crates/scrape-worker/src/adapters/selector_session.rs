@@ -497,8 +497,8 @@ fn merge_detail(
         posting.date_posted = get("date", "date")
             .filter(|raw| scrape_core::posting_date::posting_instant(raw, "UTC").is_some());
     }
-    if posting.description_source.is_none() {
-        posting.description_source = get("description", "html");
+    if let Some(detail_description) = get("description", "html") {
+        posting.description_source = Some(detail_description);
         posting.description_format = config.detail_fields.get("description").map(|field| {
             if field.extracts_html() {
                 scrape_core::enrich::DescriptionFormat::Html
@@ -507,9 +507,12 @@ fn merge_detail(
             }
         });
     }
-    let detail_logo = super::branding::resolve_document(
+    let actual_url = Url::parse(actual).map_err(|e| ClientError::Extraction(e.to_string()))?;
+    let detail_base = super::selector::resolve_document_base(&document, &actual_url);
+    let detail_logo = super::branding::resolve_document_with_base(
         &document,
         actual,
+        detail_base.as_str(),
         &super::branding::employer_name(source),
         source.config.get("employer_logo").and_then(|v| v.as_str()),
     );

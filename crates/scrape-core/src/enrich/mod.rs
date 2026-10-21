@@ -19,4 +19,4 @@ pub use salary::{CompensationFilter, CompensationRange, Salary};
 pub use workplace::classify_workplace;
 
 /// Current version of the enrichment extraction engine. Bump this when heuristics or classifiers change.
-pub const ENRICHMENT_VERSION: i32 = 3;
+pub const ENRICHMENT_VERSION: i32 = 4;
