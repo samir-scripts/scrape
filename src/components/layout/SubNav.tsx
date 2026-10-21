@@ -131,10 +131,12 @@ export function SubNav({ sort, onResetSort }: { sort?: JobSort; onResetSort?: ()
                 <IconButton label="Clear search" onClick={() => setFilterSpec((prev) => ({ ...prev, search: null }))}
                   className="absolute right-0"><Icon name="close" size="sm" /></IconButton>
               ) : (
-                <KeyHint
-                  keys="/"
-                  className="absolute right-1.5 opacity-80 text-[9px] pointer-events-none"
-                />
+                <div aria-hidden="true" className="absolute right-1.5 pointer-events-none">
+                  <KeyHint
+                    keys="/"
+                    className="text-[9px]"
+                  />
+                </div>
               )}
             </div>
           </div>
