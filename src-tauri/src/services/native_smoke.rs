@@ -28,6 +28,31 @@ pub fn install(app: &mut tauri::App) -> bool {
         return false;
     };
     use tauri::{Listener, Manager};
+    // A visible test window is not necessarily the active macOS application.
+    // Exercise the same foreground lifecycle as opening Scrape from its tray.
+    #[cfg(target_os = "macos")]
+    app.set_activation_policy(tauri::ActivationPolicy::Regular);
+    if let Some(window) = app.get_webview_window("main") {
+        window.show().expect("Show isolated test window");
+        window.set_focus().expect("Focus isolated test window");
+        println!(
+            "NATIVE_SMOKE_WINDOW visible={:?} focused={:?} minimized={:?}",
+            window.is_visible(),
+            window.is_focused(),
+            window.is_minimized()
+        );
+    }
+    let log_directory = directory.clone();
+    app.listen("native-smoke-log", move |event| {
+        use std::io::Write;
+        let mut log = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_directory.join("workflow-progress.jsonl"))
+            .expect("Open isolated native progress log");
+        writeln!(log, "{}", event.payload()).expect("Persist isolated native progress");
+        println!("NATIVE_SMOKE_LOG {}", event.payload());
+    });
     let control_directory = directory.clone();
     let control_handle = app.handle().clone();
     app.listen("native-smoke-control", move |event| {
@@ -82,7 +107,34 @@ pub fn install(app: &mut tauri::App) -> bool {
     });
     let handle = app.handle().clone();
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+        // Native-clock probes distinguish a paused WebView timer from a blocked
+        // JavaScript context without extending the existing overall deadline.
+        for seconds in [15, 30] {
+            tokio::time::sleep(std::time::Duration::from_secs(seconds)).await;
+            if let Some(window) = handle.get_webview_window("main") {
+                println!(
+                    "NATIVE_SMOKE_WATCHDOG visible={:?} focused={:?} minimized={:?}",
+                    window.is_visible(),
+                    window.is_focused(),
+                    window.is_minimized()
+                );
+                let _ = window.eval(
+                    r#"window.__TAURI_INTERNALS__.invoke("plugin:event|emit", {
+                        event: "native-smoke-log",
+                        payload: {
+                            step: "native-clock probe",
+                            workflow: window.__SCRAPE_NATIVE_WORKFLOW_STATE__ || null,
+                            visibility: document.visibilityState,
+                            focused: document.hasFocus(),
+                            active: document.activeElement?.getAttribute("aria-label"),
+                            country: document.querySelector('[aria-label="Country"]')?.value,
+                            stateDisabled: document.querySelector('[aria-label="State/province"]')?.disabled
+                        }
+                    })"#,
+                );
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
         eprintln!("Native smoke deadline exceeded");
         handle.exit(1);
     });

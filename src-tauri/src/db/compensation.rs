@@ -238,6 +238,19 @@ mod rule_parity_tests {
                 ..Default::default()
             },
             PostingRules {
+                experience_min: Some(2),
+                experience_max: Some(3),
+                experience_match_mode: scrape_core::matching::ExperienceMatchMode::RequiredMinimum,
+                ..Default::default()
+            },
+            PostingRules {
+                experience_min: Some(2),
+                experience_max: Some(3),
+                experience_match_mode: scrape_core::matching::ExperienceMatchMode::RequiredMinimum,
+                experience_include_unknown: true,
+                ..Default::default()
+            },
+            PostingRules {
                 new_grad: Some("exclude".into()),
                 ..Default::default()
             },
@@ -285,6 +298,23 @@ mod rule_parity_tests {
                 .map(|(id, _)| id.to_string())
                 .collect();
             expected.sort();
+            if rules.experience_min == Some(2) {
+                let authored: Vec<String> = match rules.experience_match_mode {
+                    scrape_core::matching::ExperienceMatchMode::AdvertisedRangeOverlap => {
+                        vec!["a", "b", "c"]
+                    }
+                    scrape_core::matching::ExperienceMatchMode::RequiredMinimum
+                        if rules.experience_include_unknown =>
+                    {
+                        vec!["b", "c"]
+                    }
+                    scrape_core::matching::ExperienceMatchMode::RequiredMinimum => vec!["b"],
+                }
+                .into_iter()
+                .map(str::to_string)
+                .collect();
+                assert_eq!(expected, authored);
+            }
             let page = JobsRepo::list_at(
                 &pool,
                 JobFilter {

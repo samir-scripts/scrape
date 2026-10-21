@@ -234,3 +234,59 @@ pub async fn get_company_logo_asset(
 ) -> Result<String> {
     crate::db::branding::asset(&state.db, &asset_reference).await
 }
+
+#[tauri::command]
+pub async fn fetch_company_logo(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    company: String,
+    website_url: Option<String>,
+) -> Result<Option<scrape_core::branding::CompanyLogo>> {
+    let company = company.trim();
+    if company.is_empty() {
+        return Ok(None);
+    }
+    // 1. Check existing verified logo in employer_branding
+    if let Some(existing) = sqlx::query(
+        "SELECT logo_json, asset_data FROM employer_branding WHERE LOWER(TRIM(company)) = LOWER(TRIM(?)) AND asset_reference IS NOT NULL ORDER BY updated_at DESC LIMIT 1",
+    )
+    .bind(company)
+    .fetch_optional(&state.db)
+    .await?
+    {
+        use sqlx::Row;
+        let mut logo: scrape_core::branding::CompanyLogo =
+            serde_json::from_str(&existing.get::<String, _>("logo_json"))?;
+        logo.asset = existing.get("asset_data");
+        if logo.validate().is_ok() {
+            return Ok(Some(logo));
+        }
+    }
+    // 2. Check curated assets
+    if let Some(curated) = crate::db::branding::resolve_curated_logo(company) {
+        crate::db::branding::record(&state.db, "curated", company, &curated).await?;
+        return Ok(Some(curated));
+    }
+    // 3. If website_url provided, invoke worker --branding
+    if let Some(ref url) = website_url {
+        if scrape_core::branding::http_url(url) {
+            let output = crate::services::process::worker_command(&app)?
+                .args(["--branding", company, url])
+                .output()
+                .await
+                .map_err(|e| AppError::Internal(format!("Failed to execute branding worker: {}", e)))?;
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if let Ok(logo) = serde_json::from_str::<scrape_core::branding::CompanyLogo>(stdout.trim()) {
+                    if logo.status == scrape_core::branding::LogoStatus::Verified {
+                        crate::db::branding::record(&state.db, "on_demand", company, &logo).await?;
+                        use tauri::Emitter;
+                        let _ = app.emit("jobs://branding-updated", ());
+                        return Ok(Some(logo));
+                    }
+                }
+            }
+        }
+    }
+    Ok(None)
+}

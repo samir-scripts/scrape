@@ -455,6 +455,13 @@ pub struct PreviewPosting {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
+pub struct WorkflowPreviewBranding {
+    pub source_id: String,
+    pub company: String,
+    pub logo: scrape_core::branding::CompanyLogo,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct WorkflowPreview {
     #[serde(default)]
     #[ts(optional = nullable)]
@@ -464,6 +471,7 @@ pub struct WorkflowPreview {
     pub sources: Option<Vec<scrape_core::protocol::SourceScanStats>>,
     pub spec: crate::services::workflow::WorkflowSpec,
     pub jobs: Vec<PreviewPosting>,
+    pub branding: Vec<WorkflowPreviewBranding>,
     #[ts(type = "number")]
     pub fetched: u64,
     #[ts(type = "number")]
@@ -545,6 +553,7 @@ pub async fn preview_workflow(
         sources: None,
         warnings: Some(vec![]),
         jobs: vec![],
+        branding: vec![],
         fetched: 0,
         matched: 0,
         rejected: 0,
@@ -634,8 +643,17 @@ pub async fn preview_workflow(
                     result.warnings.get_or_insert_with(Vec::new).push(message);
                 }
             }
-            WorkerEvent::Branding { logo, .. } => {
+            WorkerEvent::Branding {
+                source_id,
+                company,
+                logo,
+            } => {
                 logo.validate().map_err(AppError::Validation)?;
+                result.branding.push(WorkflowPreviewBranding {
+                    source_id,
+                    company,
+                    logo,
+                });
             }
             WorkerEvent::SourceInfo { .. } => {}
             WorkerEvent::Done { stats } => {

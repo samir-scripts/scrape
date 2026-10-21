@@ -54,8 +54,13 @@ if (process.env.SCRAPE_NATIVE_WORKFLOW === "1" || process.env.SCRAPE_NATIVE_DATA
     if (request.url === "/slow") { slowSeen = true; request.on("close", () => response.destroy()); return; }
     if (request.url === "/robots.txt") { response.end("User-agent: *\nAllow: /"); return; }
     response.end(`<script type="application/ld+json">${JSON.stringify([
-      { "@type": "JobPosting", identifier: "wizard-1", title: "Native workflow engineer", url: "/jobs/wizard-1", hiringOrganization: { name: "Fixture Co" }, jobLocationType: "TELECOMMUTE", applicantLocationRequirements: { "@type": "AdministrativeArea", name: "US-TX" }, jobLocation: { "@type": "Place", address: { addressLocality: "Austin", addressRegion: "TX", addressCountry: "US" } } },
+      { "@type": "JobPosting", identifier: "wizard-1", title: "Native workflow engineer", url: "/jobs/wizard-1", employmentType: "FULL_TIME", description: "Minimum qualifications: 1 year of professional experience required. Recent university graduates are eligible.", hiringOrganization: { name: "Fixture Co" }, jobLocationType: "TELECOMMUTE", applicantLocationRequirements: { "@type": "AdministrativeArea", name: "US-TX" }, jobLocation: { "@type": "Place", address: { addressLocality: "Austin", addressRegion: "TX", addressCountry: "US" } } },
       { "@type": "JobPosting", identifier: "wizard-2", title: "Unrelated role", url: "/jobs/wizard-2", hiringOrganization: { name: "Fixture Co" } },
+      ...[
+        ["wizard-senior", "Native workflow engineer III", "FULL_TIME", "Minimum qualifications: 5 years of professional experience required. 1 year of Kubernetes preferred."],
+        ["wizard-contract", "Native workflow engineer contract", "CONTRACTOR", "No professional experience required. Recent university graduates are eligible."],
+        ["wizard-unknown", "Native workflow engineer unknown", "FULL_TIME", "Join our engineering team."],
+      ].map(([identifier, title, employmentType, description]) => ({ "@type": "JobPosting", identifier, title, url: "/jobs/" + identifier, employmentType, description, hiringOrganization: { name: "Fixture Co" }, jobLocationType: "TELECOMMUTE", applicantLocationRequirements: { "@type": "AdministrativeArea", name: "US-TX" }, jobLocation: { "@type": "Place", address: { addressLocality: "Austin", addressRegion: "TX", addressCountry: "US" } } })),
     ])}</script>`);
   });
   await new Promise(resolve => workflowServer.listen(0, "127.0.0.1", resolve));

@@ -55,7 +55,7 @@ async fn populated_v25_upgrade_preserves_all_rows_backup_failure_retry_and_resta
             .last()
             .unwrap()
             .version,
-        27
+        28
     );
     for inject_failure in [false, true] {
         let directory = tempfile::tempdir().unwrap();

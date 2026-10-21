@@ -142,4 +142,4 @@ review fixture through production validation, use
 Capture URL/time/checksums and the original JPEG-format bytes are preserved next
 to `crates/scrape-worker/tests/fixtures/cloudflare-logo.json`.
 
-Provider smoke checks now consume canonical generated extractor configurations. Their permissive replay routes and parser-level success criteria remain historical limitations scheduled for Plan 12 Section 7; a green smoke run is not full workflow/company acceptance.
+Plan 12 Section 7 delivers manifest-driven provider workflow verification (`npm run test:providers` via `verify_provider_workflows`): exact routes (HTTP 404 on unlisted paths), raw capture SHA-256 checksum verification, full canonical workflow lifecycle (seed, atomic persist, script trust, launch, budget accounting, SQLite persistence, and Discovered queries), and truthful status classification (`passed`, `partial`, `unsupported`, `failed`). Meta remains an explicit unsupported client-side React SPA gap. Live workflow evaluation is opt-in via `--live` and separately reported.

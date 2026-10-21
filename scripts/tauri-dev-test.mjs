@@ -13,7 +13,7 @@ export async function runNativeDev(directory, { width = 1280, height = 800, scro
   const config = JSON.stringify({ build: {
     beforeDevCommand: `npm run build:sidecar && npm run dev -- --host 127.0.0.1 --port ${port} --strictPort`,
     devUrl: `http://127.0.0.1:${port}`,
-  }, app: { windows: [{ label: 'main', title: 'Scrape isolated startup test', visible: true, width, height }] } });
+  }, app: { windows: [{ label: 'main', title: 'Scrape isolated startup test', visible: true, focus: true, backgroundThrottling: 'disabled', width, height }] } });
   const child = spawn('npm', ['run', 'tauri', '--', 'dev', '--no-watch', '--config', config, '--', '--', '-AppleShowScrollBars', scrollbarMode], {
     env: { ...process.env, SCRAPE_NATIVE_SMOKE_DIR: directory }, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
   });

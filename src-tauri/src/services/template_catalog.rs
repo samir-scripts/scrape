@@ -1,12 +1,12 @@
 //! Authoritative, versioned built-in templates. Generated frontend/YAML files
 //! are projections of this validated catalog, never inputs to seeding.
 use super::workflow::{self, WorkflowSpec};
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use ts_rs::TS;
 
-pub const CATALOG_VERSION: u32 = 1;
+pub const CATALOG_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -58,11 +58,23 @@ fn extractors(spec: &WorkflowSpec) -> Result<Vec<TemplateExtractor>> {
         .collect()
 }
 
+/// Company choices reference one catalog source; execution configuration stays in its template.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export)]
+pub struct CompanyPreset {
+    pub id: String,
+    pub name: String,
+    pub template_id: String,
+    pub source_id: String,
+    pub logo: Option<scrape_core::branding::CompanyLogo>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[ts(export)]
 pub struct WorkflowTemplateCatalog {
     pub version: u32,
     pub templates: Vec<WorkflowTemplate>,
+    pub companies: Vec<CompanyPreset>,
 }
 
 fn definitions() -> Vec<(&'static str, &'static str, &'static str, Value)> {
@@ -373,7 +385,9 @@ fn definitions() -> Vec<(&'static str, &'static str, &'static str, Value)> {
                             "job_container": "li.lLd3Je",
                             "title_selector": "h3.QJPWVe",
                             "url_selector": "a[href*=\"jobs/results/\"]",
-                            "location_selector": "span.r0wTof"
+                            "location_selector": "span.r0wTof",
+                            "description_selector": "div.Xsxa1e",
+                            "next_page_selector": "a[aria-label=\"Go to next page\"]"
                         }
                     },
                     {
@@ -388,8 +402,10 @@ fn definitions() -> Vec<(&'static str, &'static str, &'static str, Value)> {
                             "job_container": "ul#search-job-list > li.rc-accordion-item",
                             "title_selector": "h3 a.link-inline",
                             "url_selector": "a.link-inline",
-                            "location_selector": "span.table--advanced-search__location-sub",
-                            "date_selector": "span.job-posted-date"
+                            "location_selector": "div.job-title-location span:not(.a11y)",
+                            "date_selector": "span.job-posted-date",
+                            "description_selector": "p.text-align-start",
+                            "next_page_selector": "link[rel=\"next\"]"
                         }
                     }
                 ],
@@ -401,30 +417,11 @@ fn definitions() -> Vec<(&'static str, &'static str, &'static str, Value)> {
                 },
                 "filters": {
                     "matching": {
-                        "role_types": [
-                            "full_time",
-                            "internship"
-                        ],
-                        "workplaces": [
-                            "hybrid",
-                            "onsite"
-                        ],
-                        "countries": [
-                            "US"
-                        ],
-                        "regions": [
-                            "US-CA",
-                            "US-WA",
-                            "US-NY",
-                            "US-TX"
-                        ],
-                        "cities": [
-                            "Mountain View",
-                            "Cupertino",
-                            "Seattle",
-                            "New York",
-                            "Austin"
-                        ],
+                        "role_types": [],
+                        "workplaces": [],
+                        "countries": [],
+                        "regions": [],
+                        "cities": [],
                         "keywords": {
                             "any": [
                                 "Software",
@@ -605,10 +602,182 @@ pub fn catalog() -> Result<WorkflowTemplateCatalog> {
         readiness: TemplateReadiness::RestrictiveExample, seed: false, legacy_identifier: "cloudflare".into(),
         extractors: extractors(&internship)?, spec: internship,
     });
-    Ok(WorkflowTemplateCatalog {
+    let nvidia = json!({
+        "version": 6,
+        "metadata": {
+            "name": "NVIDIA — Systems, CUDA & AI Engineering (Workday)",
+            "company": "NVIDIA",
+            "enabled": false
+        },
+        "sources": [
+            {
+                "id": "nvidia",
+                "label": "NVIDIA — Workday",
+                "enabled": true,
+                "employer_hint": "NVIDIA",
+                "extractor": {
+                    "kind": "workday",
+                    "url": "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite"
+                }
+            }
+        ],
+        "schedule": {
+            "cadence": "daily",
+            "time": "09:00",
+            "cron": "0 0 9 * * *",
+            "timezone": "UTC"
+        },
+        "filters": {
+            "matching": {
+                "keywords": {
+                    "any": [
+                        "Systems",
+                        "CUDA",
+                        "AI",
+                        "Kernel",
+                        "Compiler",
+                        "Performance"
+                    ],
+                    "all": [],
+                    "exclude": [],
+                    "fields": [
+                        "title"
+                    ]
+                }
+            }
+        },
+        "retention": {
+            "days": 30,
+            "policy": "untracked_only"
+        }
+    });
+    let nvidia_spec = workflow::validate(nvidia, "UTC")?;
+    templates.push(WorkflowTemplate {
+        id: "nvidia-workday-engineering".into(),
+        name: "NVIDIA — Systems, CUDA & AI Engineering (Workday)".into(),
+        description: "Workday ATS example for NVIDIA career site. Title keywords only. Preview before saving; live availability varies.".into(),
+        readiness: TemplateReadiness::Ready,
+        seed: false,
+        legacy_identifier: "nvidia".into(),
+        extractors: extractors(&nvidia_spec)?,
+        spec: nvidia_spec,
+    });
+    let catalog = WorkflowTemplateCatalog {
         version: CATALOG_VERSION,
         templates,
+        companies: company_presets()?,
+    };
+    validate_companies(&catalog)?;
+    Ok(catalog)
+}
+
+fn company_presets() -> Result<Vec<CompanyPreset>> {
+    [
+        (
+            "cloudflare",
+            "Cloudflare",
+            "cloudflare-systems-network",
+            "cloudflare",
+        ),
+        (
+            "bitwarden",
+            "Bitwarden",
+            "bitwarden-remote-security",
+            "bitwarden",
+        ),
+        ("linear", "Linear", "linear-product-engineering", "linear"),
+        ("sep", "SEP", "sep-midwest-consulting", "sep"),
+        ("google", "Google", "bigtech-static-swe", "google"),
+        ("apple", "Apple", "bigtech-static-swe", "apple"),
+        ("netflix", "Netflix", "streaming-cloud-script", "netflix"),
+        ("amazon", "Amazon", "streaming-cloud-script", "amazon"),
+        ("nvidia", "NVIDIA", "nvidia-workday-engineering", "nvidia"),
+    ]
+    .into_iter()
+    .map(|(id, name, template_id, source_id)| {
+        Ok(CompanyPreset {
+            id: id.into(),
+            name: name.into(),
+            template_id: template_id.into(),
+            source_id: source_id.into(),
+            logo: crate::db::branding::resolve_curated_logo(id),
+        })
     })
+    .collect()
+}
+
+fn validate_companies(catalog: &WorkflowTemplateCatalog) -> Result<()> {
+    let invalid = |message| AppError::Validation(format!("Company catalog: {message}"));
+    let mut template_ids = std::collections::HashSet::new();
+    for template in &catalog.templates {
+        if template.id.trim().is_empty() {
+            return Err(invalid("missing template ID".into()));
+        }
+        if !template_ids.insert(&template.id) {
+            return Err(invalid(format!("duplicate template ID '{}'", template.id)));
+        }
+    }
+    let mut ids = std::collections::HashSet::new();
+    for company in &catalog.companies {
+        if company.id.is_empty()
+            || company.id.starts_with('-')
+            || company.id.ends_with('-')
+            || company.id.contains("--")
+            || !company
+                .id
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        {
+            return Err(invalid(format!("invalid company ID '{}'", company.id)));
+        }
+        if !ids.insert(&company.id) {
+            return Err(invalid(format!("duplicate company ID '{}'", company.id)));
+        }
+        let template = catalog
+            .templates
+            .iter()
+            .find(|t| t.id == company.template_id)
+            .ok_or_else(|| {
+                invalid(format!(
+                    "company '{}' references missing template '{}'",
+                    company.id, company.template_id
+                ))
+            })?;
+        if template.readiness == TemplateReadiness::RestrictiveExample {
+            return Err(invalid(format!(
+                "company '{}' references restrictive template '{}'",
+                company.id, company.template_id
+            )));
+        }
+        let source_count = template
+            .spec
+            .sources
+            .iter()
+            .filter(|s| s.id == company.source_id)
+            .count();
+        if source_count != 1 {
+            return Err(invalid(format!(
+                "company '{}' references source '{}' in template '{}' ({source_count} matches)",
+                company.id, company.source_id, company.template_id
+            )));
+        }
+        if let Some(logo) = &company.logo {
+            logo.validate()
+                .map_err(|error| invalid(format!("company '{}' logo: {error}", company.id)))?;
+            if logo.status != scrape_core::branding::LogoStatus::Verified
+                || !logo
+                    .asset
+                    .as_deref()
+                    .is_some_and(|a| a.starts_with("data:image/webp;base64,"))
+            {
+                return Err(invalid(format!(
+                    "company '{}' logo must be verified inline WebP",
+                    company.id
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 pub fn seed_inputs() -> Result<Vec<crate::db::sources::CreateSourceInput>> {
@@ -628,6 +797,108 @@ pub fn seed_inputs() -> Result<Vec<crate::db::sources::CreateSourceInput>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn companies_reference_existing_sources_without_granting_readiness() {
+        let catalog = catalog().unwrap();
+        assert_eq!(catalog.version, 2);
+        assert_eq!(
+            catalog
+                .companies
+                .iter()
+                .map(|c| c.id.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "cloudflare",
+                "bitwarden",
+                "linear",
+                "sep",
+                "google",
+                "apple",
+                "netflix",
+                "amazon",
+                "nvidia"
+            ]
+        );
+        validate_companies(&catalog).unwrap();
+        for company in &catalog.companies {
+            let template = catalog
+                .templates
+                .iter()
+                .find(|t| t.id == company.template_id)
+                .unwrap();
+            assert_eq!(template.spec.version, 7);
+            assert_ne!(template.readiness, TemplateReadiness::RestrictiveExample);
+            if matches!(company.id.as_str(), "google" | "apple") {
+                assert_eq!(template.readiness, TemplateReadiness::NeedsReview);
+                assert_eq!(template.spec.metadata.enabled, Some(false));
+            }
+            if matches!(company.id.as_str(), "netflix" | "amazon") {
+                assert_eq!(template.readiness, TemplateReadiness::SetupRequired);
+                assert_eq!(template.spec.metadata.enabled, Some(false));
+            }
+            if company.id == "nvidia" {
+                assert_eq!(template.spec.metadata.enabled, Some(false));
+            }
+            assert!(company.logo.is_some());
+        }
+    }
+
+    #[test]
+    fn company_validation_reports_ids_and_broken_references_deterministically() {
+        let original = catalog().unwrap();
+        let assert_invalid = |catalog: &WorkflowTemplateCatalog, expected: &str| {
+            let first = validate_companies(catalog).unwrap_err().to_string();
+            assert!(first.contains(expected), "{first}");
+            assert_eq!(first, validate_companies(catalog).unwrap_err().to_string());
+        };
+        let mut broken = original.clone();
+        broken.companies[0].id.clear();
+        assert_invalid(&broken, "invalid company ID ''");
+        let mut broken = original.clone();
+        broken.companies.push(broken.companies[0].clone());
+        assert_invalid(&broken, "duplicate company ID 'cloudflare'");
+        let mut broken = original.clone();
+        broken.companies[0].template_id = "missing-template".into();
+        assert_invalid(
+            &broken,
+            "company 'cloudflare' references missing template 'missing-template'",
+        );
+        let mut broken = original.clone();
+        broken.companies[0].source_id = "missing-source".into();
+        assert_invalid(
+            &broken,
+            "company 'cloudflare' references source 'missing-source'",
+        );
+        let mut broken = original.clone();
+        broken.companies[0].template_id = "software-engineering-internships".into();
+        assert_invalid(
+            &broken,
+            "references restrictive template 'software-engineering-internships'",
+        );
+        let mut broken = original.clone();
+        broken.templates.push(broken.templates[0].clone());
+        assert_invalid(
+            &broken,
+            "duplicate template ID 'cloudflare-systems-network'",
+        );
+        let mut broken = original.clone();
+        broken.templates[0].id.clear();
+        assert_invalid(&broken, "missing template ID");
+        let mut broken = original.clone();
+        let duplicate = broken.templates[0].spec.sources[0].clone();
+        broken.templates[0].spec.sources.push(duplicate);
+        assert_invalid(
+            &broken,
+            "source 'cloudflare' in template 'cloudflare-systems-network' (2 matches)",
+        );
+        let mut broken = original;
+        broken.companies[0].logo.as_mut().unwrap().evidence = None;
+        assert_invalid(
+            &broken,
+            "company 'cloudflare' logo: Verified logo lacks source evidence",
+        );
+    }
+
     #[test]
     fn catalog_projection_and_execution_configs_are_canonical() {
         let catalog = catalog().unwrap();

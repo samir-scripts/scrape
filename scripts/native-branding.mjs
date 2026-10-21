@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { runNativeDev } from "./tauri-dev-test.mjs";
 import { createServer } from "node:http";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
@@ -6,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 const directory=await mkdtemp(join(tmpdir(),"scrape-native-smoke-"));
 const original=await readFile("crates/scrape-worker/tests/fixtures/cloudflare-logo.jpg");
-const cached="data:image/png;base64,"+(await readFile("crates/scrape-worker/tests/fixtures/cloudflare-logo-cache.png")).toString("base64");
 let online=true,downloads=0;
 const server=createServer((request,response)=>{
   response.setHeader("Access-Control-Allow-Origin","*");
@@ -20,14 +18,20 @@ await writeFile(join(directory,"smoke.js"),`(async()=>{
  const invoke=window.__TAURI_INTERNALS__.invoke,assert=(value,message)=>{if(!value)throw new Error(message);};
  const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  const wait=async predicate=>{const until=Date.now()+12000;while(Date.now()<until){const value=predicate();if(value)return value;await pause(50);}throw new Error("Native logo UI did not settle");};
- const expected=${JSON.stringify(cached)}, reference=${JSON.stringify("sha256:"+createHash("sha256").update(cached).digest("hex"))};
+ let expected=sessionStorage.getItem("branding-asset"),reference=sessionStorage.getItem("branding-reference");
+ function validateAsset(asset){
+  assert(asset?.startsWith("data:image/webp;base64,"),"New cache write did not use WebP");
+  const bytes=atob(asset.split(",")[1]);assert(bytes.startsWith("RIFF")&&bytes.slice(8,12)==="WEBP","Cache MIME does not match WebP content");return bytes.length;
+ }
  async function visibleLogo(size){
    const img=await wait(()=>[...document.querySelectorAll('img[alt="Cloudflare"]')].find(img=>img.complete&&img.naturalWidth>0&&Math.round(img.parentElement.getBoundingClientRect().width)===size));
    assert(img.src===expected,"Native image bypassed verified cache");assert(getComputedStyle(img).padding==="0px","Logo retained internal padding");
+   assert(Math.max(img.naturalWidth,img.naturalHeight)<=128,"Cached artwork exceeds 128px");
+   assert(Math.abs(img.naturalWidth/img.naturalHeight-1200/628)<0.03,"Cached artwork changed aspect ratio");
    const canvas=document.createElement("canvas");canvas.width=size;canvas.height=size;const ctx=canvas.getContext("2d");
    const scale=(size-2)/img.naturalWidth,height=img.naturalHeight*scale;ctx.drawImage(img,1,(size-height)/2,size-2,height);
    const pixels=ctx.getImageData(0,0,size,size).data;let orange=0;for(let i=0;i<pixels.length;i+=4){if(pixels[i]>180&&pixels[i+1]>60&&pixels[i+1]<200&&pixels[i+2]<110&&pixels[i+3]>100)orange++;}
-   assert(orange>4,"Cloudflare cloud is not visibly represented at native logo size: "+orange);return {size,orange};
+   assert(orange>4,"Cloudflare cloud is not visibly represented at native logo size: "+orange);return {size,orange,width:img.naturalWidth,height:img.naturalHeight,cachedBytes:validateAsset(img.src)};
  }
  try {
   if(sessionStorage.getItem("branding-reload")){
@@ -41,8 +45,11 @@ await writeFile(join(directory,"smoke.js"),`(async()=>{
   await invoke("set_scheduler_paused",{paused:true});await invoke("update_setting",{key:"notifications.enabled",value:false});
   const source=await invoke("save_workflow",{id:null,spec:{version:4,metadata:{name:"Engineering jobs",company:"Cloudflare"},extractor:{kind:"jsonld",url:${JSON.stringify(origin+"/careers")}},max_jobs_per_run:2,schedule:{cadence:"manual",timezone:"UTC"}}});
   const run=await invoke("run_source_now",{id:source.id});assert(run.status==="success"&&run.counts.inserted===2,"Native branding ingestion failed: "+JSON.stringify(run));
-  const jobs=(await invoke("list_jobs",{filter:{}})).items;assert(jobs.every(job=>job.company==="Cloudflare"&&job.company_logo.cached_asset_reference===reference),"Workflow name became employer or assets were not cached");
-  assert(await invoke("get_company_logo_asset",{assetReference:reference})===expected,"Cached asset lookup changed artwork");
+  const jobs=(await invoke("list_jobs",{filter:{}})).items;reference=jobs[0]?.company_logo?.cached_asset_reference;
+  assert(reference?.startsWith("sha256:"),"Verified artwork lacks its content reference");
+  expected=await invoke("get_company_logo_asset",{assetReference:reference});validateAsset(expected);
+  sessionStorage.setItem("branding-asset",expected);sessionStorage.setItem("branding-reference",reference);
+  assert(jobs.every(job=>job.company==="Cloudflare"&&job.company_logo.cached_asset_reference===reference),"Workflow name became employer or assets were not shared");
   const saved=jobs.find(job=>job.external_id==="42");assert(saved.company_logo.evidence.url===${JSON.stringify(origin+"/logo.png")},"Original evidence URL changed");
   const discovered=await wait(()=>[...document.querySelectorAll("button")].find(button=>/^DISCOVERED/.test(button.textContent.trim())));discovered.click();await visibleLogo(24);
   const title=await wait(()=>[...document.querySelectorAll("button")].find(button=>button.textContent.trim()==="Native branding engineer 42"));title.click();await visibleLogo(32);
@@ -56,5 +63,5 @@ try {
  if(result.code!==0||result.signal)throw new Error(`Native branding failed; artifacts ${directory}\n${result.output}`);
  const completion=JSON.parse(await readFile(join(directory,"result.json"),"utf8"));if(!completion.ok)throw new Error(JSON.stringify(completion));
  if(downloads!==2)throw new Error(`Expected one shared asset download per run and none from WebView/offline cache; got ${downloads}`);
- console.log(`Native branding passed; ${downloads} worker asset attempts, no WebView network dependency. Artifacts: ${directory}`);
+ console.log(`Native branding passed; ${downloads} worker asset attempts, no WebView network dependency. Original ${original.length} bytes; cached ${JSON.stringify(completion.pixels)}. Artifacts: ${directory}`);
 } finally{server.closeAllConnections();server.close();}

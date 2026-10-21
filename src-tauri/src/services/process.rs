@@ -59,3 +59,26 @@ pub fn execution_seconds(default: u64) -> u64 {
         .filter(|value| (1..=5).contains(value))
         .unwrap_or(default)
 }
+
+/// Development verification uses the same packaged native artifact as sidecar
+/// integration/native tests, never an implicitly rebuilt Cargo worker binary.
+pub fn packaged_worker_path() -> crate::error::Result<std::path::PathBuf> {
+    let triple = match (std::env::consts::ARCH, std::env::consts::OS) {
+        ("aarch64", "macos") => "aarch64-apple-darwin",
+        ("x86_64", "macos") => "x86_64-apple-darwin",
+        ("x86_64", "linux") => "x86_64-unknown-linux-gnu",
+        _ => {
+            return Err(crate::error::AppError::Validation(
+                "No packaged sidecar configured for this platform".into(),
+            ))
+        }
+    };
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(format!("binaries/scrape-worker-{triple}"));
+    if !path.is_file() {
+        return Err(crate::error::AppError::Validation(
+            "Build the packaged sidecar with npm run build:sidecar before verification".into(),
+        ));
+    }
+    Ok(path)
+}

@@ -7,7 +7,7 @@ use scrape_core::{RoleType, SourceCadence, SourceKind, WorkerFilters};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
-pub const WORKFLOW_SPEC_VERSION: u32 = 6;
+pub const WORKFLOW_SPEC_VERSION: u32 = 7;
 
 macro_rules! optional_fields {
     ($name:ident { $($field:ident: $kind:ty),* $(,)? }) => {
@@ -335,11 +335,11 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
             }
         }
         value = serde_json::json!({"version":3,"metadata":{"name":value.get("company"),"company":value.get("company")},"extractor":extractor,"schedule":{"cadence":value.pointer("/cadence/type").cloned().unwrap_or(Value::String("global".into())),"cron":value.pointer("/cadence/cron")}});
-    } else if matches!(version, 2..=6) {
-        // Legacy extractor roots become source collections before v6 decoding.
+    } else if matches!(version, 2..=7) {
+        // Legacy extractor roots become source collections before decoding.
     } else {
         return Err(AppError::Validation(format!(
-            "version: unsupported workflow version {version}; supported versions are 1, 2, 3, 4, 5, 6"
+            "version: unsupported workflow version {version}; supported versions are 1, 2, 3, 4, 5, 6, 7"
         )));
     }
     if submitted_version <= 4 && value.get("sources").is_none() {
@@ -392,6 +392,29 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
                     extractor.insert("mode".into(), Value::String(alias));
                 }
             }
+        }
+    }
+    if let Some(filters) = value.get_mut("filters").and_then(Value::as_object_mut) {
+        if (filters.get("experience_min").is_some_and(|v| !v.is_null())
+            || filters.get("experience_max").is_some_and(|v| !v.is_null()))
+            && filters.get("matching").is_none_or(Value::is_null)
+        {
+            filters.insert("matching".into(), serde_json::json!({}));
+        }
+    }
+    if let Some(matching) = value
+        .pointer_mut("/filters/matching")
+        .and_then(Value::as_object_mut)
+    {
+        if submitted_version <= 6 {
+            matching.insert(
+                "experience_match_mode".into(),
+                Value::String("advertised_range_overlap".into()),
+            );
+        } else {
+            matching
+                .entry("experience_match_mode")
+                .or_insert(Value::String("required_minimum".into()));
         }
     }
     value["version"] = Value::from(WORKFLOW_SPEC_VERSION);
@@ -501,6 +524,19 @@ pub fn normalized_source_endpoint(extractor: &WorkflowExtractor) -> Result<Strin
     if extractor.kind.expects_url() {
         let normalized = scrape_core::identity::normalized_detail_url(&extractor.url)
             .map_err(AppError::Validation)?;
+        if extractor.kind == SourceKind::Workday {
+            let parsed = url::Url::parse(&normalized)
+                .map_err(|e| AppError::Validation(format!("extractor.url: {e}")))?;
+            let valid = parsed
+                .host_str()
+                .map(|h| h.ends_with(".myworkdayjobs.com"))
+                .unwrap_or(false);
+            if !valid {
+                return Err(AppError::Validation(
+                    "extractor.url: Workday URL must end with .myworkdayjobs.com".into(),
+                ));
+            }
+        }
         Ok(format!("{:?}:{}", extractor.kind, normalized))
     } else if !extractor.url.contains("://") {
         let slug = extractor.url.trim().to_lowercase();
@@ -659,6 +695,19 @@ pub fn extract_source_input(
     let identifier = if extractor.kind.expects_url() {
         scrape_core::identity::normalized_detail_url(&extractor.url)
             .map_err(AppError::Validation)?;
+        if extractor.kind == SourceKind::Workday {
+            let parsed = url::Url::parse(&extractor.url)
+                .map_err(|e| AppError::Validation(format!("extractor.url: {e}")))?;
+            let valid = parsed
+                .host_str()
+                .map(|h| h.ends_with(".myworkdayjobs.com"))
+                .unwrap_or(false);
+            if !valid {
+                return Err(AppError::Validation(
+                    "extractor.url: Workday URL must end with .myworkdayjobs.com".into(),
+                ));
+            }
+        }
         extractor.url.clone()
     } else if !extractor.url.contains("://") {
         extractor.url.trim().to_string()
@@ -1125,10 +1174,60 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
 mod tests {
     use super::*;
     #[test]
+    fn experience_modes_preserve_legacy_rules_and_explicit_v7_edits() {
+        for version in 2..=7 {
+            let value = serde_json::json!({"version":version,"metadata":{"name":"Experience compatibility"},"sources":[{"id":"fixture","label":"Fixture","enabled":true,"extractor":{"kind":"greenhouse","url":"https://boards.greenhouse.io/fixture"}}],"filters":{"matching":{"experience_min":3,"experience_max":5}}});
+            let mut spec = validate(value, "UTC").unwrap();
+            let expected = if version <= 6 {
+                scrape_core::matching::ExperienceMatchMode::AdvertisedRangeOverlap
+            } else {
+                scrape_core::matching::ExperienceMatchMode::RequiredMinimum
+            };
+            assert_eq!(
+                spec.filters
+                    .as_ref()
+                    .unwrap()
+                    .matching
+                    .as_ref()
+                    .unwrap()
+                    .experience_match_mode,
+                expected
+            );
+            spec.filters
+                .as_mut()
+                .unwrap()
+                .matching
+                .as_mut()
+                .unwrap()
+                .experience_max = Some(6);
+            let reopened = validate(serde_json::to_value(spec).unwrap(), "UTC").unwrap();
+            assert_eq!(
+                reopened
+                    .filters
+                    .unwrap()
+                    .matching
+                    .unwrap()
+                    .experience_match_mode,
+                expected
+            );
+        }
+        let legacy = serde_json::json!({"version":6,"metadata":{"name":"Legacy bounds"},"sources":[{"id":"fixture","label":"Fixture","enabled":true,"extractor":{"kind":"greenhouse","url":"https://boards.greenhouse.io/fixture"}}],"filters":{"experience_min":3}});
+        assert_eq!(
+            validate(legacy, "UTC")
+                .unwrap()
+                .filters
+                .unwrap()
+                .matching
+                .unwrap()
+                .experience_match_mode,
+            scrape_core::matching::ExperienceMatchMode::AdvertisedRangeOverlap
+        );
+    }
+    #[test]
     fn extraction_modes_are_versioned_lossless_and_secrets_are_rejected() {
         let value = serde_json::json!({"version":6,"metadata":{"name":"Browser fixture"},"sources":[{"id":"fixture","label":"Fixture","enabled":true,"extractor":{"kind":"browser","url":"https://fixture.test/jobs","job_container":"//article","title_selector":".title","url_selector":"a","url_attribute":"href","id_selector":".","id_attribute":"data-id","date_regex":"(?P<value>.+)","date_selector":"time","next_page_selector":"a.next@href","load_more_selector":"button.more","wait_for_selector":"main","navigation_timeout_s":30,"max_pages":2,"max_source_duration_s":60,"max_workflow_duration_s":120,"session_id":"fixture-login"}}]});
         let spec = validate(value.clone(), "UTC").unwrap();
-        assert_eq!(spec.version, 6);
+        assert_eq!(spec.version, WORKFLOW_SPEC_VERSION);
         assert_eq!(spec.sources[0].extractor.kind, SourceKind::Selector);
         let config = source_input(&spec, "UTC").unwrap().config.unwrap();
         assert_eq!(config["mode"], "browser");

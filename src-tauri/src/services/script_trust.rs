@@ -132,7 +132,7 @@ pub async fn validate_execution(
 ) -> Result<()> {
     if sources.is_empty() {
         return Err(AppError::Validation(
-            "Enable at least one source before preview or execution.".into(),
+            "Enable at least one source in the workflow editor before preview or execution.".into(),
         ));
     }
     for source in sources {

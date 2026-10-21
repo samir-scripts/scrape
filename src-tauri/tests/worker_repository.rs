@@ -18,19 +18,7 @@ use std::{
 };
 
 fn worker() -> std::path::PathBuf {
-    let triple = match (std::env::consts::ARCH, std::env::consts::OS) {
-        ("aarch64", "macos") => "aarch64-apple-darwin",
-        ("x86_64", "macos") => "x86_64-apple-darwin",
-        ("x86_64", "linux") => "x86_64-unknown-linux-gnu",
-        _ => panic!("Set up a packaged native sidecar for this test platform"),
-    };
-    let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(format!("binaries/scrape-worker-{triple}"));
-    assert!(
-        file.exists(),
-        "Build the sidecar with npm run build:sidecar before Rust integration tests"
-    );
-    file
+    scrape_lib::services::process::packaged_worker_path().unwrap()
 }
 fn invoke(config: &WorkerConfig, preview: bool) -> Vec<WorkerEvent> {
     invoke_replay(config, preview, None)
@@ -447,6 +435,105 @@ async fn recorded_lever_response_survives_actual_worker_and_repository() {
             )
         );
     }
+    server.join().unwrap();
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn workday_cxs_survives_worker_and_sqlite() {
+    let payload = include_str!("../../crates/scrape-worker/tests/fixtures/workday_jobs.json");
+    let expected: serde_json::Value = serde_json::from_str(payload).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let address = listener.local_addr().unwrap();
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let stopping = stop.clone();
+    let server = std::thread::spawn(move || {
+        while !stopping.load(std::sync::atomic::Ordering::SeqCst) {
+            if let Ok((mut stream, _)) = listener.accept() {
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                let mut buffer = [0; 4096];
+                let n = stream.read(&mut buffer).unwrap();
+                let req = String::from_utf8_lossy(&buffer[..n]);
+                if req.contains("robots.txt") {
+                    write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nUser-agent: *\nAllow: /").unwrap();
+                } else if req.starts_with("GET ") {
+                    write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<html><head><title>TestCorp</title></head><body>Careers</body></html>").unwrap();
+                } else if req.starts_with("POST ") {
+                    write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", payload.len(), payload).unwrap();
+                }
+            } else {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+    });
+
+    let directory = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&directory.path().join("workday.db"))
+        .await
+        .unwrap();
+    let source = SourcesRepo::create(
+        &pool,
+        CreateSourceInput {
+            kind: SourceKind::Workday,
+            name: "TestCorp".into(),
+            identifier: "https://testcorp.wd5.myworkdayjobs.com/Careers".into(),
+            config: None,
+            enabled: Some(false),
+            cadence: Some(scrape_core::SourceCadence::Manual),
+            cadence_cron: None,
+            retention_days: None,
+            retention_policy: None,
+            filters: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let config = WorkerConfig {
+        version: PROTOCOL_VERSION,
+        blocked_postings: vec![],
+        sources: vec![WorkerSource {
+            id: source.id.clone(),
+            kind: source.kind,
+            name: source.name.clone(),
+            identifier: source.identifier.clone(),
+            config: serde_json::json!({}),
+        }],
+        filters: WorkerFilters::default(),
+        max_jobs_per_run: Some(10),
+        ..Default::default()
+    };
+
+    let events = invoke_replay(&config, false, Some(&format!("http://{address}")));
+    if let Some(err) = events
+        .iter()
+        .find(|e| matches!(e, WorkerEvent::Error { .. }))
+    {
+        panic!("Unexpected worker error event: {err:?}");
+    }
+    let jobs: Vec<_> = events
+        .into_iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .map(|e| scraped_job_from_event(e).unwrap())
+        .collect();
+
+    assert_eq!(jobs.len(), 3);
+    let stats = JobsRepo::upsert_scraped(&pool, &jobs).await.unwrap();
+    assert_eq!(stats.inserted, 3);
+
+    let saved = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+    assert_eq!(saved.total, 3);
+    for job in saved.items {
+        assert!(expected["jobPostings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["title"].as_str() == Some(&job.title)));
+    }
+    stop.store(true, std::sync::atomic::Ordering::SeqCst);
     server.join().unwrap();
     pool.close().await;
 }
@@ -1883,350 +1970,176 @@ if (!input.continuation) {
     pool.close().await;
 }
 
+/// Manifest-selected canonical six-template acceptance. Known missing captures
+/// stay partial and Meta stays unsupported; neither is a successful ingestion.
 #[tokio::test]
-async fn recorded_provider_company_verification_matrix_persists_to_sqlite() {
+async fn canonical_provider_workflow_matrix_reaches_discovered_with_truthful_coverage() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
-        .unwrap()
-        .to_path_buf();
-    let bitwarden_payload =
-        std::fs::read_to_string(root.join("fixtures/providers/greenhouse/bitwarden.json")).unwrap();
-    let google_payload =
-        std::fs::read_to_string(root.join("fixtures/providers/selector/google.html")).unwrap();
-    let apple_payload =
-        std::fs::read_to_string(root.join("fixtures/providers/selector/apple.html")).unwrap();
-    let meta_payload =
-        std::fs::read_to_string(root.join("fixtures/providers/meta/meta.html")).unwrap();
-
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let address = listener.local_addr().unwrap();
-    listener.set_nonblocking(true).unwrap();
-
-    let running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
-    let running_clone = running.clone();
-
-    let server = std::thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_secs(30);
-        while running_clone.load(std::sync::atomic::Ordering::Relaxed) && Instant::now() < deadline
-        {
-            if let Ok((mut stream, _)) = listener.accept() {
-                stream.set_nonblocking(false).unwrap();
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(3)))
-                    .unwrap();
-                let mut buffer = [0; 4096];
-                let n = match stream.read(&mut buffer) {
-                    Ok(n) if n > 0 => n,
-                    _ => continue,
-                };
-                let req = String::from_utf8_lossy(&buffer[..n]);
-                let path = req.split_whitespace().nth(1).unwrap_or("");
-                let (ctype, body) = if path.contains("bitwarden") {
-                    ("application/json", bitwarden_payload.as_str())
-                } else if path.contains("careers/applications") || path.contains("google") {
-                    ("text/html; charset=utf-8", google_payload.as_str())
-                } else if path.contains("apple") {
-                    ("text/html; charset=utf-8", apple_payload.as_str())
-                } else if path.contains("metacareers") || path.contains("meta") {
-                    ("text/html; charset=utf-8", meta_payload.as_str())
-                } else {
-                    ("text/plain", "User-agent: *\nAllow: /")
-                };
-                let resp = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                    body.len()
-                );
-                let _ = stream.write_all(resp.as_bytes());
-            } else {
-                std::thread::sleep(Duration::from_millis(10));
-            }
+        .unwrap();
+    if std::env::var_os("SCRAPE_VERIFY_NODE").is_none() {
+        std::env::set_var("SCRAPE_VERIFY_NODE", fixture_node_path());
+    }
+    let report = scrape_lib::services::provider_verification::verify(root, false, false)
+        .await
+        .unwrap();
+    assert_eq!(report["mode"], "recorded_workflows");
+    let checks = report["checks"].as_array().unwrap();
+    let failures: Vec<_> = checks.iter().filter(|c| c["status"] == "failed").collect();
+    assert!(failures.is_empty(), "{failures:#?}");
+    assert!(checks
+        .iter()
+        .any(|c| c["companies"] == serde_json::json!(["Cloudflare"])));
+    assert!(checks
+        .iter()
+        .any(|c| c["id"] == "meta-unsupported" && c["status"] == "unsupported"));
+    assert!(checks
+        .iter()
+        .any(|c| c["id"] == "netflix-amazon-template" && c["status"] == "partial"));
+    assert!(checks.iter().any(
+        |c| c["id"] == "netflix-amazon-missing-pagination-metadata" && c["status"] == "partial"
+    ));
+    assert!(checks
+        .iter()
+        .any(|c| c["id"] == "google-recorded-template" && c["status"] == "partial"));
+    assert!(checks
+        .iter()
+        .any(|c| c["id"] == "apple-recorded-template" && c["status"] == "partial"));
+    for company in [
+        "Cloudflare",
+        "Bitwarden",
+        "Linear",
+        "SEP",
+        "Google",
+        "Apple",
+        "Netflix",
+        "Amazon",
+    ] {
+        for control in ["template", "unrestricted", "strict"] {
+            assert!(
+                checks.iter().any(|c| c["control"] == control
+                    && c["companies"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|v| v == company)),
+                "missing canonical {company} {control} control"
+            );
         }
+    }
+}
+
+#[test]
+fn provider_acceptance_rejects_wrong_destination_missing_pagination_evidence_and_control_drift() {
+    use scrape_lib::services::provider_verification::validate_observation;
+    use serde_json::json;
+    let expected = json!({
+        "jobs":[{"external_id":"42","url":"https://jobs.example/42","location":"Cupertino","posting_identity":"[\"publisher\",\"https://jobs.example\",\"42\"]"}],
+        "terminal":"exhausted","errors":[],
+        "source_counts":{"Fixture":{"examined":1,"accepted":1}},
+        "required_routes":["/jobs.example/search","/jobs.example/search?page=2"]
     });
+    let valid = json!({
+        "jobs":[{"external_id":"42","url":"https://jobs.example/42","location":"Cupertino","posting_identity":"[\"publisher\",\"https://jobs.example\",\"42\"]"}],
+        "source_companies":{"fixture":"Fixture"},
+        "source_stats":[{"source_id":"fixture","examined":1,"accepted":1,"termination":"exhausted","unresolved":0}],
+        "errors":[],"inserted":1,"discovered":1,"saved_filters_match":true,
+        "routes":{"requests":["/jobs.example/search","/jobs.example/search?page=2"],"unexpected_routes":[]}
+    });
+    assert!(validate_observation(&expected, &valid).is_ok());
+    let mut wrong = valid.clone();
+    wrong["jobs"][0]["url"] = "https://jobs.example/jobs/jobs/42".into();
+    assert!(validate_observation(&expected, &wrong)
+        .unwrap_err()
+        .contains("destinations"));
+    let mut wrong_identity = valid.clone();
+    wrong_identity["jobs"][0]["posting_identity"] = serde_json::Value::Null;
+    assert!(validate_observation(&expected, &wrong_identity)
+        .unwrap_err()
+        .contains("posting_identity evidence"));
+    let mut missing_page = valid.clone();
+    missing_page["routes"]["requests"] = json!(["/jobs.example/search"]);
+    assert!(validate_observation(&expected, &missing_page)
+        .unwrap_err()
+        .contains("page request"));
+    let mut missing_evidence = valid.clone();
+    missing_evidence["jobs"][0]["location"] = serde_json::Value::Null;
+    assert!(validate_observation(&expected, &missing_evidence)
+        .unwrap_err()
+        .contains("location evidence"));
+    let mut unresolved = valid.clone();
+    unresolved["source_stats"][0]["unresolved"] = 1.into();
+    assert!(validate_observation(&expected, &unresolved)
+        .unwrap_err()
+        .contains("required field evidence"));
+    let mut wrong_counter = valid.clone();
+    wrong_counter["source_stats"][0]["accepted"] = 0.into();
+    assert!(validate_observation(&expected, &wrong_counter)
+        .unwrap_err()
+        .contains("accepted mismatch"));
+    let mut unexpected = valid.clone();
+    unexpected["routes"]["unexpected_routes"] = json!(["GET /jobs.example/unknown"]);
+    assert!(validate_observation(&expected, &unexpected)
+        .unwrap_err()
+        .contains("Unexpected fixture route"));
+    let mut drift = valid.clone();
+    drift["saved_filters_match"] = false.into();
+    assert!(validate_observation(&expected, &drift)
+        .unwrap_err()
+        .contains("controls changed"));
+    let mut missing_summary = valid.clone();
+    missing_summary["source_stats"] = json!([]);
+    assert!(validate_observation(&expected, &missing_summary)
+        .unwrap_err()
+        .contains("source scan evidence"));
+    let mut premature_exhaustion = valid;
+    premature_exhaustion["source_stats"][0]["termination"] = "job_limit".into();
+    assert!(validate_observation(&expected, &premature_exhaustion)
+        .unwrap_err()
+        .contains("terminal coverage"));
+}
 
+#[tokio::test]
+async fn canonical_provider_preflight_rejects_missing_owned_child_before_launch() {
+    use scrape_lib::db::runs::{RunsRepo, TriggerType};
+    use scrape_lib::services::{execution_diagnostics, sample_workflows, workflow};
     let directory = tempfile::tempdir().unwrap();
-    let pool = scrape_lib::db::init_db(&directory.path().join("providers_matrix.db"))
+    let pool = scrape_lib::db::init_db(&directory.path().join("missing-child.db"))
         .await
         .unwrap();
-
-    // 1. Bitwarden (Greenhouse ATS)
-    let bitwarden_src = SourcesRepo::create(
-        &pool,
-        CreateSourceInput {
-            kind: SourceKind::Greenhouse,
-            name: "Bitwarden".into(),
-            identifier: "bitwarden".into(),
-            config: None,
-            enabled: Some(true),
-            cadence: Some(scrape_core::SourceCadence::Manual),
-            cadence_cron: None,
-            retention_days: None,
-            retention_policy: None,
-            filters: None,
-        },
-    )
-    .await
-    .unwrap();
-
-    let bw_config = WorkerConfig {
-        version: PROTOCOL_VERSION,
-        max_jobs_per_run: Some(100),
-        sources: vec![WorkerSource {
-            id: bitwarden_src.id.clone(),
-            kind: bitwarden_src.kind,
-            name: bitwarden_src.name.clone(),
-            identifier: bitwarden_src.identifier.clone(),
-            config: serde_json::json!({
-                "__workflow_spec": { "max_jobs_per_run": 50 }
-            }),
-        }],
-        filters: WorkerFilters::default(),
-        limits: WorkerLimits {
-            enrichment: Some(scrape_core::protocol::EnrichmentLimits {
-                max_requests: 0,
-                timeout_ms: 5000,
-            }),
-            per_host_delay_ms: 0,
-            request_timeout_s: 3,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-
-    let bw_events = invoke_replay(&bw_config, false, Some(&format!("http://{address}")));
-    let bw_jobs: Vec<_> = bw_events
+    let parent = sample_workflows::seed_all(&pool)
+        .await
+        .unwrap()
         .into_iter()
-        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
-        .map(|e| scraped_job_from_event(e).unwrap())
-        .collect();
-    assert_eq!(bw_jobs.len(), 39);
-    let bw_stats = JobsRepo::upsert_scraped(&pool, &bw_jobs).await.unwrap();
-    assert_eq!(bw_stats.inserted, 39);
-
-    // Verify canonical identity format on saved jobs
-    let bw_saved = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
-    assert_eq!(bw_saved.total, 39);
-    for job in &bw_saved.items {
-        let id_str = job.posting_identity.as_ref().unwrap();
-        assert!(id_str.contains("\"greenhouse\"") && id_str.contains("\"bitwarden\""));
+        .find(|s| s.name.starts_with("Google & Apple"))
+        .unwrap();
+    let mut spec = workflow::validate(parent.config["__workflow_spec"].clone(), "UTC").unwrap();
+    spec.metadata.enabled = Some(true);
+    for child in &mut spec.sources {
+        child.enabled = true;
     }
-
-    // 2. Google Careers (Static Selector)
-    let google_src = SourcesRepo::create(
-        &pool,
-        CreateSourceInput {
-            kind: SourceKind::Selector,
-            name: "Google".into(),
-            identifier: "https://www.google.com/about/careers/applications/jobs/results/".into(),
-            config: Some(serde_json::json!({
-                "mode": "static",
-                "item": "li.lLd3Je",
-                "title": "h3.QJPWVe",
-                "link": "a[href*='jobs/results/']",
-                "location": "span.r0wTof",
-            })),
-            enabled: Some(true),
-            cadence: Some(scrape_core::SourceCadence::Manual),
-            cadence_cron: None,
-            retention_days: None,
-            retention_policy: None,
-            filters: None,
-        },
-    )
-    .await
-    .unwrap();
-
-    let google_config = WorkerConfig {
-        version: PROTOCOL_VERSION,
-        sources: vec![WorkerSource {
-            id: google_src.id.clone(),
-            kind: google_src.kind,
-            name: google_src.name.clone(),
-            identifier: google_src.identifier.clone(),
-            config: google_src.config.clone(),
-        }],
-        filters: WorkerFilters::default(),
-        limits: WorkerLimits {
-            per_host_delay_ms: 0,
-            request_timeout_s: 3,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-
-    let g_events = invoke_replay(&google_config, false, Some(&format!("http://{address}")));
-    let g_jobs: Vec<_> = g_events
-        .into_iter()
-        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
-        .map(|e| scraped_job_from_event(e).unwrap())
-        .collect();
-    assert_eq!(g_jobs.len(), 20);
-    let g_stats = JobsRepo::upsert_scraped(&pool, &g_jobs).await.unwrap();
-    assert_eq!(g_stats.inserted, 20);
-
-    // 3. Apple Jobs (Static Selector)
-    let apple_src = SourcesRepo::create(
-        &pool,
-        CreateSourceInput {
-            kind: SourceKind::Selector,
-            name: "Apple".into(),
-            identifier: "https://jobs.apple.com/en-us/search".into(),
-            config: Some(serde_json::json!({
-                "mode": "static",
-                "item": "ul#search-job-list > li.rc-accordion-item",
-                "title": "h3 a.link-inline",
-                "link": "a.link-inline",
-                "location": "span.table--advanced-search__location-sub",
-                "date": "span.job-posted-date",
-            })),
-            enabled: Some(true),
-            cadence: Some(scrape_core::SourceCadence::Manual),
-            cadence_cron: None,
-            retention_days: None,
-            retention_policy: None,
-            filters: None,
-        },
-    )
-    .await
-    .unwrap();
-
-    let apple_config = WorkerConfig {
-        version: PROTOCOL_VERSION,
-        sources: vec![WorkerSource {
-            id: apple_src.id.clone(),
-            kind: apple_src.kind,
-            name: apple_src.name.clone(),
-            identifier: apple_src.identifier.clone(),
-            config: apple_src.config.clone(),
-        }],
-        filters: WorkerFilters::default(),
-        limits: WorkerLimits {
-            per_host_delay_ms: 0,
-            request_timeout_s: 3,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-
-    let a_events = invoke_replay(&apple_config, false, Some(&format!("http://{address}")));
-    let a_jobs: Vec<_> = a_events
-        .into_iter()
-        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
-        .map(|e| scraped_job_from_event(e).unwrap())
-        .collect();
-    assert_eq!(a_jobs.len(), 20);
-    let a_stats = JobsRepo::upsert_scraped(&pool, &a_jobs).await.unwrap();
-    assert_eq!(a_stats.inserted, 20);
-
-    // 4. Netflix (Versioned Script Extractor)
-    let netflix_extractor_path = root
-        .join("crates/scrape-worker/examples/extractors/netflix_extractor.js")
-        .to_string_lossy()
-        .to_string();
-    let netflix_fixture_path = root
-        .join("fixtures/providers/script/netflix.json")
-        .to_string_lossy()
-        .to_string();
-
-    let netflix_src = SourcesRepo::create(
-        &pool,
-        CreateSourceInput {
-            kind: SourceKind::Selector,
-            name: "Netflix".into(),
-            identifier: "https://explore.jobs.netflix.net/api/apply/v2/jobs".into(),
-            config: Some(serde_json::json!({
-                "mode": "script",
-                "script": {
-                    "runtime": "js",
-                    "interpreter": fixture_node_path(),
-                    "path": netflix_extractor_path,
-                    "args": [netflix_fixture_path]
-                }
-            })),
-            enabled: Some(true),
-            cadence: Some(scrape_core::SourceCadence::Manual),
-            cadence_cron: None,
-            retention_days: None,
-            retention_policy: None,
-            filters: None,
-        },
-    )
-    .await
-    .unwrap();
-
-    let nf_hash = netflix_src.script_sha256.as_deref().unwrap();
-    scrape_lib::services::script_trust::trust(&pool, &netflix_src.id, nf_hash, true)
+    let parent = workflow::persist(&pool, spec, Some(parent.id.clone()), false, "UTC")
         .await
         .unwrap();
-
-    let nf_config = WorkerConfig {
-        version: PROTOCOL_VERSION,
-        sources: vec![WorkerSource {
-            id: netflix_src.id.clone(),
-            kind: netflix_src.kind,
-            name: netflix_src.name.clone(),
-            identifier: netflix_src.identifier.clone(),
-            config: netflix_src.config.clone(),
-        }],
-        filters: WorkerFilters::default(),
-        limits: WorkerLimits {
-            per_host_delay_ms: 0,
-            request_timeout_s: 3,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-
-    let nf_events = invoke(&nf_config, false);
-    let nf_jobs: Vec<_> = nf_events
-        .into_iter()
-        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
-        .map(|e| scraped_job_from_event(e).unwrap())
-        .collect();
-    assert_eq!(nf_jobs.len(), 10);
-    for job in &nf_jobs {
-        assert_eq!(job.company, "Netflix");
-    }
-    let nf_stats = JobsRepo::upsert_scraped(&pool, &nf_jobs).await.unwrap();
-    assert_eq!(nf_stats.inserted, 10);
-
-    // 5. Meta (Truthful acceptance gap / empty DOM shell)
-    let meta_config = WorkerConfig {
-        version: PROTOCOL_VERSION,
-        sources: vec![WorkerSource {
-            id: "meta-test".into(),
-            kind: SourceKind::Selector,
-            name: "Meta".into(),
-            identifier: "https://www.metacareers.com/jobs".into(),
-            config: serde_json::json!({
-                "mode": "static",
-                "item": ".job-item",
-                "title": ".job-title",
-                "link": "a",
-                "__workflow_spec": { "max_jobs_per_run": 20 }
-            }),
-        }],
-        filters: WorkerFilters::default(),
-        limits: WorkerLimits {
-            per_host_delay_ms: 0,
-            request_timeout_s: 3,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-
-    let meta_events = invoke_replay(&meta_config, false, Some(&format!("http://{address}")));
-    let meta_jobs: Vec<_> = meta_events
-        .into_iter()
-        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
-        .collect();
-    assert_eq!(meta_jobs.len(), 0, "Meta returns 0 jobs from static DOM");
-
-    // Total jobs in SQLite: 39 (Bitwarden) + 20 (Google) + 20 (Apple) + 10 (Netflix) = 89
-    let total_saved = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
-    assert_eq!(total_saved.total, 89);
-
-    running.store(false, std::sync::atomic::Ordering::Relaxed);
-    let _ = server.join();
+    let run = RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&parent.id))
+        .await
+        .unwrap();
+    let config = execution_diagnostics::prepare(&parent, "UTC", &run.started_at).unwrap();
+    assert_eq!(config.sources.len(), 2);
+    sqlx::query("DELETE FROM sources WHERE id=?")
+        .bind(&config.sources[1].id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let error = execution_diagnostics::preflight(&pool, &run.id, &parent.id, &config)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("no owned record"), "{error}");
+    assert!(RunsRepo::get_logs(&pool, &run.id)
+        .await
+        .unwrap()
+        .iter()
+        .any(|l| l.message.contains("No worker was launched")));
     pool.close().await;
 }
 
@@ -3066,6 +2979,27 @@ async fn seeded_bundled_scripts_run_after_explicit_setup_from_non_repository_dir
         panic!()
     };
     assert_eq!(stats.sources.len(), 2);
+    assert!(
+        stats.sources.iter().all(|s| s.termination
+            == scrape_core::protocol::CoverageTermination::PageLimit
+            && s.outcome == Some(scrape_core::protocol::ScanOutcome::Partial)),
+        "one captured page with a larger provider total is partial, not exhausted: {:?}",
+        stats.sources
+    );
+    assert!(
+        events
+            .iter()
+            .filter(|e| matches!(
+                e,
+                WorkerEvent::Warning {
+                    eligibility_incomplete: true,
+                    termination: Some(scrape_core::protocol::CoverageTermination::PageLimit),
+                    ..
+                }
+            ))
+            .count()
+            >= 2
+    );
     let batch: Vec<_> = events
         .iter()
         .filter(|e| matches!(e, WorkerEvent::Job { .. }))
@@ -3151,4 +3085,744 @@ async fn seeded_bundled_scripts_run_after_explicit_setup_from_non_repository_dir
     let refreshed = JobsRepo::upsert_scraped(&pool, &explicit).await.unwrap();
     assert_eq!((refreshed.inserted, refreshed.updated), (0, 8));
     pool.close().await;
+}
+
+/// Full-pipeline test for Section 6:
+/// - Google document base resolution (no duplicated jobs/results/ in destination URL)
+/// - Apple field location extraction (div.job-title-location span:not(.a11y))
+/// - Multi-page pagination across rejected Page 1 postings to matching Page 2 postings
+/// - Persistence to temporary SQLite under parent workflow ownership
+#[tokio::test]
+async fn seeded_google_apple_pagination_and_document_base_destination_persist_to_sqlite() {
+    use scrape_lib::{
+        db::runs::{RunCounts, RunsRepo, TriggerType},
+        services::{execution_diagnostics, sample_workflows, workflow},
+    };
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        listener.set_nonblocking(true).unwrap();
+        let mut pages = 0;
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while pages < 4 && Instant::now() < deadline {
+            let Ok((mut stream, _)) = listener.accept() else {
+                std::thread::sleep(Duration::from_millis(5));
+                continue;
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut bytes = [0; 8192];
+            let n = stream.read(&mut bytes).unwrap();
+            let request = String::from_utf8_lossy(&bytes[..n]);
+            let path = request.split_whitespace().nth(1).unwrap();
+            let body = match path {
+                "/www.google.com/about/careers/applications/jobs/results/" => {
+                    pages += 1;
+                    concat!(
+                        "<html><head><base href=\"https://www.google.com/about/careers/applications/\"></head>",
+                        "<body><ul><li class='lLd3Je'><h3 class='QJPWVe'>Google Sales Lead</h3>",
+                        "<a href='jobs/results/google-sales'>Job</a><span class='r0wTof'>Austin</span></li></ul>",
+                        "<a href=\"https://www.google.com/about/careers/applications/jobs/results/?page=2\" aria-label=\"Go to next page\">Next</a>",
+                        "</body></html>"
+                    )
+                }
+                "/www.google.com/about/careers/applications/jobs/results/?page=2" => {
+                    pages += 1;
+                    concat!(
+                        "<html><head><base href=\"https://www.google.com/about/careers/applications/\"></head>",
+                        "<body><ul><li class='lLd3Je'><h3 class='QJPWVe'>Google Distributed Systems Rust Engineer</h3>",
+                        "<a href='jobs/results/131138433534829254-google-rust-engineer'>Job</a><span class='r0wTof'>Austin</span></li></ul></body></html>"
+                    )
+                }
+                "/jobs.apple.com/en-us/search" => {
+                    pages += 1;
+                    concat!(
+                        "<html><head><link rel=\"next\" href=\"https://jobs.apple.com/en-us/search?page=2\"></head>",
+                        "<body><ul id='search-job-list'><li class='rc-accordion-item'><h3><a class='link-inline' href='/en-us/details/apple-retail'>Apple Store Lead</a></h3>",
+                        "<div class='job-title-location'><span class='a11y'>Location</span><span>Cupertino</span></div></li></ul></body></html>"
+                    )
+                }
+                "/jobs.apple.com/en-us/search?page=2" => {
+                    pages += 1;
+                    concat!(
+                        "<html><head></head>",
+                        "<body><ul id='search-job-list'><li class='rc-accordion-item'><h3><a class='link-inline' href='/en-us/details/200689992/coreos-firmware-engineer'>CoreOS Firmware Engineer</a></h3>",
+                        "<div class='job-title-location'><span class='a11y'>Location</span><span>Cupertino</span></div></li></ul></body></html>"
+                    )
+                }
+                _ if path.ends_with("/robots.txt") => "User-agent: *\nAllow: /",
+                _ => panic!("unexpected fixture route {path}"),
+            };
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+        }
+        assert_eq!(pages, 4, "Expected all 4 pages to be visited");
+    });
+
+    let dir = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&dir.path().join("pagination.db"))
+        .await
+        .unwrap();
+    let parent = sample_workflows::seed_all(&pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|s| s.name.starts_with("Google & Apple"))
+        .unwrap();
+
+    let mut spec = workflow::validate(parent.config["__workflow_spec"].clone(), "UTC").unwrap();
+    spec.metadata.enabled = Some(true);
+    for entry in &mut spec.sources {
+        entry.enabled = true;
+    }
+    // Filter by "Engineer": early Page 1 items are rejected, later Page 2 items match
+    let matching = spec.filters.as_mut().unwrap().matching.as_mut().unwrap();
+    let kw = matching.keywords.as_mut().unwrap();
+    kw.any = vec!["Engineer".into()];
+    kw.fields = vec![scrape_core::FilterField::Title];
+    matching.role_types = vec![];
+    matching.workplaces = vec![];
+    matching.countries = vec![];
+    matching.regions = vec![];
+    matching.cities = vec![];
+
+    let parent = workflow::persist(&pool, spec, Some(parent.id.clone()), false, "UTC")
+        .await
+        .unwrap();
+    let run = RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&parent.id))
+        .await
+        .unwrap();
+    let mut config = execution_diagnostics::prepare(&parent, "UTC", &run.started_at).unwrap();
+    config.limits.per_host_delay_ms = 0;
+    execution_diagnostics::preflight(&pool, &run.id, &parent.id, &config)
+        .await
+        .unwrap();
+
+    let events = invoke_replay(&config, false, Some(&origin));
+    server.join().unwrap();
+
+    let batch: Vec<_> = events
+        .into_iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .map(|e| scraped_job_from_event(e).unwrap())
+        .collect();
+
+    assert_eq!(
+        batch.len(),
+        2,
+        "Expected exactly 2 accepted jobs from later pages"
+    );
+    assert_ne!(batch[0].source_id, batch[1].source_id);
+
+    let google_job = batch
+        .iter()
+        .find(|j| j.title.contains("Google"))
+        .expect("Expected Google job");
+    assert_eq!(
+        google_job.url,
+        "https://www.google.com/about/careers/applications/jobs/results/131138433534829254-google-rust-engineer"
+    );
+    assert!(
+        !google_job.url.contains("jobs/results/jobs/results/"),
+        "Must not duplicate jobs/results/ in destination"
+    );
+
+    let apple_job = batch
+        .iter()
+        .find(|j| j.title.contains("CoreOS"))
+        .expect("Expected Apple job");
+    assert_eq!(
+        apple_job.url,
+        "https://jobs.apple.com/en-us/details/200689992/coreos-firmware-engineer"
+    );
+    assert_eq!(apple_job.location.as_deref(), Some("Cupertino"));
+
+    execution_diagnostics::persist_batch(&pool, &run.id, &batch, &mut RunCounts::default())
+        .await
+        .unwrap();
+
+    let saved = JobsRepo::list(
+        &pool,
+        JobFilter {
+            source_id: Some(parent.id.clone()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(saved.total, 2);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM jobs WHERE workflow_id=?")
+            .bind(&parent.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        2
+    );
+
+    pool.close().await;
+}
+
+/// Authored employer evidence, not preclassified worker events: the same HTTP
+/// documents must produce the independently specified worker and SQL identities.
+#[tokio::test]
+async fn required_experience_and_exact_employer_artwork_survive_worker_sql_and_reopen() {
+    use scrape_core::{
+        branding::{relationship_key, LogoStatus},
+        matching::{ExperienceMatchMode, PostingRules},
+        JobStatus, RoleType, TriState,
+    };
+    use serde_json::json;
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    };
+
+    const ACME_ART: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="256" height="128"><path fill="#c20" d="M0 0h256v128H0z"/></svg>"##;
+    const LABS_ART: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="128" height="256"><path fill="#06c" d="M0 0h128v256H0z"/></svg>"##;
+    let fixtures = [
+        (
+            "iii-forward",
+            "SOFTWARE ENGINEER III",
+            Some("5 years of professional experience required; 1 year of Kubernetes preferred"),
+            json!("FULL_TIME"),
+            "Acme",
+        ),
+        (
+            "iii-reverse",
+            "SOFTWARE ENGINEER III",
+            Some("1 year of Kubernetes preferred; 5 years of professional experience required"),
+            json!(["FullTime", "FULL_TIME"]),
+            "Acme",
+        ),
+        (
+            "range",
+            "Software Engineer",
+            Some("1–5 years of professional experience required"),
+            json!("FULL_TIME"),
+            "Acme",
+        ),
+        (
+            "three",
+            "Software Engineer",
+            Some("3+ years of professional experience required"),
+            json!("CONTRACT"),
+            "Acme Labs",
+        ),
+        (
+            "graduate",
+            "Software Engineer",
+            Some("New graduates welcome. 0–1 years of professional experience required"),
+            json!("INTERN"),
+            "Acme Labs",
+        ),
+        (
+            "maximum",
+            "Software Engineer",
+            Some("At most 5 years of professional experience"),
+            json!(null),
+            "Acme Labs",
+        ),
+        (
+            "unknown",
+            "Internal Tools Engineer",
+            Some("We build reliable systems."),
+            json!("Internal"),
+            "Acme Labs",
+        ),
+        (
+            "title-only",
+            "SOFTWARE ENGINEER III",
+            None,
+            json!(null),
+            "Acme",
+        ),
+        (
+            "conflict",
+            "Software Engineer",
+            None,
+            json!(["FULL_TIME", "CONTRACT"]),
+            "Acme Labs",
+        ),
+    ];
+    let postings: Vec<_> = fixtures
+        .iter()
+        .map(|(id, title, description, employment_type, company)| {
+            let logo = if *company == "Acme" {
+                json!({"@type":"ImageObject","url":"/logos/acme.svg"})
+            } else {
+                json!("/logos/acme-labs.svg")
+            };
+            let mut value = json!({
+                "@type":"JobPosting",
+                "identifier":id,
+                "title":title,
+                "url":format!("/jobs/{id}"),
+                "hiringOrganization":{"name":company,"logo":logo},
+            });
+            if let Some(description) = description {
+                value["description"] = json!(description);
+            }
+            if !employment_type.is_null() {
+                value["employmentType"] = employment_type.clone();
+            }
+            value
+        })
+        .collect();
+    let html = format!(
+        "<html><script type=\"application/ld+json\">{}</script></html>",
+        serde_json::to_string(&postings).unwrap()
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    listener.set_nonblocking(true).unwrap();
+    let stopped = Arc::new(AtomicBool::new(false));
+    let stop_server = Arc::clone(&stopped);
+    let requests = Arc::new(Mutex::new(
+        std::collections::BTreeMap::<String, usize>::new(),
+    ));
+    let server_requests = Arc::clone(&requests);
+    let server = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(90);
+        while !stop_server.load(Ordering::SeqCst) && Instant::now() < deadline {
+            if let Ok((mut stream, _)) = listener.accept() {
+                stream.set_nonblocking(false).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                let mut bytes = [0; 8192];
+                let n = stream.read(&mut bytes).unwrap();
+                let request = String::from_utf8_lossy(&bytes[..n]);
+                let path = request.split_whitespace().nth(1).unwrap().to_owned();
+                *server_requests
+                    .lock()
+                    .unwrap()
+                    .entry(path.clone())
+                    .or_default() += 1;
+                let (content_type, body) = match path.as_str() {
+                    "/shared-ats.example.test/robots.txt" => {
+                        ("text/plain", "User-agent: *\nAllow: /")
+                    }
+                    "/shared-ats.example.test/board" => ("text/html", html.as_str()),
+                    "/shared-ats.example.test/logos/acme.svg" => ("image/svg+xml", ACME_ART),
+                    "/shared-ats.example.test/logos/acme-labs.svg" => ("image/svg+xml", LABS_ART),
+                    _ => panic!("Unexpected employer fixture request: {path}"),
+                };
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                ).unwrap();
+            } else {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+    });
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("experience-artwork.db");
+    let pool = scrape_lib::db::init_db(&database).await.unwrap();
+    // This saved legacy rule deliberately omits the mode. Reopening it must
+    // preserve overlap rather than reinterpret the same bounds as a minimum.
+    let legacy_rule = json!({"experience_min":3,"experience_max":5});
+    let source = SourcesRepo::create(
+        &pool,
+        CreateSourceInput {
+            kind: SourceKind::Jsonld,
+            name: "Shared ATS, independent employers".into(),
+            identifier: "https://shared-ats.example.test/board".into(),
+            config: Some(json!({})),
+            enabled: Some(true),
+            cadence: Some(scrape_core::SourceCadence::Manual),
+            cadence_cron: None,
+            retention_days: Some(30),
+            retention_policy: Some("untracked_only".into()),
+            filters: Some(json!({"matching":legacy_rule})),
+        },
+    )
+    .await
+    .unwrap();
+    let mut config = WorkerConfig {
+        version: PROTOCOL_VERSION,
+        sources: vec![WorkerSource {
+            id: source.id.clone(),
+            kind: source.kind,
+            name: source.name.clone(),
+            identifier: source.identifier.clone(),
+            config: source.config.clone(),
+        }],
+        limits: WorkerLimits {
+            request_timeout_s: 3,
+            per_host_delay_ms: 0,
+            concurrency: 1,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let job_ids = |events: &[WorkerEvent]| {
+        let mut ids: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                WorkerEvent::Job { external_id, .. } => Some(external_id.clone()),
+                _ => None,
+            })
+            .collect();
+        ids.sort();
+        ids
+    };
+    let all_ids = vec![
+        "conflict",
+        "graduate",
+        "iii-forward",
+        "iii-reverse",
+        "maximum",
+        "range",
+        "three",
+        "title-only",
+        "unknown",
+    ];
+    let assert_clean = |events: &[WorkerEvent]| {
+        let errors: Vec<_> = events
+            .iter()
+            .filter(|event| matches!(event, WorkerEvent::Error { .. }))
+            .collect();
+        assert!(errors.is_empty(), "Fixture extraction errors: {errors:?}");
+    };
+    // Invoke the actual packaged dry-run worker and retain ephemeral artwork,
+    // but never feed preview results to either persistence API.
+    let preview = invoke_replay(&config, true, Some(&origin));
+    assert_clean(&preview);
+    assert_eq!(job_ids(&preview), all_ids);
+    let preview_logos: Vec<_> = preview
+        .iter()
+        .filter_map(|event| match event {
+            WorkerEvent::Branding {
+                source_id,
+                company,
+                logo,
+            } => Some((source_id, company, logo)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(preview_logos.len(), 2);
+    for (source_id, company, logo) in preview_logos {
+        assert_eq!(source_id, &source.id);
+        assert!(matches!(company.as_str(), "Acme" | "Acme Labs"));
+        assert_eq!(logo.status, LogoStatus::Verified);
+        logo.validate().unwrap();
+        assert!(logo
+            .asset
+            .as_deref()
+            .unwrap()
+            .starts_with("data:image/webp;base64,"));
+    }
+    for table in ["jobs", "employer_branding"] {
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(&format!("SELECT count(*) FROM {table}"))
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            0,
+            "dry-run must not populate {table}"
+        );
+    }
+
+    let events = invoke_replay(&config, false, Some(&origin));
+    assert_clean(&events);
+    assert_eq!(job_ids(&events), all_ids);
+    let rows: Vec<_> = events
+        .iter()
+        .filter(|event| matches!(event, WorkerEvent::Job { .. }))
+        .cloned()
+        .map(|event| scraped_job_from_event(event).unwrap())
+        .collect();
+    assert_eq!(
+        JobsRepo::upsert_scraped(&pool, &rows)
+            .await
+            .unwrap()
+            .inserted,
+        9
+    );
+    // Exercise the production Branding recorder *after* job insertion so the
+    // readback also covers attachment of the exact employer relationship.
+    for event in &events {
+        if let WorkerEvent::Branding {
+            source_id,
+            company,
+            logo,
+        } = event
+        {
+            scrape_lib::db::branding::record(&pool, source_id, company, logo)
+                .await
+                .unwrap();
+        }
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM employer_branding")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        2
+    );
+    let saved = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+    let expected_acme = scrape_core::branding::cache_asset(ACME_ART.as_bytes()).unwrap();
+    let expected_labs = scrape_core::branding::cache_asset(LABS_ART.as_bytes()).unwrap();
+    assert_ne!(expected_acme, expected_labs);
+    let mut protected_id = None;
+    let mut references = std::collections::BTreeMap::new();
+    for job in &saved.items {
+        let id = job.external_id.as_deref().unwrap();
+        let (min, max, role) = match id {
+            "iii-forward" | "iii-reverse" => (Some(5), None, RoleType::FullTime),
+            "range" => (Some(1), Some(5), RoleType::FullTime),
+            "three" => (Some(3), None, RoleType::Contract),
+            "graduate" => (Some(0), Some(1), RoleType::Internship),
+            "maximum" => (None, Some(5), RoleType::Unknown),
+            "title-only" | "unknown" | "conflict" => (None, None, RoleType::Unknown),
+            _ => panic!("Unexpected saved identity: {id}"),
+        };
+        assert_eq!((job.experience_min, job.experience_max), (min, max), "{id}");
+        assert_eq!(job.role_type, role, "{id}");
+        if id.starts_with("iii-") || id == "title-only" {
+            assert_eq!(job.is_new_grad, TriState::No, "{id}");
+            assert!(job
+                .experience_evidence
+                .as_deref()
+                .is_some_and(
+                    |evidence| evidence.contains("5 years") || evidence.contains("ENGINEER III")
+                ));
+        }
+        if id == "graduate" {
+            assert_eq!(job.is_new_grad, TriState::Yes);
+        }
+        let logo = job
+            .company_logo
+            .as_ref()
+            .expect("Exact employer artwork attached");
+        assert_eq!(logo.status, LogoStatus::Verified);
+        assert!(
+            logo.asset.is_none(),
+            "Read models expose references, not repeated artwork"
+        );
+        let evidence = logo.evidence.as_ref().unwrap();
+        assert_eq!(evidence.page_url, "https://shared-ats.example.test/board");
+        let (url, expected) = match job.company.as_str() {
+            "Acme" => (
+                "https://shared-ats.example.test/logos/acme.svg",
+                &expected_acme,
+            ),
+            "Acme Labs" => (
+                "https://shared-ats.example.test/logos/acme-labs.svg",
+                &expected_labs,
+            ),
+            other => panic!("Unexpected employer: {other}"),
+        };
+        assert_eq!(evidence.url, url);
+        let reference = logo.cached_asset_reference.as_ref().unwrap();
+        assert_eq!(
+            &scrape_lib::db::branding::asset(&pool, reference)
+                .await
+                .unwrap(),
+            expected
+        );
+        references.insert(job.company.clone(), reference.clone());
+        let key: String = sqlx::query_scalar("SELECT company_branding_key FROM jobs WHERE id=?")
+            .bind(&job.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(key, relationship_key(&source.id, &job.company));
+        if id == "iii-forward" {
+            protected_id = Some(job.id.clone());
+        }
+    }
+    assert_eq!(references.len(), 2);
+    assert_ne!(references["Acme"], references["Acme Labs"]);
+    let missing_artwork =
+        scrape_lib::db::branding::asset(&pool, &format!("sha256:{}", "0".repeat(64)))
+            .await
+            .unwrap_err();
+    assert_eq!(
+        missing_artwork.to_string(),
+        "Item not found: Cached employer logo not found",
+        "Unrecorded artwork must not fall back to a different employer"
+    );
+
+    // Expectations are authored independently of both the worker evaluator and
+    // SQL compiler: agreement between two implementations alone is insufficient.
+    let cases: Vec<(&str, serde_json::Value, Vec<&str>)> = vec![
+        (
+            "minimum 0–2",
+            json!({"experience_min":0,"experience_max":2,"experience_match_mode":"required_minimum"}),
+            vec!["graduate", "range"],
+        ),
+        (
+            "minimum 3–5",
+            json!({"experience_min":3,"experience_max":5,"experience_match_mode":"required_minimum"}),
+            vec!["iii-forward", "iii-reverse", "three"],
+        ),
+        (
+            "minimum 3–5, unknown included",
+            json!({"experience_min":3,"experience_max":5,"experience_match_mode":"required_minimum","experience_include_unknown":true}),
+            vec![
+                "conflict",
+                "iii-forward",
+                "iii-reverse",
+                "maximum",
+                "three",
+                "title-only",
+                "unknown",
+            ],
+        ),
+        (
+            "explicit saved overlap",
+            json!({"experience_min":3,"experience_max":5,"experience_match_mode":"advertised_range_overlap"}),
+            vec!["iii-forward", "iii-reverse", "maximum", "range", "three"],
+        ),
+        (
+            "legacy omitted mode",
+            legacy_rule,
+            vec!["iii-forward", "iii-reverse", "maximum", "range", "three"],
+        ),
+        (
+            "new grad independent",
+            json!({"new_grad":"only"}),
+            vec!["graduate"],
+        ),
+        (
+            "minimum AND new grad",
+            json!({"experience_min":3,"experience_max":5,"experience_match_mode":"required_minimum","new_grad":"only"}),
+            vec![],
+        ),
+        (
+            "explicit employment",
+            json!({"role_types":["full_time"]}),
+            vec!["iii-forward", "iii-reverse", "range"],
+        ),
+    ];
+    for (name, value, expected) in cases {
+        let rules: PostingRules = serde_json::from_value(value).unwrap();
+        config.filters.matching = Some(rules.clone());
+        let filtered = invoke_replay(&config, false, Some(&origin));
+        assert_clean(&filtered);
+        assert_eq!(job_ids(&filtered), expected, "worker: {name}");
+        let mut persisted: Vec<_> = JobsRepo::list(
+            &pool,
+            JobFilter {
+                matching: Some(rules),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap()
+        .items
+        .into_iter()
+        .map(|job| job.external_id.unwrap())
+        .collect();
+        persisted.sort();
+        assert_eq!(persisted, expected, "SQL: {name}");
+    }
+    let protected_id = protected_id.unwrap();
+    JobsRepo::update_notes(&pool, &protected_id, Some("Protected experience/logo note"))
+        .await
+        .unwrap();
+    JobsRepo::set_favorite(&pool, &protected_id, true)
+        .await
+        .unwrap();
+    JobsRepo::update_status(&pool, &protected_id, JobStatus::Applied)
+        .await
+        .unwrap();
+    let history = JobsRepo::get_status_events(&pool, &protected_id)
+        .await
+        .unwrap();
+    assert!(!history.is_empty());
+    config.filters = WorkerFilters::default();
+    let refresh = invoke_replay(&config, false, Some(&origin));
+    assert_clean(&refresh);
+    let refreshed: Vec<_> = refresh
+        .iter()
+        .filter(|event| matches!(event, WorkerEvent::Job { .. }))
+        .cloned()
+        .map(|event| scraped_job_from_event(event).unwrap())
+        .collect();
+    let counts = JobsRepo::upsert_scraped(&pool, &refreshed).await.unwrap();
+    assert_eq!((counts.inserted, counts.updated), (0, 9));
+    for event in refresh {
+        if let WorkerEvent::Branding {
+            source_id,
+            company,
+            logo,
+        } = event
+        {
+            scrape_lib::db::branding::record(&pool, &source_id, &company, &logo)
+                .await
+                .unwrap();
+        }
+    }
+    stopped.store(true, Ordering::SeqCst);
+    server.join().unwrap();
+    {
+        let requested = requests.lock().unwrap();
+        assert!(requested["/shared-ats.example.test/logos/acme.svg"] > 0);
+        assert!(requested["/shared-ats.example.test/logos/acme-labs.svg"] > 0);
+    }
+    pool.close().await;
+
+    let reopened = scrape_lib::db::init_db(&database).await.unwrap();
+    let job = JobsRepo::get(&reopened, &protected_id).await.unwrap();
+    assert_eq!(job.external_id.as_deref(), Some("iii-forward"));
+    assert_eq!(job.notes.as_deref(), Some("Protected experience/logo note"));
+    assert!(job.favorited);
+    assert_eq!(job.status, JobStatus::Applied);
+    assert_eq!(job.experience_min, Some(5));
+    let reopened_history = JobsRepo::get_status_events(&reopened, &protected_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(reopened_history).unwrap(),
+        serde_json::to_value(history).unwrap()
+    );
+    let logo = job.company_logo.unwrap();
+    assert_eq!(
+        logo.cached_asset_reference.as_ref(),
+        Some(&references["Acme"])
+    );
+    assert_eq!(
+        scrape_lib::db::branding::asset(&reopened, logo.cached_asset_reference.as_deref().unwrap())
+            .await
+            .unwrap(),
+        expected_acme
+    );
+    let reopened_source = SourcesRepo::get(&reopened, &source.id).await.unwrap();
+    let saved_overlap: PostingRules =
+        serde_json::from_value(reopened_source.filters["matching"].clone()).unwrap();
+    assert_eq!(
+        saved_overlap.experience_match_mode,
+        ExperienceMatchMode::AdvertisedRangeOverlap
+    );
+    let mut overlap_ids: Vec<_> = JobsRepo::list(
+        &reopened,
+        JobFilter {
+            matching: Some(saved_overlap),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap()
+    .items
+    .into_iter()
+    .map(|job| job.external_id.unwrap())
+    .collect();
+    overlap_ids.sort();
+    assert_eq!(
+        overlap_ids,
+        vec!["iii-forward", "iii-reverse", "maximum", "range", "three"]
+    );
+    reopened.close().await;
 }

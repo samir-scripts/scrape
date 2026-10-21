@@ -148,6 +148,8 @@ pub struct JobFilter {
     #[ts(type = "number | null")]
     pub experience_max: Option<i64>,
     pub experience_include_unknown: Option<bool>,
+    #[serde(default)]
+    pub experience_match_mode: scrape_core::matching::ExperienceMatchMode,
 
     // New Grad filter
     pub new_grad: Option<String>, // "any" | "new_grad_only" | "exclude_new_grad"
@@ -623,6 +625,7 @@ impl JobsRepo {
             experience_min: filter.experience_min,
             experience_max: filter.experience_max,
             experience_include_unknown: filter.experience_include_unknown.unwrap_or(false),
+            experience_match_mode: filter.experience_match_mode,
             new_grad,
             sponsorship: filter.sponsorship.clone().unwrap_or_default(),
             work_auth: filter.work_auth.clone().unwrap_or_default(),
@@ -1319,183 +1322,231 @@ impl JobsRepo {
         Ok(stats)
     }
 
+    /// Finish saved-data repairs before scheduling starts. Each committed batch is
+    /// resumable; one consistent backup precedes all mutations in this invocation.
     pub async fn reclassify_jobs(pool: &SqlitePool) -> Result<i64> {
         use sqlx::Row;
-        let rows = sqlx::query(
-            r#"
-            SELECT id, title, description_text, description_source, description_format
-            FROM jobs
-            WHERE enrichment_version < ?1 AND description_text IS NOT NULL
-            ORDER BY id
-            LIMIT ?2
-            "#,
-        )
-        .bind(ENRICHMENT_VERSION)
-        .bind(200i64)
-        .fetch_all(pool)
-        .await?;
+        let stale: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM jobs WHERE enrichment_version < ?)")
+                .bind(ENRICHMENT_VERSION)
+                .fetch_one(pool)
+                .await?;
+        let links = super::branding::pending_job_links(pool).await?;
+        if !stale && links.is_empty() {
+            return Ok(0);
+        }
 
-        if !rows.is_empty() {
-            let database: sqlx::sqlite::SqliteRow =
-                sqlx::query("PRAGMA database_list").fetch_one(pool).await?;
-            let database_file: String = database.get("file");
-            if !database_file.is_empty() {
-                let database_path = std::path::PathBuf::from(database_file);
-                let backup_path = database_path.with_file_name(format!(
-                    "{}.pre-description-repair-{}.db",
-                    database_path
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy(),
-                    Uuid::now_v7()
-                ));
-                sqlx::query("VACUUM INTO ?")
-                    .bind(backup_path.to_string_lossy().as_ref())
-                    .execute(pool)
-                    .await?;
+        let database = sqlx::query("PRAGMA database_list").fetch_one(pool).await?;
+        let database_file: String = database.get("file");
+        if !database_file.is_empty() {
+            let database_path = std::path::PathBuf::from(database_file);
+            let backup_path = database_path.with_file_name(format!(
+                "{}.pre-description-repair-{}.db",
+                database_path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy(),
+                Uuid::now_v7()
+            ));
+            super::backup_to(pool, &backup_path).await?;
+        }
+
+        if !links.is_empty() {
+            let mut tx = pool.begin().await?;
+            for (source_id, company, key) in links {
+                super::branding::attach_jobs(&mut tx, &source_id, &company, &key).await?;
             }
+            tx.commit().await?;
         }
 
         let mut updated = 0i64;
-        for r in rows {
-            let id: String = r.get("id");
-            let title: String = r.get("title");
-            let stored_desc: String = r.get("description_text");
-            let source: Option<String> = r.try_get("description_source").unwrap_or(None);
-            let stored_format: Option<String> = r.try_get("description_format").unwrap_or(None);
-            let repaired_input = source.as_deref().unwrap_or(&stored_desc);
-            let repaired = match stored_format.as_deref() {
-                Some("plain_text") => scrape_core::enrich::normalize_description_with_format(
-                    repaired_input,
-                    scrape_core::enrich::DescriptionFormat::PlainText,
-                    32768,
-                ),
-                Some("mixed") => scrape_core::enrich::normalize_description_with_format(
-                    repaired_input,
-                    scrape_core::enrich::DescriptionFormat::Mixed,
-                    32768,
-                ),
-                _ => scrape_core::enrich::normalize_description(repaired_input, 32768),
-            };
-            let desc = repaired.plain_text.as_str();
-
-            let spon = scrape_core::enrich::classify_sponsorship(desc);
-            let clr = scrape_core::enrich::classify_clearance(desc);
-            let wa = scrape_core::enrich::classify_work_auth(desc);
-            let exp = scrape_core::enrich::extract_experience(&title, desc);
-            let sal = scrape_core::enrich::Salary::from_text(desc);
-
-            let clr_lvl_str = clr.level.map(|cl| match cl {
-                ClearanceLevel::PublicTrust => "public_trust",
-                ClearanceLevel::Confidential => "confidential",
-                ClearanceLevel::Secret => "secret",
-                ClearanceLevel::TopSecret => "top_secret",
-                ClearanceLevel::TsSci => "ts_sci",
-            });
-
-            let spon_str = match spon.value {
-                TriState::Yes => "yes",
-                TriState::No => "no",
-                TriState::Unknown => "unknown",
-            };
-
-            let wa_str = match wa.value {
-                WorkAuthRequirement::CitizenOnly => "citizen_only",
-                WorkAuthRequirement::UsPerson => "us_person",
-                WorkAuthRequirement::Open => "open",
-                WorkAuthRequirement::Unknown => "unknown",
-            };
-
-            let clr_str = match clr.value {
-                TriState::Yes => "yes",
-                TriState::No => "no",
-                TriState::Unknown => "unknown",
-            };
-
-            let ng_str = match exp.is_new_grad {
-                TriState::Yes => "yes",
-                TriState::No => "no",
-                TriState::Unknown => "unknown",
-            };
-
-            let compensation = sal.as_ref().map(|s| s.ranges.clone()).unwrap_or_default();
-            let (sal_min, sal_max, sal_curr, sal_int, sal_raw, sal_src) = if let Some(s) = sal {
-                let int_str =
-                    s.ranges.first().and_then(|range| range.interval).map(
-                        |interval| match interval {
-                            SalaryInterval::Year => "year",
-                            SalaryInterval::Month => "month",
-                            SalaryInterval::Week => "week",
-                            SalaryInterval::Day => "day",
-                            SalaryInterval::Hour => "hour",
-                        },
-                    );
-                let src_str = match s.source {
-                    SalarySource::Structured => "structured",
-                    SalarySource::Text => "text",
-                };
-                (
-                    s.min,
-                    s.max,
-                    Some(s.currency),
-                    int_str,
-                    Some(s.raw),
-                    Some(src_str),
-                )
-            } else {
-                (None, None, None, None, None, None)
-            };
-
-            sqlx::query(
+        loop {
+            let mut tx = pool.begin().await?;
+            let rows = sqlx::query(
                 r#"
-                UPDATE jobs
-                SET sponsorship = ?1, sponsorship_evidence = ?2,
-                    clearance = ?3, clearance_level = ?4, clearance_evidence = ?5,
-                    experience_min = ?6, experience_max = ?7, experience_raw = ?8,
-                    is_new_grad = ?9, experience_evidence = ?10,
-                    salary_min = COALESCE(salary_min, ?11),
-                    salary_max = COALESCE(salary_max, ?12),
-                    salary_currency = COALESCE(salary_currency, ?13),
-                    salary_interval = COALESCE(salary_interval, ?14),
-                    salary_raw = COALESCE(salary_raw, ?15),
-                    salary_source = COALESCE(salary_source, ?16),
-                    work_auth = ?17, work_auth_evidence = ?18,
-                    enrichment_version = ?19,
-                    compensation_json = CASE WHEN compensation_json = '[]' THEN ?21 ELSE compensation_json END,
-                    description_text = ?22, description_json = ?23,
-                    compensation_migrated = 1
-                WHERE id = ?20
+                SELECT id, title, description_text, description_source, description_format,
+                       enrichment_version
+                FROM jobs
+                WHERE enrichment_version < ?1
+                ORDER BY id
+                LIMIT 200
                 "#,
             )
-            .bind(spon_str)
-            .bind(spon.evidence)
-            .bind(clr_str)
-            .bind(clr_lvl_str)
-            .bind(clr.evidence)
-            .bind(exp.min_years)
-            .bind(exp.max_years)
-            .bind(exp.raw)
-            .bind(ng_str)
-            .bind(exp.evidence)
-            .bind(sal_min)
-            .bind(sal_max)
-            .bind(sal_curr)
-            .bind(sal_int)
-            .bind(sal_raw)
-            .bind(sal_src)
-            .bind(wa_str)
-            .bind(wa.evidence)
             .bind(ENRICHMENT_VERSION)
-            .bind(&id)
-            .bind(serde_json::to_string(&compensation)?)
-            .bind(desc)
-            .bind(serde_json::to_string(&repaired)?)
-            .execute(pool)
+            .fetch_all(&mut *tx)
             .await?;
+            if rows.is_empty() {
+                tx.rollback().await?;
+                break;
+            }
+            let batch_len = rows.len() as i64;
+            for r in rows {
+                let id: String = r.get("id");
+                let title: String = r.get("title");
+                let stored_desc: Option<String> = r.get("description_text");
+                let version: i64 = r.get("enrichment_version");
 
-            updated += 1;
+                // Version 3 already repaired descriptions and unrelated enrichment.
+                // Missing descriptions, including older versions, need title-only
+                // experience classification without filling unrelated metadata.
+                if version >= 3 || stored_desc.is_none() {
+                    let exp = scrape_core::enrich::extract_experience(
+                        &title,
+                        stored_desc.as_deref().unwrap_or_default(),
+                    );
+                    let ng_str = match exp.is_new_grad {
+                        TriState::Yes => "yes",
+                        TriState::No => "no",
+                        TriState::Unknown => "unknown",
+                    };
+                    sqlx::query(
+                        "UPDATE jobs SET experience_min=?1,experience_max=?2,experience_raw=?3,is_new_grad=?4,experience_evidence=?5,enrichment_version=?6 WHERE id=?7",
+                    )
+                    .bind(exp.min_years)
+                    .bind(exp.max_years)
+                    .bind(exp.raw)
+                    .bind(ng_str)
+                    .bind(exp.evidence)
+                    .bind(ENRICHMENT_VERSION)
+                    .bind(&id)
+                    .execute(&mut *tx)
+                    .await?;
+                    continue;
+                }
+
+                // Preserve the historical pre-v3 description/enrichment repair.
+                // Employment type is never inferred here: its original ATS hint
+                // is unavailable, so an existing known value must survive.
+                let stored_desc = stored_desc.as_deref().unwrap_or_default();
+                let source: Option<String> = r.get("description_source");
+                let stored_format: Option<String> = r.get("description_format");
+                let repaired_input = source.as_deref().unwrap_or(stored_desc);
+                let repaired = match stored_format.as_deref() {
+                    Some("plain_text") => scrape_core::enrich::normalize_description_with_format(
+                        repaired_input,
+                        scrape_core::enrich::DescriptionFormat::PlainText,
+                        32768,
+                    ),
+                    Some("mixed") => scrape_core::enrich::normalize_description_with_format(
+                        repaired_input,
+                        scrape_core::enrich::DescriptionFormat::Mixed,
+                        32768,
+                    ),
+                    _ => scrape_core::enrich::normalize_description(repaired_input, 32768),
+                };
+                let desc = repaired.plain_text.as_str();
+                let spon = scrape_core::enrich::classify_sponsorship(desc);
+                let clr = scrape_core::enrich::classify_clearance(desc);
+                let wa = scrape_core::enrich::classify_work_auth(desc);
+                let exp = scrape_core::enrich::extract_experience(&title, desc);
+                let sal = scrape_core::enrich::Salary::from_text(desc);
+                let clr_lvl_str = clr.level.map(|cl| match cl {
+                    ClearanceLevel::PublicTrust => "public_trust",
+                    ClearanceLevel::Confidential => "confidential",
+                    ClearanceLevel::Secret => "secret",
+                    ClearanceLevel::TopSecret => "top_secret",
+                    ClearanceLevel::TsSci => "ts_sci",
+                });
+                let spon_str = match spon.value {
+                    TriState::Yes => "yes",
+                    TriState::No => "no",
+                    TriState::Unknown => "unknown",
+                };
+                let wa_str = match wa.value {
+                    WorkAuthRequirement::CitizenOnly => "citizen_only",
+                    WorkAuthRequirement::UsPerson => "us_person",
+                    WorkAuthRequirement::Open => "open",
+                    WorkAuthRequirement::Unknown => "unknown",
+                };
+                let clr_str = match clr.value {
+                    TriState::Yes => "yes",
+                    TriState::No => "no",
+                    TriState::Unknown => "unknown",
+                };
+                let ng_str = match exp.is_new_grad {
+                    TriState::Yes => "yes",
+                    TriState::No => "no",
+                    TriState::Unknown => "unknown",
+                };
+                let compensation = sal.as_ref().map(|s| s.ranges.clone()).unwrap_or_default();
+                let (sal_min, sal_max, sal_curr, sal_int, sal_raw, sal_src) = if let Some(s) = sal {
+                    let int_str =
+                        s.ranges
+                            .first()
+                            .and_then(|range| range.interval)
+                            .map(|interval| match interval {
+                                SalaryInterval::Year => "year",
+                                SalaryInterval::Month => "month",
+                                SalaryInterval::Week => "week",
+                                SalaryInterval::Day => "day",
+                                SalaryInterval::Hour => "hour",
+                            });
+                    let src_str = match s.source {
+                        SalarySource::Structured => "structured",
+                        SalarySource::Text => "text",
+                    };
+                    (
+                        s.min,
+                        s.max,
+                        Some(s.currency),
+                        int_str,
+                        Some(s.raw),
+                        Some(src_str),
+                    )
+                } else {
+                    (None, None, None, None, None, None)
+                };
+                sqlx::query(
+                    r#"
+                    UPDATE jobs
+                    SET sponsorship = ?1, sponsorship_evidence = ?2,
+                        clearance = ?3, clearance_level = ?4, clearance_evidence = ?5,
+                        experience_min = ?6, experience_max = ?7, experience_raw = ?8,
+                        is_new_grad = ?9, experience_evidence = ?10,
+                        salary_min = COALESCE(salary_min, ?11),
+                        salary_max = COALESCE(salary_max, ?12),
+                        salary_currency = COALESCE(salary_currency, ?13),
+                        salary_interval = COALESCE(salary_interval, ?14),
+                        salary_raw = COALESCE(salary_raw, ?15),
+                        salary_source = COALESCE(salary_source, ?16),
+                        work_auth = ?17, work_auth_evidence = ?18,
+                        enrichment_version = ?19,
+                        compensation_json = CASE WHEN compensation_json = '[]' THEN ?21 ELSE compensation_json END,
+                        description_text = ?22, description_json = ?23,
+                        compensation_migrated = 1
+                    WHERE id = ?20
+                    "#,
+                )
+                .bind(spon_str)
+                .bind(spon.evidence)
+                .bind(clr_str)
+                .bind(clr_lvl_str)
+                .bind(clr.evidence)
+                .bind(exp.min_years)
+                .bind(exp.max_years)
+                .bind(exp.raw)
+                .bind(ng_str)
+                .bind(exp.evidence)
+                .bind(sal_min)
+                .bind(sal_max)
+                .bind(sal_curr)
+                .bind(sal_int)
+                .bind(sal_raw)
+                .bind(sal_src)
+                .bind(wa_str)
+                .bind(wa.evidence)
+                .bind(ENRICHMENT_VERSION)
+                .bind(&id)
+                .bind(serde_json::to_string(&compensation)?)
+                .bind(desc)
+                .bind(serde_json::to_string(&repaired)?)
+                .execute(&mut *tx)
+                .await?;
+            }
+            tx.commit().await?;
+            updated += batch_len;
+            tokio::task::yield_now().await;
         }
-
         Ok(updated)
     }
 
@@ -2246,6 +2297,247 @@ mod tests {
         assert_eq!(reclassified.notes.as_deref(), Some("keep me"));
         assert!(reclassified.favorited);
         assert_eq!(reclassified.status, JobStatus::Applied);
+    }
+
+    async fn seed_experience_repair_rows(pool: &SqlitePool, count: i64) {
+        sqlx::query("INSERT INTO workflows(id,name,enabled,cadence,next_run_at,filters,config,created_at) VALUES ('repair-workflow','Protected workflow',0,'weekly','2030-01-01','{\"experience_min\":3}','{\"protected\":true}','2026-01-01')")
+            .execute(pool).await.unwrap();
+        sqlx::query("INSERT INTO sources(id,workflow_id,kind,name,identifier,enabled,cadence,next_run_at,created_at) VALUES ('repair-source','repair-workflow','greenhouse','Protected source','repair-fixture',0,'weekly','2030-01-01','2026-01-01')")
+            .execute(pool).await.unwrap();
+        let description = scrape_core::enrich::normalize_description(
+            "Required: 5 years of professional experience. Salary: $175,000 per year.",
+            32768,
+        );
+        sqlx::query(
+            r#"
+            WITH RECURSIVE sequence(n) AS (
+                VALUES(0) UNION ALL SELECT n+1 FROM sequence WHERE n+1 < ?1
+            )
+            INSERT INTO jobs(
+                id,dedupe_key,posting_identity,source_id,workflow_id,external_id,
+                title,company,role_type,url,date_added,last_seen_at,status,status_changed_at,
+                notes,favorited,favorited_at,salary_min,salary_max,salary_currency,
+                salary_interval,salary_raw,salary_source,compensation_json,compensation_migrated,
+                sponsorship,sponsorship_evidence,clearance,clearance_level,clearance_evidence,
+                work_auth,work_auth_evidence,workplace_type,description_text,
+                description_source,description_format,description_json,
+                experience_min,experience_max,experience_raw,is_new_grad,experience_evidence,
+                enrichment_version,company_branding_key,company_icon_url
+            )
+            SELECT printf('repair-%03d',n),printf('dedupe-%03d',n),printf('identity-%03d',n),
+                'repair-source','repair-workflow',printf('%d',n),
+                'SOFTWARE ENGINEER III','Acme','contract','https://fixture.test/job/'||n,
+                '2026-01-01','2026-01-02','applied','2026-01-03',
+                'Protected note',1,'2026-01-04',125000,150000,'CAD',
+                'year','Protected salary','structured','[]',1,
+                'no','Protected sponsorship','yes','secret','Protected clearance',
+                'us_person','Protected work auth','hybrid',
+                CASE WHEN n % 3 = 0 THEN NULL ELSE ?2 END,
+                '<p>Old source: 1 year of professional experience.</p>','html',?3,
+                0,1,'Old experience','yes','Old evidence',3,
+                'pinned-branding-key','https://fixture.test/protected-logo.png'
+            FROM sequence
+            "#,
+        )
+        .bind(count)
+        .bind(&description.plain_text)
+        .bind(serde_json::to_string(&description).unwrap())
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO job_status_events(job_id,from_status,to_status,changed_at) VALUES ('repair-000','viewed','applied','2026-01-03')")
+            .execute(pool).await.unwrap();
+        sqlx::query("INSERT INTO job_locations(job_id,raw,city,country_code,is_remote) VALUES ('repair-000','Toronto, Canada','Toronto','CA',0)")
+            .execute(pool).await.unwrap();
+        sqlx::query("INSERT INTO deleted_jobs(dedupe_key,deleted_at) VALUES ('protected-deleted','2026-01-01')")
+            .execute(pool).await.unwrap();
+        sqlx::query("INSERT INTO blocked_postings(identity,title,company,blocked_at,legacy_key) VALUES ('protected-block','Blocked','Acme','2026-01-01','protected-deleted')")
+            .execute(pool).await.unwrap();
+        sqlx::query("INSERT INTO posting_legacy_blocks(legacy_key,identity) VALUES ('protected-deleted','protected-block')")
+            .execute(pool).await.unwrap();
+    }
+
+    // Snapshot every persisted column, including future additions; only the
+    // classifier's explicitly owned fields may change on version-3 rows.
+    async fn repair_state_snapshot(pool: &SqlitePool) -> Vec<String> {
+        let mut snapshots = Vec::new();
+        for table in [
+            "jobs",
+            "job_status_events",
+            "job_locations",
+            "workflows",
+            "sources",
+            "deleted_jobs",
+            "blocked_postings",
+            "posting_legacy_blocks",
+        ] {
+            let columns: Vec<String> =
+                sqlx::query_scalar("SELECT name FROM pragma_table_info(?) ORDER BY cid")
+                    .bind(table)
+                    .fetch_all(pool)
+                    .await
+                    .unwrap();
+            let columns = columns
+                .into_iter()
+                .filter(|name| {
+                    table != "jobs"
+                        || ![
+                            "experience_min",
+                            "experience_max",
+                            "experience_raw",
+                            "is_new_grad",
+                            "experience_evidence",
+                            "enrichment_version",
+                        ]
+                        .contains(&name.as_str())
+                })
+                .map(|name| format!("\"{}\"", name.replace('"', "\"\"")))
+                .collect::<Vec<_>>()
+                .join(",");
+            let query = format!(
+                "SELECT json_group_array(json_array({columns})) FROM (SELECT * FROM {table} ORDER BY rowid)"
+            );
+            snapshots.push(sqlx::query_scalar(&query).fetch_one(pool).await.unwrap());
+        }
+        snapshots
+    }
+
+    fn description_repair_backups(directory: &std::path::Path) -> Vec<std::path::PathBuf> {
+        std::fs::read_dir(directory)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| {
+                path.file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .contains("pre-description-repair")
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn reclassify_drains_all_batches_including_title_only_and_preserves_protected_state() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("experience.db");
+        let pool = crate::db::init_db(&path).await.unwrap();
+        seed_experience_repair_rows(&pool, 405).await;
+        sqlx::query("INSERT INTO jobs(id,dedupe_key,posting_identity,title,company,role_type,url,date_added,last_seen_at,status_changed_at,enrichment_version,sponsorship,sponsorship_evidence,salary_min,compensation_migrated) VALUES ('legacy-null','legacy-null','legacy:legacy-null','SOFTWARE ENGINEER III','Acme','internship','https://fixture.test/null','2026-01-01','2026-01-01','2026-01-01',0,'yes','Protected old hint',88000,1)")
+            .execute(&pool).await.unwrap();
+        let before = repair_state_snapshot(&pool).await;
+
+        assert_eq!(JobsRepo::reclassify_jobs(&pool).await.unwrap(), 406);
+        assert_eq!(repair_state_snapshot(&pool).await, before);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM jobs WHERE enrichment_version < ?")
+                .bind(ENRICHMENT_VERSION)
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM jobs WHERE description_text IS NULL AND experience_min IS NULL AND experience_max IS NULL AND is_new_grad='no'")
+                .fetch_one(&pool).await.unwrap(),
+            136
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM jobs WHERE description_text IS NOT NULL AND experience_min=5 AND is_new_grad='no'")
+                .fetch_one(&pool).await.unwrap(),
+            270
+        );
+        let backups = description_repair_backups(directory.path());
+        assert_eq!(backups.len(), 1);
+        let backup = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect_with(
+                sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(&backups[0])
+                    .read_only(true),
+            )
+            .await
+            .unwrap();
+        assert_eq!(repair_state_snapshot(&backup).await, before);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM jobs WHERE enrichment_version < ?")
+                .bind(ENRICHMENT_VERSION)
+                .fetch_one(&backup)
+                .await
+                .unwrap(),
+            406
+        );
+        backup.close().await;
+        pool.close().await;
+        let reopened = crate::db::init_db(&path).await.unwrap();
+        assert_eq!(JobsRepo::reclassify_jobs(&reopened).await.unwrap(), 0);
+        assert_eq!(description_repair_backups(directory.path()).len(), 1);
+        assert_eq!(repair_state_snapshot(&reopened).await, before);
+    }
+
+    #[tokio::test]
+    async fn reclassify_failed_batch_rolls_back_and_restart_resumes_after_committed_batches() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("retry.db");
+        let pool = crate::db::init_db(&path).await.unwrap();
+        seed_experience_repair_rows(&pool, 405).await;
+        let before = repair_state_snapshot(&pool).await;
+        sqlx::query("CREATE TRIGGER reject_repair BEFORE UPDATE OF enrichment_version ON jobs WHEN NEW.id='repair-250' BEGIN SELECT RAISE(ABORT, 'authored repair write failure'); END")
+            .execute(&pool).await.unwrap();
+        assert!(JobsRepo::reclassify_jobs(&pool).await.is_err());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM jobs WHERE enrichment_version = ?")
+                .bind(ENRICHMENT_VERSION)
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            200
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM jobs WHERE id >= 'repair-200' AND enrichment_version=3 AND experience_min=0 AND is_new_grad='yes'")
+                .fetch_one(&pool).await.unwrap(),
+            205
+        );
+        assert_eq!(repair_state_snapshot(&pool).await, before);
+        assert_eq!(description_repair_backups(directory.path()).len(), 1);
+        sqlx::query("DROP TRIGGER reject_repair")
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+
+        let reopened = crate::db::init_db(&path).await.unwrap();
+        assert_eq!(JobsRepo::reclassify_jobs(&reopened).await.unwrap(), 205);
+        assert_eq!(JobsRepo::reclassify_jobs(&reopened).await.unwrap(), 0);
+        assert_eq!(description_repair_backups(directory.path()).len(), 2);
+        assert_eq!(repair_state_snapshot(&reopened).await, before);
+    }
+
+    #[tokio::test]
+    async fn reclassify_backup_failure_prevents_any_saved_data_mutation() {
+        let directory = tempfile::tempdir().unwrap();
+        let original = directory.path().join("original");
+        let moved = directory.path().join("moved");
+        std::fs::create_dir(&original).unwrap();
+        let pool = crate::db::init_db(&original.join("backup-failure.db"))
+            .await
+            .unwrap();
+        seed_experience_repair_rows(&pool, 3).await;
+        let before = repair_state_snapshot(&pool).await;
+        // The already-open database remains readable, but its original parent
+        // path no longer exists, making the backup destination unwritable.
+        std::fs::rename(&original, &moved).unwrap();
+        let result = JobsRepo::reclassify_jobs(&pool).await;
+        std::fs::rename(&moved, &original).unwrap();
+        assert!(result.is_err());
+        assert_eq!(repair_state_snapshot(&pool).await, before);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM jobs WHERE enrichment_version=3")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            3
+        );
+        assert!(description_repair_backups(&original).is_empty());
+        assert_eq!(JobsRepo::reclassify_jobs(&pool).await.unwrap(), 3);
+        assert_eq!(description_repair_backups(&original).len(), 1);
     }
 
     #[tokio::test]
