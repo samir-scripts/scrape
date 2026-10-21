@@ -12,7 +12,7 @@ export function KeyHint({ keys, label, className = "" }: KeyHintProps) {
       <span className="border border-current px-1 py-0.5 tracking-tighter leading-none select-none">
         {keys}
       </span>
-      {label && <span className="opacity-80">{label}</span>}
+      {label && <span>{label}</span>}
     </span>
   );
 }
