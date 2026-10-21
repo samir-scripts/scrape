@@ -2,8 +2,9 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { UserEvent } from "@testing-library/user-event";
 import { AddSourceModal } from "../components/views/settings/AddSourceModal";
-import { api } from "../lib/api";
+import { api, SAMPLE_SWE_SOURCE } from "../lib/api";
 
 beforeAll(() => {
   HTMLDialogElement.prototype.showModal = function () {
@@ -18,11 +19,19 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
+async function openSources(user: UserEvent) {
+  if (!(screen.getByLabelText("Workflow name") as HTMLInputElement).value) {
+    await user.type(screen.getByLabelText("Workflow name"), "Board editing");
+  }
+  await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
+  await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
+}
 
 describe("Sources Editor (Section 5)", () => {
   it("supports adding, reordering, and removing sources with at-least-one-source protection", async () => {
     const user = userEvent.setup({ delay: null });
-    render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, kind: "jsonld", identifier: "", name: "", config: {}, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    await openSources(user);
 
     expect(screen.getByText("Sources (1)")).toBeTruthy();
     const removeBtn = screen.getByRole("button", { name: /Remove source/ });
@@ -67,7 +76,8 @@ describe("Sources Editor (Section 5)", () => {
 
   it("detects and rejects duplicate normalized endpoints across sources", async () => {
     const user = userEvent.setup({ delay: null });
-    render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, kind: "jsonld", identifier: "", name: "", config: {}, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    await openSources(user);
 
     // Source 1: stripe full greenhouse URL
     const source1Url = screen.getByRole("textbox", { name: "Source URL or board identifier" });
@@ -84,7 +94,7 @@ describe("Sources Editor (Section 5)", () => {
     expect(screen.getByText(/Duplicate source endpoint detected/)).toBeTruthy();
 
     // Trying to continue to Matching fails with error
-    await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
     const alerts = screen.getAllByRole("alert");
     expect(alerts.some(a => /Duplicate source endpoint/i.test(a.textContent || ""))).toBe(true);
   });
@@ -97,7 +107,8 @@ describe("Sources Editor (Section 5)", () => {
       name: "Stripe",
     });
 
-    render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, kind: "jsonld", identifier: "", name: "", config: {}, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    await openSources(user);
     const source1Url = screen.getByRole("textbox", { name: "Source URL or board identifier" });
     await user.type(source1Url, "https://boards.greenhouse.io/stripe");
 
@@ -106,14 +117,15 @@ describe("Sources Editor (Section 5)", () => {
 
     await waitFor(() => {
       expect(detectSpy).toHaveBeenCalledWith("https://boards.greenhouse.io/stripe");
-      expect((screen.getByRole("textbox", { name: "Workflow name" }) as HTMLInputElement).value).toBe("Stripe");
+      expect(screen.queryByRole("textbox", { name: "Workflow name" })).toBeNull();
       expect((screen.getByRole("textbox", { name: "Source label" }) as HTMLInputElement).value).toBe("Stripe");
     });
   });
 
   it("warns when all sources in the workflow are disabled", async () => {
     const user = userEvent.setup();
-    render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, kind: "jsonld", identifier: "", name: "", config: {}, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    await openSources(user);
 
     const enableCheckbox = screen.getByRole("checkbox", { name: /Enable/ });
     expect((enableCheckbox as HTMLInputElement).checked).toBe(true);
@@ -123,7 +135,7 @@ describe("Sources Editor (Section 5)", () => {
 
     expect(screen.getByText(/At least one source must be enabled/)).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
     const alerts = screen.getAllByRole("alert");
     expect(alerts.some(a => /At least one source must be enabled/i.test(a.textContent || ""))).toBe(true);
   });

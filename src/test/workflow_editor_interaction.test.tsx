@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { AddSourceModal } from "../components/views/settings/AddSourceModal";
 import { api, SAMPLE_SWE_SOURCE } from "../lib/api";
+import { sourceToWorkflowSpec, validateWorkflowYaml, workflowSpecToYaml, normalizedEndpoint } from "../lib/yamlWorkflow";
 import type { WorkflowPreview } from "../bindings/WorkflowPreview";
 import type { WorkflowSpec } from "../bindings/WorkflowSpec";
 beforeAll(() => {
@@ -12,120 +13,175 @@ beforeAll(() => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const preview = (spec: WorkflowSpec): WorkflowPreview => ({ spec, branding: [], jobs: [], fetched: 3, matched: 0, rejected: 3, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: "2026-10-14T13:00:00Z" });
-describe("one workflow draft", () => {
-  it("defaults to 20, invalidates previews for limit edits, rejects invalid input and saves the configured limit", async () => {
-    const user = userEvent.setup({ delay: null });
+async function toSchedule(user: UserEvent) {
+  await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
+  await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
+}
+describe("role-first workflow boundaries", () => {
+  it.each([
+    { roles: "Software Engineer", companies: "Google,Amazon", date: "Past 12 hours", preset: "past_12h" },
+    { roles: "Line Cook,Store Associate", companies: "", date: "Today (since local midnight)", preset: "today" },
+  ])("creates $roles without a career URL, previews and saves without scraping", async ({ roles, companies, date, preset }) => {
+    const user = userEvent.setup();
+    const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_SWE_SOURCE);
+    const run = vi.spyOn(api, "runSourceNow");
+    const detect = vi.spyOn(api, "detectSource");
+    const extract = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => preview(spec));
+    render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    expect(screen.queryByRole("textbox", { name: "Source URL or board identifier" })).toBeNull();
+    fireEvent.change(screen.getByRole("textbox", { name: "Target roles" }), { target: { value: roles } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Companies (Optional)" }), { target: { value: companies } });
+    await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
+    await user.click(screen.getByRole("button", { name: "Date posted range", expanded: false }));
+    await user.click(screen.getByRole("option", { name: date }));
+    await toSchedule(user);
+    expect((screen.getByRole("button", { name: "Save workflow" }) as HTMLButtonElement).disabled).toBe(true);
+    await user.click(screen.getByRole("button", { name: "Preview matches" }));
+    await screen.findByText(/3 examined/);
+    await user.click(screen.getByRole("button", { name: "Save workflow" }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    const spec = save.mock.calls[0][0];
+    expect(spec.version).toBe(8);
+    expect(spec.sources).toHaveLength(1);
+    expect(spec.sources[0].extractor).toEqual({ kind: "search", url: "" });
+    expect(spec.filters?.matching?.target_roles).toEqual(roles.split(","));
+    expect(spec.filters?.matching?.companies).toEqual(companies ? companies.split(",") : []);
+    expect(spec.filters?.matching?.posting_date).toMatchObject({ preset, last_hours: null, from: null, through: null, include_unknown: false });
+    expect(extract.mock.calls[0][0]).toEqual(spec);
+    expect(detect).not.toHaveBeenCalled(); expect(run).not.toHaveBeenCalled();
+  });
+  it("only auto-names drafts until a user supplies a name, including names containing jobs or at", async () => {
+    const user = userEvent.setup();
+    render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    await user.type(screen.getByRole("textbox", { name: "Target roles" }), "Engineer{Enter}");
+    expect((screen.getByLabelText("Workflow name") as HTMLInputElement).value).toBe("Engineer jobs");
+    await user.clear(screen.getByLabelText("Workflow name"));
+    await user.type(screen.getByLabelText("Workflow name"), "My jobs at home");
+    await user.type(screen.getByRole("textbox", { name: "Companies (Optional)" }), "Acme{Enter}");
+    await user.click(screen.getByRole("button", { name: "Add target role Intern" }));
+    expect((screen.getByLabelText("Workflow name") as HTMLInputElement).value).toBe("My jobs at home");
+    expect(screen.getByRole("button", { name: "Remove Engineer from Target roles" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove Intern from Target roles" })).toBeTruthy();
+  });
+  it("defaults to 20, invalidates preview on limit changes, rejects invalid drafts and saves YAML limit", async () => {
+    const user = userEvent.setup();
     const extract = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => preview(spec));
     const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_SWE_SOURCE);
     render(<AddSourceModal isOpen initialSource={SAMPLE_SWE_SOURCE} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
     const limit = screen.getByRole("textbox", { name: "Maximum matching jobs per run" });
     expect((limit as HTMLInputElement).value).toBe("20");
+    await toSchedule(user);
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
     await screen.findByText(/3 examined/);
+    await user.click(screen.getByRole("button", { name: "Criteria" }));
     for (const invalid of ["0", "1.5", "10001", "abc"]) {
       await user.clear(limit); await user.type(limit, invalid);
       expect(limit.getAttribute("aria-invalid")).toBe("true");
-      expect(screen.queryByText(/3 examined/)).toBeNull();
-      await user.click(screen.getByRole("button", { name: "Preview matches" }));
+      await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
+      expect(screen.getByRole("button", { name: "Criteria", current: "step" })).toBeTruthy();
       expect(extract).toHaveBeenCalledTimes(1);
     }
     await user.clear(limit); await user.type(limit, "7");
     await user.click(screen.getByRole("button", { name: "Advanced settings" }));
     await user.click(screen.getByRole("button", { name: "Edit YAML" }));
-    expect((screen.getByRole("textbox", { name: "Workflow YAML" }) as HTMLTextAreaElement).value).toContain("max_jobs_per_run: 7");
+    expect((screen.getByLabelText("Workflow YAML") as HTMLTextAreaElement).value).toContain("max_jobs_per_run: 7");
     await user.click(screen.getByRole("button", { name: "Apply YAML to form" }));
-    await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
-    await user.click(screen.getByRole("button", { name: "Review workflow" }));
-    expect(screen.getByText(/Maximum 7 matching jobs per run/)).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Preview matches" }));
-    await screen.findByText(/3 examined/);
-    await user.click(screen.getByRole("button", { name: "Save workflow" }));
-    await waitFor(() => expect(save).toHaveBeenCalled());
-    expect(save.mock.calls[0][0].max_jobs_per_run).toBe(7);
-    expect(extract.mock.calls[1][0].max_jobs_per_run).toBe(7);
-  });
-  it("creates URL → preview → save with zero matches, preserves cents and does not run implicitly", async () => {
-    const user = userEvent.setup(); const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_SWE_SOURCE);
-    const run = vi.spyOn(api, "runSourceNow");
-    vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => preview(spec));
-    render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
-    await user.type(screen.getByRole("textbox", { name: "Source URL or board identifier" }), "https://boards.greenhouse.io/acme");
-    await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
-    await screen.findByRole("textbox", { name: "Keywords" });
-    await user.type(screen.getByRole("textbox", { name: "Keywords" }), "Engineer");
-    await user.click(screen.getByRole("button", { name: "Preview matches" }));
-    await screen.findByText(/3 examined/);
-    // Schedule editing invalidates the old preview.
-    await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
-    await user.click(screen.getByRole("button", { name: "Schedule", expanded: false }));
-    await user.click(await screen.findByRole("option", { name: "manual" }));
-    await user.click(screen.getByRole("button", { name: "Review workflow" }));
+    await toSchedule(user);
     expect((screen.getByRole("button", { name: "Save workflow" }) as HTMLButtonElement).disabled).toBe(true);
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
-    await screen.findByText(/No eligible postings/);
+    await screen.findByText(/3 examined/);
     await user.click(screen.getByRole("button", { name: "Save workflow" }));
-    await screen.findByText(/Saving has not started a scrape/);
-    expect(save.mock.calls[0][0].schedule?.cadence).toBe("manual");
-    expect(save.mock.calls[0][0].filters?.matching?.keywords?.any).toEqual(["Engineer"]);
-    expect(run).not.toHaveBeenCalled();
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(save.mock.calls[0][0].max_jobs_per_run).toBe(7);
   });
-  it("preserves hidden fields across simple, advanced, YAML and ignores a cancelled stale preview", async () => {
-    const user = userEvent.setup(); let finish!: (result: WorkflowPreview) => void;
-    const source = { ...SAMPLE_SWE_SOURCE, filters: { matching: { keywords: { any: [], all: ["Rust"], exclude: ["Senior"], fields: ["description"] }, compensation: { min_minor: 5025, max_minor: 6075, interval: "hour", currency: "USD", include_unknown: false } } } };
-    const mock = vi.spyOn(api, "previewWorkflow").mockImplementation(spec => new Promise(resolve => { finish = resolve; expect(spec.filters?.matching?.compensation?.min_minor).toBe(5025); }));
-    const cancel = vi.spyOn(api, "cancelWorkflowPreview").mockResolvedValue(true);
-    render(<AddSourceModal isOpen initialSource={source} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
-    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
-    await user.click(screen.getByRole("button", { name: "Edit YAML" }));
-    expect((screen.getByRole("textbox", { name: "Workflow YAML" }) as HTMLTextAreaElement).value).toContain("5025");
-    await user.click(screen.getByRole("button", { name: "Apply YAML to form" }));
-    await screen.findByRole("textbox", { name: "Minimum per hour" });
+  it("preserves saved names, cents, arbitrary relative hours and legacy filters until edited", async () => {
+    const user = userEvent.setup();
+    const spec = sourceToWorkflowSpec(SAMPLE_SWE_SOURCE);
+    spec.metadata.name = "My jobs at home";
+    spec.filters = { ...spec.filters, matching: { ...spec.filters?.matching, target_roles: ["Engineer"], companies: ["Acme"], posting_date: { preset: null, last_hours: 37, from: null, through: null, timezone: "America/New_York", include_unknown: true }, compensation: { min_minor: 5025, max_minor: 6075, currency: "USD", interval: "hour", include_unknown: false } } } as WorkflowSpec["filters"];
+    const extract = vi.spyOn(api, "previewWorkflow").mockImplementation(async input => preview(input));
+    render(<AddSourceModal isOpen initialSpec={spec} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    await user.type(screen.getByRole("textbox", { name: "Target roles" }), "Intern{Enter}");
+    expect((screen.getByLabelText("Workflow name") as HTMLInputElement).value).toBe("My jobs at home");
+    await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
+    expect((screen.getByLabelText("Last N hours") as HTMLInputElement).value).toBe("37");
     expect((screen.getByRole("textbox", { name: "Minimum per hour" }) as HTMLInputElement).value).toBe("50.25");
+    await toSchedule(user);
+    await user.click(screen.getByRole("button", { name: "Preview matches" }));
+    await screen.findByText(/3 examined/);
+    expect(extract.mock.calls[0][0].filters?.matching?.posting_date).toEqual(spec.filters?.matching?.posting_date);
+    expect(extract.mock.calls[0][0].filters?.matching?.compensation).toEqual(spec.filters?.matching?.compensation);
+    expect(extract.mock.calls[0][0].sources).toEqual(spec.sources);
+    await user.click(screen.getByRole("button", { name: "Criteria" }));
+    await user.click(screen.getByRole("button", { name: "Date posted range", expanded: false }));
+    await user.click(screen.getByRole("option", { name: "Custom date range…" }));
+    expect(screen.getByLabelText("Posted from")).toBeTruthy(); expect(screen.getByLabelText("Posted through")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Date posted range", expanded: false }));
+    await user.click(screen.getByRole("option", { name: "Any time" }));
+    await toSchedule(user);
+    await user.click(screen.getByRole("button", { name: "Preview matches" }));
+    await waitFor(() => expect(extract).toHaveBeenCalledTimes(2));
+    expect(extract.mock.calls[1][0].filters?.matching?.posting_date).toBeNull();
+  });
+  it("ignores cancelled stale preview results and requires a new preview after cadence edits", async () => {
+    const user = userEvent.setup();
+    let finish!: (value: WorkflowPreview) => void;
+    const pending = new Promise<WorkflowPreview>(resolve => { finish = resolve; });
+    const extract = vi.spyOn(api, "previewWorkflow").mockImplementationOnce(() => pending).mockImplementation(async spec => preview(spec));
+    const cancel = vi.spyOn(api, "cancelWorkflowPreview").mockResolvedValue(true);
+    const settings = vi.spyOn(api, "updateSetting");
+    render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, cadence: "global" }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "Continue to Criteria" })); await toSchedule(user);
+    expect(screen.getByRole("button", { name: "Schedule", expanded: false }).textContent).toContain("daily");
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
     await user.click(screen.getByRole("button", { name: "Cancel preview" }));
-    await user.click(screen.getByRole("button", { name: "Back" }));
-    await user.type(screen.getByRole("textbox", { name: "Workflow name" }), " revised");
-    expect(cancel).toHaveBeenCalled();
-    finish(preview(mock.mock.calls[0][0]));
+    finish(preview(extract.mock.calls[0][0]));
     await waitFor(() => expect(screen.queryByText(/3 examined/)).toBeNull());
+    expect(cancel).toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Preview matches" })); await screen.findByText(/3 examined/);
+    await user.click(screen.getByRole("button", { name: "Schedule", expanded: false }));
+    expect(screen.queryByRole("option", { name: "global" })).toBeNull();
+    await user.click(screen.getByRole("option", { name: "manual" }));
+    expect((screen.getByRole("button", { name: "Save workflow" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("checkbox", { name: "Run this workflow when the app starts" })).toBeTruthy();
+    expect(settings).not.toHaveBeenCalled();
   });
-  it("re-detects an interrupted source before preview without losing the latest matching rule", async () => {
-    const user = userEvent.setup(); let finishDetection!: (result: {kind:string;identifier:string;name:string}) => void;
-    const result = {kind:"greenhouse",identifier:"acme",name:"Acme"};
-    const detection = vi.spyOn(api,"detectSource").mockImplementationOnce(() => new Promise(resolve => {finishDetection=resolve;})).mockResolvedValue(result);
-    const extraction = vi.spyOn(api,"previewWorkflow").mockImplementation(async spec => preview(spec));
-    render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
-    await user.type(screen.getByRole("textbox",{name:"Source URL or board identifier"}),"https://boards.greenhouse.io/acme");
-    await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
-    await user.clear(screen.getByRole("textbox", { name: "Source URL or board identifier" }));
-    await user.type(screen.getByRole("textbox", { name: "Source URL or board identifier" }), "https://boards.greenhouse.io/acme-new");
-    await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
-    await user.type(screen.getByRole("textbox",{name:"Keywords"}),"Engineer");
-    await user.click(screen.getByRole("button",{name:"Preview matches"}));
-    await screen.findByText(/No eligible postings/);
-    expect(detection).toHaveBeenCalledTimes(2);
-    expect(extraction.mock.calls[0][0].sources[0].extractor.kind).toBe("greenhouse");
-    expect(extraction.mock.calls[0][0].filters?.matching?.keywords?.any).toEqual(["Engineer"]);
-    finishDetection(result);
-    await waitFor(() => expect(screen.getByText(/No eligible postings/)).toBeTruthy());
+  it("re-detects an interrupted board edit and keeps the latest keywords", async () => {
+    const user = userEvent.setup();
+    let finish!: (value: { kind: string; identifier: string; name: string }) => void;
+    const pending = new Promise<{ kind: string; identifier: string; name: string }>(resolve => { finish = resolve; });
+    const result = { kind: "greenhouse", identifier: "acme-new", name: "Acme" };
+    const detect = vi.spyOn(api, "detectSource").mockImplementationOnce(() => pending).mockResolvedValue(result);
+    const extract = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => preview(spec));
+    render(<AddSourceModal isOpen initialSource={SAMPLE_SWE_SOURCE} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    await user.type(screen.getByRole("textbox", { name: "Any keywords" }), "Engineer");
+    await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
+    const url = screen.getByRole("textbox", { name: "Source URL or board identifier" });
+    await user.clear(url); await user.type(url, "https://boards.greenhouse.io/acme");
+    await user.click(screen.getByRole("button", { name: "Detect source 1" }));
+    await user.clear(url); await user.type(url, "https://boards.greenhouse.io/acme-new");
+    await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
+    await user.click(screen.getByRole("button", { name: "Preview matches" }));
+    await screen.findByText(/3 examined/);
+    expect(detect).toHaveBeenCalledTimes(2);
+    expect(extract.mock.calls[0][0].sources[0].extractor.kind).toBe("greenhouse");
+    expect(extract.mock.calls[0][0].filters?.matching?.keywords?.any).toEqual(["Engineer"]);
+    finish({ kind: "lever", identifier: "stale", name: "Stale" });
+    await waitFor(() => expect(screen.getByText(/3 examined/)).toBeTruthy());
+    expect(screen.queryByText("Stale")).toBeNull();
   });
-
-});
-it('keeps each workflow schedule explicit without writing application defaults during navigation', async () => {
- const save = vi.spyOn(api, 'saveWorkflow'); const settings = vi.spyOn(api, 'updateSetting');
- render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, cadence: 'global' }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
- const user = userEvent.setup();
- await user.click(screen.getByRole('button', { name: 'Continue to Matching' }));
- await user.click(screen.getByRole('button', { name: 'Continue to Schedule' }));
- expect(screen.getByRole('button', { name: 'Schedule', expanded: false }).textContent).toContain('daily');
- await user.click(screen.getByRole('button', { name: 'Schedule', expanded: false }));
- expect(screen.queryByRole('option', { name: 'global' })).toBeNull();
- expect(screen.getByRole('checkbox', { name: 'Run this workflow when the app starts' })).toBeTruthy();
- await user.keyboard('{Escape}');
- await user.click(screen.getByRole('button', { name: 'Back' }));
- await user.click(screen.getByRole('button', { name: 'Continue to Schedule' }));
- expect(screen.getByRole('button', { name: 'Schedule', expanded: false }).textContent).toContain('daily');
- expect(settings).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled();
+  it("roundtrips version8 search and role/company/date rules without silent drops", () => {
+    const spec = sourceToWorkflowSpec(SAMPLE_SWE_SOURCE); spec.version = 8;
+    spec.sources = [{ id: "search", label: "Public listings", enabled: true, extractor: { kind: "search", url: "" } }];
+    spec.filters = { matching: { ...spec.filters?.matching, target_roles: ["Line Cook"], companies: ["Acme"], posting_date: { preset: "past_week", last_hours: null, from: null, through: null, timezone: "UTC", include_unknown: false } } } as WorkflowSpec["filters"];
+    spec.filters!.matching!.experience_match_mode = "required_minimum";
+    const result = validateWorkflowYaml(workflowSpecToYaml(spec));
+    expect(result.errors).toEqual([]); expect(result.parsedSpec).toEqual(spec);
+    expect(normalizedEndpoint("search", "")).toBe(normalizedEndpoint("search", "default"));
+    expect(normalizedEndpoint("search", "")).toBe(normalizedEndpoint("search", "themuse"));
+    spec.filters!.matching!.posting_date!.last_hours = 168;
+    expect(validateWorkflowYaml(workflowSpecToYaml(spec)).errors.some(error => /cannot be combined/.test(error.message))).toBe(true);
+  });
 });

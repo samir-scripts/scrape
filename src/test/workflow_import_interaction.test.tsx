@@ -16,7 +16,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); useToastStore.getState().clea
 it('imports only after validation, confirms replacement, preserves the old draft on failure, and reselects the same file', async () => {
  const save = vi.spyOn(api, 'saveWorkflow');
  render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
- const user = userEvent.setup(); await user.type(screen.getByLabelText('Workflow name'), 'Keep my changes');
+ const user = userEvent.setup(); await user.clear(screen.getByLabelText('Workflow name')); await user.type(screen.getByLabelText('Workflow name'), 'Keep my changes');
  const input = screen.getByLabelText('Workflow YAML file');
  const yaml = file(workflowSpecToYaml(spec));
  await user.upload(input, yaml); await user.click(await screen.findByRole("button", { name: "Keep editing" }));
@@ -40,8 +40,7 @@ it('registry upload opens an unsaved draft and Run all remains available while s
  await user.upload(screen.getByRole('button', { name: 'Import workflow YAML' }).parentElement!.querySelector('input')!, file(workflowSpecToYaml(spec)));
  await screen.findByRole('dialog', { name: 'Create workflow' });
  expect((screen.getByLabelText('Workflow name') as HTMLInputElement).value).toBe('Imported board'); expect(save).not.toHaveBeenCalled();
- await user.click(screen.getByRole('button', { name: 'Continue to Matching' }));
- expect(screen.getByLabelText("Keywords")).toBeTruthy();
+ expect(screen.getByLabelText("Any keywords")).toBeTruthy();
  expect(screen.queryByText(/Global keyword defaults/)).toBeNull();
 });
 it('confirms against edits made while file validation is in flight and ignores an empty file selection', async () => {
@@ -51,6 +50,7 @@ it('confirms against edits made while file validation is in flight and ignores a
  const user = userEvent.setup(), input = screen.getByLabelText('Workflow YAML file');
  await user.upload(input, []); expect(validation).not.toHaveBeenCalled();
  await user.upload(input, file(workflowSpecToYaml(spec)));
+ await user.clear(screen.getByLabelText('Workflow name'));
  await user.type(screen.getByLabelText('Workflow name'), 'Edited during validation');
  finish(spec);
  await user.click(await screen.findByRole("button", { name: "Keep editing" }));

@@ -2,6 +2,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { UserEvent } from "@testing-library/user-event";
 import { AddSourceModal } from "../components/views/settings/AddSourceModal";
 import { api, SAMPLE_SWE_SOURCE } from "../lib/api";
 import type { ExtractorTestResult } from "../bindings/ExtractorTestResult";
@@ -11,6 +12,11 @@ import type { ScriptEnvironmentStatus } from "../bindings/ScriptEnvironmentStatu
 import type { Source } from "../bindings/Source";
 import type { WorkflowSpec } from "../bindings/WorkflowSpec";
 
+async function openExtractorSettings(user: UserEvent) {
+  await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
+  await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
+  await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+}
 beforeAll(() => {
   HTMLDialogElement.prototype.showModal = function () {
     this.setAttribute("open", "");
@@ -96,7 +102,7 @@ describe("Workflow Editor — Custom Extractor, Browser Sessions, & Script Trust
     );
 
     // Advanced settings must be opened to edit extractor details
-    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+    await openExtractorSettings(user);
 
     // Mode selector is visible
     expect(screen.getByRole("button", { name: /Extraction mode/i })).toBeTruthy();
@@ -156,7 +162,7 @@ describe("Workflow Editor — Custom Extractor, Browser Sessions, & Script Trust
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+    await openExtractorSettings(user);
 
     const testBtn = screen.getByRole("button", { name: "Test extractor" });
     await user.click(testBtn);
@@ -236,7 +242,7 @@ describe("Workflow Editor — Custom Extractor, Browser Sessions, & Script Trust
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+    await openExtractorSettings(user);
 
     // Browser runtime indicator is displayed
     await waitFor(() => {
@@ -307,7 +313,7 @@ describe("Workflow Editor — Custom Extractor, Browser Sessions, & Script Trust
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+    await openExtractorSettings(user);
 
     // Truthful privilege disclosure is visible
     expect(
@@ -358,7 +364,7 @@ describe("Workflow Editor — Custom Extractor, Browser Sessions, & Script Trust
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+    await openExtractorSettings(user);
 
     const pathInput = screen.getByRole("textbox", { name: /Script file path/i });
     await user.clear(pathInput);
@@ -399,7 +405,7 @@ it("reviews a multi-source child's stored fingerprint instead of the parent's fi
   const read=vi.spyOn(api,"getSource").mockResolvedValue(child);
   const trust=vi.spyOn(api,"trustWorkflowScript").mockResolvedValue({...child,script_trusted:true,needs_review:false});
   render(<AddSourceModal isOpen initialSource={parent} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
-  await user.click(screen.getByRole("button",{name:"Advanced settings"}));
+  await openExtractorSettings(user);
   await user.click(await screen.findByRole("button",{name:"Trust saved script"}));
   expect(read).toHaveBeenCalledWith(child.id);
   expect(trust).toHaveBeenCalledWith(child.id,child.script_sha256,true);
@@ -415,7 +421,7 @@ it("requires saving when the owned child's script differs from the parent snapsh
   vi.spyOn(api,"getSource").mockResolvedValue({...sampleScriptSource,config:{script:{runtime:"js",code:"different saved executable"}}});
   const trust=vi.spyOn(api,"trustWorkflowScript");
   render(<AddSourceModal isOpen initialSource={parent} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
-  await user.click(screen.getByRole("button",{name:"Advanced settings"}));
+  await openExtractorSettings(user);
   const button=await screen.findByRole("button",{name:"Trust saved script"});
   expect((button as HTMLButtonElement).disabled).toBe(true);
   await user.click(button);expect(trust).not.toHaveBeenCalled();

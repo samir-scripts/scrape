@@ -499,6 +499,7 @@ function matchesDemoWorkflow(job: Job, source: Source): boolean {
   const filters = source.filters as WorkflowSpec["filters"] || {};
   if (filters.query || filters.policy) throw new Error("Expert queries and policies require desktop validation.");
   const rules = filters.matching;
+  if (rules?.target_roles?.length || rules?.companies?.length) throw new Error("Role and company filtering requires the desktop application.");
   if (rules?.experience_match_mode === "required_minimum" && (rules.experience_min != null || rules.experience_max != null)) throw new Error("Minimum required experience filtering requires the desktop application.");
   if (rules?.posting_date) throw new Error("Posting-date previews require desktop extraction.");
   const includes = filters.include_keywords;
@@ -548,6 +549,7 @@ const apiImplementation = {
       for (const rules of [filter, filter?.matching]) {
         if (rules?.experience_match_mode === "required_minimum" && (rules.experience_min != null || rules.experience_max != null)) return Promise.reject(new Error("Minimum required experience filtering requires the desktop application."));
       }
+      if (filter?.matching?.target_roles?.length || filter?.matching?.companies?.length) return Promise.reject(new Error("Role and company filtering requires the desktop application."));
       let items = devJobs.filter((job) => !job.removed_at && matchesJob(job, filter || {}));
       const sort = filter?.sort || "date_added_desc";
       const compare = (a: Job, b: Job) => {
@@ -1227,7 +1229,7 @@ const apiImplementation = {
     })) throw new Error("Browser and script extraction require the desktop application; executable configurations require local trust.");
     // Demonstration validates the form shape; expert syntax requires the desktop validator.
     if (result.parsedSpec?.filters?.query || result.parsedSpec?.filters?.policy) throw new Error("Expert queries and policies require desktop validation.");
-    return { ...result.parsedSpec!, version: 7, max_jobs_per_run: result.parsedSpec!.max_jobs_per_run ?? INGESTION_LIMITS.default };
+    return { ...result.parsedSpec!, version: 8, max_jobs_per_run: result.parsedSpec!.max_jobs_per_run ?? INGESTION_LIMITS.default };
   },
   importWorkflow: async (spec: unknown): Promise<WorkflowSpec> => {
     if (isTauri()) return invoke("import_workflow", { spec });

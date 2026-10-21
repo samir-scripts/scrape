@@ -10,7 +10,9 @@ import type { WorkflowSpec } from "../bindings/WorkflowSpec";
 afterEach(cleanup);
 function Editor({ initialSpec }: { initialSpec?: WorkflowSpec }) {
   const model = useWorkflowDraft({ isOpen: true, initialSpec, onSourceSaved: () => {} });
-  return <><WorkflowSections draft={model.draft} change={model.change} advanced={false} section="Source" selectCompany={model.selectCompany} />
+  return <><WorkflowSections draft={model.draft} change={model.change} advanced={false} section="Roles" />
+    <WorkflowSections draft={model.draft} change={model.change} advanced={false} section="Sources" selectCompany={model.selectCompany} />
+    {!initialSpec && <button onClick={() => model.change(draft => ({ ...draft, sources: [{ id: "source-1", enabled: true, label: "", extractor: { kind: "greenhouse", url: "" } }] }))}>Attach company board</button>}
     {model.pendingCompany && <section aria-label="Replace source"><button onClick={model.cancelCompany}>Keep editing</button><button onClick={model.confirmCompany}>Replace source</button></section>}
     <output aria-label="Current draft">{JSON.stringify(model.draft)}</output></>;
 }
@@ -19,13 +21,14 @@ async function choose(user: UserEvent, index: number, query: string) {
   const input = screen.getAllByRole("combobox", { name: "Search companies" })[index];
   await user.click(input); await user.clear(input); await user.type(input, query); await user.keyboard("{ArrowDown}{Enter}");
 }
-describe("company-first source editing", () => {
+describe("company board attachment editing", () => {
   it("searches every token across provider/domain, commits by keyboard, restores Escape and keeps custom entry available", async () => {
     const user = userEvent.setup(); render(<Editor />);
+    await user.click(screen.getByRole("button", { name: "Attach company board" }));
     await choose(user, 0, "cloud green");
     const draft = readDraft();
-    expect(draft.metadata.name).toBe("Cloudflare jobs");
-    expect(draft.version).toBe(7);
+    expect(draft.metadata.name).toBe("New Job Workflow");
+    expect(draft.version).toBe(8);
     expect(draft.filters?.matching?.experience_match_mode).toBe("required_minimum");
     expect(draft.sources[0].id).toBe("source-1");
     expect(selectedCompanyId(draft.sources[0])).toBe("cloudflare");
@@ -66,6 +69,8 @@ describe("company-first source editing", () => {
   });
   it("does not overwrite an edited name or apply example matching when selecting a company", async () => {
     const user = userEvent.setup(); render(<Editor />);
+    await user.click(screen.getByRole("button", { name: "Attach company board" }));
+    await user.clear(screen.getByRole("textbox", { name: "Workflow name" }));
     await user.type(screen.getByRole("textbox", { name: "Workflow name" }), "Personal search");
     await choose(user, 0, "netflix");
     const draft = readDraft();

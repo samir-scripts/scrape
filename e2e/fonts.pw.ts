@@ -6,7 +6,8 @@ test('selected fonts load locally and apply to navigation, body, fields and dial
   await page.getByRole('button', { name: /APPEARANCE/ }).click();
   const picker = page.getByLabel('Interface font');
   for (const [id, family] of Object.entries({ inter: 'Inter Variable', jetbrains: 'JetBrains Mono Variable', geist: 'Geist Mono Variable', fira_code: 'Fira Code Variable', ibm_plex: 'IBM Plex Mono' })) {
-    await picker.selectOption(id);
+    await picker.click();
+    await page.getByRole('option', { name: new RegExp(`^${family.replace(' Variable', '')}`) }).click();
     await expect(page.locator('html')).toHaveAttribute('data-font', id);
     expect(await page.evaluate(async family => {
       const faces = await document.fonts.load(`14px "${family}"`, 'Software Engineer 45.25');
@@ -20,8 +21,8 @@ test('selected fonts load locally and apply to navigation, body, fields and dial
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-font', 'ibm_plex');
   await page.getByRole('button', { name: 'SCRAPER', exact: true }).click();
-  await page.getByRole('button', { name: /ADD WORKFLOW/ }).click();
+  await page.getByRole('button', { name: 'Add workflow', exact: true }).click();
   expect(await page.getByRole('dialog').evaluate(el => getComputedStyle(el).fontFamily)).toContain('IBM Plex Mono');
-  expect(await page.getByLabel('Source URL or board identifier').evaluate(el => getComputedStyle(el).fontFamily)).toContain('IBM Plex Mono');
+  expect(await page.getByRole('textbox', { name: 'Workflow name', exact: true }).evaluate(el => getComputedStyle(el).fontFamily)).toContain('IBM Plex Mono');
   await expect(page).toHaveScreenshot('bundled-mono-workflow.png', {animations:'disabled'});
 });

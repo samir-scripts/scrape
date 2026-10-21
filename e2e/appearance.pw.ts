@@ -17,17 +17,17 @@ for (const theme of ["paper", "obsidian"]) {
       expect(await contrastFailures(page)).toEqual([]);
       await expect.soft(page).toHaveScreenshot(`${theme}-${width}-settings.png`, { animations: "disabled" });
       await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
-      await page.getByRole("button", { name: /ADD WORKFLOW/ }).click();
+      await page.getByRole("button", { name: "Add workflow", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "Create workflow" });
       await expect(dialog).toBeVisible();
-      await dialog.getByRole("textbox", { name: "Source URL or board identifier" }).focus();
+      await dialog.getByRole("textbox", { name: "Workflow name", exact: true }).focus();
       await page.keyboard.press("Tab");
-      await expect(dialog.getByRole("textbox", { name: "Workflow name" })).toBeFocused();
+      await expect(dialog.getByRole("textbox", { name: "Target roles", exact: true })).toBeFocused();
       await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
       expect(await contrastFailures(page)).toEqual([]);
       await expect.soft(page).toHaveScreenshot(`${theme}-${width}-workflow.png`, { animations: "disabled" });
       await page.keyboard.press("Escape");
-      await expect(page.getByRole("button", { name: /ADD WORKFLOW/ })).toBeFocused();
+      await expect(page.getByRole("button", { name: "Add workflow", exact: true })).toBeFocused();
       await page.getByRole("button", { name: "RUN", exact: true }).first().click();
       await expect(page.getByRole("button", { name: "RUNNING…", exact: true })).toHaveCount(0, { timeout: 15000 });
       await page.getByRole("button", { name: /^DISCOVERED/ }).click();
@@ -51,8 +51,8 @@ for (const theme of ["paper", "obsidian"]) {
       await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
       // A 200% zoom-equivalent viewport exercises reflow at the same CSS width.
       await page.setViewportSize({ width: Math.floor(width / 2), height: 450 });
-      await page.getByRole("button", { name: /ADD WORKFLOW/ }).click();
-      await expect(dialog.getByRole("textbox", { name: "Source URL or board identifier" })).toBeVisible();
+      await page.getByRole("button", { name: "Add workflow", exact: true }).click();
+      await expect(dialog.getByRole("textbox", { name: "Workflow name", exact: true })).toBeVisible();
       expect(await dialog.evaluate(el => el.scrollWidth <= innerWidth)).toBe(true);
     });
   }

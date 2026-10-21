@@ -8,10 +8,13 @@ test("create a workflow through actual controls without an implicit scrape", asy
     .getByRole("button", { name: /add workflow|new workflow|create workflow/i })
     .click();
   const dialog = page.getByRole("dialog", { name: "Create workflow" });
-  await dialog
-    .getByRole("textbox", { name: "Source URL or board identifier" })
-    .fill("https://boards.greenhouse.io/fixture-board");
-  await dialog.getByRole("button", { name: "Continue to Matching" }).click();
+  await dialog.getByRole("textbox", { name: "Workflow name", exact: true }).fill("fixture-board");
+  await dialog.getByRole("textbox", { name: "Any keywords", exact: true }).fill("NoSuchRole");
+  await expect(dialog.getByRole("button", { name: "Preview matches" })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Continue to Criteria" }).click();
+  // Date matching is exercised through Rust/native fixtures, not this UI demo.
+  await dialog.getByRole("button", { name: "Date posted range", exact: true }).click();
+  await page.getByRole("option", { name: "Any time", exact: true }).click();
   const limit = dialog.getByRole("textbox", { name: "Maximum matching jobs per run" });
   await expect(limit).toHaveValue("20");
   await limit.fill("7");
@@ -20,16 +23,18 @@ test("create a workflow through actual controls without an implicit scrape", asy
   await dialog.getByRole("combobox", { name: "State/province", exact: true }).fill("CA");
   await page.keyboard.press("Enter");
   await dialog.getByRole("checkbox", { name: "Remote", exact: true }).check();
-  await dialog
-    .getByRole("textbox", { name: "Keywords", exact: true })
-    .fill("NoSuchRole");
-  await dialog.getByRole("button", { name: "Preview matches" }).click();
-  await expect(dialog.getByText(/No eligible postings/)).toBeVisible();
+  await dialog.getByRole("button", { name: "Continue to Sources" }).click();
+  await expect(dialog.getByRole("textbox", { name: /URL or board identifier/ })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Add source", exact: true }).click();
+  await dialog.getByRole("textbox", { name: "Source 2 URL or board identifier", exact: true }).fill("https://boards.greenhouse.io/fixture-board");
+  await dialog.getByRole("button", { name: "Remove source Cross-Company Search", exact: true }).click();
   await dialog.getByRole("button", { name: "Continue to Schedule" }).click();
   await expect(
     dialog.getByRole("textbox", { name: "IANA timezone" }),
   ).toHaveValue("America/New_York");
-  await dialog.getByRole("button", { name: "Review workflow" }).click();
+  await expect(dialog.getByRole("button", { name: "Save workflow" })).toBeDisabled();
+  await dialog.getByRole("button", { name: "Preview matches" }).click();
+  await expect(dialog.getByText(/No eligible postings/)).toBeVisible();
   await dialog.getByRole("button", { name: "Save workflow" }).click();
   await expect(
     dialog.getByText(/Saving has not started a scrape/),
@@ -41,12 +46,12 @@ test("create a workflow through actual controls without an implicit scrape", asy
   await page.getByRole("row").filter({ hasText: "fixture-board" }).getByRole("button", { name: "Edit workflow fixture-board" }).click();
   const edit = page.getByRole("dialog", { name: "Edit workflow" });
   await expect(edit.getByLabel("Workflow name")).toHaveValue("fixture-board");
-  await edit.getByRole("button", { name: "Continue to Matching" }).click();
+  await expect(edit.getByRole("button", { name: "Remove NoSuchRole from Any keywords", exact: true })).toBeVisible();
+  await edit.getByRole("button", { name: "Continue to Criteria" }).click();
   await expect(edit.getByRole("textbox", { name: "Maximum matching jobs per run" })).toHaveValue("7");
   await expect(edit.getByRole("combobox", { name: "Country", exact: true })).toHaveValue("United States");
   await expect(edit.getByRole("button", { name: "Remove California", exact: true })).toBeVisible();
   await expect(edit.getByRole("checkbox", { name: "Remote", exact: true })).toBeChecked();
-  await expect(edit.getByRole("button", { name: "Remove NoSuchRole from Keywords" })).toBeVisible();
   await edit.getByRole("button", { name: "Back", exact: true }).click();
   await expect(edit.getByLabel("Workflow name")).toHaveValue("fixture-board");
   await edit.getByRole("button", { name: "Cancel", exact: true }).click();

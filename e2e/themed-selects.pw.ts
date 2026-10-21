@@ -42,8 +42,7 @@ for (const theme of ["paper", "obsidian"] as const) {
 
       await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
       await page.getByRole("button", { name: /add workflow/i }).click();
-      await page.getByRole("textbox", { name: "Source URL or board identifier" }).fill("https://boards.greenhouse.io/fixture-board");
-      await page.getByRole("button", { name: "Continue to Matching" }).click();
+      await page.getByRole("button", { name: "Continue to Criteria" }).click();
       const country = page.getByRole("combobox", { name: "Country", exact: true });
       await country.fill("can");
       await expect(page.getByRole("listbox")).toBeVisible();

@@ -53,6 +53,23 @@ if (process.env.SCRAPE_NATIVE_WORKFLOW === "1" || process.env.SCRAPE_NATIVE_DATA
     if (request.url === "/seen-slow") { response.end(JSON.stringify({ seen: slowSeen })); return; }
     if (request.url === "/slow") { slowSeen = true; request.on("close", () => response.destroy()); return; }
     if (request.url === "/robots.txt") { response.end("User-agent: *\nAllow: /"); return; }
+    if (request.url === "/search") {
+      const publication = hours => new Date(Date.now() - hours * 3_600_000).toISOString();
+      const rows = [
+        [9001, "Software Engineer", "Google", 6],
+        [9002, "Software Engineer II", "Amazon", 8],
+        [9003, "Software Engineer", "Meta", 6],
+        [9004, "Software Engineer", "Google", 36],
+        [9005, "Product Manager", "Google", 6],
+      ];
+      response.setHeader("Content-Type", "application/json");
+      response.end(JSON.stringify({ page: 0, page_count: 1, results: rows.map(([id, name, company, age]) => ({
+        id, name, company: { name: company }, publication_date: publication(age),
+        contents: "<p>Labelled native search fixture. Build reliable systems.</p>",
+        locations: [{ name: "Austin, TX" }], refs: { landing_page: `${workflowOrigin}/search-job/${id}` },
+      })) }));
+      return;
+    }
     response.end(`<script type="application/ld+json">${JSON.stringify([
       { "@type": "JobPosting", identifier: "wizard-1", title: "Native workflow engineer", url: "/jobs/wizard-1", employmentType: "FULL_TIME", description: "Minimum qualifications: 1 year of professional experience required. Recent university graduates are eligible.", hiringOrganization: { name: "Fixture Co" }, jobLocationType: "TELECOMMUTE", applicantLocationRequirements: { "@type": "AdministrativeArea", name: "US-TX" }, jobLocation: { "@type": "Place", address: { addressLocality: "Austin", addressRegion: "TX", addressCountry: "US" } } },
       { "@type": "JobPosting", identifier: "wizard-2", title: "Unrelated role", url: "/jobs/wizard-2", hiringOrganization: { name: "Fixture Co" } },

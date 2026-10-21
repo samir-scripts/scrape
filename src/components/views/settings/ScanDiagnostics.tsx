@@ -7,10 +7,11 @@ const reasons: Record<RejectionReason, string> = {
   legacy_exclusion: "Imported exclude keywords", legacy_location: "Additional location text",
   legacy_role_type: "Imported role restriction", keyword_any: "No Any keyword matched",
   keyword_all: "Missing required All keywords", keyword_exclusion: "Excluded keyword matched",
-  posting_date: "Posting date", compensation: "Compensation", role_type: "Role type",
+  posting_date: "Posting date", compensation: "Compensation", role_type: "Target role or employment type",
   workplace: "Workplace", experience: "Experience", new_grad: "New graduate rule",
   sponsorship: "Sponsorship", work_authorization: "Work authorization", clearance: "Clearance",
   geography: "Country or region", invalid_candidate: "Invalid candidate",
+  company: "Company restriction",
 };
 const terminations: Record<SourceScanStats["termination"], string> = {
   exhausted: "Source exhausted", job_limit: "Matching job limit reached",

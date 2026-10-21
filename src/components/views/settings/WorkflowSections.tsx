@@ -17,8 +17,29 @@ import { JobLimitInput } from "./JobLimitInput";
 import { CustomExtractorConfig } from "./CustomExtractorConfig";
 import type { Source } from "../../../bindings/Source";
 import { normalizedEndpoint } from "../../../lib/yamlWorkflow";
+import { KeywordInput } from "../../ui/KeywordInput";
+import { companyOptions } from "./CompanyPicker";
+
+export const ROLE_SUGGESTIONS = [
+  "Software Engineer",
+  "Frontend Developer",
+  "Backend Developer",
+  "Data Engineer",
+  "Intern",
+  "Software Engineer Intern",
+  "New Grad",
+  "Line Cook",
+  "Prep Cook",
+  "Server",
+  "Barista",
+  "Store Associate",
+  "Sales Associate",
+  "Cashier",
+] as const;
 
 export const emptyRules = (): PostingRules => ({
+  target_roles: [],
+  companies: [],
   keywords: null,
   posting_date: null,
   compensation: null,
@@ -58,7 +79,7 @@ export function WorkflowSections({
   draft: WorkflowSpec;
   change: WorkflowDraftChange;
   advanced: boolean;
-  section: "Source" | "Matching" | "Schedule" | "Retention";
+  section: "Roles" | "Criteria" | "Sources" | "Schedule" | "Retention";
   initialSource?: Source | null;
   onTrustChanged?: () => void;
   selectCompany?: (sourceId: string, companyId: string) => void;
@@ -68,13 +89,13 @@ export function WorkflowSections({
   const filters = draft.filters || {};
   const rules = { ...emptyRules(), ...filters.matching };
   const setRules = (patch: Partial<PostingRules>) =>
-    change({
-      ...draft,
-      filters: { ...filters, matching: { ...rules, ...patch } },
-    });
+    change(current => ({
+      ...current,
+      filters: { ...current.filters, matching: { ...emptyRules(), ...current.filters?.matching, ...patch } },
+    }));
   const schedule = draft.schedule || {};
   const setSchedule = (patch: Partial<NonNullable<WorkflowSpec["schedule"]>>) =>
-    change({ ...draft, schedule: { ...schedule, ...patch } });
+    change(current => ({ ...current, schedule: { ...current.schedule, ...patch } }));
   const field = (
     label: string,
     value: string | number,
@@ -92,10 +113,84 @@ export function WorkflowSections({
       />
     </label>
   );
-  if (section === "Source") {
+  if (section === "Roles") {
+    return (
+      <div className="grid gap-4">
+        <section aria-label="Workflow identification" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
+          <h4 className="font-bold text-sm">Workflow Name</h4>
+          {field(
+            "Workflow name",
+            draft.metadata?.name || "",
+            (name) => change(current => ({ ...current, metadata: { ...current.metadata, name } }))
+          )}
+          <p className="text-xs text-[var(--color-ink-mute)]">
+            Auto-named from your target roles and companies if left empty.
+          </p>
+        </section>
+
+        <section aria-label="Target roles" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
+          <h4 className="font-bold text-sm">Target Roles</h4>
+          <KeywordInput
+            label="Target roles"
+            value={rules.target_roles || []}
+            onChange={(terms) => setRules({ target_roles: terms })}
+            onDraftChange={() => change(current => ({ ...current }))}
+          />
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-[var(--color-text-muted)] font-semibold uppercase">Popular roles:</span>
+            {ROLE_SUGGESTIONS.map((suggestion) => {
+              const active = (rules.target_roles || []).some(
+                (r) => r.toLowerCase() === suggestion.toLowerCase()
+              );
+              return (
+                <button
+                  key={suggestion}
+                  type="button"
+                  aria-label={`Add target role ${suggestion}`}
+                  disabled={active}
+                  className="min-h-7 px-2 border border-[var(--color-border)] text-xs font-semibold uppercase hover:bg-[var(--color-surface-raised)] disabled:opacity-40"
+                  onClick={() => change(current => {
+                    const matching = { ...emptyRules(), ...current.filters?.matching };
+                    return { ...current, filters: { ...current.filters, matching: { ...matching,
+                      target_roles: matching.target_roles.some(role => role.toLowerCase() === suggestion.toLowerCase())
+                        ? matching.target_roles : [...matching.target_roles, suggestion],
+                    } } };
+                  })}
+                >
+                  + {suggestion}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-[var(--color-ink-mute)]">
+            Job titles must contain any of your target roles. Leave empty to match any role.
+          </p>
+        </section>
+
+        <section aria-label="Target companies" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
+          <h4 className="font-bold text-sm">Target Companies (Optional)</h4>
+          <KeywordInput
+            label="Companies (Optional)"
+            value={rules.companies || []}
+            onChange={(terms) => setRules({ companies: terms })}
+            onDraftChange={() => change(current => ({ ...current }))}
+          />
+          <p className="text-xs text-[var(--color-ink-mute)]">
+            Leave empty to discover listings across all employers. Enter specific employers (e.g. Google, Amazon, McDonald&apos;s, Burger King) to restrict matching.
+          </p>
+        </section>
+
+        <section aria-label="Job keywords" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
+          <h4 className="font-bold text-sm">Keywords</h4>
+          <KeywordMatching rules={rules} change={change} />
+        </section>
+      </div>
+    );
+  }
+  if (section === "Sources") {
     const endpointMap = new Map<string, number>();
     (draft.sources || []).forEach((s) => {
-      if (s.extractor?.url?.trim()) {
+      if (s.extractor?.kind === "search" || s.extractor?.url?.trim()) {
         const ep = normalizedEndpoint(s.extractor.kind, s.extractor.url);
         endpointMap.set(ep, (endpointMap.get(ep) || 0) + 1);
       }
@@ -105,6 +200,54 @@ export function WorkflowSections({
 
     return (
       <div className="grid gap-4">
+        <div className="border border-[var(--color-border)] p-4 bg-[var(--color-surface)] grid gap-2">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-sm">✓ Cross-Company Search</span>
+            <span className="text-xs px-2 py-0.5 bg-[var(--color-text)] text-[var(--color-surface)] font-semibold uppercase">
+              {(draft.sources || []).some(s => s.extractor.kind === "search" && s.enabled) ? "Active" : "Available"}
+            </span>
+          </div>
+          <p className="text-xs text-[var(--color-ink-mute)]">
+            The Muse public listings provide bounded cross-employer coverage, not all employers. Roles, companies, keywords and criteria are evaluated locally. No API key or company URL is required. Arbeitnow is an alternative Germany-focused public feed; original posting dates may be unknown.
+          </p>
+        </div>
+
+        {rules.companies?.map((targetCo) => {
+          const match = companyOptions.find(opt =>
+            opt.company.name.toLowerCase().includes(targetCo.toLowerCase()) ||
+            targetCo.toLowerCase().includes(opt.company.name.toLowerCase())
+          );
+          if (!match) return null;
+          const alreadyAttached = (draft.sources || []).some(
+            s => s.employer_hint === match.company.name || s.label === match.company.name
+          );
+          if (alreadyAttached) return null;
+          return (
+            <div key={targetCo} className="border border-[var(--color-border)] p-3 bg-[var(--color-surface-raised)] flex items-center justify-between gap-3 text-xs">
+              <span>Direct career board available for <strong>{match.company.name}</strong> · {match.template.readiness.replaceAll("_", " ")}. Non-ready or script sources attach disabled for review.</span>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  const newId = `source-${Date.now().toString(36)}`;
+                  const newSource: WorkflowSourceSpec = {
+                    id: newId,
+                    label: match.source.label,
+                    employer_hint: match.source.employer_hint,
+                    enabled: match.source.enabled && match.template.readiness === "ready" && !match.source.extractor.script && match.source.extractor.mode !== "script",
+                    extractor: structuredClone(match.source.extractor),
+                  };
+                  change(current => ({
+                    ...current,
+                    sources: [...current.sources, newSource],
+                  }));
+                }}
+              >
+                + Attach direct board
+              </Button>
+            </div>
+          );
+        })}
         <div className="flex items-center justify-between gap-2 pt-2 border-t border-[var(--color-border)]">
           <h4 className="font-bold text-sm">
             Sources ({draft.sources?.length ?? 0})
@@ -216,13 +359,13 @@ export function WorkflowSections({
                   </Button>
                 </div>
               </div>
-              <CompanyPicker value={selectedCompanyId(source)}
+              {source.extractor.kind !== "search" && <CompanyPicker value={selectedCompanyId(source)}
                 onChange={companyId => selectCompany?.(source.id, companyId)}
                 onCustom={() => {}}
-                logo={preview?.branding.find(item => item.source_id === source.id && item.company === source.employer_hint)?.logo} />
+                logo={preview?.branding.find(item => item.source_id === source.id && item.company === source.employer_hint)?.logo} />}
 
               <div className="grid gap-3">
-                <div className="flex flex-col gap-1 text-sm">
+                {source.extractor.kind !== "search" && <div className="flex flex-col gap-1 text-sm">
                   Source URL or board identifier
                   <div className="flex gap-2">
                     <Input
@@ -251,11 +394,13 @@ export function WorkflowSections({
                       Detect
                     </Button>
                   </div>
-                </div>
-
-                {index === 0 && field("Workflow name", draft.metadata.name, (name) =>
-                  change({ ...draft, metadata: { ...draft.metadata, name } }),
-                )}
+                </div>}
+                {source.extractor.kind === "search" && <label className="grid gap-1 text-sm">Public listings provider
+                  <Select aria-label={`Source ${index + 1} search provider`}
+                    value={!source.extractor.url || source.extractor.url === "default" ? "themuse" : source.extractor.url}
+                    options={[{ value: "themuse", label: "The Muse — bounded worldwide listings" }, { value: "arbeitnow", label: "Arbeitnow — Germany-focused feed" }]}
+                    onChange={provider => change(current => ({ ...current, sources: current.sources.map(item => item.id === source.id ? { ...item, extractor: { ...item.extractor, url: provider } } : item) }))} />
+                </label>}
 
                 <details className="border-t border-[var(--color-border)] pt-2 text-xs">
                   <summary className="cursor-pointer font-semibold uppercase text-[var(--color-text-muted)] hover:text-[var(--color-text)] py-1">
@@ -315,6 +460,7 @@ export function WorkflowSections({
                         aria-label={`Source ${index + 1} adapter`}
                         value={source.extractor.kind}
                         options={[
+                          "search",
                           "greenhouse",
                           "lever",
                           "ashby",
@@ -358,15 +504,99 @@ export function WorkflowSections({
       </div>
     );
   }
-  if (section === "Matching")
+  if (section === "Criteria")
     return (
       <div className="grid gap-4">
-        <section aria-label="Job role and keywords" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
-          <h4 className="font-bold text-sm">Role & Keywords</h4>
-          <KeywordMatching rules={rules} change={change} />
+        <section aria-label="Posting recency" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
+          <h4 className="font-bold text-sm">Date Posted Window</h4>
+          <label className="flex flex-col gap-1 text-sm">
+            Recency window
+            <Select
+              aria-label="Date posted range"
+              value={!rules.posting_date ? "any" : rules.posting_date.preset || (rules.posting_date.last_hours != null ? "hours" : "custom")}
+              options={[
+                { value: "past_12h", label: "Past 12 hours" },
+                { value: "today", label: "Today (since local midnight)" },
+                { value: "past_24h", label: "Past 24 hours" },
+                { value: "past_week", label: "Past week (7 days)" },
+                { value: "past_month", label: "Past month (30 days)" },
+                { value: "any", label: "Any time" },
+                { value: "custom", label: "Custom date range…" },
+                { value: "hours", label: "Last N hours (custom)" },
+              ]}
+              onChange={(val) => {
+                const timezone = rules.posting_date?.timezone || schedule.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+                const include_unknown = rules.posting_date?.include_unknown ?? false;
+                setRules({ posting_date: val === "any" ? null : {
+                  preset: val === "custom" || val === "hours" ? null : val,
+                  last_hours: val === "hours" ? rules.posting_date?.last_hours ?? 24 : null,
+                  from: val === "custom" ? rules.posting_date?.from ?? null : null,
+                  through: val === "custom" ? rules.posting_date?.through ?? null : null,
+                  timezone, include_unknown,
+                } });
+              }}
+            />
+          </label>
+          {rules.posting_date && (
+            <>
+              {!rules.posting_date.preset && rules.posting_date.last_hours == null && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {field(
+                    "Posted from",
+                    rules.posting_date.from || "",
+                    (value) =>
+                      setRules({
+                        posting_date: {
+                          ...rules.posting_date!,
+                          preset: null,
+                          from: value || null,
+                        },
+                      }),
+                    "date",
+                  )}
+                  {field(
+                    "Posted through",
+                    rules.posting_date.through || "",
+                    (value) =>
+                      setRules({
+                        posting_date: {
+                          ...rules.posting_date!,
+                          preset: null,
+                          through: value || null,
+                        },
+                      }),
+                    "date",
+                  )}
+                </div>
+              )}
+              {!rules.posting_date.preset && rules.posting_date.last_hours != null && field(
+                "Last N hours", rules.posting_date.last_hours,
+                value => setRules({ posting_date: { ...rules.posting_date!, last_hours: Number(value) } }), "number",
+              )}
+              <p className="text-xs text-[var(--color-ink-mute)]">
+                Evaluated in {rules.posting_date.timezone}.
+              </p>
+              {rules.posting_date.preset !== "any" && <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={rules.posting_date.include_unknown}
+                  onChange={(e) =>
+                    setRules({
+                      posting_date: {
+                        ...rules.posting_date!,
+                        include_unknown: e.target.checked,
+                      },
+                    })
+                  }
+                />
+                Include jobs with unknown posting dates
+              </label>}
+            </>
+          )}
+          {(!rules.posting_date || rules.posting_date.preset === "any") && <p className="text-xs">Any time includes all posting dates, including unknown dates.</p>}
         </section>
         <section aria-label="Location and workplace" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
-          <GeographyMatching rules={rules} onChange={setRules} onDraftChange={() => change({ ...draft })} />
+          <GeographyMatching rules={rules} onChange={setRules} onDraftChange={() => change(current => ({ ...current }))} />
         </section>
         <section aria-label="Experience, employment and ingestion limits" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-4">
           <h4 className="font-bold text-sm">Experience, Employment & Limits</h4>
@@ -376,7 +606,7 @@ export function WorkflowSections({
             experienceMatchMode={rules.experience_match_mode}
             includeUnknown={rules.experience_include_unknown}
             newGrad={rules.new_grad ?? "any"}
-            onDraftChange={() => change({ ...draft })}
+            onDraftChange={() => change(current => ({ ...current }))}
             onChange={values => setRules({
               experience_min: values.experienceMin, experience_max: values.experienceMax,
               experience_match_mode: values.experienceMatchMode,
@@ -418,8 +648,6 @@ export function WorkflowSections({
           </div>
           <CompatibilityFilters draft={draft} change={change} advanced={advanced} />
         </section>
-        {advanced && (
-          <>
             <SalaryRangeFilter
               salaryMin={
                 rules.compensation?.min_minor == null
@@ -434,7 +662,7 @@ export function WorkflowSections({
               currency={rules.compensation?.currency ?? null}
               interval={rules.compensation?.interval ?? null}
               includeUnknown={rules.compensation?.include_unknown ?? false}
-              onDraftChange={() => change(draft)}
+              onDraftChange={() => change(current => ({ ...current }))}
               onChange={(values) =>
                 setRules({
                   compensation:
@@ -459,6 +687,8 @@ export function WorkflowSections({
                 })
               }
             />
+        {advanced && (
+          <>
             {(["sponsorship", "clearance", "work_auth"] as const).map((key) => (
               <fieldset key={key} className="flex flex-wrap gap-3">
                 <legend>{key.replaceAll("_", " ")}</legend>
@@ -483,101 +713,6 @@ export function WorkflowSections({
                 ))}
               </fieldset>
             ))}
-            <label>
-              Posting date restriction
-              <Select
-                aria-label="Posting date restriction"
-                value={
-                  !rules.posting_date
-                    ? "none"
-                    : rules.posting_date.last_hours != null
-                      ? "age"
-                      : "range"
-                }
-                options={[
-                  { value: "none", label: "No date restriction" },
-                  { value: "age", label: "Last N hours" },
-                  { value: "range", label: "Date range" },
-                ]}
-                onChange={(range) =>
-                  setRules({
-                    posting_date:
-                      range === "none"
-                        ? null
-                        : {
-                            last_hours: range === "age" ? 24 : null,
-                            from: null,
-                            through: null,
-                            timezone:
-                              schedule.timezone ||
-                              Intl.DateTimeFormat().resolvedOptions().timeZone,
-                            include_unknown: false,
-                          },
-                  })
-                }
-              />
-            </label>
-            {rules.posting_date && (
-              <>
-                {rules.posting_date.last_hours != null ? (
-                  field(
-                    "Posted in last hours",
-                    rules.posting_date.last_hours,
-                    (value) =>
-                      setRules({
-                        posting_date: {
-                          ...rules.posting_date!,
-                          last_hours: Number(value),
-                        },
-                      }),
-                    "number",
-                  )
-                ) : (
-                  <>
-                    {field(
-                      "Posted from",
-                      rules.posting_date.from || "",
-                      (value) =>
-                        setRules({
-                          posting_date: {
-                            ...rules.posting_date!,
-                            from: value || null,
-                          },
-                        }),
-                      "date",
-                    )}
-                    {field(
-                      "Posted through",
-                      rules.posting_date.through || "",
-                      (value) =>
-                        setRules({
-                          posting_date: {
-                            ...rules.posting_date!,
-                            through: value || null,
-                          },
-                        }),
-                      "date",
-                    )}
-                  </>
-                )}
-                <p>Date boundaries use {rules.posting_date.timezone}.</p>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={rules.posting_date.include_unknown}
-                    onChange={(e) =>
-                      setRules({
-                        posting_date: {
-                          ...rules.posting_date!,
-                          include_unknown: e.target.checked,
-                        },
-                      })
-                    }
-                  />{" "}
-                  Include unknown posting dates
-                </label>
-              </>
-            )}
             <details><summary className="cursor-pointer min-h-8">Expert geography codes</summary>
             {field("Eligible countries (ISO codes)", rules.countries.join(", "), value => setRules({ countries: words(value).map(code => code.toUpperCase()) }))}
             {field("Eligible regions (ISO codes)", rules.regions.join(", "), value => setRules({ regions: words(value).map(code => code.toUpperCase()) }))}
@@ -617,28 +752,7 @@ export function WorkflowSections({
             <Select
               aria-label="Schedule"
               value={schedule.cadence || "daily"}
-              options={(advanced
-                ? [
-                    "daily",
-                    "weekly",
-                    "manual",
-                    "hourly",
-                    "every_6h",
-                    "every_12h",
-                    "cron",
-                  ]
-                : [
-                    "daily",
-                    "manual",
-                    ...(schedule.cadence &&
-                    !["daily", "manual"].includes(schedule.cadence)
-                      ? [schedule.cadence]
-                      : []),
-                  ]
-              ).map((value) => ({
-                value,
-                label: value,
-              }))}
+              options={["daily", "weekly", "manual", "hourly", "every_6h", "every_12h", "cron"].map(value => ({ value, label: value }))}
               onChange={(cadence) =>
                 setSchedule({
                   cadence: cadence as NonNullable<

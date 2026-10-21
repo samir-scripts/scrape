@@ -41,6 +41,7 @@ const VALID_KINDS: SourceKind[] = [
   "workday",
   "jsonld",
   "selector",
+  "search",
 ];
 const VALID_CADENCES: SourceCadence[] = [
   "global",
@@ -63,6 +64,10 @@ const VALID_ROLE_TYPES: RoleType[] = [
 
 export function normalizedEndpoint(kind: SourceKind, urlOrSlug: string): string {
   const trimmed = (urlOrSlug || "").trim();
+  if (kind === "search") {
+    const provider = !trimmed || trimmed.toLowerCase() === "default" ? "themuse" : trimmed.toLowerCase();
+    return `Search:${provider}`;
+  }
   if (["greenhouse", "lever", "ashby"].includes(kind)) {
     if (!trimmed.includes("://")) {
       return `${kind}:${trimmed.toLowerCase()}`;
@@ -133,9 +138,9 @@ export function validateWorkflowYaml(
   }
 
   // Version check
-  if (json.version !== undefined && ![1, 2, 3, 4, 5, 6, 7].includes(json.version)) {
+  if (json.version !== undefined && ![1, 2, 3, 4, 5, 6, 7, 8].includes(json.version)) {
     errors.push({
-      message: `Unsupported workflow version ${json.version}. Expected supported versions: 1–7`,
+      message: `Unsupported workflow version ${json.version}. Expected supported versions: 1–8`,
     });
   }
 
@@ -212,7 +217,13 @@ export function validateWorkflowYaml(
             message: `sources[${i}].extractor.kind must be one of: ${VALID_KINDS.join(", ")}`,
           });
         }
-        if (
+        if (extractor.kind === "search") {
+          const provider = (extractor.url || "").trim().toLowerCase();
+          if (!["", "default", "themuse", "arbeitnow"].includes(provider)) errors.push({ message: `sources[${i}].extractor.url: unsupported search provider` });
+          const endpointKey = normalizedEndpoint("search", provider);
+          if (seenEndpoints.has(endpointKey)) errors.push({ message: `Duplicate source endpoint: ${endpointKey}` });
+          else seenEndpoints.add(endpointKey);
+        } else if (
           !extractor.url ||
           typeof extractor.url !== "string" ||
           !extractor.url.trim()
@@ -300,6 +311,15 @@ export function validateWorkflowYaml(
   if (json.filters && typeof json.filters === "object") {
     const matching = json.filters.matching;
     if (matching && typeof matching === "object") {
+      for (const key of ["target_roles", "companies"] as const) {
+        const values = matching[key];
+        if (values != null && (!Array.isArray(values) || values.some(value => typeof value !== "string" || !value.trim()))) errors.push({ message: `filters.matching.${key} must contain non-empty strings` });
+      }
+      const date = matching.posting_date;
+      if (date?.preset != null) {
+        if (!["past_12h", "today", "past_24h", "past_week", "past_month", "any"].includes(date.preset)) errors.push({ message: "filters.matching.posting_date.preset is unsupported" });
+        if (date.last_hours != null || date.from != null || date.through != null) errors.push({ message: "filters.matching.posting_date.preset cannot be combined with last_hours, from or through" });
+      }
       if (matching.experience_match_mode != null && !["advertised_range_overlap", "required_minimum"].includes(matching.experience_match_mode)) errors.push({ message: "filters.matching.experience_match_mode must be advertised_range_overlap or required_minimum" });
       for (const key of ["experience_min", "experience_max"] as const) {
         const val = matching[key];
@@ -381,7 +401,7 @@ export function validateWorkflowYaml(
   return {
     isValid: true,
     errors: [],
-    parsedSpec: { ...json, version: json.version ?? 7 } as WorkflowSpec,
+    parsedSpec: { ...json, version: json.version ?? 8 } as WorkflowSpec,
   };
 }
 
@@ -459,7 +479,7 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
 
   return {
     ...snapshot,
-    version: 7,
+    version: snapshot?.version ?? 8,
     max_jobs_per_run: snapshot?.max_jobs_per_run ?? INGESTION_LIMITS.default,
     metadata: {
       ...snapshot?.metadata,
@@ -496,6 +516,7 @@ export function workflowSpecToCreateInput(
     extractor: { kind: "jsonld" as SourceKind, url: "" },
   };
   let identifier = primarySource.extractor.url;
+  if (primarySource.extractor.kind === "search" && (!identifier.trim() || identifier.trim().toLowerCase() === "default")) identifier = "themuse";
   if (
     ["greenhouse", "lever", "ashby"].includes(primarySource.extractor.kind) &&
     identifier.includes("://")

@@ -14,7 +14,6 @@ import { WorkflowImportButton } from "./WorkflowImportButton";
 import { WorkflowPreviewResults } from "./WorkflowPreviewResults";
 import { Select } from "../../ui/Select";
 import { SAMPLE_WORKFLOW_TEMPLATES } from "../../../lib/yamlWorkflow";
-import { companyOptions, selectedCompanyId } from "./CompanyPicker";
 
 interface AddSourceModalProps {
   isOpen: boolean; onClose: () => void; onSourceSaved: () => void;
@@ -34,11 +33,11 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
   const index = WORKFLOW_STEPS.indexOf(step);
   const rules = draft.filters?.matching;
   const hasScripts = draft.sources.some(source => source.extractor.script || source.extractor.mode === "script");
-  const stepHelp = {
-    Source: "Select a company preset or enter a careers page URL",
-    Matching: "Filter jobs by title, workplace, and location (all optional)",
-    Schedule: "Configure automated crawl frequency and timing",
-    Review: "Verify match quality and finalize workflow",
+  const stepHelp: Record<string, string> = {
+    Roles: "Specify target job titles, optional companies, and keywords",
+    Criteria: "Set posting recency, location, workplace, and experience",
+    Sources: "Choose cross-company search and optional company career boards",
+    Schedule: "Configure automated crawl frequency and verify match preview",
   };
   const advancedSettings = [
     draft.filters?.query || draft.filters?.policy ? "expert rules" : null,
@@ -92,10 +91,10 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
       <Button onClick={close} disabled={locked}>Cancel</Button>
       <div className="flex flex-wrap gap-2">
         {model.operation === "preview" && <Button onClick={model.cancel}>Cancel preview</Button>}
-        {hasScripts && step !== "Review" && <Button disabled={busy || locked || yaml != null} onClick={() => void model.saveDisabled()}>Save disabled for review</Button>}
+        {hasScripts && step !== "Schedule" && <Button disabled={busy || locked || yaml != null} onClick={() => void model.saveDisabled()}>Save disabled for review</Button>}
         {index > 0 && <Button disabled={busy || locked} onClick={() => model.navigate(WORKFLOW_STEPS[index - 1])}>Back</Button>}
-        {yaml == null && (step === "Matching" || step === "Review") && <Button disabled={busy || locked || isRecordedMode()} onClick={() => void model.runPreview()}>{preview ? "Refresh preview" : "Preview matches"}</Button>}
-        {step !== "Review" ? <Button variant="inverted" disabled={busy || locked || yaml != null} onClick={() => void model.next()}>{step === "Schedule" ? "Review workflow" : `Continue to ${WORKFLOW_STEPS[index + 1]}`}</Button>
+        {yaml == null && step === "Schedule" && <Button disabled={busy || locked || isRecordedMode()} onClick={() => void model.runPreview()}>{preview ? "Refresh preview" : "Preview matches"}</Button>}
+        {step !== "Schedule" ? <Button variant="inverted" className="transition-none" disabled={busy || locked || yaml != null} onClick={() => void model.next()}>{`Continue to ${WORKFLOW_STEPS[index + 1]}`}</Button>
           : <Button variant="inverted" disabled={!model.canSave} onClick={() => void model.save()}>Save workflow</Button>}
       </div>
     </div>}>
@@ -132,20 +131,20 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
         </section>}
         {yaml != null && <label className="grid gap-2">Workflow YAML<textarea disabled={locked} aria-label="Workflow YAML" className="font-code border bg-[var(--color-paper)] p-3 min-h-80" value={yaml} onChange={event => setYaml(event.target.value)} /></label>}
         <fieldset disabled={locked} className={yaml != null ? "hidden" : "min-w-0 grid gap-4"}>
-          {(["Source", "Matching", "Schedule"] as const).map(section => <section key={section} data-workflow-step={section} hidden={step !== section} className={step === section ? "grid gap-3" : "hidden"}>
-            <h3 className="text-base font-bold normal-case">{section === "Matching" ? "Matching (optional)" : section}</h3>
+          {WORKFLOW_STEPS.map(section => <section key={section} data-workflow-step={section} hidden={step !== section} className={step === section ? "grid gap-3" : "hidden"}>
+            <h3 className="text-base font-bold normal-case">{section}</h3>
             <WorkflowSections key={`${section}:${model.inputSession}`} draft={draft} change={change} advanced={advanced} section={section} initialSource={initialSource} onTrustChanged={() => model.invalidate()} selectCompany={model.selectCompany} onDetect={index => void model.detect(index)} preview={preview} />
-            {section === "Source" && <p aria-live="polite" className="text-[var(--color-ink-mute)]">{model.operation === "detect" ? "Detecting source…" : detected ? `Sources: ${draft.sources?.map(s => `${s.extractor.kind} (${s.label})`).join(", ") || "None"}` : "Choose a company or enter a custom careers URL. Continue or Detect checks the URL; selecting a company does not grant script trust."}</p>}
+            {section === "Sources" && <p aria-live="polite" className="text-[var(--color-ink-mute)]">{model.operation === "detect" ? "Detecting source…" : detected ? `Sources: ${draft.sources?.map(s => `${s.extractor.kind} (${s.label})`).join(", ") || "None"}` : "Use the public search feed or attach optional company career boards."}</p>}
             {section === "Schedule" && <details><summary className="cursor-pointer min-h-9">Retention</summary><WorkflowSections draft={draft} change={change} advanced section="Retention" initialSource={initialSource} onTrustChanged={() => model.invalidate()} /></details>}
           </section>)}
         </fieldset>
-        {step === "Review" && yaml == null && <section data-workflow-step="Review" className="grid gap-3">
+        {step === "Schedule" && yaml == null && <section className="grid gap-3">
           <section aria-label="Workflow readiness" aria-live="polite"
             className={`grid gap-2 border-l-4 p-4 bg-[var(--color-surface-raised)] ${model.canSave ? "border-[var(--color-success)]" : "border-[var(--color-warning)]"}`}>
             <h3 className={`font-semibold ${model.canSave ? "text-[var(--color-success)]" : "text-[var(--color-warning)]"}`}>
               {model.operation === "preview" ? "Preview in progress…" : model.canSave ? `Preview complete — ${preview!.matched - preview!.blocked} eligible postings found` : preview?.errors.length ? "Preview needs attention" : "Preview required before saving"}
             </h3>
-            <p>{model.canSave ? "The current configuration passed preview. You can save, including with zero matches." : isDemoMode() ? "Run a simulated preview to check this example configuration. No live source is contacted." : "A dry-run preview checks your current sources and matching rules. Preview does not save jobs."}</p>
+            <p>{model.canSave ? "The current configuration passed preview. You can save, including with zero matches." : isDemoMode() ? "Run a simulated preview to check this example configuration. No live source is contacted." : "A dry-run preview checks your target roles, criteria and sources. Preview does not save jobs."}</p>
             {!model.canSave && <div><Button variant="inverted" disabled={busy || locked || yaml != null || isRecordedMode()} onClick={() => void model.runPreview()}>Run Preview Now</Button></div>}
             {hasScripts && <>
               <p>Custom scripts require local review and trust. Save disabled, then reopen to review each script; trust does not enable the workflow.</p>
@@ -159,8 +158,7 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
             <ul className="list-disc pl-5">
               {draft.sources?.map((s) => (
                 <li key={s.id} className="break-words">
-                  {s.label} ({s.extractor.kind}{s.extractor.mode ? ` · ${s.extractor.mode}` : ""}) · {s.extractor.url || s.extractor.script?.path || "Custom script"} {s.enabled ? "" : "[Disabled]"}
-                  {" · "}{companyOptions.find(option => option.company.id === selectedCompanyId(s))?.template.readiness.replaceAll("_", " ") || "Custom source · preview required"}
+                  {s.label} ({s.extractor.kind}{s.extractor.mode ? ` · ${s.extractor.mode}` : ""}) · {s.extractor.url || s.extractor.script?.path || "Cross-company search"} {s.enabled ? "" : "[Disabled]"}
                 </li>
               ))}
             </ul>
@@ -171,18 +169,26 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
             <h4 className="font-semibold">Matching rules</h4>
             <p>Every configured restriction applies together. Empty groups do not restrict matching.</p>
             <dl className="grid gap-2">
+              <div><dt className="font-semibold">Target roles</dt><dd>{rules?.target_roles?.length ? rules.target_roles.join(", ") : "Any role"}</dd></div>
+              <div><dt className="font-semibold">Companies</dt><dd>{rules?.companies?.length ? rules.companies.join(", ") : "All employers"}</dd></div>
+              <div><dt className="font-semibold">Posting window</dt><dd>
+                {!rules?.posting_date ? "Any time" : <>
+                  {rules.posting_date.preset?.replaceAll("_", " ") ||
+                    (rules.posting_date.last_hours ? `Past ${rules.posting_date.last_hours} hours` :
+                      `${rules.posting_date.from || "No start bound"} through ${rules.posting_date.through || "No end bound"}`)}
+                  {` · ${rules.posting_date.timezone} · ${rules.posting_date.include_unknown ? "Include" : "Exclude"} unknown dates`}
+                </>}
+              </dd></div>
               <div><dt className="font-semibold">Employment type</dt><dd>{(rules?.role_types?.length ? rules.role_types : draft.filters?.role_types)?.join(", ").replaceAll("_", " ") || "Any, including unknown"}</dd></div>
               <div><dt className="font-semibold">{rules?.experience_match_mode === "advertised_range_overlap" && (rules.experience_min != null || rules.experience_max != null) ? "Advertised range overlap (saved rule)" : "Minimum required experience"}</dt><dd>{rules?.experience_min == null && rules?.experience_max == null ? "Any" : `${rules?.experience_min ?? 0}–${rules?.experience_max ?? "unbounded"} years, inclusive`}{rules?.experience_include_unknown ? " · Include unknown" : " · Exclude unknown when constrained"}</dd></div>
               <div><dt className="font-semibold">New Grad</dt><dd>{rules?.new_grad || "any"} (independent of years of experience)</dd></div>
-              <div><dt className="font-semibold">Company</dt><dd>{draft.sources.map(source => source.employer_hint || source.label).join(", ")}</dd></div>
-              <div><dt className="font-semibold">Readiness</dt><dd>{draft.sources.some(source => source.extractor.script || source.extractor.mode === "script") ? "Scripts require explicit review and trust; company selection never grants trust." : "Preview the current sources before saving."}</dd></div>
             </dl>
           </section>
           <details><summary className="cursor-pointer min-h-9">All configured rules</summary><pre className="font-code whitespace-pre-wrap break-words text-xs">{workflowSpecToYaml(draft)}</pre></details>
           <p>Saving creates or updates the workflow. It does not run a scrape.</p>
         </section>}
         <section className="grid gap-3 border-t pt-3">
-          <button type="button" aria-expanded={advanced} className="text-left underline cursor-pointer min-h-9" onClick={() => setAdvanced(!advanced)}>{advanced ? "Hide advanced settings" : "Advanced settings"}</button>
+          <button type="button" aria-expanded={advanced} className="text-left underline cursor-pointer min-h-9" onMouseDown={event => event.preventDefault()} onClick={() => { model.commitInputs(); setAdvanced(value => !value); }}>{advanced ? "Hide advanced settings" : "Advanced settings"}</button>
           {advancedSettings.length > 0 && <p className="text-[var(--color-ink-mute)]">Active advanced settings: {advancedSettings.join(", ")}.</p>}
           {advanced && <div className="flex flex-wrap gap-2"><Button disabled={locked} onClick={() => yaml == null ? setYaml(workflowSpecToYaml(model.commitInputs())) : void model.applyYaml()}>{yaml == null ? "Edit YAML" : "Apply YAML to form"}</Button><Button disabled={yaml != null} onClick={() => { const url = URL.createObjectURL(new Blob([workflowSpecToYaml(model.commitInputs())], { type: "text/yaml" })); const link = document.createElement("a"); link.href = url; link.download = "workflow.yaml"; link.click(); URL.revokeObjectURL(url); }}>Export YAML</Button></div>}
           {advanced && <label className="grid gap-2">Load example workflow
@@ -191,7 +197,7 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
             <span className="text-xs">Examples replace the entire draft after confirmation. Restrictive and setup-required examples are not company presets.</span>
           </label>}
         </section>
-        {(step === "Matching" || step === "Review") && <WorkflowPreviewResults preview={preview} draft={draft} setError={setError} />}
+        {step === "Schedule" && <WorkflowPreviewResults preview={preview} draft={draft} setError={setError} />}
       </>}
     </div>
   </Modal>;

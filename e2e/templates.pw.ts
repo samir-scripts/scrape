@@ -18,19 +18,19 @@ for (const theme of ["paper", "obsidian"]) {
     await dialog.getByRole("button", { name: "Advanced settings" }).click();
     await dialog.getByRole("button", { name: "Load example workflow" }).click();
     await page.getByRole("option", { name: template.name, exact: true }).click();
-    await expect(dialog.getByLabel("Selected company details").getByText(template.description)).toBeVisible();
-    await dialog.getByRole("button", { name: "Continue to Matching" }).click();
+    await dialog.getByRole("button", { name: "Continue to Criteria" }).click();
     await dialog.getByRole("checkbox", { name: "Internship", exact: true }).check();
     await dialog.getByRole("checkbox", { name: "Unknown employment", exact: true }).check();
     await dialog.getByRole("checkbox", { name: "Remote", exact: true }).check();
     await dialog.getByRole("checkbox", { name: "Unknown workplace", exact: true }).check();
     expect(await contrastFailures(page)).toEqual([]);
-    await page.screenshot({ path: `plans/assets/11-template-catalog-review/${theme}-matching-1024.png` });
+    await page.screenshot({ path: `plans/assets/11-template-catalog-review/${theme}-criteria-1024.png` });
+    await dialog.getByRole("button", { name: "Continue to Sources" }).click();
+    await expect(dialog.getByLabel("Selected company details").getByText(template.description)).toBeVisible();
+    await dialog.getByRole("button", { name: "Continue to Schedule" }).click();
     await dialog.getByRole("button", { name: "Preview matches", exact: true }).click();
     await expect(dialog.getByRole("heading", { name: "1 eligible matches", exact: true })).toBeVisible();
     await expect(dialog.getByRole("link", { name: "Systems Engineer Intern - Distributed Data", exact: true })).toBeVisible();
-    await dialog.getByRole("button", { name: "Continue to Schedule" }).click();
-    await dialog.getByRole("button", { name: "Review workflow" }).click();
     const summary = dialog.getByRole("region", { name: "Matching rules summary" });
     await expect(summary).toContainText("unknown");
     await expect(summary).toContainText("internship");
@@ -39,7 +39,7 @@ for (const theme of ["paper", "obsidian"]) {
     await dialog.getByRole("button", { name: "Done", exact: true }).click();
     await page.getByRole("button", { name: `Edit workflow ${template.name}`, exact: true }).click();
     const reopened = page.getByRole("dialog", { name: "Edit workflow" });
-    await reopened.getByRole("button", { name: "Continue to Matching" }).click();
+    await reopened.getByRole("button", { name: "Continue to Criteria" }).click();
     for (const name of ["Internship", "Unknown employment", "Remote", "Unknown workplace"]) {
       await expect(reopened.getByRole("checkbox", { name, exact: true })).toBeChecked();
     }

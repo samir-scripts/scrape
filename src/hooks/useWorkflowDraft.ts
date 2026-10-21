@@ -11,30 +11,31 @@ import { sourceToWorkflowSpec, canonicalizeAtsUrl, normalizedEndpoint } from "..
 import { companyOptions, selectedCompanyId } from "../components/views/settings/CompanyPicker";
 import { emptyRules } from "../components/views/settings/WorkflowSections";
 
-export const WORKFLOW_STEPS = ["Source", "Matching", "Schedule", "Review"] as const;
+export const WORKFLOW_STEPS = ["Roles", "Criteria", "Sources", "Schedule"] as const;
 export type WorkflowStep = typeof WORKFLOW_STEPS[number];
 export type WorkflowDraftChange = (next: WorkflowSpec | ((current: WorkflowSpec) => WorkflowSpec)) => void;
 const newDraft = (): WorkflowSpec => ({
-  version: 7, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true },
-  sources: [{ id: "source-1", label: "Career Board 1", enabled: true, extractor: { kind: "jsonld", url: "" } }],
+  version: 8, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true },
+  sources: [{ id: "source-1", label: "Cross-Company Search", enabled: true, extractor: { kind: "search", url: "" } }],
   schedule: { cadence: "daily", time: "09:00", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, run_on_startup: false },
-  filters: { matching: emptyRules() }, retention: { days: 30, policy: "untracked_only" },
+  filters: { matching: { ...emptyRules(), posting_date: { preset: "past_week", last_hours: null, from: null, through: null, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, include_unknown: false } } }, retention: { days: 30, policy: "untracked_only" },
 });
 export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceSaved }: {
   isOpen: boolean; initialSource?: Source | null; initialSpec?: WorkflowSpec | null; onSourceSaved: () => void;
 }) {
   const [draft, setDraft] = useState<WorkflowSpec>(newDraft);
   const [inputSession, setInputSession] = useState(0);
-  const [step, setStep] = useState<WorkflowStep>("Source"), [visited, setVisited] = useState(0);
+  const [step, setStep] = useState<WorkflowStep>("Roles"), [visited, setVisited] = useState(0);
   const [advanced, setAdvanced] = useState(false), [yaml, setYamlState] = useState<string | null>(null);
   const [detected, setDetected] = useState("");
   const [preview, setPreview] = useState<WorkflowPreview | null>(null), [previewRevision, setPreviewRevision] = useState<number | null>(null);
-  const [error, setError] = useState(""), [errorStep, setErrorStep] = useState<WorkflowStep>("Source");
+  const [error, setError] = useState(""), [errorStep, setErrorStep] = useState<WorkflowStep>("Roles");
   const [operation, setOperation] = useState<"detect" | "preview" | "validate" | "save" | "run" | null>(null);
   const [pendingImport, setPendingImport] = useState<WorkflowSpec | null>(null);
   const [pendingCompany, setPendingCompany] = useState<{ sourceId: string; companyId: string } | null>(null);
   const [saved, setSaved] = useState<Source | null>(null), [dirty, setDirty] = useState(false);
   const imported = useRef(false);
+  const userNamed = useRef(false);
   const content = useRef<HTMLDivElement>(null), revision = useRef(0), request = useRef<string | null>(null);
   const draftRef = useRef(draft); draftRef.current = draft;
   const cancel = () => {
@@ -48,9 +49,10 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
       setInputSession(value => value + 1);
       invalidate();
       const initial = initialSpec || (initialSource ? sourceToWorkflowSpec(initialSource) : newDraft());
-      setDraft(initial);
+      userNamed.current = !!initialSpec || !!initialSource;
+      draftRef.current = initial; setDraft(initial);
       setDetected(initial.sources?.[0]?.extractor.url || initialSource?.identifier || "");
-      setStep("Source"); setVisited(0); setAdvanced(false); setYamlState(null); setError(""); setSaved(null); setPendingImport(null); setPendingCompany(null); setDirty(false);
+      setStep("Roles"); setVisited(0); setAdvanced(false); setYamlState(null); setError(""); setSaved(null); setPendingImport(null); setPendingCompany(null); setDirty(false);
     }
     return () => {
       if (request.current) void api.cancelWorkflowPreview(request.current).catch(() => {});
@@ -59,7 +61,14 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   }, [isOpen, initialSource, initialSpec]);
   const change: WorkflowDraftChange = (update) => {
     const previous = draftRef.current;
-    const next = typeof update === "function" ? update(previous) : update;
+    let next = typeof update === "function" ? update(previous) : update;
+    const nameChanged = next.metadata.name !== previous.metadata.name;
+    if (nameChanged) userNamed.current = !!next.metadata.name.trim();
+    if (!userNamed.current && !nameChanged) {
+      const roles = next.filters?.matching?.target_roles || [], companies = next.filters?.matching?.companies || [];
+      const name = roles.length ? `${roles.join(" & ")}${companies.length ? ` at ${companies.join(" & ")}` : " jobs"}` : "New Job Workflow";
+      next = { ...next, metadata: { ...next.metadata, name } };
+    }
     invalidate(); setDirty(true); draftRef.current = next; setDraft(next); setError("");
     const prevUrl = previous.sources?.[0]?.extractor?.url;
     const nextUrl = next.sources?.[0]?.extractor?.url;
@@ -70,13 +79,11 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     const current = draftRef.current;
     const target = current.sources.find(source => source.id === sourceId);
     if (!option || !target) return;
-    const untouched = !initialSource && !initialSpec && !dirty && !current.metadata.name && current.sources.length === 1 && !target.extractor.url;
     change({
       ...current,
-      metadata: untouched ? { ...current.metadata, name: `${option.company.name} jobs`, company: option.company.name } : current.metadata,
       sources: current.sources.map(source => source.id === sourceId ? {
         ...source, label: option.source.label, employer_hint: option.source.employer_hint,
-        enabled: source.enabled && option.source.enabled,
+        enabled: source.enabled && option.source.enabled && option.template.readiness === "ready" && !option.source.extractor.script && option.source.extractor.mode !== "script",
         extractor: structuredClone(option.source.extractor),
       } : source),
     });
@@ -96,7 +103,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   const setYaml = (value: string | null) => { invalidate(); setDirty(true); setYamlState(value); };
   const report = (value: unknown, fallback: WorkflowStep = step) => {
     const message = String(value); setError(message);
-    setErrorStep(/filters|query|matching|compensation|max_jobs_per_run/i.test(message) ? "Matching" : /schedule|timezone|retention/i.test(message) ? "Schedule" : /extractor|metadata|source|url/i.test(message) ? "Source" : fallback);
+    setErrorStep(/target_roles|keywords|companies|metadata/i.test(message) ? "Roles" : /filters|query|matching|compensation|max_jobs_per_run|role_types|date|posting_date|location|experience|workplace/i.test(message) ? "Criteria" : /schedule|timezone|retention/i.test(message) ? "Schedule" : /extractor|source|url/i.test(message) ? "Sources" : fallback);
   };
   const detect = async (sourceIndex: number = 0) => {
     invalidate();
@@ -104,7 +111,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     const input = draftRef.current;
     const targetSource = input.sources?.[sourceIndex] || input.sources?.[0];
     if (!targetSource || !targetSource.extractor.url.trim()) {
-      report("Source URL is required.", "Source");
+      report("Source URL is required.", "Sources");
       setOperation(null);
       return;
     }
@@ -129,13 +136,12 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
         ...input,
         metadata: {
           ...input.metadata,
-          name: input.metadata.name || result.name,
           company: input.metadata.company || result.name,
         },
         sources: nextSources,
       };
       change(next); setDetected(url); return next;
-    } catch (error) { if (revision.current === current) report(`${String(error)} Open Advanced settings to configure an adapter or selectors.`, "Source"); }
+    } catch (error) { if (revision.current === current) report(`${String(error)} Open Advanced settings to configure an adapter or selectors.`, "Sources"); }
     finally { if (revision.current === current) setOperation(null); }
   };
   const invalidInputs = () => {
@@ -145,9 +151,9 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     setError("Fix the highlighted inputs before continuing."); return true;
   };
   const applyImport = (spec: WorkflowSpec) => {
-    imported.current = true;
+    imported.current = true; userNamed.current = true;
     setInputSession(value => value + 1);
-    change(spec); setDetected(spec.sources?.[0]?.extractor.url || ""); setYamlState(null); setStep("Source"); setVisited(0); setPendingImport(null);
+    change(spec); setDetected(spec.sources?.[0]?.extractor.url || ""); setYamlState(null); setStep("Roles"); setVisited(0); setPendingImport(null);
   };
   const replaceImport = (spec: WorkflowSpec) => { if (dirty) setPendingImport(spec); else applyImport(spec); };
   const confirmImport = () => { if (pendingImport) applyImport(pendingImport); };
@@ -158,7 +164,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
       const validated = await importWorkflowYaml(yaml || "");
       if (revision.current !== current) return;
       setInputSession(value => value + 1);
-      imported.current = true;
+      imported.current = true; userNamed.current = true;
       change(validated); setDetected(validated.sources?.[0]?.extractor.url || ""); setYamlState(null);
     } catch (error) { if (revision.current === current) report(error); }
     finally { if (revision.current === current) setOperation(null); }
@@ -168,34 +174,38 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     const draft = commitInputs();
     if (yaml != null) { report("Apply YAML to the form before continuing."); return; }
     if (invalidInputs()) return;
-    if (step === "Source") {
-      if (!draft.sources || draft.sources.length === 0) { report("At least one source is required.", "Source"); return; }
-      if (draft.metadata.enabled !== false && !draft.sources.some(s => s.enabled)) { report("At least one source must be enabled.", "Source"); return; }
+    if (step === "Roles" && !draft.metadata.name.trim()) {
+      const roles = draft.filters?.matching?.target_roles || [];
+      const companies = draft.filters?.matching?.companies || [];
+      const name = roles.length ? `${roles.join(" & ")}${companies.length ? ` at ${companies.join(" & ")}` : " jobs"}` : "New Job Workflow";
+      const named = { ...draft, metadata: { ...draft.metadata, name } };
+      draftRef.current = named; setDraft(named);
+    }
+    if (step === "Sources") {
+      if (!draft.sources || draft.sources.length === 0) { report("At least one source is required.", "Sources"); return; }
+      if (draft.metadata.enabled !== false && !draft.sources.some(s => s.enabled)) { report("At least one source must be enabled.", "Sources"); return; }
       for (let i = 0; i < draft.sources.length; i++) {
         const s = draft.sources[i];
-        if (!s.label.trim()) { report(`Source ${i + 1} label is required.`, "Source"); return; }
-        if (!s.extractor.url.trim()) { report(i === 0 ? "Source URL is required." : `Source '${s.label}' URL is required.`, "Source"); return; }
+        if (!s.label.trim()) { report(`Source ${i + 1} label is required.`, "Sources"); return; }
+        if (s.extractor.kind !== "search" && !s.extractor.url.trim()) { report(`Source '${s.label}' URL is required.`, "Sources"); return; }
       }
       const seen = new Set<string>();
       for (const s of draft.sources) {
         const ep = normalizedEndpoint(s.extractor.kind, s.extractor.url);
         if (seen.has(ep)) {
-          report(`Duplicate source endpoint: '${s.extractor.url}' conflicts with another source in this workflow.`, "Source");
+          report(`Duplicate source endpoint: '${s.extractor.url}' conflicts with another source in this workflow.`, "Sources");
           return;
         }
         seen.add(ep);
       }
-      let currentDraft = draft;
-      if (!advanced && !detected && draft.sources[0]?.extractor.url.trim()) {
+      if (!advanced && !detected && draft.sources[0]?.extractor.url.trim() && draft.sources[0].extractor.kind !== "search") {
         const input = await detect(0);
         if (!input) return;
-        currentDraft = input;
       }
-      if (!currentDraft.metadata.name.trim()) { report("Workflow name is required.", "Source"); return; }
     }
-    if (step === "Schedule") {
+    if (step === "Sources") {
       const current = revision.current; setOperation("validate");
-      try { await api.validateWorkflow(draft); if (revision.current !== current) return; }
+      try { await api.validateWorkflow(draftRef.current); if (revision.current !== current) return; }
       catch (error) { if (revision.current === current) report(error); return; }
       finally { if (revision.current === current) setOperation(null); }
     }
@@ -204,7 +214,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   const runPreview = async () => {
     if (invalidInputs()) return;
     let effective = commitInputs();
-    if (!advanced && !detected && effective.sources?.[0]?.extractor.url.trim()) {
+    if (!advanced && !detected && effective.sources?.[0]?.extractor.kind !== "search" && effective.sources?.[0]?.extractor.url.trim()) {
       const result = await detect(0);
       if (!result) return;
       effective = result;
@@ -213,7 +223,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     request.current = id; setOperation("preview"); setError(""); setPreview(null);
     try {
       const result = await api.previewWorkflow(effective, id);
-      if (revision.current === current) { setPreview(result); setDraft(result.spec); setPreviewRevision(current); }
+      if (revision.current === current) { draftRef.current = result.spec; setPreview(result); setDraft(result.spec); setPreviewRevision(current); }
     } catch (error) { if (revision.current === current) report(error); }
     finally { if (revision.current === current) { request.current = null; setOperation(null); } }
   };

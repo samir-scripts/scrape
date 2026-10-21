@@ -83,7 +83,7 @@ for (const theme of ["paper", "obsidian"]) {
     await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
     await row.getByRole("button", { name: "Edit workflow Cloudflare — Software Engineering Internships" }).click();
     const edit = page.getByRole("dialog", { name: "Edit workflow" });
-    await edit.getByRole("button", { name: "Continue to Matching" }).click();
+    await edit.getByRole("button", { name: "Continue to Criteria" }).click();
     for (const term of ["Software", "Engineer", "Intern"]) {
       await expect(edit.getByRole("button", { name: `Remove ${term} from Legacy include keywords` })).toBeVisible();
     }

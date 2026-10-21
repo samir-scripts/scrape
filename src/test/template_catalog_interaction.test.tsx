@@ -12,8 +12,9 @@ afterEach(cleanup);
 function Harness() {
   const [draft, change] = useState<WorkflowSpec>(structuredClone(SAMPLE_WORKFLOW_TEMPLATES[0].spec));
   return <>
-    <WorkflowSections draft={draft} change={change} advanced={false} section="Source" />
-    <WorkflowSections draft={draft} change={change} advanced={false} section="Matching" />
+    <WorkflowSections draft={draft} change={change} advanced={false} section="Roles" />
+    <WorkflowSections draft={draft} change={change} advanced={false} section="Criteria" />
+    <WorkflowSections draft={draft} change={change} advanced={false} section="Sources" />
     <output data-testid="draft">{workflowSpecToYaml(draft)}</output>
   </>;
 }
@@ -37,6 +38,7 @@ it("keeps example loading in Advanced and requires whole-draft replacement confi
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
   const user = userEvent.setup();
   render(<AddSourceModal isOpen onClose={() => {}} onSourceSaved={() => {}} />);
+  await user.clear(screen.getByRole("textbox", { name: "Workflow name" }));
   await user.type(screen.getByRole("textbox", { name: "Workflow name" }), "Keep my edits");
   expect(screen.queryByRole("button", { name: "Load example workflow" })).toBeNull();
   await user.click(screen.getByRole("button", { name: "Advanced settings" }));
@@ -50,6 +52,8 @@ it("keeps example loading in Advanced and requires whole-draft replacement confi
   await user.click(screen.getByRole("option", { name: template.name }));
   await user.click(screen.getByRole("button", { name: "Replace draft" }));
   expect((screen.getByRole("textbox", { name: "Workflow name" }) as HTMLInputElement).value).toBe(template.name);
+  await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
+  await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
   expect(screen.getAllByRole("checkbox", { name: /^Enable (Netflix|Amazon)$/ }).every(input => !(input as HTMLInputElement).checked)).toBe(true);
   expect((screen.getByRole("button", { name: "Save disabled for review" }) as HTMLButtonElement).disabled).toBe(false);
 });

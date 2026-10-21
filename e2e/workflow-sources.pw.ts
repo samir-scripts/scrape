@@ -19,6 +19,10 @@ for (const theme of ["paper", "obsidian"]) {
 
     const dialog = page.getByRole("dialog", { name: "Create workflow" });
     await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Continue to Criteria" }).click();
+    await dialog.getByRole("button", { name: "Continue to Sources" }).click();
+    await dialog.getByRole("button", { name: "Add source", exact: true }).click();
+    await dialog.getByRole("button", { name: "Remove source Cross-Company Search", exact: true }).click();
 
     // Expand Advanced settings
     await dialog.getByRole("button", { name: "Advanced settings" }).click();

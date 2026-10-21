@@ -23,7 +23,7 @@ for (const theme of ["paper", "obsidian"]) {
     await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
     await page.getByRole("button", { name: "Edit workflow Authored compatibility fixture", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Edit workflow" });
-    await dialog.getByRole("button", { name: "Continue to Matching" }).click();
+    await dialog.getByRole("button", { name: "Continue to Criteria" }).click();
     await expect(dialog.getByRole("region", { name: "Compatibility restrictions" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Remove Austin from Legacy location terms", exact: true })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Migrate to structured rules" })).toHaveCount(0);

@@ -37,7 +37,7 @@ test("both themes remain operable at actual 200% browser zoom", async () => {
       const add = page.getByRole("button", { name: /add workflow/i });
       await add.click();
       const dialog = page.getByRole("dialog", { name: "Create workflow" });
-      await expect(dialog.getByRole("textbox", { name: "Source URL or board identifier" })).toBeVisible();
+      await expect(dialog.getByRole("textbox", { name: "Workflow name", exact: true })).toBeVisible();
       expect(await dialog.evaluate(el => el.getBoundingClientRect().right <= innerWidth && el.getBoundingClientRect().left >= 0)).toBe(true);
       await page.keyboard.press("Escape");
       await expect(add).toBeFocused();
