@@ -591,6 +591,52 @@ fn feed_requests(server: &Server) -> Vec<String> {
 }
 
 #[test]
+fn search_hospitality_roles_without_company_restrictions_resolve_today_in_local_timezone() {
+    let server = Server::new(|path| {
+        assert_eq!(path, "/www.themuse.com/api/public/jobs?page=0");
+        json!({"page":0,"page_count":1,"results":[
+            muse_job(1, "Line Cook", "Burger King", json!("2026-10-15T14:00:00Z")),
+            muse_job(2, "Store Associate", "Target", json!("2026-10-15T18:00:00Z")),
+            muse_job(3, "Software Engineer", "Google", json!("2026-10-15T18:00:00Z")),
+            muse_job(4, "Line Cook", "Wendy's", json!("2026-10-15T03:59:00Z")),
+        ]})
+        .to_string()
+    });
+    let events = run_worker_config(
+        &server,
+        vec![search_source("", json!({}))],
+        json!({"matching":{"target_roles":["Line Cook","Store Associate"],"companies":[],
+            "posting_date":{"preset":"today","timezone":"America/New_York","include_unknown":false}}}),
+        20,
+        0,
+        false,
+        worker_limits(),
+    );
+    let jobs: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            WorkerEvent::Job {
+                external_id,
+                company,
+                ..
+            } => Some((external_id.as_str(), company.as_str())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(jobs, [("1", "Burger King"), ("2", "Target")]);
+    let scan = &scans(&events)[0];
+    assert_eq!((scan.accepted, scan.rejected, scan.unresolved), (2, 2, 0));
+    assert_eq!(
+        scan.outcome,
+        Some(scrape_core::protocol::ScanOutcome::Success)
+    );
+    assert_eq!(
+        feed_requests(&server),
+        ["/www.themuse.com/api/public/jobs?page=0"]
+    );
+}
+
+#[test]
 fn search_arbeitnow_admits_later_page_employers_without_inventing_publication_dates() {
     let server = Server::new(|path| match path {
         "/www.arbeitnow.com/api/job-board-api" => json!({
