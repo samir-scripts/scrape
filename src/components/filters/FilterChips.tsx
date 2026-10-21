@@ -65,7 +65,8 @@ export function FilterChips({ filter, onUpdate, onClearAll, sort, defaultSort, o
 
   // Experience (YOE)
   if (filter.experience_min != null || filter.experience_max != null) {
-    let expLabel = "YOE: ";
+    let expLabel = filter.experience_match_mode === "required_minimum"
+      ? "REQUIRED YOE: " : "SAVED OVERLAP YOE: ";
     if (filter.experience_min != null && filter.experience_max != null) {
       expLabel += `${filter.experience_min}-${filter.experience_max} YRS`;
     } else if (filter.experience_min != null) {
@@ -77,7 +78,8 @@ export function FilterChips({ filter, onUpdate, onClearAll, sort, defaultSort, o
       id: "experience",
       label: expLabel,
       onRemove: () =>
-        onUpdate((prev) => ({ ...prev, experience_min: null, experience_max: null })),
+        onUpdate((prev) => ({ ...prev, experience_min: null, experience_max: null,
+          experience_match_mode: "required_minimum", experience_include_unknown: false })),
     });
   }
 

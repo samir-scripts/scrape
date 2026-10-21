@@ -6,8 +6,8 @@ System contains the application-wide automatic-scraping pause. Scraper provides 
 `AddSourceModal` and `WorkflowSections` share one draft across `Sources → Matching → Schedule → Review`, Advanced controls, and
 YAML. In `Sources`, users can add, edit, enable/disable, reorder, and remove sources, with independent per-source ATS detection and duplicate normalized endpoint validation. Sources configured with `selector` adapter render `CustomExtractorConfig` exposing three extraction modes: (1) `Static HTML · CSS & XPath` with required container/title/URL locators, optional field selectors, expandable attributes/regexes, navigation & pagination locators, and interactive `Test extractor` candidate previews; (2) `Headless Browser · CDP` with Chromium runtime detection, bounds controls (`navigation_timeout_s`, `max_pages`, `max_source_duration_s`), and isolated session lifecycle actions (`Open login session`, `Save session`, `Clear session`); and (3) `Custom Script · Stdin/NDJSON` with script runtime selector (`js`, `python`, `custom`), environment diagnostics (`Check environment`), truthful local user privilege disclosure, and an explicit `Trust and enable script` gate for untrusted or modified scripts. Review runs or refreshes the live preview before Save, with an explicit
 Run now action afterward. The `needs_review` flag distinguishes unconvertible legacy originals (which ignore corrupt snapshots) from quarantined script workflows awaiting trust (which preserve their Rust-validated snapshots for review and editing). Script trust requires saving the workflow first to establish a canonical content fingerprint; modifying script fields disables trust until the changes are saved. Advanced settings remain intact and are summarized in Simple
-mode. Source configuration and YAML use the canonical desktop v6 validator, with
-v1–v5 compatibility conversion at import.
+mode. Source configuration and YAML use the canonical desktop v7 validator, with
+v1–v6 compatibility conversion at import.
 
 `KeywordInput` keeps unfinished text separate from committed chips. Enter, Add,
 comma and newline commit terms; multi-term paste preserves phrases, ignores empty
@@ -24,6 +24,7 @@ one field remains selected during editing. This UI edits Rust `KeywordRules` and
 adds no matcher. Matching decisions and run explanations use Rust's shared
 `MatchingEvaluator`; `ScanDiagnostics` shows reconciled primary counts and explicitly
 overlapping examples in previews and saved run details.
+Compact run history distinguishes examined candidates from accepted worker output and confirmed inserted/refreshed saves. Refreshed records are not new discoveries; tracked status, removed/suppressed postings and current Discovered filters still determine visibility. Acceptance alone does not confirm persistence.
 
 Matching includes Maximum matching jobs per run: default 20, positive whole numbers up to 10,000, preserved through YAML/edit/reopen. Changing any limit draft invalidates preview; invalid text prevents continuing or previewing. Review explains the run/preview caps. `JobLimitInput` and other consumers use constants generated from Rust by `export_bindings_ingestion_limits`. Preview accepts at most 10 (or the lower configured limit) and labels partial coverage. Existing records refreshed by a run count toward the limit; saved jobs are not removed by changing it.
 
@@ -102,4 +103,6 @@ functional draft updates. Individual legacy roles/compensation can be edited in 
 Malformed policy drafts are retained for authoritative validation, not silently
 replaced with the last valid policy. No migration button unions groups or clears SQL.
 
-Plan 12 Section 5: the picker consumes Rust-generated catalog data and clones selected drafts. New ATS templates use title keywords only; restrictive and unverified/setup examples are labelled separately. Matching exposes Unknown employment/workplace independently of unknown location. Review renders all exact filter settings. Script examples stay disabled until local runtime setup, saved per-source trust and explicit enablement; the interpreter control requests an absolute path. See [template setup](../../../../workflows/README.md).
+The company picker consumes only the Rust-generated catalog. Search combines company/provider/domain tokens and never downloads artwork. Each choice replaces one source's extractor, label and employer hint, preserving its ID and the workflow's matching, schedule, retention and edited name. Populated-source replacement requires confirmation; catalog setup requirements and disabled states remain intact. No choice grants script trust. Custom careers URLs remain available, while whole-draft examples live under Advanced and reuse import confirmation.
+
+Standard Matching separates employment type, minimum-required years of experience and New Grad eligibility. Existing overlap rules remain labelled and require explicit conversion. Invalid numeric drafts invalidate preview and cannot continue or save. Review shows readable matching/source/readiness rows with full YAML in the details disclosure. Preview artwork is keyed by exact source/employer, displays honest failure diagnostics and is discarded whenever the preview is invalidated or cancelled; preview never persists jobs or artwork.

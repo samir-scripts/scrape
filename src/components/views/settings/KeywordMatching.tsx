@@ -7,6 +7,7 @@ import { KeywordInput } from "../../ui/KeywordInput";
 import { Select } from "../../ui/Select";
 const defaultKeywords = (): KeywordRules => ({ any: [], all: [], exclude: [], fields: ["title"] });
 const fields = ["title", "description", "company", "location"] as const;
+export const KEYWORD_SUGGESTIONS = ["Engineer", "Developer", "Intern", "Data", "Product"] as const;
 export function KeywordMatching({ rules: postingRules, change }: { rules: PostingRules; change: WorkflowDraftChange }) {
   const rules = postingRules.keywords || defaultKeywords();
   const [emptyMode, setEmptyMode] = useState<"any" | "all">(() => rules.all.length && !rules.any.length ? "all" : "any");
@@ -38,6 +39,28 @@ export function KeywordMatching({ rules: postingRules, change }: { rules: Postin
           }} />
       </label>
       {terms(mode, "Keywords")}
+      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+        <span className="text-[var(--color-text-muted)] font-semibold uppercase">Suggestions:</span>
+        {KEYWORD_SUGGESTIONS.map(suggestion => {
+          const active = rules[mode].some(k => k.toLowerCase() === suggestion.toLowerCase());
+          return (
+            <button
+              key={suggestion}
+              type="button"
+              disabled={active}
+              className="min-h-7 px-2 border border-[var(--color-border)] text-xs font-semibold uppercase hover:bg-[var(--color-surface-raised)] disabled:opacity-40"
+              onClick={() => {
+                if (!active) {
+                  patch(current => ({ ...current, [mode]: [...current[mode], suggestion] }));
+                  change(current => ({ ...current }));
+                }
+              }}
+            >
+              + {suggestion}
+            </button>
+          );
+        })}
+      </div>
     </>}
     {terms("exclude", "Exclude keywords")}
     <p className="text-sm text-[var(--color-ink-mute)]">Any: Engineer, Developer matches either. All: Software, Engineer requires both. Machine Learning stays one phrase. Substrings match: Engineer also matches Engineering.</p>

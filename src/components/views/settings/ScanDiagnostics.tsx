@@ -25,7 +25,7 @@ export function ScanDiagnostics({ sources }: { sources?: SourceScanStats[] | nul
       <p>{source.source_id}{source.outcome ? ` · ${runStatusLabel(source.outcome)}` : ""} · {terminations[source.termination]} · cap {source.limit}</p>
       {source.provider_total != null && <p>Provider-reported total: {source.provider_total}</p>}
       <p>{source.examined} examined · {source.accepted} accepted · {source.rejected} matching rejections · {source.blocked} blocked · {source.duplicates} duplicates · {source.invalid} invalid · {source.unresolved ?? 0} unresolved · {source.enrichment_warnings ?? 0} enrichment warnings</p>
-      <p className="text-[var(--color-ink-mute)]">Counts describe examined candidates. Unvisited pages and provider eligibility are not inferred.</p>
+      <p className="text-[var(--color-ink-mute)]">Counts describe examined candidates. Accepted candidates passed worker matching, not necessarily persistence or new discovery. Unvisited pages and provider eligibility are not inferred.</p>
       {!!source.rejections.length && <ul className="list-disc pl-5">
         {source.rejections.map(({ reason, count }) => <li key={reason}>{reasons[reason]}: {count}</li>)}
       </ul>}

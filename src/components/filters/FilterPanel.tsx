@@ -173,6 +173,7 @@ export function FilterPanel({
       salary_interval: filterSpec.salary_interval ?? null,
       experience_min: filterSpec.experience_min ?? null,
       experience_max: filterSpec.experience_max ?? null,
+      experience_match_mode: filterSpec.experience_match_mode ?? "advertised_range_overlap",
       experience_include_unknown: filterSpec.experience_include_unknown ?? true,
       new_grad: filterSpec.new_grad ?? null,
       sponsorship: filterSpec.sponsorship ?? null,
@@ -312,13 +313,15 @@ export function FilterPanel({
         <ExperienceFilter
           experienceMin={filterSpec.experience_min ?? null}
           experienceMax={filterSpec.experience_max ?? null}
+          experienceMatchMode={filterSpec.experience_match_mode ?? "advertised_range_overlap"}
           newGrad={filterSpec.new_grad ?? "any"}
           includeUnknown={filterSpec.experience_include_unknown ?? true}
-          onChange={({ experienceMin, experienceMax, newGrad, includeUnknown }) =>
+          onChange={({ experienceMin, experienceMax, experienceMatchMode, newGrad, includeUnknown }) =>
             onUpdateFilter((prev) => ({
               ...prev,
               experience_min: experienceMin,
               experience_max: experienceMax,
+              experience_match_mode: experienceMatchMode,
               new_grad: newGrad,
               experience_include_unknown: includeUnknown,
             }))

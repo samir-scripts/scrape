@@ -15,9 +15,10 @@ for (const theme of ["paper", "obsidian"]) {
     await page.getByRole("button", { name: /add workflow|new workflow|create workflow/i }).click();
     const dialog = page.getByRole("dialog", { name: "Create workflow" });
     const template = catalog.templates.find(template => template.id === "sep-midwest-consulting")!;
-    await dialog.getByRole("button", { name: "Choose sample workflow template" }).click();
+    await dialog.getByRole("button", { name: "Advanced settings" }).click();
+    await dialog.getByRole("button", { name: "Load example workflow" }).click();
     await page.getByRole("option", { name: template.name, exact: true }).click();
-    await expect(dialog.getByText(template.description)).toBeVisible();
+    await expect(dialog.getByLabel("Selected company details").getByText(template.description)).toBeVisible();
     await dialog.getByRole("button", { name: "Continue to Matching" }).click();
     await dialog.getByRole("checkbox", { name: "Internship", exact: true }).check();
     await dialog.getByRole("checkbox", { name: "Unknown employment", exact: true }).check();

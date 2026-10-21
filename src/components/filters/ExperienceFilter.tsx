@@ -1,219 +1,93 @@
-import React from "react";
+import { useEffect, useId, useState } from "react";
+import type { ExperienceMatchMode } from "../../bindings/ExperienceMatchMode";
 
-export interface ExperienceFilterProps {
+interface ExperienceValues {
   experienceMin: number | null;
   experienceMax: number | null;
-  newGrad: string | null; // "any" | "only" | "exclude" | null
+  experienceMatchMode: ExperienceMatchMode;
+  newGrad: string | null;
   includeUnknown: boolean;
-  onChange: (vals: {
-    experienceMin: number | null;
-    experienceMax: number | null;
-    newGrad: string | null;
-    includeUnknown: boolean;
-  }) => void;
 }
 
-export const CAREER_LEVEL_PRESETS: { label: string; min: number | null; max: number | null }[] = [
-  { label: "ALL", min: null, max: null },
-  { label: "NEW GRAD (0-1)", min: 0, max: 1 },
-  { label: "MID (1-3)", min: 1, max: 3 },
-  { label: "SENIOR (3-5)", min: 3, max: 5 },
-  { label: "STAFF+ (5+)", min: 5, max: null },
+export interface ExperienceFilterProps extends ExperienceValues {
+  onChange: (values: ExperienceValues) => void;
+  onDraftChange?: () => void;
+  onValidityChange?: (valid: boolean) => void;
+}
+
+const PRESETS = [
+  { label: "Any", min: null, max: null },
+  { label: "0–1", min: 0, max: 1 },
+  { label: "0–2", min: 0, max: 2 },
+  { label: "3–5", min: 3, max: 5 },
+  { label: "5+", min: 5, max: null },
 ];
-
-export const NEW_GRAD_OPTIONS: { id: string; label: string }[] = [
-  { id: "any", label: "ANY" },
-  { id: "only", label: "NEW GRAD ONLY" },
-  { id: "exclude", label: "EXCLUDE NEW GRAD" },
+const NEW_GRAD_OPTIONS = [
+  { id: "any", label: "Any New Grad status" },
+  { id: "only", label: "New Grad only" },
+  { id: "exclude", label: "Exclude New Grad" },
 ];
+const buttonClass = "px-2 py-1 text-xs border border-[var(--color-ink)] cursor-pointer aria-pressed:bg-[var(--color-ink)] aria-pressed:text-[var(--color-paper)]";
+const validBound = (value: string) => value === "" || (/^\d+$/.test(value) && Number.isSafeInteger(Number(value)));
 
-export function ExperienceFilter({
-  experienceMin,
-  experienceMax,
-  newGrad = "any",
-  includeUnknown,
-  onChange,
-}: ExperienceFilterProps) {
-  const currentNewGrad = newGrad || "any";
+export function ExperienceFilter({ experienceMin, experienceMax, experienceMatchMode, newGrad, includeUnknown, onChange, onValidityChange, onDraftChange }: ExperienceFilterProps) {
+  const [minText, setMinText] = useState(String(experienceMin ?? ""));
+  const [maxText, setMaxText] = useState(String(experienceMax ?? ""));
+  const errorId = useId();
+  useEffect(() => { setMinText(String(experienceMin ?? "")); }, [experienceMin]);
+  useEffect(() => { setMaxText(String(experienceMax ?? "")); }, [experienceMax]);
+  const minValid = validBound(minText);
+  const maxValid = validBound(maxText);
+  const ordered = minText === "" || maxText === "" || Number(minText) <= Number(maxText);
+  const valid = minValid && maxValid && ordered;
+  useEffect(() => { onValidityChange?.(valid); }, [valid, onValidityChange]);
+  const active = experienceMin != null || experienceMax != null;
+  const overlap = active && experienceMatchMode === "advertised_range_overlap";
+  const currentMin = minValid && minText !== "" ? Number(minText) : experienceMin;
+  const currentMax = maxValid && maxText !== "" ? Number(maxText) : experienceMax;
+  const values = { experienceMin: currentMin, experienceMax: currentMax, experienceMatchMode, newGrad: newGrad || "any", includeUnknown };
 
-  const isPresetActive = (min: number | null, max: number | null) => {
-    return experienceMin === min && experienceMax === max;
-  };
-
-  const handleMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value.trim();
-    const num = val === "" ? null : Math.max(0, parseInt(val, 10));
-    onChange({
-      experienceMin: isNaN(num as number) ? null : num,
-      experienceMax,
-      newGrad: currentNewGrad,
-      includeUnknown,
-    });
-  };
-
-  const handleMaxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value.trim();
-    const num = val === "" ? null : Math.max(0, parseInt(val, 10));
-    onChange({
-      experienceMin,
-      experienceMax: isNaN(num as number) ? null : num,
-      newGrad: currentNewGrad,
-      includeUnknown,
-    });
-  };
-
-  const handlePresetClick = (min: number | null, max: number | null) => {
-    onChange({
-      experienceMin: min,
-      experienceMax: max,
-      newGrad: currentNewGrad,
-      includeUnknown,
-    });
-  };
-
-  const handleNewGradChange = (val: string) => {
-    onChange({
-      experienceMin,
-      experienceMax,
-      newGrad: val,
-      includeUnknown,
-    });
-  };
-
-  const hasFilter =
-    experienceMin != null ||
-    experienceMax != null ||
-    currentNewGrad !== "any";
+  function setBounds(min: number | null, max: number | null) {
+    const nextActive = min != null || max != null;
+    onChange({ ...values, experienceMin: min, experienceMax: max,
+      experienceMatchMode: active && nextActive ? experienceMatchMode : "required_minimum",
+      includeUnknown: active && nextActive ? includeUnknown : false });
+  }
+  function editBound(which: "min" | "max", text: string) {
+    onDraftChange?.();
+    const nextMin = which === "min" ? text : minText;
+    const nextMax = which === "max" ? text : maxText;
+    if (which === "min") setMinText(text); else setMaxText(text);
+    if (validBound(nextMin) && validBound(nextMax) && (nextMin === "" || nextMax === "" || Number(nextMin) <= Number(nextMax))) {
+      setBounds(nextMin === "" ? null : Number(nextMin), nextMax === "" ? null : Number(nextMax));
+    }
+  }
+  function preset(min: number | null, max: number | null) {
+    setMinText(String(min ?? "")); setMaxText(String(max ?? ""));
+    setBounds(min, max);
+  }
 
   return (
-    <div className="flex flex-col gap-3 font-mono text-xs select-none">
-      <div className="flex justify-between items-center">
-        <label className="font-bold uppercase tracking-wider text-[var(--color-ink)]">
-          YEARS OF EXPERIENCE & LEVEL
-        </label>
-        {hasFilter && (
-          <button
-            onClick={() =>
-              onChange({
-                experienceMin: null,
-                experienceMax: null,
-                newGrad: "any",
-                includeUnknown,
-              })
-            }
-            className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-danger)] uppercase cursor-pointer"
-          >
-            [RESET]
-          </button>
-        )}
+    <div className="flex flex-col gap-3 font-mono text-xs">
+      <div className="flex flex-wrap justify-between gap-2">
+        <span className="font-bold">{overlap ? "Advertised range overlap (saved rule)" : "Minimum required experience"}</span>
+        {overlap && <button type="button" className={buttonClass} onClick={() => onChange({ ...values, experienceMatchMode: "required_minimum" })}>Use minimum required experience</button>}
       </div>
-
-      {/* Preset Career Levels */}
-      <div className="flex flex-col gap-1">
-        <span className="text-xs text-[var(--color-ink-mute)] uppercase font-bold">
-          CAREER LEVEL PRESETS
-        </span>
-        <div className="flex flex-wrap gap-1.5">
-          {CAREER_LEVEL_PRESETS.map((p) => {
-            const active = isPresetActive(p.min, p.max);
-            return (
-              <button
-                key={p.label}
-                type="button"
-                onClick={() => handlePresetClick(p.min, p.max)}
-                className={`px-2 py-1 text-xs font-bold uppercase tracking-wider border cursor-pointer ${
-                  active
-                    ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
-                    : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-                }`}
-              >
-                {p.label}
-              </button>
-            );
-          })}
-        </div>
+      <div role="group" aria-label="Years of experience" className="flex flex-wrap gap-1.5">
+        {PRESETS.map(({ label, min, max }) => <button key={label} type="button" className={buttonClass} aria-pressed={valid && experienceMin === min && experienceMax === max} onClick={() => preset(min, max)}>{label}</button>)}
       </div>
-
-      {/* Custom Numerical Range */}
-      <div className="flex items-center gap-2 pt-0.5">
-        <span className="text-xs text-[var(--color-ink-mute)] uppercase font-bold">
-          CUSTOM:
-        </span>
-        <div className="flex items-center border border-[var(--color-ink)] bg-[var(--color-paper)] px-2 py-0.5 w-24">
-          <span className="text-xs text-[var(--color-ink-mute)] mr-1">MIN</span>
-          <input
-            type="number"
-            min={0}
-            max={30}
-            value={experienceMin ?? ""}
-            placeholder="0"
-            onChange={handleMinChange}
-            className="w-full bg-transparent text-[var(--color-ink)] text-xs font-mono focus:outline-none"
-          />
-        </div>
-        <span className="text-[var(--color-ink-mute)]">—</span>
-        <div className="flex items-center border border-[var(--color-ink)] bg-[var(--color-paper)] px-2 py-0.5 w-24">
-          <span className="text-xs text-[var(--color-ink-mute)] mr-1">MAX</span>
-          <input
-            type="number"
-            min={0}
-            max={30}
-            value={experienceMax ?? ""}
-            placeholder="ANY"
-            onChange={handleMaxChange}
-            className="w-full bg-transparent text-[var(--color-ink)] text-xs font-mono focus:outline-none"
-          />
-        </div>
-        <span className="text-xs text-[var(--color-ink-mute)] font-bold">YOE</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <span>Custom:</span>
+        <label>Min <input aria-label="Minimum experience (years)" aria-invalid={!minValid || !ordered} aria-describedby={!valid ? errorId : undefined} type="text" inputMode="numeric" value={minText} onChange={(event) => editBound("min", event.target.value)} className="w-16 border border-[var(--color-ink)] bg-[var(--color-paper)] p-1" /></label>
+        <label>Max <input aria-label="Maximum experience (years)" aria-invalid={!maxValid || !ordered} aria-describedby={!valid ? errorId : undefined} type="text" inputMode="numeric" value={maxText} onChange={(event) => editBound("max", event.target.value)} className="w-16 border border-[var(--color-ink)] bg-[var(--color-paper)] p-1" /></label>
+        <span>years, inclusive</span>
       </div>
-
-      {/* New Grad Qualification Eligibility */}
-      <div className="flex flex-col gap-1 pt-0.5">
-        <span className="text-xs text-[var(--color-ink-mute)] uppercase font-bold">
-          NEW GRAD STATUS
-        </span>
-        <div className="flex gap-1.5">
-          {NEW_GRAD_OPTIONS.map((opt) => {
-            const active = currentNewGrad === opt.id;
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => handleNewGradChange(opt.id)}
-                className={`flex-1 py-1 px-2 text-xs font-bold uppercase tracking-wider border cursor-pointer ${
-                  active
-                    ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
-                    : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-                }`}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
+      {!valid && <p id={errorId} role="alert" className="text-[var(--color-danger)]">Enter non-negative whole years, with minimum no greater than maximum.</p>}
+      <label className="flex items-center gap-2"><input type="checkbox" checked={includeUnknown} onChange={(event) => onChange({ ...values, includeUnknown: event.target.checked })} />{overlap ? "Include jobs without stated experience" : "Include jobs with unknown required experience"}</label>
+      <div role="group" aria-label="New Grad eligibility" className="flex flex-wrap gap-1.5">
+        {NEW_GRAD_OPTIONS.map(({ id, label }) => <button key={id} type="button" className={buttonClass} aria-pressed={(newGrad || "any") === id} onClick={() => onChange({ ...values, newGrad: id })}>{label}</button>)}
       </div>
-
-      {/* Include Unknown Toggle */}
-      <div className="flex items-center gap-2 pt-0.5">
-        <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--color-ink)]">
-          <input
-            type="checkbox"
-            checked={includeUnknown}
-            onChange={(e) =>
-              onChange({
-                experienceMin,
-                experienceMax,
-                newGrad: currentNewGrad,
-                includeUnknown: e.target.checked,
-              })
-            }
-            className="w-3.5 h-3.5 border border-[var(--color-ink)] bg-[var(--color-paper)] rounded-none accent-[var(--color-ink)] cursor-pointer"
-          />
-          <span className="uppercase font-bold tracking-wider">
-            INCLUDE JOBS WITHOUT STATED YOE
-          </span>
-        </label>
-      </div>
+      <p className="text-[var(--color-ink-mute)]">New Grad eligibility is separate from numeric experience and must also match.</p>
     </div>
   );
 }

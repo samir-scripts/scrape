@@ -1,4 +1,3 @@
-import { stringify } from "yaml";
 import { INGESTION_LIMITS } from "../../../bindings/ingestionLimits";
 import { useLayoutEffect, useRef } from "react";
 import { api } from "../../../lib/api";
@@ -9,9 +8,13 @@ import { workflowSpecToYaml } from "../../../lib/yamlWorkflow";
 import { isDemoMode, isRecordedMode } from "../../../lib/runtime";
 import { Modal } from "../../ui/Modal";
 import { Button } from "../../ui/Button";
+import { Icon } from "../../ui/Icon";
 import { WorkflowSections } from "./WorkflowSections";
 import { WorkflowImportButton } from "./WorkflowImportButton";
 import { WorkflowPreviewResults } from "./WorkflowPreviewResults";
+import { Select } from "../../ui/Select";
+import { SAMPLE_WORKFLOW_TEMPLATES } from "../../../lib/yamlWorkflow";
+import { companyOptions, selectedCompanyId } from "./CompanyPicker";
 
 interface AddSourceModalProps {
   isOpen: boolean; onClose: () => void; onSourceSaved: () => void;
@@ -21,15 +24,22 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
   const model = useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceSaved });
   const { draft, change, step, advanced, setAdvanced, yaml, setYaml, detected, preview, error, setError, busy, saved } = model;
   const persisting = model.operation === "save" || model.operation === "run";
-  const locked = persisting || !!model.pendingImport;
+  const locked = persisting || !!model.pendingImport || !!model.pendingCompany;
   const hadImport = useRef(false);
   useLayoutEffect(() => {
     if (hadImport.current && !model.pendingImport) model.content.current?.querySelector<HTMLElement>('button[aria-label="Import workflow YAML"]')?.focus({ preventScroll: true });
     hadImport.current = !!model.pendingImport;
   }, [model.pendingImport]);
-  const close = () => { if (model.pendingImport) { model.cancelImport(); return; } if (!persisting) { model.cancel(); onClose(); } };
+  const close = () => { if (model.pendingCompany) { model.cancelCompany(); return; } if (model.pendingImport) { model.cancelImport(); return; } if (!persisting) { model.cancel(); onClose(); } };
   const index = WORKFLOW_STEPS.indexOf(step);
   const rules = draft.filters?.matching;
+  const hasScripts = draft.sources.some(source => source.extractor.script || source.extractor.mode === "script");
+  const stepHelp = {
+    Source: "Select a company preset or enter a careers page URL",
+    Matching: "Filter jobs by title, workplace, and location (all optional)",
+    Schedule: "Configure automated crawl frequency and timing",
+    Review: "Verify match quality and finalize workflow",
+  };
   const advancedSettings = [
     draft.filters?.query || draft.filters?.policy ? "expert rules" : null,
     draft.filters?.locations?.length ? "additional location text" : null,
@@ -82,10 +92,10 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
       <Button onClick={close} disabled={locked}>Cancel</Button>
       <div className="flex flex-wrap gap-2">
         {model.operation === "preview" && <Button onClick={model.cancel}>Cancel preview</Button>}
-        {draft.sources.some(s => s.extractor.script || s.extractor.mode === "script") && <Button disabled={busy || !!model.pendingImport || yaml != null} onClick={() => void model.saveDisabled()}>Save disabled for review</Button>}
-        {index > 0 && <Button disabled={busy || !!model.pendingImport} onClick={() => model.navigate(WORKFLOW_STEPS[index - 1])}>Back</Button>}
-        {yaml == null && (step === "Matching" || step === "Review") && <Button disabled={busy || !!model.pendingImport || isRecordedMode()} onClick={() => void model.runPreview()}>{preview ? "Refresh preview" : "Preview matches"}</Button>}
-        {step !== "Review" ? <Button variant="inverted" disabled={busy || !!model.pendingImport || yaml != null} onClick={() => void model.next()}>{step === "Schedule" ? "Review workflow" : `Continue to ${WORKFLOW_STEPS[index + 1]}`}</Button>
+        {hasScripts && step !== "Review" && <Button disabled={busy || locked || yaml != null} onClick={() => void model.saveDisabled()}>Save disabled for review</Button>}
+        {index > 0 && <Button disabled={busy || locked} onClick={() => model.navigate(WORKFLOW_STEPS[index - 1])}>Back</Button>}
+        {yaml == null && (step === "Matching" || step === "Review") && <Button disabled={busy || locked || isRecordedMode()} onClick={() => void model.runPreview()}>{preview ? "Refresh preview" : "Preview matches"}</Button>}
+        {step !== "Review" ? <Button variant="inverted" disabled={busy || locked || yaml != null} onClick={() => void model.next()}>{step === "Schedule" ? "Review workflow" : `Continue to ${WORKFLOW_STEPS[index + 1]}`}</Button>
           : <Button variant="inverted" disabled={!model.canSave} onClick={() => void model.save()}>Save workflow</Button>}
       </div>
     </div>}>
@@ -98,30 +108,50 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
         <div className="flex gap-2"><Button variant="inverted" disabled={busy || !!model.pendingImport || isRecordedMode() || saved.needs_review || !saved.enabled} onClick={async () => { if (await model.runSaved()) onClose(); }}>Run now</Button>{model.operation === "run" && <Button variant="danger" onClick={() => void api.cancelScrape().catch(error => setError(String(error)))}>Cancel run</Button>}<Button disabled={busy} onClick={close}>Done</Button></div>
       </> : <>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <nav aria-label="Workflow steps"><ol className="flex flex-wrap items-center gap-2">
-            {WORKFLOW_STEPS.map((value, position) => <li key={value} className="flex items-center gap-2">
-              {position > 0 && <span aria-hidden="true">→</span>}
-              <button type="button" aria-current={step === value ? "step" : undefined} disabled={position > model.visited || busy || !!model.pendingImport}
-                className={`min-h-9 px-2 border ${step === value ? "bg-[var(--color-ink)] text-[var(--color-paper)]" : "border-transparent"}`}
-                onClick={() => model.navigate(value)}>{value}</button>
+          <nav aria-label="Workflow steps" className="min-w-0 flex-1"><ol className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {WORKFLOW_STEPS.map((value, position) => <li key={value} className="min-w-0">
+              <button type="button" aria-label={value} aria-current={step === value ? "step" : undefined} disabled={position > model.visited || busy || locked}
+                className={`w-full min-h-10 flex items-center gap-2 border px-2 text-xs font-semibold uppercase disabled:opacity-50 ${step === value ? "bg-[var(--color-text)] text-[var(--color-surface)]" : "border-[var(--color-border)] hover:bg-[var(--color-surface-raised)]"}`}
+                onClick={() => model.navigate(value)}>
+                <span aria-hidden="true" className="inline-flex items-center justify-center w-5 h-5 shrink-0 border border-current">
+                  {position < index ? <Icon name="check" size="sm" /> : String(position + 1).padStart(2, "0")}
+                </span>{value}
+              </button>
             </li>)}
           </ol></nav>
           <WorkflowImportButton disabled={!isOpen || locked || isRecordedMode()} onImport={model.replaceImport} />
         </div>
+        <p className="text-[var(--color-text-muted)]">{stepHelp[step]}</p>
         {model.pendingImport && <section role="region" aria-label="Replace unsaved workflow changes" className="border border-[var(--color-warning)] p-3 grid gap-3">
           <p>Replace unsaved changes with {model.pendingImport.metadata.name}? Your current draft stays unchanged until you replace it.</p>
           <div className="flex flex-wrap gap-2"><Button autoFocus onClick={model.cancelImport}>Keep editing</Button><Button variant="inverted" onClick={model.confirmImport}>Replace draft</Button></div>
+        </section>}
+        {model.pendingCompany && <section role="region" aria-label="Replace source" className="border border-[var(--color-warning)] p-3 grid gap-3">
+          <p>Replace this source with the selected company? Other sources, matching rules, schedule and workflow name stay unchanged.</p>
+          <div className="flex flex-wrap gap-2"><Button autoFocus onClick={model.cancelCompany}>Keep editing</Button><Button variant="inverted" onClick={model.confirmCompany}>Replace source</Button></div>
         </section>}
         {yaml != null && <label className="grid gap-2">Workflow YAML<textarea disabled={locked} aria-label="Workflow YAML" className="font-code border bg-[var(--color-paper)] p-3 min-h-80" value={yaml} onChange={event => setYaml(event.target.value)} /></label>}
         <fieldset disabled={locked} className={yaml != null ? "hidden" : "min-w-0 grid gap-4"}>
           {(["Source", "Matching", "Schedule"] as const).map(section => <section key={section} data-workflow-step={section} hidden={step !== section} className={step === section ? "grid gap-3" : "hidden"}>
             <h3 className="text-base font-bold normal-case">{section === "Matching" ? "Matching (optional)" : section}</h3>
-            <WorkflowSections key={`${section}:${model.inputSession}`} draft={draft} change={change} advanced={advanced} section={section} initialSource={initialSource} onTrustChanged={() => model.invalidate()} />
-            {section === "Source" && <p aria-live="polite" className="text-[var(--color-ink-mute)]">{model.operation === "detect" ? "Detecting source…" : detected ? `Sources: ${draft.sources?.map(s => `${s.extractor.kind} (${s.label})`).join(", ") || "None"}` : "Paste a careers URL. Continue to detect its source, or configure an adapter in Advanced settings."}</p>}
+            <WorkflowSections key={`${section}:${model.inputSession}`} draft={draft} change={change} advanced={advanced} section={section} initialSource={initialSource} onTrustChanged={() => model.invalidate()} selectCompany={model.selectCompany} onDetect={index => void model.detect(index)} preview={preview} />
+            {section === "Source" && <p aria-live="polite" className="text-[var(--color-ink-mute)]">{model.operation === "detect" ? "Detecting source…" : detected ? `Sources: ${draft.sources?.map(s => `${s.extractor.kind} (${s.label})`).join(", ") || "None"}` : "Choose a company or enter a custom careers URL. Continue or Detect checks the URL; selecting a company does not grant script trust."}</p>}
             {section === "Schedule" && <details><summary className="cursor-pointer min-h-9">Retention</summary><WorkflowSections draft={draft} change={change} advanced section="Retention" initialSource={initialSource} onTrustChanged={() => model.invalidate()} /></details>}
           </section>)}
         </fieldset>
         {step === "Review" && yaml == null && <section data-workflow-step="Review" className="grid gap-3">
+          <section aria-label="Workflow readiness" aria-live="polite"
+            className={`grid gap-2 border-l-4 p-4 bg-[var(--color-surface-raised)] ${model.canSave ? "border-[var(--color-success)]" : "border-[var(--color-warning)]"}`}>
+            <h3 className={`font-semibold ${model.canSave ? "text-[var(--color-success)]" : "text-[var(--color-warning)]"}`}>
+              {model.operation === "preview" ? "Preview in progress…" : model.canSave ? `Preview complete — ${preview!.matched - preview!.blocked} eligible postings found` : preview?.errors.length ? "Preview needs attention" : "Preview required before saving"}
+            </h3>
+            <p>{model.canSave ? "The current configuration passed preview. You can save, including with zero matches." : isDemoMode() ? "Run a simulated preview to check this example configuration. No live source is contacted." : "A dry-run preview checks your current sources and matching rules. Preview does not save jobs."}</p>
+            {!model.canSave && <div><Button variant="inverted" disabled={busy || locked || yaml != null || isRecordedMode()} onClick={() => void model.runPreview()}>Run Preview Now</Button></div>}
+            {hasScripts && <>
+              <p>Custom scripts require local review and trust. Save disabled, then reopen to review each script; trust does not enable the workflow.</p>
+              <div><Button variant="inverted" disabled={busy || locked || yaml != null} onClick={() => void model.saveDisabled()}>Save disabled for review</Button></div>
+            </>}
+          </section>
           <h3 className="font-bold text-base">Review {draft.metadata.name}</h3>
           <p>Maximum {draft.max_jobs_per_run ?? INGESTION_LIMITS.default} matching jobs per run; preview accepts at most {Math.min(draft.max_jobs_per_run ?? INGESTION_LIMITS.default, INGESTION_LIMITS.preview)}.</p>
           <div className="grid gap-1">
@@ -130,6 +160,7 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
               {draft.sources?.map((s) => (
                 <li key={s.id} className="break-words">
                   {s.label} ({s.extractor.kind}{s.extractor.mode ? ` · ${s.extractor.mode}` : ""}) · {s.extractor.url || s.extractor.script?.path || "Custom script"} {s.enabled ? "" : "[Disabled]"}
+                  {" · "}{companyOptions.find(option => option.company.id === selectedCompanyId(s))?.template.readiness.replaceAll("_", " ") || "Custom source · preview required"}
                 </li>
               ))}
             </ul>
@@ -139,7 +170,13 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
           <section aria-label="Matching rules summary" className="grid gap-1">
             <h4 className="font-semibold">Matching rules</h4>
             <p>Every configured restriction applies together. Empty groups do not restrict matching.</p>
-            <pre className="font-code whitespace-pre-wrap break-words text-xs">{stringify(draft.filters || {})}</pre>
+            <dl className="grid gap-2">
+              <div><dt className="font-semibold">Employment type</dt><dd>{(rules?.role_types?.length ? rules.role_types : draft.filters?.role_types)?.join(", ").replaceAll("_", " ") || "Any, including unknown"}</dd></div>
+              <div><dt className="font-semibold">{rules?.experience_match_mode === "advertised_range_overlap" && (rules.experience_min != null || rules.experience_max != null) ? "Advertised range overlap (saved rule)" : "Minimum required experience"}</dt><dd>{rules?.experience_min == null && rules?.experience_max == null ? "Any" : `${rules?.experience_min ?? 0}–${rules?.experience_max ?? "unbounded"} years, inclusive`}{rules?.experience_include_unknown ? " · Include unknown" : " · Exclude unknown when constrained"}</dd></div>
+              <div><dt className="font-semibold">New Grad</dt><dd>{rules?.new_grad || "any"} (independent of years of experience)</dd></div>
+              <div><dt className="font-semibold">Company</dt><dd>{draft.sources.map(source => source.employer_hint || source.label).join(", ")}</dd></div>
+              <div><dt className="font-semibold">Readiness</dt><dd>{draft.sources.some(source => source.extractor.script || source.extractor.mode === "script") ? "Scripts require explicit review and trust; company selection never grants trust." : "Preview the current sources before saving."}</dd></div>
+            </dl>
           </section>
           <details><summary className="cursor-pointer min-h-9">All configured rules</summary><pre className="font-code whitespace-pre-wrap break-words text-xs">{workflowSpecToYaml(draft)}</pre></details>
           <p>Saving creates or updates the workflow. It does not run a scrape.</p>
@@ -148,6 +185,11 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
           <button type="button" aria-expanded={advanced} className="text-left underline cursor-pointer min-h-9" onClick={() => setAdvanced(!advanced)}>{advanced ? "Hide advanced settings" : "Advanced settings"}</button>
           {advancedSettings.length > 0 && <p className="text-[var(--color-ink-mute)]">Active advanced settings: {advancedSettings.join(", ")}.</p>}
           {advanced && <div className="flex flex-wrap gap-2"><Button disabled={locked} onClick={() => yaml == null ? setYaml(workflowSpecToYaml(model.commitInputs())) : void model.applyYaml()}>{yaml == null ? "Edit YAML" : "Apply YAML to form"}</Button><Button disabled={yaml != null} onClick={() => { const url = URL.createObjectURL(new Blob([workflowSpecToYaml(model.commitInputs())], { type: "text/yaml" })); const link = document.createElement("a"); link.href = url; link.download = "workflow.yaml"; link.click(); URL.revokeObjectURL(url); }}>Export YAML</Button></div>}
+          {advanced && <label className="grid gap-2">Load example workflow
+            <Select aria-label="Load example workflow" value="" disabled={locked} options={[{ value: "", label: "Choose an example…" }, ...SAMPLE_WORKFLOW_TEMPLATES.map(template => ({value: template.id, label: template.name}))]}
+              onChange={id => { const template = SAMPLE_WORKFLOW_TEMPLATES.find(template => template.id === id); if (template) model.replaceImport(structuredClone(template.spec)); }} />
+            <span className="text-xs">Examples replace the entire draft after confirmation. Restrictive and setup-required examples are not company presets.</span>
+          </label>}
         </section>
         {(step === "Matching" || step === "Review") && <WorkflowPreviewResults preview={preview} draft={draft} setError={setError} />}
       </>}
