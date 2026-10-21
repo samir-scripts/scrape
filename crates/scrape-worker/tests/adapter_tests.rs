@@ -445,7 +445,9 @@ fn test_google_document_base_resolution_and_safeguards() {
     let desc = events
         .iter()
         .find_map(|e| match e {
-            WorkerEvent::Job { description_text, .. } => description_text.as_deref(),
+            WorkerEvent::Job {
+                description_text, ..
+            } => description_text.as_deref(),
             _ => None,
         })
         .expect("Expected extracted Google description");
@@ -589,7 +591,10 @@ fn test_apple_selectors_and_pagination() {
     for cand in &page.candidates {
         let event = cand.clone().event(&source);
         if let WorkerEvent::Job {
-            location, title, description_text, ..
+            location,
+            title,
+            description_text,
+            ..
         } = event
         {
             assert!(
@@ -597,7 +602,11 @@ fn test_apple_selectors_and_pagination() {
                 "Posting '{title}' should have extracted location"
             );
             assert!(
-                !description_text.as_deref().unwrap_or_default().trim().is_empty(),
+                !description_text
+                    .as_deref()
+                    .unwrap_or_default()
+                    .trim()
+                    .is_empty(),
                 "Posting '{title}' should have extracted description"
             );
         } else {

@@ -64,8 +64,8 @@ export function JobInspectorContent({
       const fetched = await api.fetchCompanyLogo(job.company, job.url);
       if (fetched && fetched.status === "verified") {
         notifySuccess(`Fetched and verified logo for ${job.company}`, "LOGO UPDATED");
-        void queryClient.invalidateQueries({ queryKey: ["jobs"] });
-        void queryClient.invalidateQueries({ queryKey: ["job", job.id] });
+        void queryClient?.invalidateQueries({ queryKey: ["jobs"] });
+        void queryClient?.invalidateQueries({ queryKey: ["job", job.id] });
       } else {
         notifyInfo(`No public logo found for ${job.company}. Initials retained.`, "LOGO LOOKUP");
       }

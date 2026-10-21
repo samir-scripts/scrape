@@ -274,10 +274,14 @@ pub async fn fetch_company_logo(
                 .args(["--branding", company, url])
                 .output()
                 .await
-                .map_err(|e| AppError::Internal(format!("Failed to execute branding worker: {}", e)))?;
+                .map_err(|e| {
+                    AppError::Internal(format!("Failed to execute branding worker: {}", e))
+                })?;
             if output.status.success() {
                 let stdout = String::from_utf8_lossy(&output.stdout);
-                if let Ok(logo) = serde_json::from_str::<scrape_core::branding::CompanyLogo>(stdout.trim()) {
+                if let Ok(logo) =
+                    serde_json::from_str::<scrape_core::branding::CompanyLogo>(stdout.trim())
+                {
                     if logo.status == scrape_core::branding::LogoStatus::Verified {
                         crate::db::branding::record(&state.db, "on_demand", company, &logo).await?;
                         use tauri::Emitter;

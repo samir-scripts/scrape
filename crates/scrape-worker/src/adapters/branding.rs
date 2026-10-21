@@ -251,7 +251,10 @@ pub fn resolve_document_with_base(
             .unwrap_or_default()
             .trim()
             .to_lowercase();
-        if label == normalized || label == format!("{normalized} home") || label == format!("{normalized} careers") {
+        if label == normalized
+            || label == format!("{normalized} home")
+            || label == format!("{normalized} careers")
+        {
             if let Some(img) = anchor.select(&Selector::parse("img").unwrap()).next() {
                 if let Some(url) = image_url(img, base_url) {
                     return Some(LogoEvidence {
@@ -265,7 +268,13 @@ pub fn resolve_document_with_base(
     }
     for link in document.select(&Selector::parse("link[rel*='icon']").unwrap()) {
         let rel = link.value().attr("rel").unwrap_or_default().to_lowercase();
-        if rel.contains("apple-touch-icon") || (rel.contains("icon") && link.value().attr("type").map_or(false, |t| t.contains("png") || t.contains("webp"))) {
+        if rel.contains("apple-touch-icon")
+            || (rel.contains("icon")
+                && link
+                    .value()
+                    .attr("type")
+                    .is_some_and(|t| t.contains("png") || t.contains("webp")))
+        {
             if let Some(href) = link.value().attr("href") {
                 if let Some(url) = logo_url(&Value::String(href.into()), base_url) {
                     return Some(LogoEvidence {

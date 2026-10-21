@@ -125,8 +125,16 @@ pub async fn asset(pool: &SqlitePool, reference: &str) -> Result<String> {
         Some(r) => (r.get::<String, _>("logo_json"), r.get("asset_data")),
         None => {
             let curated = [
-                "cloudflare", "google", "apple", "meta", "amazon", "netflix", "bitwarden",
-                "linear", "sep", "nvidia",
+                "cloudflare",
+                "google",
+                "apple",
+                "meta",
+                "amazon",
+                "netflix",
+                "bitwarden",
+                "linear",
+                "sep",
+                "nvidia",
             ]
             .into_iter()
             .find_map(|name| {
@@ -672,18 +680,31 @@ mod tests {
     async fn all_curated_logos_resolve_validate_and_serve_via_asset_lookup() {
         let pool = crate::db::init_memory_db().await.unwrap();
         let companies = [
-            "cloudflare", "google", "apple", "meta", "amazon",
-            "netflix", "bitwarden", "linear", "sep", "nvidia",
+            "cloudflare",
+            "google",
+            "apple",
+            "meta",
+            "amazon",
+            "netflix",
+            "bitwarden",
+            "linear",
+            "sep",
+            "nvidia",
         ];
         for name in companies {
-            let logo = resolve_curated_logo(name).unwrap_or_else(|| panic!("Missing curated logo for {name}"));
+            let logo = resolve_curated_logo(name)
+                .unwrap_or_else(|| panic!("Missing curated logo for {name}"));
             assert_eq!(logo.status, LogoStatus::Verified);
             assert!(logo.evidence.is_some());
             let evidence = logo.evidence.as_ref().unwrap();
             assert!(scrape_core::branding::http_url(&evidence.url));
             assert!(scrape_core::branding::http_url(&evidence.page_url));
             assert!(logo.asset.is_some());
-            assert!(logo.asset.as_ref().unwrap().starts_with("data:image/webp;base64,"));
+            assert!(logo
+                .asset
+                .as_ref()
+                .unwrap()
+                .starts_with("data:image/webp;base64,"));
             assert!(logo.validate().is_ok());
 
             let reference = logo.asset_reference().unwrap();
