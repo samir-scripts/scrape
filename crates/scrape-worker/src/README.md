@@ -43,6 +43,7 @@ The `crates/scrape-worker/src` directory contains the source code for the scrape
   - Dynamically redistributes capacity when sources exhaust early or encounter transient errors.
   - Rotates the persisted starting source index across actual runs while leaving preview runs unrotated.
   - Performs workflow-wide canonical deduplication and enforces the authoritative total job cap.
+  - Resumes The Muse/Arbeitnow search sessions one page/candidate per turn alongside direct boards, with shared acceptance caps and truthful page/time/unknown-evidence partial outcomes.
 
 ### [`filter.rs`](filter.rs)
 - **Role**: Worker-side stream filtering.
@@ -60,5 +61,5 @@ The `crates/scrape-worker/src` directory contains the source code for the scrape
 Static sources now use `adapters/selector_session.rs` for resumable CSS/XPath or
 hydration discovery, bounded next pages and lazy detail enrichment. Coordinator
 turns retain one eligible unique acceptance and yield during bounded discovery.
-Protocol v7 adds page/login termination and shared extraction duration/page bounds.
+Protocol v9 includes role/company criteria, dynamic date presets and the search source kind; page/login termination and extraction bounds remain shared.
 `--protocol-version` reports the Rust-owned contract version for external harnesses.

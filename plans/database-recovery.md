@@ -289,6 +289,26 @@ in `jobs.source_id` and `scrape_runs.source_id` are saved in temporary mapping t
 the replacement is renamed to `sources`, the foreign-key links are restored, and indexes
 (`idx_sources_cadence`, `idx_sources_workflow_id`) are recreated before commit.
 
+
+## Search source kind (migration 29)
+
+Migration `0029_search_source_kind.sql` updates the `CHECK` constraint on `sources.kind`
+to permit `'search'` alongside `'greenhouse'`, `'lever'`, `'ashby'`, `'jsonld'`, `'selector'`, and `'workday'`.
+Existing source IDs, workflows, provenance, settings, trust fingerprints, and job/run relationships
+are strictly preserved. A pre-migration backup is automatically taken by normal startup
+before applying pending migrations.
+
+The table replacement follows SQLite's standard table-recreation procedure: referencing links
+in `jobs.source_id` and `scrape_runs.source_id` are saved in temporary mapping tables,
+`sources_next_29` is populated with `SELECT * FROM sources`, `sources` is dropped,
+the replacement is renamed to `sources`, the foreign-key links are restored, and indexes
+(`idx_sources_cadence`, `idx_sources_workflow_id`) are recreated before commit.
+
+`search_upgrade_tests.rs` verifies populated v28 upgrades with Workday and legacy
+boards, exact historical table projections/checksums, consistent backup contents,
+failure immediately after `DROP TABLE sources`, full rollback, successful retry,
+foreign-key/integrity checks, search insertion and idempotent restart.
+
 ## Enrichment version 4 and employer branding attachment repair
 
 Startup reclassification repairs saved jobs with stale enrichment versions (`enrichment_version < 4`) in deterministic 200-row transactions with yields before automatic scheduling starts. A single `VACUUM INTO` backup named `<database>.pre-description-repair-<uuid>.db` is taken once per invocation if stale rows or unlinked branding relationships exist. If backup creation fails, startup halts before any data mutation. If a batch fails, its transaction rolls back and startup halts; previously committed batches remain intact and restart safely resumes.

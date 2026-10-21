@@ -15,9 +15,9 @@ The `src-tauri/src/services` directory contains long-running background tasks, p
 | [`sample_workflows.rs`](sample_workflows.rs) | Built-in Seeding | Shared callable service behind both seed commands; canonical atomic saves and created/already-present/needs-review reports. |
 | [`execution_diagnostics.rs`](execution_diagnostics.rs) | Run Preparation & Diagnostics | Shared workflow-to-worker preparation, redacted context/config snapshots before preflight, and durable batch-persistence failure evidence. |
 | [`workflow_store.rs`](workflow_store.rs) | Atomic Workflow Ownership | Validates and saves parent/child records in one transaction, canonicalizes IDs, preserves owned identities/trust, retires removed sources, and performs explicit backed-up ownership repair. |
-| [`workflow.rs`](workflow.rs) | Authoritative Workflow Specification | Defines and validates `WorkflowSpec` (v6) with path-specific diagnostics, converts legacy v1–v5 configurations through a single compatibility resolver, and prepares worker execution inputs and previews. |
+| [`workflow.rs`](workflow.rs) | Authoritative Workflow Specification | Validates WorkflowSpec v8; converts v1–v7 without broadening stored filters; prepares public search and direct-board inputs through the same resolver. |
 | [`script_trust.rs`](script_trust.rs) | Local Script Trust | Quarantines imports, hashes executable inputs/file bytes, persists explicit confirmation, rechecks trust before previews/runs and reconciles workflow review state. Trust never enables execution automatically. |
-| [`runner.rs`](runner.rs) | Worker Process Orchestration | `ScrapeRunner`: Spawns the `scrape-worker` sidecar with `PROTOCOL_VERSION = 7`, streams and revalidates NDJSON events (`Job`, `Branding`, `Warning`, `SourceCompleted`, `Completed`), enforces write coordination, and broadcasts `scrape://event` updates. |
+| [`runner.rs`](runner.rs) | Worker Process Orchestration | Spawns worker protocol 9, revalidates NDJSON, enforces write coordination and broadcasts scrape events. |
 | [`ingestion.rs`](ingestion.rs) | Ingestion & Revalidation | Validates worker-emitted job records, source scan summaries, and employer branding reports before persisting them to SQLite. |
 | [`scheduler.rs`](scheduler.rs) | Automated Crawl Dispatcher | `SchedulerService`: Unified background dispatcher that evaluates per-workflow schedules and startup triggers, coalesces due runs, respects the global automatic-scraping pause, and coordinates with manual runs. |
 | [`calendar.rs`](calendar.rs) | IANA Calendar Scheduling | Computes next-run UTC instants for `CalendarSchedule` (local `HH:MM`, ISO weekdays, and IANA timezone), handling DST gaps and overlaps deterministically. |
@@ -41,7 +41,7 @@ Application Boot (lib.rs)
         │         ▼
         │    ScrapeRunner
         │         │
-        │         ├──► Spawns scrape-worker Sidecar (Protocol v7)
+        │         ├──► Spawns scrape-worker Sidecar (Protocol v9)
         │         ├──► Revalidates NDJSON Events (ingestion.rs)
         │         ├──► Upserts Jobs, Branding & Outcomes into SQLite
         │         └──► Emits Tauri Window Events
@@ -49,11 +49,11 @@ Application Boot (lib.rs)
         └──► TrayService::init() (Maintains background presence)
 ```
 
-Each workflow owns an explicit `WorkflowSpec` v6 configuration (sources collection, matching rules, `CalendarSchedule`, `max_jobs_per_run`, and retention policy) without global inheritance. Legacy v1–v5 workflows and imports are converted once through `workflow.rs`; invalid stored specs remain preserved and marked `needs_review` so they cannot broaden matches or run automatically. Explicit empty collections remove restrictions.
+Each workflow owns an explicit WorkflowSpec v8 (sources, role/company/keyword criteria, dates, calendar schedule, job cap and retention) without global inheritance. Legacy v1–v7 imports resolve through `workflow.rs`; invalid stored originals remain preserved and marked Needs review. Empty collections are unrestricted.
 
 Calendar scheduling (`calendar.rs`) computes next runs from local time, ISO weekdays, and IANA timezone across creation, edits, and post-run updates. DST gaps run at the first valid instant; overlaps use their first occurrence once. One dispatcher queue in `scheduler.rs` coalesces due workflows and waits through manual-run overlap; missed occurrences become one catch-up run before the next future date. All automatic paths share the persisted global pause flag, while explicit manual runs remain available.
 
-`PostingRules` is shared by worker evaluation and repository query compilation. It supports Any/All/Exclude keywords by explicit field, partial-evidence evaluation for bounded detail enrichment, native compensation, experience, role/workplace, eligibility, and geography. Posting-date rules use one captured run-start instant and explicit IANA timezone; missing publication dates are never replaced with discovery or provider `updated_at` edit time. Worker protocol v7 enforces exact contract compatibility between the host and sidecar.
+`PostingRules` is shared by worker evaluation and repository SQL compilation, including literal target-role/company substrings and dynamic publication-date presets. One run-start instant anchors relative windows; Today resolves the date filter's local midnight each run. Missing publication dates are never replaced with discovery/provider edit time. Protocol 9 enforces host/sidecar compatibility. `execution_diagnostics::prepare_search_sources` derives the same canonical context for preview/manual/scheduled/Run all execution; providers are not assumed to support arbitrary query fields.
 
 ## Seeded-workflow diagnostics (Plan 12 section 1)
 

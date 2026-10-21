@@ -29,8 +29,9 @@ scrape-core/
     ├── locator.rs      # Unified CSS and XPath locator grammar, parsing, and attributes
     ├── matching.rs     # Authoritative keyword/geography/workplace/partial-evidence matcher & diagnostics
     ├── posting_date.rs # Publication timestamp normalization and timezone-aware date rules
-    ├── protocol.rs     # Subprocess IPC contracts (WorkerConfig, WorkerEvent, NDJSON v8)
+    ├── protocol.rs     # Subprocess IPC contracts (WorkerConfig, WorkerEvent, NDJSON v9)
     ├── role.rs         # Role category classification heuristics (SWE, Data, etc.)
+    ├── search_source.rs # Shared public search provider identity, endpoint validation and bounds
     ├── static_source.rs # Bounded static selector source configuration and transforms
     ├── types.rs        # Core enums and domain structures (JobStatus, RoleType, etc.)
     └── xpath.rs        # Pure-Rust XPath 1.0 query execution over html5ever DOM trees
@@ -47,7 +48,7 @@ scrape-core/
 | [`examples/cache-logo-fixture.rs`](examples/cache-logo-fixture.rs) | CLI example that runs raw logo bytes through production `branding` validation to reproduce review PNGs. |
 | [`src/lib.rs`](src/README.md) | Crate root. Re-exports public submodules and shared utilities (`now_iso()`, `INGESTION_LIMITS`, `PROTOCOL_VERSION`). |
 | [`src/types.rs`](src/README.md#typesrs) | Canonical domain enumerations: `JobStatus`, `RoleType`, `TriState`, `SalaryInterval`, `SalarySource`, `SourceKind`, `SourceCadence`, `ClearanceLevel`, `WorkAuthRequirement`, and `WorkplaceType`. |
-| [`src/protocol.rs`](src/README.md#protocolrs) | IPC protocol v8 definitions for host-worker communication: `WorkerConfig`, `WorkerLimits`, `EnrichmentLimits`, `WorkerFilters`, `WorkerSource`, `WorkerEvent`, `WorkerStats`, `SourceScanStats`, `ScanOutcome`, `CoverageTermination`, and `ScrapedJob`. Script protocol remains v2. |
+| [`src/protocol.rs`](src/README.md#protocolrs) | IPC protocol v9: WorkerConfig/limits/filters/sources, NDJSON events and reconciled coverage/outcome statistics. Custom script protocol remains v2. |
 | [`src/matching.rs`](src/README.md#matchingrs) | Single authoritative owner of `PostingRules` evaluation, `KeywordRules` (Any/All/Exclude/fields), partial-evidence decisions for bounded enrichment, primary `RejectionReason` categorization, and `RejectionExample` diagnostics. |
 | [`src/filter.rs`](src/README.md#filterrs) | SQL-style filter parser and evaluator plus parameterized SQLite `WHERE` clause compilation for saved-job queries and `PostingRules`. |
 | [`src/identity.rs`](src/README.md#identityrs) | Canonical `PostingIdentity` derivation across ATS providers, JSON-LD, and custom selectors so deduplication, rescraping, and suppression share one identity rule. |

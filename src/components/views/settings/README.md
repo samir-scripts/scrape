@@ -3,11 +3,16 @@
 Settings provides Appearance, System, Removed & blocked jobs, and Data management.
 System contains the application-wide automatic-scraping pause. Scraper provides workflow configuration.
 
-`AddSourceModal` and `WorkflowSections` share one draft across `Sources → Matching → Schedule → Review`, Advanced controls, and
-YAML. In `Sources`, users can add, edit, enable/disable, reorder, and remove sources, with independent per-source ATS detection and duplicate normalized endpoint validation. Sources configured with `selector` adapter render `CustomExtractorConfig` exposing three extraction modes: (1) `Static HTML · CSS & XPath` with required container/title/URL locators, optional field selectors, expandable attributes/regexes, navigation & pagination locators, and interactive `Test extractor` candidate previews; (2) `Headless Browser · CDP` with Chromium runtime detection, bounds controls (`navigation_timeout_s`, `max_pages`, `max_source_duration_s`), and isolated session lifecycle actions (`Open login session`, `Save session`, `Clear session`); and (3) `Custom Script · Stdin/NDJSON` with script runtime selector (`js`, `python`, `custom`), environment diagnostics (`Check environment`), truthful local user privilege disclosure, and an explicit `Trust and enable script` gate for untrusted or modified scripts. Review runs or refreshes the live preview before Save, with an explicit
-Run now action afterward. The `needs_review` flag distinguishes unconvertible legacy originals (which ignore corrupt snapshots) from quarantined script workflows awaiting trust (which preserve their Rust-validated snapshots for review and editing). Script trust requires saving the workflow first to establish a canonical content fingerprint; modifying script fields disables trust until the changes are saved. Advanced settings remain intact and are summarized in Simple
-mode. Source configuration and YAML use the canonical desktop v7 validator, with
-v1–v6 compatibility conversion at import.
+`AddSourceModal` and `WorkflowSections` share one draft across **Roles → Criteria → Sources → Schedule**, Advanced controls and YAML. New workflows use The Muse search without requiring a career URL; role and optional company chips remain independent literal substring restrictions. Names are derived only for unnamed drafts and never replace explicit user names.
+
+Sources can be edited, enabled, reordered and removed with duplicate-provider/board
+validation and independent ATS detection. Selector sources reuse Static HTML,
+browser/CDP session and custom script controls. Script execution requires explicit
+runtime setup, a saved executable fingerprint and local trust; trust does not
+enable a disabled source. Invalid legacy originals and quarantined script drafts
+remain distinct Needs review states. Advanced constraints remain intact and visible.
+Source configuration and YAML use the canonical desktop v8 validator, with
+v1–v7 compatibility conversion at import.
 
 `KeywordInput` keeps unfinished text separate from committed chips. Enter, Add,
 comma and newline commit terms; multi-term paste preserves phrases, ignores empty
@@ -17,9 +22,9 @@ edits invalidate preview, and editor actions synchronously commit all keyword
 inputs before reading the draft. Input sessions reset only when replacing or
 reopening a workflow, so abandoned text cannot leak across workflows.
 
-`KeywordMatching` exposes Any/All, exclusion and Search in in standard Matching.
-Imported mixed Any/All rules keep both groups visible, including temporarily empty
-groups. Empty imported fields mean every supported field, as in Rust. At least
+`KeywordMatching` exposes independent required-Any, All and Exclude groups with
+explicit Search in fields in Roles. No mode change clears another group.
+Empty imported fields mean every supported field, as in Rust. At least
 one field remains selected during editing. This UI edits Rust `KeywordRules` and
 adds no matcher. Matching decisions and run explanations use Rust's shared
 `MatchingEvaluator`; `ScanDiagnostics` shows reconciled primary counts and explicitly
@@ -43,11 +48,13 @@ retained only to convert older workflows and imports. See
 ## Workflow editor
 
 The workflow editor uses `useWorkflowDraft` as its only draft/request controller.
-Source → Matching → Schedule → Review is an ordered step navigation, with completed
-steps available for backtracking. Hidden section inputs retain their draft state.
-Schedule contains collapsed retention controls; Advanced settings and YAML retain
-supported fields across navigation. Review shows the complete configured rules,
-preview and next run before Save. Saving never runs a scrape.
+Roles → Criteria → Sources → Schedule is ordered navigation with completed steps
+available for backtracking. Hidden inputs retain their draft state. Criteria
+exposes dynamic date presets, location/workplace, YOE/employment and native pay.
+Existing arbitrary-hour/custom date filters remain editable without conversion.
+Sources labels provider coverage and offers optional direct-board attachments,
+preserving disabled/readiness/script trust. Schedule includes retention, complete
+rule review, current preview and Save; saving never runs a scrape.
 
 `WorkflowImportButton` is shared by the registry and editor. It reads a selected
 file, parses it through `workflowImport`, and calls the canonical workflow

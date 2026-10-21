@@ -21,7 +21,7 @@ The `crates/scrape-core/src` directory contains the core source modules that def
   - `TriState`: Three-state boolean enum (`yes`, `no`, `unknown`) used for visa sponsorship, security clearance, and new-grad eligibility.
   - `SalaryInterval`: Frequency of pay (`hourly`, `monthly`, `yearly`).
   - `SalarySource`: Origin of salary data (`structured`, `parsed_title`, `parsed_body`).
-  - `SourceKind`: Ingestion adapter type (`greenhouse`, `lever`, `ashby`, `jsonld`, `selector`).
+  - `SourceKind`: Ingestion adapter type (`search`, `greenhouse`, `lever`, `ashby`, `workday`, `jsonld`, `selector`).
   - `SourceCadence`: Scraping frequency (`hourly`, `six_hours`, `twelve_hours`, `daily`, `manual`).
   - `ClearanceLevel`: Government clearance requirements (`none`, `secret`, `top_secret`, `ts_sci`, `polygraph`, `public_trust`).
   - `WorkAuthRequirement`: Work authorization status (`citizen_only`, `us_person`, `open`, `unknown`).
@@ -33,7 +33,7 @@ The `crates/scrape-core/src` directory contains the core source modules that def
 - **Behavior**: CSS and a documented XPath 1.0 location-path subset operate on the same `scraper::Html` tree. Supports relative/absolute paths, child/self/parent/following-sibling steps, descendant shorthand, attribute/text tests, positional predicates, field attributes and named regex captures. Unsupported syntax fails explicitly. XPath is bounded to 4096 bytes, 64 steps and 32 predicates per step; this is not a full XPath implementation.
 
 ### [`protocol.rs`](protocol.rs)
-- **Role**: Versioned IPC message contracts (`PROTOCOL_VERSION = 8`) exchanged between the Tauri host (`src-tauri`) and the scraper sidecar (`scrape-worker`).
+- **Role**: Versioned IPC message contracts (`PROTOCOL_VERSION = 9`) exchanged between the Tauri host and isolated worker.
 - **Key Types**:
   - `WorkerConfig`: JSON payload sent via `stdin` to configure a scrape run (protocol version, sources, limits, filters, suppression keys).
   - `WorkerLimits` & `EnrichmentLimits`: Concurrency caps, per-host request delays, global timeouts, and bounded detail enrichment limits (`max_requests` 0–100, `timeout_ms` 1–45,000).
@@ -54,6 +54,10 @@ The `crates/scrape-core/src` directory contains the core source modules that def
   - `PostingRules` & `KeywordRules`: Structured matching rules for Any/All/Exclude keywords across selected fields (`Title`, `Department`, `Location`, `Description`), workplace arrangements, countries/subdivisions, native compensation, experience, eligibility, and posting dates.
   - `MatchingEvaluator`: Evaluates both complete postings and partial listing evidence (`PartialEvidenceDecision`), distinguishing conclusive rejections from unresolved fields that merit bounded detail enrichment.
   - `RejectionReason`, `RejectionCount`, & `RejectionExample`: Assigns one deterministic primary rejection category per rejected candidate while recording all overlapping failure categories in bounded representative examples.
+
+### [`search_source.rs`](search_source.rs)
+- **Role**: Shared provider identity, credential-free endpoint and bounded configuration validation. Blank search identifiers resolve to The Muse; Arbeitnow is explicit. Host and worker use the same rules.
+- **Matching/date additions**: `target_roles` and `companies` are literal ASCII-insensitive OR lists, ANDed with other groups. Date presets resolve at each run's start in the configured timezone; Today is never frozen at save time. SQLite and worker predicates share these semantics.
 
 ### [`filter.rs`](filter.rs)
 - **Role**: SQL-like query evaluation and SQLite query compiler.
@@ -119,9 +123,9 @@ pretending description/date/pay evidence exists. `ParsedLocation::validate` and
 cities, preserving raw labels and ambiguous uncontextualized IN/CA as unknown.
 Geographic worker/SQLite predicates share tuple, city exact/raw-literal-substring,
 ASCII case and Unicode-whitespace semantics; aggregate location text is never borrowed.
-Custom script frames are version 2; the worker event/config protocol is 8.
+Custom script frames are version 2; the worker event/config protocol is 9.
 Numeric experience rules expose `ExperienceMatchMode`: omitted domain/filter modes
-retain `advertised_range_overlap`, while workflow v7 omissions resolve to
+retain `advertised_range_overlap`, while workflow v7+ omissions resolve to
 `required_minimum`. Workflow versions 1–6 explicitly retain overlap on upgrade.
 Required-minimum rules compare inclusive bounds against `experience_min`;
 maximum-only evidence follows the unknown policy after detail opportunities end.

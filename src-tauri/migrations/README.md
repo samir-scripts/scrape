@@ -51,6 +51,9 @@ Additional forward migrations:
 | 0024 | Parent workflow ownership and multi-source allocation; creates workflows table, backfills workflow_id across sources, jobs, and scrape_runs, preserves user state, schedules, and historical checksums. |
 | 0025 | Forward employer-branding `asset_data` checkpoint shared with the recognized six-column historical variant of migration 23. |
 | 0026 | Isolated browser-session metadata and additive per-source script trust/hash columns; no source-kind CHECK changes or table rebuilds. Stores session references and paths, never cookies or credentials. |
+| 0027 | Scope source endpoint uniqueness to workflow ownership, preserving job/run links through table replacement. |
+| 0028 | Admit Workday sources while preserving existing source columns, constraints, indexes and foreign-key links. |
+| 0029 | Admit cross-employer `search` sources; populated v28 upgrade tests cover complete historical projections, consistent backup, injected rollback, retry and idempotent restart. |
 
 The Rust backfills preserve source identities, uncertain legacy salary values and
 unresolved suppression keys. Populated upgrade tests preserve all tracked states,

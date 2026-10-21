@@ -4,6 +4,16 @@ Scrape is a high-performance, local-first desktop application that runs in the b
 
 **Stack:** Tauri v2 · Rust (Tokio, Reqwest, Scraper, SQLx) · SQLite (WAL mode) · React 19 · TypeScript · Tailwind CSS v4 · Visx
 
+Role-first workflows use **Roles → Criteria → Sources → Schedule**, with optional
+company restrictions, literal title-role matching, publication-date presets and
+one preview-gated draft. New workflows default to The Muse public cross-employer
+listings without a company URL; direct ATS boards remain optional sources.
+Arbeitnow is an explicit Germany-focused alternative with unknown original dates.
+Coverage is bounded, not every employer or posting. Save never runs a scrape.
+Current contracts: WorkflowSpec **8**, worker protocol **9**, migration **29**.
+See the [workflow contract](plans/workflow-v3.md) and
+[implementation evidence](plans/11-implementation-evidence.md).
+
 
 Workflow ingestion repair is tracked in [Plan 12](plans/12-workflow-ingestion-repair.md) and fully implemented across Sections 1–8.
 Its first section adds durable redacted run-preparation/preflight diagnostics and
@@ -63,7 +73,7 @@ Each directory in this repository contains its own dedicated `README.md` documen
 
 ### 1. Rust Workspace Crates (`crates/`)
 - [`crates/`](crates/README.md) — Rust workspace overview and sidecar architecture.
-  - [`crates/scrape-core/`](crates/scrape-core/README.md) — Shared domain models, matching/filtering predicates, identity/geography/branding rules, IPC wire protocols (`PROTOCOL_VERSION` = 7), and TypeScript type binding generators.
+  - [`crates/scrape-core/`](crates/scrape-core/README.md) — Shared matching/filtering, search-provider configuration, identity/geography/branding rules, IPC wire protocol 9, and generated TypeScript boundary contracts.
     - [`crates/scrape-core/data/`](crates/scrape-core/data/README.md) — Pinned ISO country and subdivision catalog (`regions.json`).
     - [`crates/scrape-core/src/`](crates/scrape-core/src/README.md) — Core enums, categorized matching and rejection diagnostics, SQL filter compiler, canonical posting identity, geography, posting dates, and employer branding evidence.
     - [`crates/scrape-core/src/enrich/`](crates/scrape-core/src/enrich/README.md) — Information extraction heuristics (salary, location, workplace arrangement, eligibility, experience, HTML/description normalization).
@@ -80,11 +90,11 @@ Each directory in this repository contains its own dedicated `README.md` documen
   - [`src-tauri/gen/`](src-tauri/gen/README.md) — Auto-generated configuration schemas.
     - [`src-tauri/gen/schemas/`](src-tauri/gen/schemas/README.md) — JSON schemas for capabilities and desktop configuration.
   - [`src-tauri/icons/`](src-tauri/icons/README.md) — Multi-platform application and system tray icons.
-  - [`src-tauri/migrations/`](src-tauri/migrations/README.md) — Forward-only versioned SQLite migrations (0001–0025) executed via SQLx, paired with `src-tauri/historical-migrations/` for upgrade verification.
+  - [`src-tauri/migrations/`](src-tauri/migrations/README.md) — Immutable forward-only SQLite migrations (0001–0029), paired with historical manifests and populated upgrade/recovery verification.
   - [`src-tauri/src/`](src-tauri/src/README.md) — Application initialization, state management, and error handling.
     - [`src-tauri/src/commands/`](src-tauri/src/commands/README.md) — Tauri IPC command endpoints exposed to the frontend.
     - [`src-tauri/src/db/`](src-tauri/src/db/README.md) — SQLite database repositories and query implementations (`jobs`, `postings`, `sources`, `runs`, `branding`, `cleanup`, `history`, `settings`, `metrics`, `notifications`).
-    - [`src-tauri/src/services/`](src-tauri/src/services/README.md) — Background services: `workflow` (WorkflowSpec v6 validator/resolver), `runner`, `ingestion`, `scheduler`, `calendar`, `retention`, `process`, `startup`, `tray`, and `system`.
+    - [`src-tauri/src/services/`](src-tauri/src/services/README.md) — Authoritative WorkflowSpec v8 validation, execution preparation, runner, ingestion, scheduler, retention and process/startup services.
 
 ### 3. Specifications, Plans, Fixtures & Automation
 - [`plans/`](plans/README.md) — System specifications, architectural designs, phased blueprints, and implementation evidence ledgers.

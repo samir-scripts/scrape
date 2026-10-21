@@ -1,3 +1,11 @@
+Latest implemented revision: **role-first cross-employer workflows**, specified in
+[the current v8 workflow contract](workflow-v3.md). Roles → Criteria → Sources →
+Schedule replaces the company-first editor. Search defaults to The Muse, with
+optional Arbeitnow/direct ATS sources, literal role/company matching and dynamic
+posting-date presets. Worker protocol 9 and migration 29 preserve existing rules
+and protected state. Verification and limits are recorded in
+[the evidence ledger](11-implementation-evidence.md#role-first-cross-employer-workflows).
+
 Current priority: [Workflow ingestion repair — Plan 12](12-workflow-ingestion-repair.md), following [Incident 28](errors/28-empty-seeded-workflows.md). Sections 1–8 are implemented and verified with [evidence](12-implementation-evidence.md): diagnostics, ownership, matching compatibility, field evidence/geography, template catalog, site extraction/pagination, manifest-driven provider verification, and final integration/recovery. Plan 12 is complete. Saved user filters remain unchanged; disabled examples do not establish provider coverage. Historical completion statements below are superseded for that scope.
 
 Current revision: [Reliable ingestion, multi-source workflows, and UI repair](11-reliable-ingestion-and-ui-repair.md). Sections 1 diagnostics, 2 keywords, 3 bounded enrichment/outcomes, 4 employer branding, 5 multi-source workflow ownership, 6 low-resource browser and script extraction (Phases 6A–6F), 7 provider/company verification, and 8 regional settings and Kanban have [implementation evidence](11-implementation-evidence.md); Sections 1–8 are fully implemented and verified. Original-report reproduction remains open (screenshots/config missing). Plan 11 implementation complete. Next: Desktop usability and extraction (Plan 08 native acceptance) or subsequent roadmap priorities. See [Section 6 execution blueprint](11-section-6-browser-and-script-extraction.md) for browser and script extraction and [Section 7 execution blueprint](11-section-7-provider-and-company-verification.md) for provider and company verification.

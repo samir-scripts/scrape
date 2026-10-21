@@ -1114,3 +1114,108 @@ Actually run:
 - Reviewed visual captures saved to `plans/assets/11-muted-scraper-review/`: `paper-1280-scraper.png`, `obsidian-1280-scraper.png`, `paper-480-scraper.png`, `paper-1280-modal.png`, `obsidian-1280-modal.png`, and `paper-480-modal.png`.
 
 Limits: No live company endpoints or native WKWebView/Tauri host harnesses run; physical pointer and file chooser acceptance open for Plan 08 Section 8.
+
+## Role-first cross-employer workflows
+
+Implemented the approved role-first workflow revision. Behavior commits:
+`3e152b4` (Rust matching, dates, providers, versioning, migration and persistence),
+`b2d9a6f` (generated contracts/templates), `9d5fd2e` (wizard and native acceptance),
+`d32e716` (hospitality/local-Today process acceptance), and `f1b3abc` (reviewed visual
+captures). `d90e96c` separately repairs inherited strict-check prerequisites and
+optional query-client invalidation. No user database or application profile was used.
+
+### Observable behavior
+
+- One draft across **Roles → Criteria → Sources → Schedule**. New workflows use
+  The Muse search without a career URL; companies and direct boards are optional.
+  User names and saved legacy board filters remain intact. Any/All/Exclude keyword
+  groups stay independent; pending chips cannot lose the Advanced/export click.
+  Save needs a current successful preview and never scrapes.
+- Rust owns literal ASCII-insensitive role/company substring OR lists, ANDed with
+  all other restrictions. Company has its own diagnostic; target titles share
+  the employment/RoleType diagnostic. Real SQLite predicates match worker
+  acceptance, including literal `%`, `_`, backslash and non-ASCII negatives.
+- Presets persist their name alone, never conflicting `last_hours` or frozen dates.
+  Today re-evaluates local midnight per run, including DST. Existing arbitrary-hour
+  and absolute ranges remain unchanged until edited. Unknown publication is explicit.
+- Resumable The Muse and Arbeitnow feeds share round-robin budgets with direct
+  boards. Exact-request regressions cover later-page matches, cap-before-next-page,
+  fair mixed sources, malformed envelopes/items, safe sequential continuations,
+  source/global page limits and truthful partial coverage.
+- WorkflowSpec 8 / worker protocol 9 / migration 29. Shared search configuration
+  validation is used by host and worker; preview and saved execution derive the
+  same canonical context without inventing provider query support. The populated
+  v28 upgrade regression compares historical rows/checksums, backup, injected
+  DROP-table rollback, retry, foreign keys and idempotent restart.
+
+### Checks actually run
+
+| Command / exercised path | Observed result |
+|---|---|
+| `cargo test -p scrape-core` | 179 passed during the domain gate. |
+| `cargo test -p scrape --lib services::workflow::tests` | 15 passed, including new source/date validation and old filter preservation. |
+| `cargo test -p scrape --lib db::compensation` | 4 passed, including authored literal role/company SQL negatives. |
+| `cargo test -p scrape --lib db::search_upgrade_tests` | Populated v28→29 backup/failure/retry/restart regression passed. |
+| `cargo test -p scrape-worker --test coordinator_tests` | 18 passed at the bounded-acquisition gate; final workspace also includes the added hospitality case. |
+| `npm run build:sidecar` | Packaged aarch64 worker built successfully before repository/native checks. |
+| `cargo test -p scrape --test worker_repository role_first_search_survives_canonical_save_worker_discovered_refresh_and_reopen` | Canonical save → real worker → mapper → SQLite → Discovered/reopen passed; protected notes/favorite/status/history survive refresh. Missing publication is unresolved/partial, never a fabricated rejection/date. |
+| `cargo fmt --all --check` | Passed after integrated formatting. |
+| `cargo test --workspace` | **530 passed / 16 suites** on the final run. |
+| `cargo clippy --workspace --all-targets -- -D warnings` | Passed. |
+| `npm run gen:types` then `git diff --exit-code -- src/bindings` against staged generated outputs | Passed; generation is deterministic. Bindings were produced by ts-rs, not maintained manually. |
+| `npm run gen:templates` / `npm run check:templates` | Canonical v8 projections generated; drift check passed. |
+| `npx tsc --noEmit` / `npm run build` | Passed; existing large-chunk advisory remains. |
+| `node scripts/check-style.mjs` / `node scripts/test-app-startup.mjs` | Passed. |
+| `npx vitest run --maxWorkers=1` | **526 passed / 84 files**, including the final interface changes. |
+| `CI= SCRAPE_BROWSER_PORT=1432 PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test --workers=1 e2e/workflows.pw.ts e2e/workflow-sources.pw.ts e2e/workflow-ingestion.pw.ts e2e/keywords.pw.ts e2e/matching-compatibility.pw.ts e2e/templates.pw.ts e2e/themed-selects.pw.ts e2e/zoom.pw.ts e2e/fonts.pw.ts e2e/appearance.pw.ts` | **23 passed** in the final non-update run, both themes, keyboard/contrast, viewport/reflow and Chromium zoom. |
+| `cargo build -p scrape` | Native host built successfully. |
+| `SCRAPE_STARTUP_MODES=fresh SCRAPE_NATIVE_WORKFLOW=1 npm run test:native-startup` | Actual WKWebView role-first wizard, real IPC/worker and isolated SQLite passed. |
+| `npm run test:native` | Native protocol/persistence/cancellation/opener smoke passed. |
+| `npm run test:providers` | Recorded manifest-driven canonical provider matrix passed; partial/unsupported classifications remain explicit. |
+
+Initial integration failures were repaired rather than hidden: stale company-first
+navigation, preset+hours conflicts, protocol-manifest drift, native Schedule-step
+versus Schedule-field selector ambiguity, pending-chip layout movement losing an
+Advanced click, stale screenshot baselines and the old native-select font test.
+Concurrent Vitest hit two 5-second timeouts; the unchanged-timeout serial run
+passed all 526. Browser tests were also run serially. Expected scan accounting
+preserves missing publication as unresolved, not complete rejected coverage.
+
+### Native and visual evidence
+
+Native role-first report:
+`/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-x3M8OV/result.json`.
+It records Software Engineer, Google/Amazon, `past_12h`, no career URL, **2 previewed /
+2 inserted / 3 rejected**, one explicit Run now execution, and no jobs/runs from
+Preview or Save. The same journey proves old board matching and tracked-state
+preservation across two explicit runs. Generic native artifacts:
+`/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-cSFnte`.
+
+Reviewed captures: `plans/assets/11-role-first-review/paper-1280-roles.png`,
+`plans/assets/11-template-catalog-review/{paper,obsidian}-criteria-1024.png`,
+the eight updated `plans/assets/11-browser-script-review/` captures, all sixteen
+Paper/Obsidian 480/1280 appearance snapshots, and
+`e2e/fonts.pw.ts-snapshots/bundled-mono-workflow-chromium-darwin.png`.
+Every changed baseline was visually reviewed before
+`--update-snapshots=changed`; the final run used ordinary comparisons.
+Existing appearance captures also now reflect the already-implemented
+Paper/Parchment/Obsidian settings and job surfaces; no theme was redesigned here.
+
+### Live smoke and limits
+
+A throwaway dry-run invoked the packaged protocol-9 worker against The Muse,
+`max_pages:1`, acceptance cap 2, from a temporary working directory without opening
+SQLite. Exit 0, two distinct employers/postings, provider `publication_date` values,
+zero errors and `job_limit` termination were observed. This establishes live feed
+acquisition, **not** recent Google/Amazon availability, exhaustive search, or fresh
+publication across the feed. The Muse public API is documented at
+<https://www.themuse.com/developers/api/v2>; unauthenticated quota is 500 requests/hour.
+Arbeitnow is Germany-focused and its `created_at` does not establish employer
+publication (<https://documenter.getpostman.com/view/18545278/UVJbJdKh>); strict
+publication rules leave those rows unresolved unless unknown dates are admitted.
+
+No live provider data was persisted. Synthetic browser journeys remain labelled
+and reject desktop-only role/company/date evaluation instead of silently
+broadening matches. Physical pointer/IME, native file-chooser gestures and native
+visual/200% zoom acceptance from earlier plans remain unperformed. These checks do
+not close Plan 08 Section 8 or claim the original 438/436/2 report was reproduced.

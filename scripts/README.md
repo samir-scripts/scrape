@@ -94,12 +94,17 @@ pointer dragging remains an acceptance gate; browser pointer tests live in
 SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_WORKFLOW=1 npm run test:native-startup
 ```
 
-This runs the actual WKWebView Source/Matching/Schedule/Review controls against a
-bounded local JSON-LD fixture and the actual sidecar. It verifies the latest keyword
-rule, manual schedule, preview counts, persisted spec, unchanged jobs and no extra
-run on Save. The temporary HTTP server and test process are closed by their owners.
-This check does not automate the native file chooser; browser chooser coverage
-uses `e2e/workflows.pw.ts` and native chooser/visual acceptance remains manual.
+This drives actual WKWebView **Roles → Criteria → Sources → Schedule** controls
+against bounded local JSON-LD and The Muse-schema feeds using the packaged
+sidecar and isolated SQLite. It verifies legacy keyword/YOE/New Grad/geography
+rules, preview invalidation, protected status on refresh, and role-first creation
+without a career URL: Google/Amazon Software Engineer, Past 12 hours, two accepted
+jobs and three explained rejections. Preview/Save persist no jobs or run records;
+explicit Run now creates exactly one execution. The selected feed endpoint is
+edited through YAML; actual public endpoints are not contacted by this harness.
+The HTTP server and process are owned and closed by the launcher. DOM/IPC
+automation does not establish physical typing/IME, native chooser gestures or
+native visual/zoom acceptance.
 
 Section 7 scheduling summary regression (isolated current migration-19 fixture):
 

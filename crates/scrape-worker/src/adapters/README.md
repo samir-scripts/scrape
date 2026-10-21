@@ -14,13 +14,15 @@ Production uses `coordinator.rs` resumable sessions and shared matching/budgetin
 
 | File | Adapter Target | Data Source & Mechanism | Key Implementation Details |
 |---|---|---|---|
-| [`mod.rs`](mod.rs) | Adapter Dispatcher | Router | Matches `source.kind` (`Greenhouse`, `Lever`, `Ashby`, `JsonLd`, `Selector`) to its respective asynchronous scraper function. |
+| [`mod.rs`](mod.rs) | Adapter Dispatcher | Router | Matches `source.kind` (`Greenhouse`, `Lever`, `Ashby`, `JsonLd`, `Selector`, `Workday`, `Search`) to its respective asynchronous scraper function. |
 | [`branding.rs`](branding.rs) | Shared employer branding | Posting-page HTML | Bounded optional lookup and shared logo extraction, URL validation and employer association. |
 | [`greenhouse.rs`](greenhouse.rs) | Greenhouse | JSON REST API | Fetches `https://boards-api.greenhouse.io/v1/boards/{board}/jobs?content=true`. Keeps Remote workplace policy separate from eligible geography; uses office location fields for an explicit hybrid/on-site arrangement and labeled eligible-location sections from normalized descriptions. Fetches provider detail fields and preserves posting provenance. |
 | [`lever.rs`](lever.rs) | Lever | JSON REST API | Fetches `https://api.lever.co/v0/postings/{company}`. Parses commitment categories, workplace types, salary ranges, and plain-text descriptions. |
 | [`ashby.rs`](ashby.rs) | Ashby | JSON REST API | Fetches `https://api.ashbyhq.com/posting-api/job-board/{board}`. Normalizes compensation tiers, remote/hybrid status, and multi-location lists. |
+| [`workday.rs`](workday.rs) | Workday ATS | REST CXS API | Ingests Workday CXS endpoints with session pagination and detail enrichment. |
 | [`jsonld.rs`](jsonld.rs) | Schema.org Semantic Web | Embedded HTML `<script>` | Scrapes HTML pages containing `<script type="application/ld+json">` tags. Recursively parses Schema.org `JobPosting` objects, supporting both direct objects and `@graph` array collections. |
 | [`selector.rs`](selector.rs), [`selector_session.rs`](selector_session.rs) | Custom Web Pages | CSS/XPath, hydration JSON, bounded HTTP pages/details | Configurable engine for arbitrary career websites. Extracts job items, titles, URLs, locations, and salaries using configurable CSS selectors, regex captures, and URL glob filters (`url_pattern`, `exclude_url_patterns`). |
+| [`search.rs`](search.rs) | Cross-employer public discovery | The Muse / Arbeitnow APIs | Resumable strict-schema feed sessions share round-robin matching/caps with direct boards. The Muse supplies publication dates; Germany-focused Arbeitnow retains unknown original dates. Provider order and page/time bounds limit coverage; no all-employer guarantee or invented API query support. |
 
 ---
 
