@@ -17,7 +17,7 @@ const filters: WorkflowFilters = {
   include_keywords: ["Software"], exclude_keywords: ["Staff"], locations: ["Remote", "Austin"], role_types: ["internship"],
   query: "title LIKE '%Engineer%' OR title LIKE '%Developer%' OR title LIKE '%Intern%'",
   policy: { company: "%Fixture%" }, compensation: { min_minor: 5000, max_minor: null, interval: "hour", currency: "USD", include_unknown: true },
-  matching: { ...emptyRules(), role_types: ["full_time"], keywords: { any: ["Engineer"], all: ["Software"], exclude: ["Senior"], fields: ["description"] } },
+  matching: { ...emptyRules(), experience_match_mode: "advertised_range_overlap", role_types: ["full_time"], keywords: { any: ["Engineer"], all: ["Software"], exclude: ["Senior"], fields: ["description"] } },
 };
 function setup() {
   vi.spyOn(api, "describeWorkflowFilters").mockResolvedValue([
@@ -26,7 +26,7 @@ function setup() {
     { field: "role_types", explanation: "Rust explanation: both role groups must match." },
   ]);
   vi.spyOn(api, "validateWorkflow").mockImplementation(async spec => spec as ReturnType<typeof sourceToWorkflowSpec>);
-  const preview = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => ({ spec, jobs: [], fetched: 0, matched: 0, rejected: 0, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: null }));
+  const preview = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => ({ spec, branding: [], jobs: [], fetched: 0, matched: 0, rejected: 0, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: null }));
   const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_SWE_SOURCE);
   const initial = { ...SAMPLE_SWE_SOURCE, filters };
   render(<AddSourceModal isOpen initialSource={initial} onClose={vi.fn()} onSourceSaved={vi.fn()} />);

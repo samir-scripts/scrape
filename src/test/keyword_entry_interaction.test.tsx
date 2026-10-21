@@ -61,7 +61,7 @@ it("keeps IME composition intact before committing the completed phrase", async 
 
 it("flushes unfinished Any and excluded terms before preview, persists All mode, and round-trips YAML", async () => {
   const user = userEvent.setup();
-  const extraction = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => ({ spec, jobs: [], fetched: 0, matched: 0, rejected: 0, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: null }));
+  const extraction = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => ({ spec, branding: [], jobs: [], fetched: 0, matched: 0, rejected: 0, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: null }));
   const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_SWE_SOURCE);
   render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
   await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
@@ -91,7 +91,7 @@ it("shows mixed imported groups and search fields without opening Advanced, pres
   const user = userEvent.setup();
   const spec = sourceToWorkflowSpec({ ...SAMPLE_SWE_SOURCE, filters: {} });
   spec.filters = { matching: { ...emptyRules(), keywords: { any: ["Engineer", "Developer"], all: ["Machine Learning"], exclude: ["Senior"], fields: ["description"] } } };
-  const extraction = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => ({ spec, jobs: [], fetched: 0, matched: 0, rejected: 0, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: null }));
+  const extraction = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => ({ spec, branding: [], jobs: [], fetched: 0, matched: 0, rejected: 0, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: null }));
   render(<AddSourceModal isOpen initialSpec={spec} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
   await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
   expect(screen.getByRole("textbox", { name: "Any keywords" })).toBeTruthy();
@@ -142,7 +142,7 @@ it("preserves the exact effective spelling of imported terms during navigation a
   const user = userEvent.setup();
   const spec = sourceToWorkflowSpec({ ...SAMPLE_SWE_SOURCE, filters: {} });
   spec.filters = { matching: { ...emptyRules(), keywords: { any: [" Engineer "], all: [], exclude: [], fields: ["title"] } } };
-  const preview = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => ({ spec, jobs: [], fetched: 0, matched: 0, rejected: 0, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: null }));
+  const preview = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => ({ spec, branding: [], jobs: [], fetched: 0, matched: 0, rejected: 0, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: null }));
   render(<AddSourceModal isOpen initialSpec={spec} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
   await user.click(screen.getByRole("button", { name: "Continue to Matching" }));
   await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));

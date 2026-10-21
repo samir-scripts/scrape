@@ -11,7 +11,7 @@ beforeAll(() => {
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
-const preview = (spec: WorkflowSpec): WorkflowPreview => ({ spec, jobs: [], fetched: 3, matched: 0, rejected: 3, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: "2026-10-14T13:00:00Z" });
+const preview = (spec: WorkflowSpec): WorkflowPreview => ({ spec, branding: [], jobs: [], fetched: 3, matched: 0, rejected: 3, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: "2026-10-14T13:00:00Z" });
 describe("one workflow draft", () => {
   it("defaults to 20, invalidates previews for limit edits, rejects invalid input and saves the configured limit", async () => {
     const user = userEvent.setup({ delay: null });

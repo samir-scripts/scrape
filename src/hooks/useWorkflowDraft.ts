@@ -8,15 +8,17 @@ import type { WorkflowPreview } from "../bindings/WorkflowPreview";
 import { api } from "../lib/api";
 import { importWorkflowYaml } from "../lib/workflowImport";
 import { sourceToWorkflowSpec, canonicalizeAtsUrl, normalizedEndpoint } from "../lib/yamlWorkflow";
+import { companyOptions, selectedCompanyId } from "../components/views/settings/CompanyPicker";
+import { emptyRules } from "../components/views/settings/WorkflowSections";
 
 export const WORKFLOW_STEPS = ["Source", "Matching", "Schedule", "Review"] as const;
 export type WorkflowStep = typeof WORKFLOW_STEPS[number];
 export type WorkflowDraftChange = (next: WorkflowSpec | ((current: WorkflowSpec) => WorkflowSpec)) => void;
 const newDraft = (): WorkflowSpec => ({
-  version: 6, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true },
+  version: 7, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true },
   sources: [{ id: "source-1", label: "Career Board 1", enabled: true, extractor: { kind: "jsonld", url: "" } }],
   schedule: { cadence: "daily", time: "09:00", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, run_on_startup: false },
-  filters: {}, retention: { days: 30, policy: "untracked_only" },
+  filters: { matching: emptyRules() }, retention: { days: 30, policy: "untracked_only" },
 });
 export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceSaved }: {
   isOpen: boolean; initialSource?: Source | null; initialSpec?: WorkflowSpec | null; onSourceSaved: () => void;
@@ -30,13 +32,14 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
   const [error, setError] = useState(""), [errorStep, setErrorStep] = useState<WorkflowStep>("Source");
   const [operation, setOperation] = useState<"detect" | "preview" | "validate" | "save" | "run" | null>(null);
   const [pendingImport, setPendingImport] = useState<WorkflowSpec | null>(null);
+  const [pendingCompany, setPendingCompany] = useState<{ sourceId: string; companyId: string } | null>(null);
   const [saved, setSaved] = useState<Source | null>(null), [dirty, setDirty] = useState(false);
   const imported = useRef(false);
   const content = useRef<HTMLDivElement>(null), revision = useRef(0), request = useRef<string | null>(null);
   const draftRef = useRef(draft); draftRef.current = draft;
   const cancel = () => {
     if (request.current) void api.cancelWorkflowPreview(request.current).catch(() => {});
-    request.current = null; revision.current++; setOperation(null);
+    request.current = null; revision.current++; setOperation(null); setPreview(null); setPreviewRevision(null);
   };
   const invalidate = () => { cancel(); setPreview(null); setPreviewRevision(null); };
   useEffect(() => {
@@ -47,7 +50,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
       const initial = initialSpec || (initialSource ? sourceToWorkflowSpec(initialSource) : newDraft());
       setDraft(initial);
       setDetected(initial.sources?.[0]?.extractor.url || initialSource?.identifier || "");
-      setStep("Source"); setVisited(0); setAdvanced(false); setYamlState(null); setError(""); setSaved(null); setPendingImport(null); setDirty(false);
+      setStep("Source"); setVisited(0); setAdvanced(false); setYamlState(null); setError(""); setSaved(null); setPendingImport(null); setPendingCompany(null); setDirty(false);
     }
     return () => {
       if (request.current) void api.cancelWorkflowPreview(request.current).catch(() => {});
@@ -62,6 +65,30 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     const nextUrl = next.sources?.[0]?.extractor?.url;
     if (nextUrl !== prevUrl) setDetected(advanced ? (nextUrl || "") : "");
   };
+  const applyCompany = (sourceId: string, companyId: string) => {
+    const option = companyOptions.find(option => option.company.id === companyId);
+    const current = draftRef.current;
+    const target = current.sources.find(source => source.id === sourceId);
+    if (!option || !target) return;
+    const untouched = !initialSource && !initialSpec && !dirty && !current.metadata.name && current.sources.length === 1 && !target.extractor.url;
+    change({
+      ...current,
+      metadata: untouched ? { ...current.metadata, name: `${option.company.name} jobs`, company: option.company.name } : current.metadata,
+      sources: current.sources.map(source => source.id === sourceId ? {
+        ...source, label: option.source.label, employer_hint: option.source.employer_hint,
+        enabled: source.enabled && option.source.enabled,
+        extractor: structuredClone(option.source.extractor),
+      } : source),
+    });
+    setPendingCompany(null);
+    if (current.sources[0]?.id === sourceId) setDetected(option.source.extractor.url);
+  };
+  const selectCompany = (sourceId: string, companyId: string): void => {
+    const source = draftRef.current.sources.find(source => source.id === sourceId);
+    if (!source || selectedCompanyId(source) === companyId) return;
+    if (source.extractor.url.trim() || source.extractor.script) setPendingCompany({ sourceId, companyId });
+    else applyCompany(sourceId, companyId);
+  };
   const commitInputs = () => {
     content.current?.querySelectorAll("input[data-keyword-input]").forEach(input => input.dispatchEvent(new Event(COMMIT_KEYWORDS)));
     return draftRef.current;
@@ -72,6 +99,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     setErrorStep(/filters|query|matching|compensation|max_jobs_per_run/i.test(message) ? "Matching" : /schedule|timezone|retention/i.test(message) ? "Schedule" : /extractor|metadata|source|url/i.test(message) ? "Source" : fallback);
   };
   const detect = async (sourceIndex: number = 0) => {
+    invalidate();
     const current = ++revision.current; setOperation("detect"); setError(""); setPreview(null);
     const input = draftRef.current;
     const targetSource = input.sources?.[sourceIndex] || input.sources?.[0];
@@ -106,7 +134,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
         },
         sources: nextSources,
       };
-      setDraft(next); draftRef.current = next; setDetected(url); return next;
+      change(next); setDetected(url); return next;
     } catch (error) { if (revision.current === current) report(`${String(error)} Open Advanced settings to configure an adapter or selectors.`, "Source"); }
     finally { if (revision.current === current) setOperation(null); }
   };
@@ -189,10 +217,10 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     } catch (error) { if (revision.current === current) report(error); }
     finally { if (revision.current === current) { request.current = null; setOperation(null); } }
   };
-  const canSave = !!preview && previewRevision === revision.current && !preview.errors.length && yaml == null && !operation && !pendingImport;
+  const canSave = !!preview && previewRevision === revision.current && !preview.errors.length && yaml == null && !operation && !pendingImport && !pendingCompany;
   const save = async () => {
     const draft = commitInputs();
-    if (!canSave || previewRevision !== revision.current) return;
+    if (!canSave || previewRevision !== revision.current || invalidInputs()) return;
     const current = revision.current; setOperation("save"); setError("");
     try {
       const source = await api.saveWorkflow(draft, initialSource?.id, imported.current); onSourceSaved();
@@ -201,7 +229,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     finally { if (revision.current === current) setOperation(null); }
   };
   const saveDisabled = async () => {
-    if (operation || pendingImport || yaml != null || invalidInputs()) return;
+    if (operation || pendingImport || pendingCompany || yaml != null || invalidInputs()) return;
     const input = commitInputs();
     const current = revision.current; setOperation("save"); setError("");
     try {
@@ -221,5 +249,5 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     catch (error) { report(error); return false; }
     finally { setOperation(null); }
   };
-  return { draft, change, commitInputs, inputSession, step, visited, navigate, next, advanced, setAdvanced, yaml, setYaml, detected, preview, error, errorStep, setError, operation, busy: !!operation, saved, content, cancel, invalidate, detect, applyYaml, runPreview, save, saveDisabled, canSave, replaceImport, pendingImport, confirmImport, cancelImport, runSaved };
+  return { draft, change, commitInputs, inputSession, step, visited, navigate, next, advanced, setAdvanced, yaml, setYaml, detected, preview, error, errorStep, setError, operation, busy: !!operation, saved, content, cancel, invalidate, detect, applyYaml, runPreview, save, saveDisabled, canSave, replaceImport, pendingImport, confirmImport, cancelImport, runSaved, selectCompany, pendingCompany, confirmCompany: () => { if (pendingCompany) applyCompany(pendingCompany.sourceId, pendingCompany.companyId); }, cancelCompany: () => setPendingCompany(null) };
 }

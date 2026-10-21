@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { WorkflowSections } from "../components/views/settings/WorkflowSections";
 import { SAMPLE_WORKFLOW_TEMPLATES, workflowSpecToYaml, validateWorkflowYaml } from "../lib/yamlWorkflow";
 import type { WorkflowSpec } from "../bindings/WorkflowSpec";
+import { AddSourceModal } from "../components/views/settings/AddSourceModal";
 
 afterEach(cleanup);
 function Harness() {
@@ -16,13 +17,10 @@ function Harness() {
     <output data-testid="draft">{workflowSpecToYaml(draft)}</output>
   </>;
 }
-it("loads a canonical template and explicitly combines known and unknown evidence choices", async () => {
+it("explicitly combines known and unknown evidence choices without mutating the catalog", async () => {
   const user = userEvent.setup();
   render(<Harness />);
-  await user.click(screen.getByRole("button", { name: "Choose sample workflow template" }));
-  const template = SAMPLE_WORKFLOW_TEMPLATES.find(template => template.id === "sep-midwest-consulting")!;
-  await user.click(screen.getByRole("option", { name: template.name }));
-  expect(validateWorkflowYaml(screen.getByTestId("draft").textContent!).parsedSpec).toEqual(template.spec);
+  const template = SAMPLE_WORKFLOW_TEMPLATES[0];
   await user.click(screen.getByRole("checkbox", { name: "Full-time" }));
   await user.click(screen.getByRole("checkbox", { name: "Unknown employment" }));
   await user.click(screen.getByRole("checkbox", { name: "Remote" }));
@@ -34,15 +32,24 @@ it("loads a canonical template and explicitly combines known and unknown evidenc
   // A new draft must never mutate the canonical data shared by other editors.
   expect(template.spec.filters?.matching?.role_types).toEqual([]);
 });
-it("labels bundled script setup and keeps every executable source disabled", async () => {
+it("keeps example loading in Advanced and requires whole-draft replacement confirmation", async () => {
+  HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
+  HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
   const user = userEvent.setup();
-  render(<Harness />);
-  await user.click(screen.getByRole("button", { name: "Choose sample workflow template" }));
+  render(<AddSourceModal isOpen onClose={() => {}} onSourceSaved={() => {}} />);
+  await user.type(screen.getByRole("textbox", { name: "Workflow name" }), "Keep my edits");
+  expect(screen.queryByRole("button", { name: "Load example workflow" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+  await user.click(screen.getByRole("button", { name: "Load example workflow" }));
   const template = SAMPLE_WORKFLOW_TEMPLATES.find(template => template.id === "streaming-cloud-script")!;
   await user.click(screen.getByRole("option", { name: template.name }));
-  expect(screen.getByText(template.description)).toBeTruthy();
-  const draft = validateWorkflowYaml(screen.getByTestId("draft").textContent!).parsedSpec!;
-  expect(draft.metadata.enabled).toBe(false);
-  expect(draft.sources.every(source => !source.enabled)).toBe(true);
+  expect((screen.getByRole("textbox", { name: "Workflow name" }) as HTMLInputElement).value).toBe("Keep my edits");
+  await user.click(screen.getByRole("button", { name: "Keep editing" }));
+  expect((screen.getByRole("textbox", { name: "Workflow name" }) as HTMLInputElement).value).toBe("Keep my edits");
+  await user.click(screen.getByRole("button", { name: "Load example workflow" }));
+  await user.click(screen.getByRole("option", { name: template.name }));
+  await user.click(screen.getByRole("button", { name: "Replace draft" }));
+  expect((screen.getByRole("textbox", { name: "Workflow name" }) as HTMLInputElement).value).toBe(template.name);
   expect(screen.getAllByRole("checkbox", { name: /^Enable (Netflix|Amazon)$/ }).every(input => !(input as HTMLInputElement).checked)).toBe(true);
+  expect((screen.getByRole("button", { name: "Save disabled for review" }) as HTMLButtonElement).disabled).toBe(false);
 });

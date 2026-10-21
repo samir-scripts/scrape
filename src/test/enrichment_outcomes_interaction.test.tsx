@@ -16,7 +16,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 it("allows saving a preview with optional warnings and blocks incomplete required evidence", async () => {
   const user=userEvent.setup();
   let required=false;
-  vi.spyOn(api,"previewWorkflow").mockImplementation(async spec => ({spec,jobs:[],fetched:1,matched:0,rejected:0,invalid:0,blocked:0,sampled:false,next_run_at:null,errors:required?["Required publication date unavailable; retry the source."]:[],warnings:required?[]:["Optional publication date enrichment unavailable."]} as WorkflowPreview));
+  vi.spyOn(api,"previewWorkflow").mockImplementation(async spec => ({spec,branding:[],jobs:[],fetched:1,matched:0,rejected:0,invalid:0,blocked:0,sampled:false,next_run_at:null,errors:required?["Required publication date unavailable; retry the source."]:[],warnings:required?[]:["Optional publication date enrichment unavailable."]} as WorkflowPreview));
   const save=vi.spyOn(api,"saveWorkflow").mockResolvedValue(SAMPLE_SWE_SOURCE);
   render(<AddSourceModal isOpen initialSource={SAMPLE_SWE_SOURCE} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
   await user.click(screen.getByRole("button",{name:"Continue to Matching"}));

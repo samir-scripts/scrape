@@ -32,7 +32,8 @@ export const DEFAULT_FILTER_SPEC: Partial<JobFilter> = {
   salary_include_unknown: false,
   experience_min: null,
   experience_max: null,
-  experience_include_unknown: true,
+  experience_match_mode: "required_minimum",
+  experience_include_unknown: false,
   new_grad: "any",
   sponsorship: null,
   clearance: null,
@@ -168,7 +169,13 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   filterSpec: (() => {
     try { const saved = JSON.parse(getStored("scrape:job_filters:v2") || "null");
-      return saved && typeof saved === "object" && !Array.isArray(saved) ? { ...DEFAULT_FILTER_SPEC, ...saved } : { ...DEFAULT_FILTER_SPEC };
+      return saved && typeof saved === "object" && !Array.isArray(saved)
+        ? { ...DEFAULT_FILTER_SPEC, ...saved,
+          experience_match_mode: saved.experience_match_mode ?? (
+            saved.experience_min != null || saved.experience_max != null
+              ? "advertised_range_overlap" : "required_minimum"),
+          experience_include_unknown: saved.experience_include_unknown ?? true }
+        : { ...DEFAULT_FILTER_SPEC };
     } catch { return { ...DEFAULT_FILTER_SPEC }; }
   })(),
   setFilterSpec: (updater) => set((state) => {

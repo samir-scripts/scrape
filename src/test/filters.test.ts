@@ -396,6 +396,7 @@ describe("Work Authorization & Green Card Filtering", () => {
       experience_min: null,
       experience_max: null,
       experience_include_unknown: true,
+      experience_match_mode: "advertised_range_overlap",
       new_grad: null,
       sponsorship: null,
       clearance: null,

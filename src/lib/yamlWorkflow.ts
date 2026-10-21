@@ -38,6 +38,7 @@ const VALID_KINDS: SourceKind[] = [
   "greenhouse",
   "lever",
   "ashby",
+  "workday",
   "jsonld",
   "selector",
 ];
@@ -132,9 +133,9 @@ export function validateWorkflowYaml(
   }
 
   // Version check
-  if (json.version !== undefined && ![1, 2, 3, 4, 5, 6].includes(json.version)) {
+  if (json.version !== undefined && ![1, 2, 3, 4, 5, 6, 7].includes(json.version)) {
     errors.push({
-      message: `Unsupported workflow version ${json.version}. Expected supported versions: 1–6`,
+      message: `Unsupported workflow version ${json.version}. Expected supported versions: 1–7`,
     });
   }
 
@@ -297,6 +298,16 @@ export function validateWorkflowYaml(
 
   // Filters check
   if (json.filters && typeof json.filters === "object") {
+    const matching = json.filters.matching;
+    if (matching && typeof matching === "object") {
+      if (matching.experience_match_mode != null && !["advertised_range_overlap", "required_minimum"].includes(matching.experience_match_mode)) errors.push({ message: "filters.matching.experience_match_mode must be advertised_range_overlap or required_minimum" });
+      for (const key of ["experience_min", "experience_max"] as const) {
+        const val = matching[key];
+        if (val != null && (!Number.isSafeInteger(val) || val < 0)) errors.push({ message: `filters.matching.${key} must be a non-negative whole number` });
+      }
+      if (matching.experience_min != null && matching.experience_max != null && matching.experience_min > matching.experience_max) errors.push({ message: "filters.matching.experience_min must not exceed experience_max" });
+      matching.experience_match_mode = (json.version ?? 2) <= 6 ? "advertised_range_overlap" : matching.experience_match_mode ?? "required_minimum";
+    }
     if (json.filters.role_types != null) {
       if (!Array.isArray(json.filters.role_types)) {
         errors.push({ message: "filters.role_types must be an array" });
@@ -370,7 +381,7 @@ export function validateWorkflowYaml(
   return {
     isValid: true,
     errors: [],
-    parsedSpec: { ...json, version: json.version ?? 6 } as WorkflowSpec,
+    parsedSpec: { ...json, version: json.version ?? 7 } as WorkflowSpec,
   };
 }
 
@@ -423,7 +434,8 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
       .map(([field, key]) => [field, sourceConfig[key]]),
   );
   for (const key of Object.values(selectors)) delete sourceConfig[key];
-  const filters = (source.filters || {}) as WorkflowSpec["filters"];
+  const filters = structuredClone((source.filters || {}) as WorkflowSpec["filters"]);
+  if (filters?.matching && (snapshot?.version ?? 6) <= 6) filters.matching.experience_match_mode = "advertised_range_overlap";
   const calendar = config.__schedule as
     { time?: string; weekdays?: number[]; timezone?: string } | undefined;
   const runOnStartup = config.__run_on_startup;
@@ -447,7 +459,7 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
 
   return {
     ...snapshot,
-    version: 6,
+    version: 7,
     max_jobs_per_run: snapshot?.max_jobs_per_run ?? INGESTION_LIMITS.default,
     metadata: {
       ...snapshot?.metadata,

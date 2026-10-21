@@ -5,6 +5,7 @@ import { INGESTION_LIMITS } from "../bindings/ingestionLimits";
 import { errorMessage } from "./errors";
 import type { WorkflowSpec } from "../bindings/WorkflowSpec";
 import type { WorkflowPreview } from "../bindings/WorkflowPreview";
+import type { CompanyLogo } from "../bindings/CompanyLogo";
 import { workflowSpecToCreateInput, workflowSpecToYaml, validateWorkflowYaml, SAMPLE_WORKFLOW_TEMPLATES } from "./yamlWorkflow";
 import { matchesJob } from "./filter";
 import type { RemovedPosting } from "../bindings/RemovedPosting";
@@ -498,6 +499,7 @@ function matchesDemoWorkflow(job: Job, source: Source): boolean {
   const filters = source.filters as WorkflowSpec["filters"] || {};
   if (filters.query || filters.policy) throw new Error("Expert queries and policies require desktop validation.");
   const rules = filters.matching;
+  if (rules?.experience_match_mode === "required_minimum" && (rules.experience_min != null || rules.experience_max != null)) throw new Error("Minimum required experience filtering requires the desktop application.");
   if (rules?.posting_date) throw new Error("Posting-date previews require desktop extraction.");
   const includes = filters.include_keywords;
   const excludes = filters.exclude_keywords;
@@ -543,6 +545,9 @@ const apiImplementation = {
   // Jobs
   listJobs: (filter?: ApiJobFilter): Promise<Page<Job>> => {
     if (!isTauri()) {
+      for (const rules of [filter, filter?.matching]) {
+        if (rules?.experience_match_mode === "required_minimum" && (rules.experience_min != null || rules.experience_max != null)) return Promise.reject(new Error("Minimum required experience filtering requires the desktop application."));
+      }
       let items = devJobs.filter((job) => !job.removed_at && matchesJob(job, filter || {}));
       const sort = filter?.sort || "date_added_desc";
       const compare = (a: Job, b: Job) => {
@@ -581,6 +586,13 @@ const apiImplementation = {
   },
 
   getCompanyLogoAsset: (assetReference: string): Promise<string> => invoke<string>("get_company_logo_asset", { assetReference }),
+
+  fetchCompanyLogo: (company: string, websiteUrl?: string): Promise<CompanyLogo | null> => {
+    if (!isTauri()) {
+      return Promise.resolve(null);
+    }
+    return invoke<CompanyLogo | null>("fetch_company_logo", { company, websiteUrl: websiteUrl || null });
+  },
 
   getJob: (id: string): Promise<Job> => {
     if (!isTauri()) {
@@ -1215,7 +1227,7 @@ const apiImplementation = {
     })) throw new Error("Browser and script extraction require the desktop application; executable configurations require local trust.");
     // Demonstration validates the form shape; expert syntax requires the desktop validator.
     if (result.parsedSpec?.filters?.query || result.parsedSpec?.filters?.policy) throw new Error("Expert queries and policies require desktop validation.");
-    return { ...result.parsedSpec!, version: 6, max_jobs_per_run: result.parsedSpec!.max_jobs_per_run ?? INGESTION_LIMITS.default };
+    return { ...result.parsedSpec!, version: 7, max_jobs_per_run: result.parsedSpec!.max_jobs_per_run ?? INGESTION_LIMITS.default };
   },
   importWorkflow: async (spec: unknown): Promise<WorkflowSpec> => {
     if (isTauri()) return invoke("import_workflow", { spec });
@@ -1242,7 +1254,7 @@ const apiImplementation = {
     const matched = events.filter(event => event.type === "job" && matchesDemoWorkflow(fixtures.find(job => job.external_id === event.external_id)!, source));
     const eligible = matched.filter(event => event.type === "job" && !demoBlocks.some(block => block.identity === fixtures.find(job => job.external_id === event.external_id)?.posting_identity));
     const previewLimit = Math.min(validated.max_jobs_per_run ?? INGESTION_LIMITS.default, INGESTION_LIMITS.preview);
-    return { spec: validated, jobs: eligible.slice(0, previewLimit).map(job => ({ identity: job.type === "job" ? `demo:${source.identifier}:${job.external_id}` : "", job })), fetched: events.length, matched: matched.length, rejected: events.length - matched.length, blocked: matched.length - eligible.length, invalid: 0, sampled: eligible.length >= previewLimit, errors: [], next_run_at: null };
+    return { spec: validated, branding: [], jobs: eligible.slice(0, previewLimit).map(job => ({ identity: job.type === "job" ? `demo:${source.identifier}:${job.external_id}` : "", job })), fetched: events.length, matched: matched.length, rejected: events.length - matched.length, blocked: matched.length - eligible.length, invalid: 0, sampled: eligible.length >= previewLimit, errors: [], next_run_at: null };
   },
 
   testSource: (id: string): Promise<WorkerEvent[]> => {

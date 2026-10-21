@@ -1,120 +1,99 @@
-import { describe, it, expect } from "vitest";
-import {
-  CAREER_LEVEL_PRESETS,
-  NEW_GRAD_OPTIONS,
-} from "../components/filters/ExperienceFilter";
-import { matchesJob } from "../lib/filter";
-import type { Job } from "../bindings/Job";
-import type { JobFilter } from "../bindings/JobFilter";
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { createElement, useState } from "react";
+import { ExperienceFilter } from "../components/filters/ExperienceFilter";
+import type { ExperienceFilterProps } from "../components/filters/ExperienceFilter";
 
-const createMockJob = (overrides: Partial<Job> = {}): Job => ({
-  id: "job-1",
-  dedupe_key: "gh:test:1",
-  source_id: "src-1",
-  external_id: "1",
-  title: "Software Engineer",
-  company: "Acme",
-  role_type: "full_time",
-  location: "Remote",
-  url: "https://example.com/1",
-  date_posted: null,
-  date_added: "2026-10-09T00:00:00Z",
-  last_seen_at: "2026-10-09T00:00:00Z",
-  status: "scraped",
-  status_changed_at: "2026-10-09T00:00:00Z",
-  notes: null,
-  favorited: false,
-  favorited_at: null,
-  salary_min: null,
-  salary_max: null,
-  salary_currency: null,
-  salary_interval: null,
-  salary_raw: null,
-  salary_source: null,
-  workplace_type: "remote",
-  sponsorship: "unknown",
-  sponsorship_evidence: null,
-  clearance: "unknown",
-  clearance_level: null,
-  clearance_evidence: null,
-  work_auth: "unknown",
-  work_auth_evidence: null,
-  experience_min: null,
-  experience_max: null,
-  experience_raw: null,
-  is_new_grad: "unknown",
-  experience_evidence: null,
-  description_text: null,
-  company_icon_url: null,
-  enrichment_version: 1,
-  locations: [],
-  ...overrides,
+type Values = Omit<ExperienceFilterProps, "onChange" | "onValidityChange" | "onDraftChange">;
+const empty: Values = {
+  experienceMin: null, experienceMax: null, experienceMatchMode: "required_minimum",
+  newGrad: "any", includeUnknown: false,
+};
+afterEach(cleanup);
+
+function Harness({ initial = empty }: { initial?: Values }) {
+  const [values, setValues] = useState(initial);
+  const [valid, setValid] = useState(true);
+  return createElement("div", null,
+    createElement(ExperienceFilter, { ...values, onChange: setValues, onValidityChange: setValid }),
+    createElement("output", { "data-testid": "values" }, JSON.stringify(values)),
+    createElement("button", { disabled: !valid }, "Save"));
+}
+
+function currentValues(): Values {
+  return JSON.parse(screen.getByTestId("values").textContent || "{}");
+}
+
+describe("experience matching controls", () => {
+  it("keeps numeric required experience independent from New Grad eligibility", () => {
+    render(createElement(Harness));
+    fireEvent.click(screen.getByRole("button", { name: "0–2" }));
+    expect(currentValues()).toMatchObject({ experienceMin: 0, experienceMax: 2, newGrad: "any", experienceMatchMode: "required_minimum", includeUnknown: false });
+    fireEvent.click(screen.getByRole("button", { name: "New Grad only" }));
+    fireEvent.click(screen.getByRole("button", { name: "5+" }));
+    expect(currentValues()).toMatchObject({ experienceMin: 5, experienceMax: null, newGrad: "only" });
+    fireEvent.click(screen.getByRole("button", { name: "Any" }));
+    expect(currentValues()).toMatchObject({ experienceMin: null, experienceMax: null, newGrad: "only" });
+  });
+
+  it("preserves saved overlap and unknown settings on bounds edits and converts only explicitly", () => {
+    const initial: Values = { ...empty, experienceMin: 1, experienceMax: 5, experienceMatchMode: "advertised_range_overlap", includeUnknown: true };
+    render(createElement(Harness, { initial }));
+    expect(screen.getByText("Advertised range overlap (saved rule)")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Minimum experience (years)"), { target: { value: "3" } });
+    expect(currentValues()).toMatchObject({ experienceMin: 3, experienceMatchMode: "advertised_range_overlap", includeUnknown: true });
+    fireEvent.click(screen.getByRole("button", { name: "0–1" }));
+    expect(currentValues()).toMatchObject({ experienceMatchMode: "advertised_range_overlap", includeUnknown: true });
+    fireEvent.click(screen.getByRole("button", { name: "Use minimum required experience" }));
+    const saved = currentValues();
+    cleanup();
+    render(createElement(Harness, { initial: saved }));
+    expect(screen.getByText("Minimum required experience")).toBeTruthy();
+    expect(currentValues()).toMatchObject({ experienceMin: 0, experienceMax: 1, experienceMatchMode: "required_minimum", includeUnknown: true });
+  });
+
+  it("clears the numeric group and starts new constraints without unknown inclusion", () => {
+    render(createElement(Harness, { initial: { ...empty, experienceMin: 1, includeUnknown: true, experienceMatchMode: "advertised_range_overlap" } }));
+    fireEvent.click(screen.getByRole("button", { name: "Any" }));
+    fireEvent.click(screen.getByRole("button", { name: "3–5" }));
+    expect(currentValues()).toMatchObject({ experienceMin: 3, experienceMax: 5, experienceMatchMode: "required_minimum", includeUnknown: false });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Include jobs with unknown required experience" }));
+    fireEvent.change(screen.getByLabelText("Maximum experience (years)"), { target: { value: "6" } });
+    expect(currentValues().includeUnknown).toBe(true);
+  });
+
+  it.each(["1.5", "-1", "2years", "1e2", "9007199254740992"])("rejects invalid whole-year input %s without truncating it", (value) => {
+    const change = vi.fn();
+    render(createElement(ExperienceFilter, { ...empty, onChange: change }));
+    const min = screen.getByLabelText("Minimum experience (years)");
+    fireEvent.change(min, { target: { value } });
+    expect(min.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(change).not.toHaveBeenCalled();
+  });
+
+  it("gates saving for inverted inclusive bounds and recovers when corrected", () => {
+    render(createElement(Harness, { initial: { ...empty, experienceMin: 0, experienceMax: 2 } }));
+    fireEvent.change(screen.getByLabelText("Minimum experience (years)"), { target: { value: "3" } });
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(currentValues().experienceMin).toBe(0);
+    fireEvent.change(screen.getByLabelText("Maximum experience (years)"), { target: { value: "5" } });
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(currentValues()).toMatchObject({ experienceMin: 3, experienceMax: 5 });
+  });
 });
 
-describe("Consolidated Experience & Career Level Filter", () => {
-  it("provides comprehensive career level presets covering all experience tiers", () => {
-    const labels = CAREER_LEVEL_PRESETS.map((p) => p.label);
-    expect(labels).toContain("ALL");
-    expect(labels).toContain("NEW GRAD (0-1)");
-    expect(labels).toContain("MID (1-3)");
-    expect(labels).toContain("SENIOR (3-5)");
-    expect(labels).toContain("STAFF+ (5+)");
-
-    const newGradPreset = CAREER_LEVEL_PRESETS.find((p) => p.label === "NEW GRAD (0-1)")!;
-    expect(newGradPreset.min).toBe(0);
-    expect(newGradPreset.max).toBe(1);
-
-    const seniorPreset = CAREER_LEVEL_PRESETS.find((p) => p.label === "SENIOR (3-5)")!;
-    expect(seniorPreset.min).toBe(3);
-    expect(seniorPreset.max).toBe(5);
-
-    const staffPreset = CAREER_LEVEL_PRESETS.find((p) => p.label === "STAFF+ (5+)")!;
-    expect(staffPreset.min).toBe(5);
-    expect(staffPreset.max).toBeNull();
-  });
-
-  it("provides clean New Grad status qualification options", () => {
-    const ids = NEW_GRAD_OPTIONS.map((o) => o.id);
-    expect(ids).toEqual(["any", "only", "exclude"]);
-  });
-
-  it("filters accurately when applying New Grad preset (0-1 YOE)", () => {
-    const entryJob = createMockJob({ experience_min: 0, experience_max: 1, is_new_grad: "yes" });
-    const midJob = createMockJob({ experience_min: 2, experience_max: 4, is_new_grad: "no" });
-    const seniorJob = createMockJob({ experience_min: 5, experience_max: null, is_new_grad: "no" });
-
-    const newGradPreset = CAREER_LEVEL_PRESETS.find((p) => p.label === "NEW GRAD (0-1)")!;
-    const filter: Partial<JobFilter> = {
-      experience_min: newGradPreset.min,
-      experience_max: newGradPreset.max,
-      new_grad: "any",
-    };
-
-    expect(matchesJob(entryJob, filter)).toBe(true);
-    expect(matchesJob(midJob, filter)).toBe(false);
-    expect(matchesJob(seniorJob, filter)).toBe(false);
-  });
-
-  it("filters accurately when requiring new_grad = only or exclude within the same criteria", () => {
-    const newGradWithYoe = createMockJob({ experience_min: 0, experience_max: 1, is_new_grad: "yes" });
-    const juniorNotGrad = createMockJob({ experience_min: 0, experience_max: 1, is_new_grad: "no" });
-
-    // 0-1 YOE with NEW GRAD ONLY
-    const newGradOnlyFilter: Partial<JobFilter> = {
-      experience_min: 0,
-      experience_max: 1,
-      new_grad: "only",
-    };
-    expect(matchesJob(newGradWithYoe, newGradOnlyFilter)).toBe(true);
-    expect(matchesJob(juniorNotGrad, newGradOnlyFilter)).toBe(false);
-
-    // 0-1 YOE with EXCLUDE NEW GRAD
-    const excludeGradFilter: Partial<JobFilter> = {
-      experience_min: 0,
-      experience_max: 1,
-      new_grad: "exclude",
-    };
-    expect(matchesJob(newGradWithYoe, excludeGradFilter)).toBe(false);
-    expect(matchesJob(juniorNotGrad, excludeGradFilter)).toBe(true);
-  });
+it("invalidates a current preview even when an invalid edit cannot update numeric rules", () => {
+  const change = vi.fn();
+  const invalidatePreview = vi.fn();
+  const validity = vi.fn();
+  render(createElement(ExperienceFilter, {
+    ...empty, experienceMin: 0, experienceMax: 2,
+    onChange: change, onDraftChange: invalidatePreview, onValidityChange: validity,
+  }));
+  fireEvent.change(screen.getByLabelText("Maximum experience (years)"), { target: { value: "2.5" } });
+  expect(invalidatePreview).toHaveBeenCalledTimes(1);
+  expect(validity).toHaveBeenLastCalledWith(false);
+  expect(change).not.toHaveBeenCalled();
 });

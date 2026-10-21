@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "templates": [
     {
       "id": "cloudflare-systems-network",
@@ -9,7 +9,7 @@
       "seed": true,
       "legacy_identifier": "cloudflare",
       "spec": {
-        "version": 6,
+        "version": 7,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Cloudflare — Engineering (title keywords)",
@@ -66,6 +66,7 @@
             "experience_min": null,
             "experience_max": null,
             "experience_include_unknown": false,
+            "experience_match_mode": "advertised_range_overlap",
             "new_grad": null,
             "sponsorship": [],
             "work_auth": [],
@@ -109,7 +110,7 @@
       "seed": false,
       "legacy_identifier": "cloudflare",
       "spec": {
-        "version": 6,
+        "version": 7,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Cloudflare — Restrictive role/geography example",
@@ -173,6 +174,7 @@
             "experience_min": null,
             "experience_max": null,
             "experience_include_unknown": false,
+            "experience_match_mode": "advertised_range_overlap",
             "new_grad": null,
             "sponsorship": [],
             "work_auth": [],
@@ -225,7 +227,7 @@
       "seed": true,
       "legacy_identifier": "bitwarden",
       "spec": {
-        "version": 6,
+        "version": 7,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Bitwarden — Engineering (title keywords)",
@@ -278,6 +280,7 @@
             "experience_min": null,
             "experience_max": null,
             "experience_include_unknown": false,
+            "experience_match_mode": "advertised_range_overlap",
             "new_grad": null,
             "sponsorship": [],
             "work_auth": [],
@@ -321,7 +324,7 @@
       "seed": false,
       "legacy_identifier": "bitwarden",
       "spec": {
-        "version": 6,
+        "version": 7,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Bitwarden — Restrictive role/geography example",
@@ -378,6 +381,7 @@
             "experience_min": null,
             "experience_max": null,
             "experience_include_unknown": false,
+            "experience_match_mode": "advertised_range_overlap",
             "new_grad": null,
             "sponsorship": [],
             "work_auth": [],
@@ -426,7 +430,7 @@
       "seed": true,
       "legacy_identifier": "linear",
       "spec": {
-        "version": 6,
+        "version": 7,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Linear — Product Engineering (title keywords)",
@@ -479,6 +483,7 @@
             "experience_min": null,
             "experience_max": null,
             "experience_include_unknown": false,
+            "experience_match_mode": "advertised_range_overlap",
             "new_grad": null,
             "sponsorship": [],
             "work_auth": [],
@@ -522,7 +527,7 @@
       "seed": false,
       "legacy_identifier": "linear",
       "spec": {
-        "version": 6,
+        "version": 7,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Linear — Restrictive role/geography example",
@@ -579,6 +584,7 @@
             "experience_min": null,
             "experience_max": null,
             "experience_include_unknown": false,
+            "experience_match_mode": "advertised_range_overlap",
             "new_grad": null,
             "sponsorship": [],
             "work_auth": [],
@@ -628,7 +634,7 @@
       "seed": true,
       "legacy_identifier": "sep",
       "spec": {
-        "version": 6,
+        "version": 7,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "SEP — Engineering (title keywords)",
@@ -682,6 +688,7 @@
             "experience_min": null,
             "experience_max": null,
             "experience_include_unknown": false,
+            "experience_match_mode": "advertised_range_overlap",
             "new_grad": null,
             "sponsorship": [],
             "work_auth": [],
@@ -725,7 +732,7 @@
       "seed": false,
       "legacy_identifier": "sep",
       "spec": {
-        "version": 6,
+        "version": 7,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "SEP — Restrictive role/geography example",
@@ -785,6 +792,7 @@
             "experience_min": null,
             "experience_max": null,
             "experience_include_unknown": false,
+            "experience_match_mode": "advertised_range_overlap",
             "new_grad": null,
             "sponsorship": [],
             "work_auth": [],
@@ -835,7 +843,7 @@
       "seed": true,
       "legacy_identifier": "google-apple-selector",
       "spec": {
-        "version": 6,
+        "version": 7,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Google & Apple — Static extraction example (Needs review)",
@@ -855,7 +863,9 @@
               "title_selector": "h3.QJPWVe",
               "url_selector": "a[href*=\"jobs/results/\"]",
               "location_selector": "span.r0wTof",
-              "mode": "static"
+              "description_selector": "div.Xsxa1e",
+              "mode": "static",
+              "next_page_selector": "a[aria-label=\"Go to next page\"]"
             }
           },
           {
@@ -869,9 +879,11 @@
               "job_container": "ul#search-job-list > li.rc-accordion-item",
               "title_selector": "h3 a.link-inline",
               "url_selector": "a.link-inline",
-              "location_selector": "span.table--advanced-search__location-sub",
+              "location_selector": "div.job-title-location span:not(.a11y)",
+              "description_selector": "p.text-align-start",
               "date_selector": "span.job-posted-date",
-              "mode": "static"
+              "mode": "static",
+              "next_page_selector": "link[rel=\"next\"]"
             }
           }
         ],
@@ -909,6 +921,7 @@
             "experience_min": null,
             "experience_max": null,
             "experience_include_unknown": false,
+            "experience_match_mode": "advertised_range_overlap",
             "new_grad": null,
             "sponsorship": [],
             "work_auth": [],
@@ -939,10 +952,12 @@
               "weekdays": []
             },
             "__source_id": "google",
+            "description": "div.Xsxa1e",
             "item": "li.lLd3Je",
             "link": "a[href*=\"jobs/results/\"]",
             "location": "span.r0wTof",
             "mode": "static",
+            "next_page": "a[aria-label=\"Go to next page\"]",
             "title": "h3.QJPWVe",
             "url": "https://www.google.com/about/careers/applications/jobs/results/"
           }
@@ -962,10 +977,12 @@
             },
             "__source_id": "apple",
             "date": "span.job-posted-date",
+            "description": "p.text-align-start",
             "item": "ul#search-job-list > li.rc-accordion-item",
             "link": "a.link-inline",
-            "location": "span.table--advanced-search__location-sub",
+            "location": "div.job-title-location span:not(.a11y)",
             "mode": "static",
+            "next_page": "link[rel=\"next\"]",
             "title": "h3 a.link-inline",
             "url": "https://jobs.apple.com/en-us/search"
           }
@@ -980,7 +997,7 @@
       "seed": true,
       "legacy_identifier": "streaming-cloud-script",
       "spec": {
-        "version": 6,
+        "version": 7,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Netflix & Amazon — Script example (Setup required)",
@@ -999,7 +1016,7 @@
               "mode": "script",
               "script": {
                 "runtime": "js",
-                "code": "#!/usr/bin/env node\n// Netflix Eightfold API extractor speaking SCRIPT_PROTOCOL_VERSION = 2\n\nasync function main() {\n  // Works as a packaged temporary .js file and as an imported ES module.\n  const { readFileSync } = await import(\"node:fs\");\n  const inputChunks = [];\n  for await (const chunk of process.stdin) {\n    inputChunks.push(chunk);\n  }\n  const inputStr = Buffer.concat(inputChunks).toString(\"utf8\").trim();\n  if (!inputStr) {\n    process.stderr.write(\"No input received on stdin\\n\");\n    process.exit(1);\n  }\n\n  const input = JSON.parse(inputStr);\n  if (input.version !== 2) {\n    process.stderr.write(`Unsupported protocol version: ${input.version}\\n`);\n    process.exit(1);\n  }\n\n  let data;\n  const fixturePath = input.config?.fixture_path || input.config?.script?.args?.[0] || process.argv[2];\n  if (fixturePath) {\n    const raw = readFileSync(fixturePath, \"utf8\");\n    data = JSON.parse(raw);\n  } else {\n    const res = await fetch(input.url, {\n      headers: { \"User-Agent\": \"Scrape/1.0 (Job Aggregator; +https://github.com/scrape)\" },\n      signal: AbortSignal.timeout(input.timeout_ms || 30000),\n    });\n    if (!res.ok) {\n      process.stderr.write(`HTTP error: ${res.status} ${res.statusText}\\n`);\n      process.exit(1);\n    }\n    data = await res.json();\n  }\n\n  const positions = data.positions || [];\n  const limit = Math.min(positions.length, input.max_candidates || 100);\n\n  for (let i = 0; i < limit; i++) {\n    const pos = positions[i];\n    const candidate = {\n      type: \"candidate\",\n      version: 2,\n      external_id: String(pos.id || pos.ats_job_id || \"\"),\n      title: pos.name || pos.posting_name || \"Untitled Role\",\n      url: pos.canonicalPositionUrl || `https://explore.jobs.netflix.net/careers/job/${pos.id}`,\n      location: Array.isArray(pos.locations) && pos.locations.length > 0\n        ? pos.locations.join(\"; \")\n        : (pos.location || null),\n      company: \"Netflix\",\n      // Observed in the recorded Netflix contract; no arrangement is inferred\n      // from a physical office address or a continental location label.\n      workplace_type: pos.work_location_option === \"remote_local\" ? \"remote\"\n        : [\"onsite\", \"remote\", \"hybrid\"].includes(pos.work_location_option)\n          ? pos.work_location_option : \"unknown\",\n    };\n    if (pos.job_description) {\n      candidate.description = pos.job_description;\n    }\n    if (pos.t_create) {\n      candidate.date_posted = new Date(pos.t_create * 1000).toISOString();\n    }\n    process.stdout.write(JSON.stringify(candidate) + \"\\n\");\n  }\n\n  const complete = {\n    type: \"complete\",\n    version: 2,\n    exhausted: limit >= positions.length,\n  };\n  process.stdout.write(JSON.stringify(complete) + \"\\n\");\n}\n\nmain().catch((err) => {\n  process.stderr.write(String(err?.stack || err) + \"\\n\");\n  process.exit(1);\n});\n"
+                "code": "#!/usr/bin/env node\n// Netflix Eightfold API extractor speaking SCRIPT_PROTOCOL_VERSION = 2\n\nasync function main() {\n  // Works as a packaged temporary .js file and as an imported ES module.\n  const { readFileSync } = await import(\"node:fs\");\n  const inputChunks = [];\n  for await (const chunk of process.stdin) {\n    inputChunks.push(chunk);\n  }\n  const inputStr = Buffer.concat(inputChunks).toString(\"utf8\").trim();\n  if (!inputStr) {\n    process.stderr.write(\"No input received on stdin\\n\");\n    process.exit(1);\n  }\n\n  const input = JSON.parse(inputStr);\n  if (input.version !== 2) {\n    process.stderr.write(`Unsupported protocol version: ${input.version}\\n`);\n    process.exit(1);\n  }\n\n  let pageOffset = 0;\n  let itemIndex = 0;\n  if (input.continuation) {\n    try {\n      const state = JSON.parse(input.continuation);\n      if (typeof state.page_offset === \"number\") pageOffset = state.page_offset;\n      if (typeof state.item_index === \"number\") itemIndex = state.item_index;\n    } catch {\n      process.stderr.write(`Invalid continuation cursor: ${input.continuation}\\n`);\n      process.exit(1);\n    }\n  }\n\n  const fixturePath = input.config?.fixture_path || input.config?.script?.args?.[0] || process.argv[2];\n  let data;\n  let totalCount = null;\n\n  if (fixturePath) {\n    const raw = readFileSync(fixturePath, \"utf8\");\n    data = JSON.parse(raw);\n    totalCount = Number.isSafeInteger(data.count) && data.count >= 0 ? data.count : null;\n  } else {\n    const parsedUrl = new URL(input.url);\n    parsedUrl.searchParams.set(\"start\", String(pageOffset));\n    if (!parsedUrl.searchParams.has(\"num\")) {\n      parsedUrl.searchParams.set(\"num\", \"10\");\n    }\n    // Explicit loopback replay is verification transport, never a live fallback.\n    let fetchUrl = parsedUrl.toString();\n    if (process.env.SCRAPE_REPLAY_ORIGIN) {\n      const replay = new URL(process.env.SCRAPE_REPLAY_ORIGIN);\n      if (replay.protocol !== \"http:\" || ![\"127.0.0.1\", \"localhost\", \"[::1]\"].includes(replay.hostname)) {\n        throw new Error(\"SCRAPE_REPLAY_ORIGIN must be a loopback HTTP origin\");\n      }\n      replay.pathname = `/${parsedUrl.host}${parsedUrl.pathname}`;\n      replay.search = parsedUrl.search;\n      fetchUrl = replay.toString();\n    }\n\n    let res;\n    try {\n      res = await fetch(fetchUrl, {\n        headers: { \"User-Agent\": \"Scrape/1.0 (Job Aggregator; +https://github.com/scrape)\" },\n        signal: AbortSignal.timeout(input.timeout_ms || 30000),\n      });\n    } catch (err) {\n      process.stderr.write(`Netflix careers portal endpoint unreachable (${err.message}); verify network or update URL to active portal\\n`);\n      process.exit(1);\n    }\n    if (!res.ok) {\n      process.stderr.write(`Provider API HTTP error: ${res.status} ${res.statusText}\\n`);\n      process.exit(1);\n    }\n    data = await res.json();\n    totalCount = Number.isSafeInteger(data.count) && data.count >= 0 ? data.count : null;\n  }\n\n  const positions = data.positions;\n  if (!Array.isArray(positions)) {\n    process.stderr.write(\"Provider API response missing positions array\\n\");\n    process.exit(1);\n  }\n\n  const budget = Math.max(1, input.max_candidates || 10);\n  let emitted = 0;\n  let currIdx = itemIndex;\n\n  while (currIdx < positions.length && emitted < budget) {\n    const pos = positions[currIdx];\n    currIdx++;\n\n    // Validate required fields without fabricated fallbacks\n    const title = (pos.name || pos.posting_name || \"\").trim();\n    const externalId = String(pos.id || pos.ats_job_id || \"\").trim();\n    const jobUrl = pos.canonicalPositionUrl || (pos.id ? `https://explore.jobs.netflix.net/careers/job/${pos.id}` : \"\");\n\n    const candidate = {\n      type: \"candidate\",\n      version: 2,\n      external_id: externalId || null,\n      title,\n      url: jobUrl,\n      location: Array.isArray(pos.locations) && pos.locations.length > 0\n        ? pos.locations.join(\"; \")\n        : (pos.location || null),\n      company: \"Netflix\",\n      workplace_type: pos.work_location_option === \"remote_local\" ? \"remote\"\n        : [\"onsite\", \"remote\", \"hybrid\"].includes(pos.work_location_option)\n          ? pos.work_location_option : \"unknown\",\n    };\n    if (pos.job_description) {\n      candidate.description = pos.job_description;\n    }\n    // Note: t_create / t_update are internal ATS creation/edit timestamps,\n    // not verified publication dates.\n\n    process.stdout.write(JSON.stringify(candidate) + \"\\n\");\n    emitted++;\n  }\n\n  let exhausted = false;\n  let nextContinuation = null;\n\n  if (currIdx < positions.length) {\n    nextContinuation = JSON.stringify({\n      v: 2,\n      page_offset: pageOffset,\n      item_index: currIdx,\n    });\n  } else {\n    const nextOffset = pageOffset + positions.length;\n    if (fixturePath || totalCount === null || positions.length === 0) {\n      exhausted = totalCount !== null && nextOffset >= totalCount;\n    } else if (nextOffset >= totalCount) {\n      exhausted = true;\n    } else {\n      nextContinuation = JSON.stringify({\n        v: 2,\n        page_offset: nextOffset,\n        item_index: 0,\n      });\n    }\n  }\n\n  if (nextContinuation && !exhausted) {\n    process.stdout.write(JSON.stringify({\n      type: \"continuation\",\n      version: 2,\n      cursor: nextContinuation,\n    }) + \"\\n\");\n  }\n\n  process.stdout.write(JSON.stringify({\n    type: \"complete\",\n    version: 2,\n    exhausted,\n  }) + \"\\n\");\n}\n\nmain().catch((err) => {\n  process.stderr.write(String(err?.stack || err) + \"\\n\");\n  process.exit(1);\n});\n"
               }
             }
           },
@@ -1014,7 +1031,7 @@
               "mode": "script",
               "script": {
                 "runtime": "js",
-                "code": "#!/usr/bin/env node\n// Amazon Jobs API extractor speaking SCRIPT_PROTOCOL_VERSION = 2\n\nasync function main() {\n  // Works as a packaged temporary .js file and as an imported ES module.\n  const { readFileSync } = await import(\"node:fs\");\n  const inputChunks = [];\n  for await (const chunk of process.stdin) {\n    inputChunks.push(chunk);\n  }\n  const inputStr = Buffer.concat(inputChunks).toString(\"utf8\").trim();\n  if (!inputStr) {\n    process.stderr.write(\"No input received on stdin\\n\");\n    process.exit(1);\n  }\n\n  const input = JSON.parse(inputStr);\n  if (input.version !== 2) {\n    process.stderr.write(`Unsupported protocol version: ${input.version}\\n`);\n    process.exit(1);\n  }\n\n  let data;\n  const fixturePath = input.config?.fixture_path || input.config?.script?.args?.[0] || process.argv[2];\n  if (fixturePath) {\n    const raw = readFileSync(fixturePath, \"utf8\");\n    data = JSON.parse(raw);\n  } else {\n    const res = await fetch(input.url, {\n      headers: { \"User-Agent\": \"Scrape/1.0 (Job Aggregator; +https://github.com/scrape)\" },\n      signal: AbortSignal.timeout(input.timeout_ms || 30000),\n    });\n    if (!res.ok) {\n      process.stderr.write(`HTTP error: ${res.status} ${res.statusText}\\n`);\n      process.exit(1);\n    }\n    data = await res.json();\n  }\n\n  const jobs = data.jobs || [];\n  const limit = Math.min(jobs.length, input.max_candidates || 100);\n\n  for (let i = 0; i < limit; i++) {\n    const job = jobs[i];\n    const candidate = {\n      type: \"candidate\",\n      version: 2,\n      external_id: String(job.id_icims || job.id || \"\"),\n      title: job.title || \"Untitled Role\",\n      url: job.job_path\n        ? (job.job_path.startsWith(\"http\") ? job.job_path : `https://www.amazon.jobs${job.job_path}`)\n        : `https://www.amazon.jobs/en/jobs/${job.id_icims || job.id}`,\n      location: job.normalized_location || job.location || null,\n      company: job.company_name || \"Amazon\",\n    };\n    if (job.description) {\n      candidate.description = job.description;\n    }\n    if (job.posted_date) {\n      candidate.date_posted = job.posted_date;\n    }\n    // Extract base salary from preferred qualifications or description if present\n    if (job.preferred_qualifications) {\n      const match = job.preferred_qualifications.match(/(\\$[\\d,]+(?:\\s*-\\s*\\$[\\d,]+)?(?:\\s*(?:USD|per year|annually))?|[\\d,]+\\.\\d{2}\\s*-\\s*[\\d,]+\\.\\d{2}\\s*USD\\s*annually)/i);\n      if (match) {\n        candidate.salary = match[1];\n      }\n    }\n    process.stdout.write(JSON.stringify(candidate) + \"\\n\");\n  }\n\n  const complete = {\n    type: \"complete\",\n    version: 2,\n    exhausted: limit >= jobs.length,\n  };\n  process.stdout.write(JSON.stringify(complete) + \"\\n\");\n}\n\nmain().catch((err) => {\n  process.stderr.write(String(err?.stack || err) + \"\\n\");\n  process.exit(1);\n});\n"
+                "code": "#!/usr/bin/env node\n// Amazon Jobs API extractor speaking SCRIPT_PROTOCOL_VERSION = 2\n\nasync function main() {\n  // Works as a packaged temporary .js file and as an imported ES module.\n  const { readFileSync } = await import(\"node:fs\");\n  const inputChunks = [];\n  for await (const chunk of process.stdin) {\n    inputChunks.push(chunk);\n  }\n  const inputStr = Buffer.concat(inputChunks).toString(\"utf8\").trim();\n  if (!inputStr) {\n    process.stderr.write(\"No input received on stdin\\n\");\n    process.exit(1);\n  }\n\n  const input = JSON.parse(inputStr);\n  if (input.version !== 2) {\n    process.stderr.write(`Unsupported protocol version: ${input.version}\\n`);\n    process.exit(1);\n  }\n\n  let pageOffset = 0;\n  let itemIndex = 0;\n  if (input.continuation) {\n    try {\n      const state = JSON.parse(input.continuation);\n      if (typeof state.page_offset === \"number\") pageOffset = state.page_offset;\n      if (typeof state.item_index === \"number\") itemIndex = state.item_index;\n    } catch {\n      process.stderr.write(`Invalid continuation cursor: ${input.continuation}\\n`);\n      process.exit(1);\n    }\n  }\n\n  const fixturePath = input.config?.fixture_path || input.config?.script?.args?.[0] || process.argv[2];\n  let data;\n  let totalCount = null;\n\n  if (fixturePath) {\n    const raw = readFileSync(fixturePath, \"utf8\");\n    data = JSON.parse(raw);\n    totalCount = Number.isSafeInteger(data.hits) && data.hits >= 0 ? data.hits : null;\n  } else {\n    const parsedUrl = new URL(input.url);\n    parsedUrl.searchParams.set(\"offset\", String(pageOffset));\n    if (!parsedUrl.searchParams.has(\"result_limit\")) {\n      parsedUrl.searchParams.set(\"result_limit\", \"10\");\n    }\n    // Explicit loopback replay is verification transport, never a live fallback.\n    let fetchUrl = parsedUrl.toString();\n    if (process.env.SCRAPE_REPLAY_ORIGIN) {\n      const replay = new URL(process.env.SCRAPE_REPLAY_ORIGIN);\n      if (replay.protocol !== \"http:\" || ![\"127.0.0.1\", \"localhost\", \"[::1]\"].includes(replay.hostname)) {\n        throw new Error(\"SCRAPE_REPLAY_ORIGIN must be a loopback HTTP origin\");\n      }\n      replay.pathname = `/${parsedUrl.host}${parsedUrl.pathname}`;\n      replay.search = parsedUrl.search;\n      fetchUrl = replay.toString();\n    }\n\n    const res = await fetch(fetchUrl, {\n      headers: { \"User-Agent\": \"Scrape/1.0 (Job Aggregator; +https://github.com/scrape)\" },\n      signal: AbortSignal.timeout(input.timeout_ms || 30000),\n    });\n    if (!res.ok) {\n      process.stderr.write(`Provider API HTTP error: ${res.status} ${res.statusText}\\n`);\n      process.exit(1);\n    }\n    data = await res.json();\n    totalCount = Number.isSafeInteger(data.hits) && data.hits >= 0 ? data.hits : null;\n  }\n\n  const jobs = data.jobs;\n  if (!Array.isArray(jobs)) {\n    process.stderr.write(\"Provider API response missing jobs array\\n\");\n    process.exit(1);\n  }\n\n  const budget = Math.max(1, input.max_candidates || 10);\n  let emitted = 0;\n  let currIdx = itemIndex;\n\n  while (currIdx < jobs.length && emitted < budget) {\n    const job = jobs[currIdx];\n    currIdx++;\n\n    // Validate required fields without fabricated fallbacks\n    const title = (job.title || \"\").trim();\n    const externalId = String(job.id_icims || job.id || \"\").trim();\n    const jobUrl = job.job_path\n      ? (job.job_path.startsWith(\"http\") ? job.job_path : `https://www.amazon.jobs${job.job_path}`)\n      : (externalId ? `https://www.amazon.jobs/en/jobs/${externalId}` : \"\");\n\n    const candidate = {\n      type: \"candidate\",\n      version: 2,\n      external_id: externalId || null,\n      title,\n      url: jobUrl,\n      location: job.normalized_location || job.location || null,\n      company: job.company_name || \"Amazon\",\n    };\n    if (job.description) {\n      candidate.description = job.description;\n    }\n    if (job.posted_date) {\n      candidate.date_posted = job.posted_date;\n    }\n    if (job.preferred_qualifications) {\n      const match = job.preferred_qualifications.match(/(\\$[\\d,]+(?:\\s*-\\s*\\$[\\d,]+)?(?:\\s*(?:USD|per year|annually))?|[\\d,]+\\.\\d{2}\\s*-\\s*[\\d,]+\\.\\d{2}\\s*USD\\s*annually)/i);\n      if (match) {\n        candidate.salary = match[1];\n      }\n    }\n    process.stdout.write(JSON.stringify(candidate) + \"\\n\");\n    emitted++;\n  }\n\n  let exhausted = false;\n  let nextContinuation = null;\n\n  if (currIdx < jobs.length) {\n    nextContinuation = JSON.stringify({\n      v: 2,\n      page_offset: pageOffset,\n      item_index: currIdx,\n    });\n  } else {\n    const nextOffset = pageOffset + jobs.length;\n    if (fixturePath || totalCount === null || jobs.length === 0) {\n      exhausted = totalCount !== null && nextOffset >= totalCount;\n    } else if (nextOffset >= totalCount) {\n      exhausted = true;\n    } else {\n      nextContinuation = JSON.stringify({\n        v: 2,\n        page_offset: nextOffset,\n        item_index: 0,\n      });\n    }\n  }\n\n  if (nextContinuation && !exhausted) {\n    process.stdout.write(JSON.stringify({\n      type: \"continuation\",\n      version: 2,\n      cursor: nextContinuation,\n    }) + \"\\n\");\n  }\n\n  process.stdout.write(JSON.stringify({\n    type: \"complete\",\n    version: 2,\n    exhausted,\n  }) + \"\\n\");\n}\n\nmain().catch((err) => {\n  process.stderr.write(String(err?.stack || err) + \"\\n\");\n  process.exit(1);\n});\n"
               }
             }
           }
@@ -1055,6 +1072,7 @@
             "experience_min": null,
             "experience_max": null,
             "experience_include_unknown": false,
+            "experience_match_mode": "advertised_range_overlap",
             "new_grad": null,
             "sponsorship": [],
             "work_auth": [],
@@ -1087,7 +1105,7 @@
             "__source_id": "netflix",
             "mode": "script",
             "script": {
-              "code": "#!/usr/bin/env node\n// Netflix Eightfold API extractor speaking SCRIPT_PROTOCOL_VERSION = 2\n\nasync function main() {\n  // Works as a packaged temporary .js file and as an imported ES module.\n  const { readFileSync } = await import(\"node:fs\");\n  const inputChunks = [];\n  for await (const chunk of process.stdin) {\n    inputChunks.push(chunk);\n  }\n  const inputStr = Buffer.concat(inputChunks).toString(\"utf8\").trim();\n  if (!inputStr) {\n    process.stderr.write(\"No input received on stdin\\n\");\n    process.exit(1);\n  }\n\n  const input = JSON.parse(inputStr);\n  if (input.version !== 2) {\n    process.stderr.write(`Unsupported protocol version: ${input.version}\\n`);\n    process.exit(1);\n  }\n\n  let data;\n  const fixturePath = input.config?.fixture_path || input.config?.script?.args?.[0] || process.argv[2];\n  if (fixturePath) {\n    const raw = readFileSync(fixturePath, \"utf8\");\n    data = JSON.parse(raw);\n  } else {\n    const res = await fetch(input.url, {\n      headers: { \"User-Agent\": \"Scrape/1.0 (Job Aggregator; +https://github.com/scrape)\" },\n      signal: AbortSignal.timeout(input.timeout_ms || 30000),\n    });\n    if (!res.ok) {\n      process.stderr.write(`HTTP error: ${res.status} ${res.statusText}\\n`);\n      process.exit(1);\n    }\n    data = await res.json();\n  }\n\n  const positions = data.positions || [];\n  const limit = Math.min(positions.length, input.max_candidates || 100);\n\n  for (let i = 0; i < limit; i++) {\n    const pos = positions[i];\n    const candidate = {\n      type: \"candidate\",\n      version: 2,\n      external_id: String(pos.id || pos.ats_job_id || \"\"),\n      title: pos.name || pos.posting_name || \"Untitled Role\",\n      url: pos.canonicalPositionUrl || `https://explore.jobs.netflix.net/careers/job/${pos.id}`,\n      location: Array.isArray(pos.locations) && pos.locations.length > 0\n        ? pos.locations.join(\"; \")\n        : (pos.location || null),\n      company: \"Netflix\",\n      // Observed in the recorded Netflix contract; no arrangement is inferred\n      // from a physical office address or a continental location label.\n      workplace_type: pos.work_location_option === \"remote_local\" ? \"remote\"\n        : [\"onsite\", \"remote\", \"hybrid\"].includes(pos.work_location_option)\n          ? pos.work_location_option : \"unknown\",\n    };\n    if (pos.job_description) {\n      candidate.description = pos.job_description;\n    }\n    if (pos.t_create) {\n      candidate.date_posted = new Date(pos.t_create * 1000).toISOString();\n    }\n    process.stdout.write(JSON.stringify(candidate) + \"\\n\");\n  }\n\n  const complete = {\n    type: \"complete\",\n    version: 2,\n    exhausted: limit >= positions.length,\n  };\n  process.stdout.write(JSON.stringify(complete) + \"\\n\");\n}\n\nmain().catch((err) => {\n  process.stderr.write(String(err?.stack || err) + \"\\n\");\n  process.exit(1);\n});\n",
+              "code": "#!/usr/bin/env node\n// Netflix Eightfold API extractor speaking SCRIPT_PROTOCOL_VERSION = 2\n\nasync function main() {\n  // Works as a packaged temporary .js file and as an imported ES module.\n  const { readFileSync } = await import(\"node:fs\");\n  const inputChunks = [];\n  for await (const chunk of process.stdin) {\n    inputChunks.push(chunk);\n  }\n  const inputStr = Buffer.concat(inputChunks).toString(\"utf8\").trim();\n  if (!inputStr) {\n    process.stderr.write(\"No input received on stdin\\n\");\n    process.exit(1);\n  }\n\n  const input = JSON.parse(inputStr);\n  if (input.version !== 2) {\n    process.stderr.write(`Unsupported protocol version: ${input.version}\\n`);\n    process.exit(1);\n  }\n\n  let pageOffset = 0;\n  let itemIndex = 0;\n  if (input.continuation) {\n    try {\n      const state = JSON.parse(input.continuation);\n      if (typeof state.page_offset === \"number\") pageOffset = state.page_offset;\n      if (typeof state.item_index === \"number\") itemIndex = state.item_index;\n    } catch {\n      process.stderr.write(`Invalid continuation cursor: ${input.continuation}\\n`);\n      process.exit(1);\n    }\n  }\n\n  const fixturePath = input.config?.fixture_path || input.config?.script?.args?.[0] || process.argv[2];\n  let data;\n  let totalCount = null;\n\n  if (fixturePath) {\n    const raw = readFileSync(fixturePath, \"utf8\");\n    data = JSON.parse(raw);\n    totalCount = Number.isSafeInteger(data.count) && data.count >= 0 ? data.count : null;\n  } else {\n    const parsedUrl = new URL(input.url);\n    parsedUrl.searchParams.set(\"start\", String(pageOffset));\n    if (!parsedUrl.searchParams.has(\"num\")) {\n      parsedUrl.searchParams.set(\"num\", \"10\");\n    }\n    // Explicit loopback replay is verification transport, never a live fallback.\n    let fetchUrl = parsedUrl.toString();\n    if (process.env.SCRAPE_REPLAY_ORIGIN) {\n      const replay = new URL(process.env.SCRAPE_REPLAY_ORIGIN);\n      if (replay.protocol !== \"http:\" || ![\"127.0.0.1\", \"localhost\", \"[::1]\"].includes(replay.hostname)) {\n        throw new Error(\"SCRAPE_REPLAY_ORIGIN must be a loopback HTTP origin\");\n      }\n      replay.pathname = `/${parsedUrl.host}${parsedUrl.pathname}`;\n      replay.search = parsedUrl.search;\n      fetchUrl = replay.toString();\n    }\n\n    let res;\n    try {\n      res = await fetch(fetchUrl, {\n        headers: { \"User-Agent\": \"Scrape/1.0 (Job Aggregator; +https://github.com/scrape)\" },\n        signal: AbortSignal.timeout(input.timeout_ms || 30000),\n      });\n    } catch (err) {\n      process.stderr.write(`Netflix careers portal endpoint unreachable (${err.message}); verify network or update URL to active portal\\n`);\n      process.exit(1);\n    }\n    if (!res.ok) {\n      process.stderr.write(`Provider API HTTP error: ${res.status} ${res.statusText}\\n`);\n      process.exit(1);\n    }\n    data = await res.json();\n    totalCount = Number.isSafeInteger(data.count) && data.count >= 0 ? data.count : null;\n  }\n\n  const positions = data.positions;\n  if (!Array.isArray(positions)) {\n    process.stderr.write(\"Provider API response missing positions array\\n\");\n    process.exit(1);\n  }\n\n  const budget = Math.max(1, input.max_candidates || 10);\n  let emitted = 0;\n  let currIdx = itemIndex;\n\n  while (currIdx < positions.length && emitted < budget) {\n    const pos = positions[currIdx];\n    currIdx++;\n\n    // Validate required fields without fabricated fallbacks\n    const title = (pos.name || pos.posting_name || \"\").trim();\n    const externalId = String(pos.id || pos.ats_job_id || \"\").trim();\n    const jobUrl = pos.canonicalPositionUrl || (pos.id ? `https://explore.jobs.netflix.net/careers/job/${pos.id}` : \"\");\n\n    const candidate = {\n      type: \"candidate\",\n      version: 2,\n      external_id: externalId || null,\n      title,\n      url: jobUrl,\n      location: Array.isArray(pos.locations) && pos.locations.length > 0\n        ? pos.locations.join(\"; \")\n        : (pos.location || null),\n      company: \"Netflix\",\n      workplace_type: pos.work_location_option === \"remote_local\" ? \"remote\"\n        : [\"onsite\", \"remote\", \"hybrid\"].includes(pos.work_location_option)\n          ? pos.work_location_option : \"unknown\",\n    };\n    if (pos.job_description) {\n      candidate.description = pos.job_description;\n    }\n    // Note: t_create / t_update are internal ATS creation/edit timestamps,\n    // not verified publication dates.\n\n    process.stdout.write(JSON.stringify(candidate) + \"\\n\");\n    emitted++;\n  }\n\n  let exhausted = false;\n  let nextContinuation = null;\n\n  if (currIdx < positions.length) {\n    nextContinuation = JSON.stringify({\n      v: 2,\n      page_offset: pageOffset,\n      item_index: currIdx,\n    });\n  } else {\n    const nextOffset = pageOffset + positions.length;\n    if (fixturePath || totalCount === null || positions.length === 0) {\n      exhausted = totalCount !== null && nextOffset >= totalCount;\n    } else if (nextOffset >= totalCount) {\n      exhausted = true;\n    } else {\n      nextContinuation = JSON.stringify({\n        v: 2,\n        page_offset: nextOffset,\n        item_index: 0,\n      });\n    }\n  }\n\n  if (nextContinuation && !exhausted) {\n    process.stdout.write(JSON.stringify({\n      type: \"continuation\",\n      version: 2,\n      cursor: nextContinuation,\n    }) + \"\\n\");\n  }\n\n  process.stdout.write(JSON.stringify({\n    type: \"complete\",\n    version: 2,\n    exhausted,\n  }) + \"\\n\");\n}\n\nmain().catch((err) => {\n  process.stderr.write(String(err?.stack || err) + \"\\n\");\n  process.exit(1);\n});\n",
               "runtime": "js"
             },
             "url": "https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&start=0&num=10"
@@ -1109,7 +1127,7 @@
             "__source_id": "amazon",
             "mode": "script",
             "script": {
-              "code": "#!/usr/bin/env node\n// Amazon Jobs API extractor speaking SCRIPT_PROTOCOL_VERSION = 2\n\nasync function main() {\n  // Works as a packaged temporary .js file and as an imported ES module.\n  const { readFileSync } = await import(\"node:fs\");\n  const inputChunks = [];\n  for await (const chunk of process.stdin) {\n    inputChunks.push(chunk);\n  }\n  const inputStr = Buffer.concat(inputChunks).toString(\"utf8\").trim();\n  if (!inputStr) {\n    process.stderr.write(\"No input received on stdin\\n\");\n    process.exit(1);\n  }\n\n  const input = JSON.parse(inputStr);\n  if (input.version !== 2) {\n    process.stderr.write(`Unsupported protocol version: ${input.version}\\n`);\n    process.exit(1);\n  }\n\n  let data;\n  const fixturePath = input.config?.fixture_path || input.config?.script?.args?.[0] || process.argv[2];\n  if (fixturePath) {\n    const raw = readFileSync(fixturePath, \"utf8\");\n    data = JSON.parse(raw);\n  } else {\n    const res = await fetch(input.url, {\n      headers: { \"User-Agent\": \"Scrape/1.0 (Job Aggregator; +https://github.com/scrape)\" },\n      signal: AbortSignal.timeout(input.timeout_ms || 30000),\n    });\n    if (!res.ok) {\n      process.stderr.write(`HTTP error: ${res.status} ${res.statusText}\\n`);\n      process.exit(1);\n    }\n    data = await res.json();\n  }\n\n  const jobs = data.jobs || [];\n  const limit = Math.min(jobs.length, input.max_candidates || 100);\n\n  for (let i = 0; i < limit; i++) {\n    const job = jobs[i];\n    const candidate = {\n      type: \"candidate\",\n      version: 2,\n      external_id: String(job.id_icims || job.id || \"\"),\n      title: job.title || \"Untitled Role\",\n      url: job.job_path\n        ? (job.job_path.startsWith(\"http\") ? job.job_path : `https://www.amazon.jobs${job.job_path}`)\n        : `https://www.amazon.jobs/en/jobs/${job.id_icims || job.id}`,\n      location: job.normalized_location || job.location || null,\n      company: job.company_name || \"Amazon\",\n    };\n    if (job.description) {\n      candidate.description = job.description;\n    }\n    if (job.posted_date) {\n      candidate.date_posted = job.posted_date;\n    }\n    // Extract base salary from preferred qualifications or description if present\n    if (job.preferred_qualifications) {\n      const match = job.preferred_qualifications.match(/(\\$[\\d,]+(?:\\s*-\\s*\\$[\\d,]+)?(?:\\s*(?:USD|per year|annually))?|[\\d,]+\\.\\d{2}\\s*-\\s*[\\d,]+\\.\\d{2}\\s*USD\\s*annually)/i);\n      if (match) {\n        candidate.salary = match[1];\n      }\n    }\n    process.stdout.write(JSON.stringify(candidate) + \"\\n\");\n  }\n\n  const complete = {\n    type: \"complete\",\n    version: 2,\n    exhausted: limit >= jobs.length,\n  };\n  process.stdout.write(JSON.stringify(complete) + \"\\n\");\n}\n\nmain().catch((err) => {\n  process.stderr.write(String(err?.stack || err) + \"\\n\");\n  process.exit(1);\n});\n",
+              "code": "#!/usr/bin/env node\n// Amazon Jobs API extractor speaking SCRIPT_PROTOCOL_VERSION = 2\n\nasync function main() {\n  // Works as a packaged temporary .js file and as an imported ES module.\n  const { readFileSync } = await import(\"node:fs\");\n  const inputChunks = [];\n  for await (const chunk of process.stdin) {\n    inputChunks.push(chunk);\n  }\n  const inputStr = Buffer.concat(inputChunks).toString(\"utf8\").trim();\n  if (!inputStr) {\n    process.stderr.write(\"No input received on stdin\\n\");\n    process.exit(1);\n  }\n\n  const input = JSON.parse(inputStr);\n  if (input.version !== 2) {\n    process.stderr.write(`Unsupported protocol version: ${input.version}\\n`);\n    process.exit(1);\n  }\n\n  let pageOffset = 0;\n  let itemIndex = 0;\n  if (input.continuation) {\n    try {\n      const state = JSON.parse(input.continuation);\n      if (typeof state.page_offset === \"number\") pageOffset = state.page_offset;\n      if (typeof state.item_index === \"number\") itemIndex = state.item_index;\n    } catch {\n      process.stderr.write(`Invalid continuation cursor: ${input.continuation}\\n`);\n      process.exit(1);\n    }\n  }\n\n  const fixturePath = input.config?.fixture_path || input.config?.script?.args?.[0] || process.argv[2];\n  let data;\n  let totalCount = null;\n\n  if (fixturePath) {\n    const raw = readFileSync(fixturePath, \"utf8\");\n    data = JSON.parse(raw);\n    totalCount = Number.isSafeInteger(data.hits) && data.hits >= 0 ? data.hits : null;\n  } else {\n    const parsedUrl = new URL(input.url);\n    parsedUrl.searchParams.set(\"offset\", String(pageOffset));\n    if (!parsedUrl.searchParams.has(\"result_limit\")) {\n      parsedUrl.searchParams.set(\"result_limit\", \"10\");\n    }\n    // Explicit loopback replay is verification transport, never a live fallback.\n    let fetchUrl = parsedUrl.toString();\n    if (process.env.SCRAPE_REPLAY_ORIGIN) {\n      const replay = new URL(process.env.SCRAPE_REPLAY_ORIGIN);\n      if (replay.protocol !== \"http:\" || ![\"127.0.0.1\", \"localhost\", \"[::1]\"].includes(replay.hostname)) {\n        throw new Error(\"SCRAPE_REPLAY_ORIGIN must be a loopback HTTP origin\");\n      }\n      replay.pathname = `/${parsedUrl.host}${parsedUrl.pathname}`;\n      replay.search = parsedUrl.search;\n      fetchUrl = replay.toString();\n    }\n\n    const res = await fetch(fetchUrl, {\n      headers: { \"User-Agent\": \"Scrape/1.0 (Job Aggregator; +https://github.com/scrape)\" },\n      signal: AbortSignal.timeout(input.timeout_ms || 30000),\n    });\n    if (!res.ok) {\n      process.stderr.write(`Provider API HTTP error: ${res.status} ${res.statusText}\\n`);\n      process.exit(1);\n    }\n    data = await res.json();\n    totalCount = Number.isSafeInteger(data.hits) && data.hits >= 0 ? data.hits : null;\n  }\n\n  const jobs = data.jobs;\n  if (!Array.isArray(jobs)) {\n    process.stderr.write(\"Provider API response missing jobs array\\n\");\n    process.exit(1);\n  }\n\n  const budget = Math.max(1, input.max_candidates || 10);\n  let emitted = 0;\n  let currIdx = itemIndex;\n\n  while (currIdx < jobs.length && emitted < budget) {\n    const job = jobs[currIdx];\n    currIdx++;\n\n    // Validate required fields without fabricated fallbacks\n    const title = (job.title || \"\").trim();\n    const externalId = String(job.id_icims || job.id || \"\").trim();\n    const jobUrl = job.job_path\n      ? (job.job_path.startsWith(\"http\") ? job.job_path : `https://www.amazon.jobs${job.job_path}`)\n      : (externalId ? `https://www.amazon.jobs/en/jobs/${externalId}` : \"\");\n\n    const candidate = {\n      type: \"candidate\",\n      version: 2,\n      external_id: externalId || null,\n      title,\n      url: jobUrl,\n      location: job.normalized_location || job.location || null,\n      company: job.company_name || \"Amazon\",\n    };\n    if (job.description) {\n      candidate.description = job.description;\n    }\n    if (job.posted_date) {\n      candidate.date_posted = job.posted_date;\n    }\n    if (job.preferred_qualifications) {\n      const match = job.preferred_qualifications.match(/(\\$[\\d,]+(?:\\s*-\\s*\\$[\\d,]+)?(?:\\s*(?:USD|per year|annually))?|[\\d,]+\\.\\d{2}\\s*-\\s*[\\d,]+\\.\\d{2}\\s*USD\\s*annually)/i);\n      if (match) {\n        candidate.salary = match[1];\n      }\n    }\n    process.stdout.write(JSON.stringify(candidate) + \"\\n\");\n    emitted++;\n  }\n\n  let exhausted = false;\n  let nextContinuation = null;\n\n  if (currIdx < jobs.length) {\n    nextContinuation = JSON.stringify({\n      v: 2,\n      page_offset: pageOffset,\n      item_index: currIdx,\n    });\n  } else {\n    const nextOffset = pageOffset + jobs.length;\n    if (fixturePath || totalCount === null || jobs.length === 0) {\n      exhausted = totalCount !== null && nextOffset >= totalCount;\n    } else if (nextOffset >= totalCount) {\n      exhausted = true;\n    } else {\n      nextContinuation = JSON.stringify({\n        v: 2,\n        page_offset: nextOffset,\n        item_index: 0,\n      });\n    }\n  }\n\n  if (nextContinuation && !exhausted) {\n    process.stdout.write(JSON.stringify({\n      type: \"continuation\",\n      version: 2,\n      cursor: nextContinuation,\n    }) + \"\\n\");\n  }\n\n  process.stdout.write(JSON.stringify({\n    type: \"complete\",\n    version: 2,\n    exhausted,\n  }) + \"\\n\");\n}\n\nmain().catch((err) => {\n  process.stderr.write(String(err?.stack || err) + \"\\n\");\n  process.exit(1);\n});\n",
               "runtime": "js"
             },
             "url": "https://www.amazon.jobs/en/search.json?offset=0&result_limit=10"
@@ -1125,7 +1143,7 @@
       "seed": false,
       "legacy_identifier": "cloudflare",
       "spec": {
-        "version": 6,
+        "version": 7,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Cloudflare — Internship/location example (Restrictive)",
@@ -1195,6 +1213,268 @@
           }
         }
       ]
+    },
+    {
+      "id": "nvidia-workday-engineering",
+      "name": "NVIDIA — Systems, CUDA & AI Engineering (Workday)",
+      "description": "Workday ATS example for NVIDIA career site. Title keywords only. Preview before saving; live availability varies.",
+      "readiness": "ready",
+      "seed": false,
+      "legacy_identifier": "nvidia",
+      "spec": {
+        "version": 7,
+        "max_jobs_per_run": 20,
+        "metadata": {
+          "name": "NVIDIA — Systems, CUDA & AI Engineering (Workday)",
+          "company": "NVIDIA",
+          "enabled": false
+        },
+        "sources": [
+          {
+            "id": "nvidia",
+            "label": "NVIDIA — Workday",
+            "enabled": true,
+            "employer_hint": "NVIDIA",
+            "extractor": {
+              "kind": "workday",
+              "url": "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite"
+            }
+          }
+        ],
+        "schedule": {
+          "cadence": "daily",
+          "time": "09:00",
+          "cron": "0 0 9 * * *",
+          "timezone": "UTC",
+          "run_on_startup": false
+        },
+        "filters": {
+          "role_types": [],
+          "include_keywords": [],
+          "exclude_keywords": [],
+          "locations": [],
+          "matching": {
+            "keywords": {
+              "any": [
+                "Systems",
+                "CUDA",
+                "AI",
+                "Kernel",
+                "Compiler",
+                "Performance"
+              ],
+              "all": [],
+              "exclude": [],
+              "fields": [
+                "title"
+              ]
+            },
+            "posting_date": null,
+            "compensation": null,
+            "role_types": [],
+            "workplaces": [],
+            "experience_min": null,
+            "experience_max": null,
+            "experience_include_unknown": false,
+            "experience_match_mode": "advertised_range_overlap",
+            "new_grad": null,
+            "sponsorship": [],
+            "work_auth": [],
+            "clearance": [],
+            "countries": [],
+            "regions": [],
+            "cities": [],
+            "location_include_unknown": false
+          }
+        },
+        "retention": {
+          "days": 30,
+          "policy": "untracked_only"
+        }
+      },
+      "extractors": [
+        {
+          "id": "nvidia",
+          "kind": "workday",
+          "identifier": "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite",
+          "config": {
+            "__company": "NVIDIA",
+            "__cron_timezone": "UTC",
+            "__run_on_startup": false,
+            "__schedule": {
+              "time": "09:00",
+              "timezone": "UTC",
+              "weekdays": []
+            },
+            "__source_id": "nvidia",
+            "url": "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite"
+          }
+        }
+      ]
+    }
+  ],
+  "companies": [
+    {
+      "id": "cloudflare",
+      "name": "Cloudflare",
+      "template_id": "cloudflare-systems-network",
+      "source_id": "cloudflare",
+      "logo": {
+        "evidence": {
+          "url": "https://recruiting.cdn.greenhouse.io/external_greenhouse_job_boards/logos/000/007/685/original/Image_20221024_121529_116.png?1666631611",
+          "page_url": "https://boards.greenhouse.io/cloudflare",
+          "method": "provider"
+        },
+        "checked_at": "2026-10-16T18:23:08.416410+00:00",
+        "status": "verified",
+        "asset": "data:image/webp;base64,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",
+        "cached_asset_reference": null,
+        "diagnostic": null
+      }
+    },
+    {
+      "id": "bitwarden",
+      "name": "Bitwarden",
+      "template_id": "bitwarden-remote-security",
+      "source_id": "bitwarden",
+      "logo": {
+        "evidence": {
+          "url": "https://bitwarden.com/images/icon.png",
+          "page_url": "https://bitwarden.com/careers",
+          "method": "provider"
+        },
+        "checked_at": "2026-10-16T18:23:08.416410+00:00",
+        "status": "verified",
+        "asset": "data:image/webp;base64,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",
+        "cached_asset_reference": null,
+        "diagnostic": null
+      }
+    },
+    {
+      "id": "linear",
+      "name": "Linear",
+      "template_id": "linear-product-engineering",
+      "source_id": "linear",
+      "logo": {
+        "evidence": {
+          "url": "https://linear.app/static/apple-touch-icon.png",
+          "page_url": "https://linear.app/careers",
+          "method": "provider"
+        },
+        "checked_at": "2026-10-16T18:23:08.416410+00:00",
+        "status": "verified",
+        "asset": "data:image/webp;base64,UklGRmoCAABXRUJQVlA4TF4CAAAvY8AYEM1VICICHgjsEtsAAIDvAAJwAAVoAAboAAAMYABVwJCiA3RQFAoQaNgACmAAAwBQgAI4gAIcgAAuIHlPfgNVHkiBDWMBAMD5v7RmWxUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA0Fv3/8nFAymAQiMAADj/Bz5QIGhAYABw4IDADhQEBAAfAAAAAADwASDgggYGFhg4AAgc8EGgQIAHQoDDBgAAcP73AKAAAAAAHwAgAIABAAYAGACwFgAMAGAAgAEAXQHAJwAAAEABgCQEeKBvVlxOMNKsuJzgqUAhC5/CWajCGgpVOAvvQgLZ1bE5jgkUvKBDggESOuxQxzFZHRsgGeOwuxeb8y22ExiJ7bQ533b3IsYB6C17th+zumdgou7ZfswWbQfUlj37vBdVXMBkFZev8WvRdkArxuHjegGm3f0U4wCk1teqigswVXFZXyug9Hps6p4BY92zl/4PCL0df4D5/fwAs3Qzhe08U4vtBMyxnc4ztW6msIE54Akc8AAykMABHcjABhywARlI4IAE/ypM4IAJZOAGDriBDAzggD+QgS9wwA/M0ay4bNsVK1cBmHMVtitWs+KygVn+/r8A8+/7DQhdv3cpa8CYsnbLBlC6vK2+AmDqK7i8LSCVq/T9/gCmdndylYBWypt2d/oKwGRfwekZ3H8VoJby5vQMUtbARMra6RncfxWgl6vU7t7lr5WrAEZyFX72Q7t7uUpA8vq9O3xG0OCACyYYYMIFB7TDZ3TLBpANjMAe6IEMxBDIQA/sgQGeCnQzhROMdDOFEzwKAwA=",
+        "cached_asset_reference": null,
+        "diagnostic": null
+      }
+    },
+    {
+      "id": "sep",
+      "name": "SEP",
+      "template_id": "sep-midwest-consulting",
+      "source_id": "sep",
+      "logo": {
+        "evidence": {
+          "url": "https://sep.com/wp-content/uploads/2021/04/sep-logo.svg",
+          "page_url": "https://sep.com/careers",
+          "method": "provider"
+        },
+        "checked_at": "2026-10-16T18:23:08.416410+00:00",
+        "status": "verified",
+        "asset": "data:image/webp;base64,UklGRnICAABXRUJQVlA4TGYCAAAvY8AYEM1VICICHghcD2oBAIDvZAEAAAAAAICKAQAAAAAAAAAAAAAAAAAAAEYLAAAAAAAANJ2uqnvxD+A9D6QoBhEAAOD8388CAAAAAAAAdQwAAAAAAAAAAAAAAAAAAAAwrgAAAAAAAEDpeyAER4wAAADnP1sAAAD4tAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAcHkAAAC49UBgd9gIAADO/zsAsB8AEADAAwAEAGgHAAQAWAGApQBADwBMAYAcAOgNADQBAB0AsPcAgIQf4GX5v9OxZVZvciIwIAZ0te48n+FrW3/nD/ghr0nT/b3ma77HpqHFSQYDgoA5yWg5Nm2+5jvd3yuvEfBtvubZhhMtTgQEcyK0tOGar3kCr3mNpvs9nVQnAgI6kZM63e+Z1wh45jXWhgsMCArWhiuvMeCe16gNhxMBYZ2oDUdeI+DKa7TvOZwICOxE+54DuNqwgAGhweZrKvDJaxI8gODwyGsEnPue6kRAcCfa92zAqXYCwqudgOX/m50ICO9Ey/83H9szAx04yWoT0AGYkxvQgZMbGNABGPD/P/AXLwygAxhqHehArTv5AB1AH77bgA7U/q+/f1MbQHi1sf7+DXDSgPBOGnCOTxe1AQRXG+PTBTjLXIcNCA5bmevAp55bYQChYdRzK3CNT7PaAAKrjfFpBm5lrqdXVhtAWLWRXrnMdeBe5vb0SjCAoDDSK5W5HXiWub4dx9SuagMIqDbUrttxrMx14LWeW9Mrwa42gGBqA/b0SvXcCnwrc307TqnnavjuHXa1bxhAEBhq32p/h+/e67najlPKXAceAA==",
+        "cached_asset_reference": null,
+        "diagnostic": null
+      }
+    },
+    {
+      "id": "google",
+      "name": "Google",
+      "template_id": "bigtech-static-swe",
+      "source_id": "google",
+      "logo": {
+        "evidence": {
+          "url": "https://www.gstatic.com/hiring/CportalUi/google_logo_dark.png",
+          "page_url": "https://www.google.com/about/careers/applications/jobs/results/",
+          "method": "provider"
+        },
+        "checked_at": "2026-10-16T18:23:08.416410+00:00",
+        "status": "verified",
+        "asset": "data:image/webp;base64,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",
+        "cached_asset_reference": null,
+        "diagnostic": null
+      }
+    },
+    {
+      "id": "apple",
+      "name": "Apple",
+      "template_id": "bigtech-static-swe",
+      "source_id": "apple",
+      "logo": {
+        "evidence": {
+          "url": "https://jobs.apple.com/public/images/apple-logo.svg",
+          "page_url": "https://jobs.apple.com/en-us/search",
+          "method": "provider"
+        },
+        "checked_at": "2026-10-16T18:23:08.416410+00:00",
+        "status": "verified",
+        "asset": "data:image/webp;base64,UklGRrIDAABXRUJQVlA4TKYDAAAvf8AfEM1VICICHohREvQGAIAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHBJk/1v37zRoojwQGB42NoCAM7/OwBALgCQAYCXAYCbAwCaCwD2HwBwOgDQDACsAwBNAUAzANAWADQFAE0AwFIA8NIX/lOnNJ42HnspnUPUMhTW6hw8hS8GS2kbT+GPFjs5G4MfTgkriYnCTwkriQG7GQMOFiykzTiJWGiicHBK2MczOInYx+pw5LFPh6NRxjr2wZHHPh2OHjLWcSxOVh77OJycHBZqcHCyKvYxFH47WQkLOfx2shK6KH91nuYvk05DI2PWPBR6aL82HwuvZb84XnQ8nhq8pHV+8ZvjRR+HwY1CA21w6BmcaK3o8KTxkXKzOXgKZ5oIPiYW4zoHwWda6zC74cgYHAKDV5zZ4YZRxsbjJSv4GDT4QescNkLhNS3YWMyxZgbvKSL6mHSPp+PhadwxZgOFIWKmcEdx/KOlESA2BiPEgBraRjDAGtBkIIjTJnQZCNImCmUGgizPoI5DlNGhzekfh6gn2uy0iChhUWZkVGR1KDMShAmNLiNB2i+6vAnSLIMqhSBO0EVUxDWoMloQ5yhU8cizqDLKyPuLKhF5ikGTU0SeQZWIARZVMgZoVFkwQKNKxoD/UCVjgMJyCtsZ/F0YbKewncF2Gts12E4/iFtQRrDdDdtpgriCMh3iMspoLdIq2nQ0whLaKBOFrIo6xhNZCX3EgKiEQmJAUlVQSEwUgjIaORuDnAWVtI0gJqHUYGYRsqCVNZtoRFQFtZzDoEHCgmIi+hg0uLagmiKi/20mHYMbC+oZjie4ke1YoMeVBf12GVcC+gXcSQrqBVyKaPdWcSmiXcCtRUG3IuJaQLce9wKqnQLuZW8061UEBDRbkBAV9FolRHj0CioigoJWp4gQj1a9ipCgoNOpR4xHp1ZFTLCi0SogyKORIGkxos9DRlTrRJvCI6tq0cYhLXijy0NCnDjRZOWRVwmKnBwmRA/0sCpGeCta3CUMcXZ0GPWYUlknGrwJ5lTWiXk7waTE2jFtZ1WMSqwVr+1GD9+Piy8X34+HUcFrI6tiWGU98MrbjwtDeMsjQ7Y8PKFd3O145U5UzPOuVnyyu/vDCTLOsp5x8VLwyeqqR4XE+qfgoHi5MnoVb2Qt7Z9RwcHbNyuhRaRdvawKnFajuwutlfBeJLSrHy/rt5cffzgLmiQtS/uiWKKXcSsJWvZbK6j4JwIA",
+        "cached_asset_reference": null,
+        "diagnostic": null
+      }
+    },
+    {
+      "id": "netflix",
+      "name": "Netflix",
+      "template_id": "streaming-cloud-script",
+      "source_id": "netflix",
+      "logo": {
+        "evidence": {
+          "url": "https://static.vscdn.net/images/careers/demo/netflix/1746474854::netflix_jobs_logo",
+          "page_url": "https://jobs.netflix.com",
+          "method": "provider"
+        },
+        "checked_at": "2026-10-16T18:23:08.416410+00:00",
+        "status": "verified",
+        "asset": "data:image/webp;base64,UklGRqQDAABXRUJQVlA4TJgDAAAvY8AYEM1VICICHojRAvNWAIDv/iXPtiIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAoHu10FzgbOwABg+kAIqNAwDg/N//l6jRIletZkC4OjEwAAAAABwAAAAAAAAAAAAAOAAAAAAMTJweAS6V6YLWppL+74EY9bCuAACc//cnVnl9QwEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADF1kWv5HggBjyoBAAA5/8FAAwAsAMADgC4AQAdAFAAwAIA+gEAAwAUAPAAAC8A4ACAWwDAAgAvMcG/+d9+nZ9vn/8/+dvv8x/+4Hg/43j/9/kN/JXnDGSryu+nUaByb+EfkB9tg84dN8gbaj67kaHymXAH8l32gM4dNsjLcnYjQ+Uz4Q7ku+wBnTtskJfl7EaGymfCHch32QM6929AljKf/ZWgcsfwAOLGSvfyblC5iR0Dsqye/ZWgcsfwAOLGSvfyblC5iR0Dsqye/ZWgcseAvLHSr/RZoXITewGyXBU6d9ggk/zj41yhcmf2AuTnqe3QucMGmeQfH+cKlTuzFyA/T22Hzv2zQSb5++f3L1Tuf1wD8uZU6HzOQBaU99MoULm3cA3IX/oOnc8ZyILyfhoFKvcWrgH5S9+hcy8BWVDObmSofCbcgXyXPaBzhw3yspzdyFD5TMySAfkue0DnXlyQl+XsRobKry9/uCHfZQ/onJwDspT57K8ElUdxtEl5IG6sdC/vBpVXcw9BgyyrZ38lqDyKo03KA3FjpXt5N6i8mnsIGmRZPfsrQeVRHA3yxkq/0meFyqu5x3BClqtC5zGvgEzy23ffUHm1sw8n5Hn2A53HvALylpVeFVB5tbMPJ+SpG+g85hWQrXhVQOXVzi67IM+2QOebFZBtyqwLVH4c51t2QX4dgM43KyDblFkXqPw4zrfsgvw6AJ0TqkG2KfMNqPz/5eeFG/LsGuh8PRKQZ8uUQOXP1+fADXnqBjpfjwTk2TIlUPnz9TlwQ566gU5BgzxbJgKV/8WvY1IeyLMvUHk19xA0yLMrE4HKozjapDwQFcy+QOXV3EPQIM+uTAQqj+Jok/JAVDD7ApVXcw+xXpDnuUDnMa+AbMWrAiqvdvbhhDx1A53HvAKyFa8KqLza2YcT8tQNdB7zCshWvCqg8mpnl12QZ1ug880KyDZl1gUqP47z7Z4O+XUA/sr99jf95n57Av7g88fz9fnyO+XPn88E/yADAA==",
+        "cached_asset_reference": null,
+        "diagnostic": null
+      }
+    },
+    {
+      "id": "amazon",
+      "name": "Amazon",
+      "template_id": "streaming-cloud-script",
+      "source_id": "amazon",
+      "logo": {
+        "evidence": {
+          "url": "https://m.media-amazon.com/images/G/01/wfm/Home/amazon_logo_RGB._CB485934546_.png",
+          "page_url": "https://amazon.jobs",
+          "method": "provider"
+        },
+        "checked_at": "2026-10-16T18:23:08.416410+00:00",
+        "status": "verified",
+        "asset": "data:image/webp;base64,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",
+        "cached_asset_reference": null,
+        "diagnostic": null
+      }
+    },
+    {
+      "id": "nvidia",
+      "name": "NVIDIA",
+      "template_id": "nvidia-workday-engineering",
+      "source_id": "nvidia",
+      "logo": {
+        "evidence": {
+          "url": "https://www.nvidia.com/content/dam/en-zz/Solutions/about-nvidia/logo-and-brand/01-nvidia-logo-horiz-500x200-2c50-p@2x.png",
+          "page_url": "https://www.nvidia.com/en-us/about-nvidia/careers",
+          "method": "provider"
+        },
+        "checked_at": "2026-10-16T18:23:08.416410+00:00",
+        "status": "verified",
+        "asset": "data:image/webp;base64,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",
+        "cached_asset_reference": null,
+        "diagnostic": null
+      }
     }
   ]
 }

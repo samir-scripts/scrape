@@ -9,7 +9,7 @@ import { api, SAMPLE_SWE_SOURCE } from "../lib/api";
 
 describe("Rust-owned template projections", () => {
   it("imports every generated YAML as the same spec used by the picker and seed input", () => {
-    expect(WORKFLOW_TEMPLATE_CATALOG.version).toBe(1);
+    expect(WORKFLOW_TEMPLATE_CATALOG.version).toBe(2);
     expect(SAMPLE_WORKFLOW_TEMPLATES.filter(template => template.seed)).toHaveLength(6);
     for (const template of SAMPLE_WORKFLOW_TEMPLATES) {
       const yaml = readFileSync(resolve(__dirname, `../../workflows/${template.id}.yaml`), "utf8");
