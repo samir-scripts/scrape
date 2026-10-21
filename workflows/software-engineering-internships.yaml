@@ -1,6 +1,6 @@
 # Generated from Rust template catalog v2. Do not edit.
 # Restrictive legacy example: internship AND keyword rules AND any listed location text. Zero matches may be valid. Not the default; not seeded automatically.
-version: 7
+version: 8
 max_jobs_per_run: 20
 metadata:
   name: Cloudflare — Internship/location example (Restrictive)

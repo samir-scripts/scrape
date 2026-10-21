@@ -1,6 +1,6 @@
 # Generated from Rust template catalog v2. Do not edit.
 # Bundled script protocol 2 example, disabled. Select an absolute Node.js executable for each source, save, review and trust each script, then enable explicitly. Pagination coverage remains incomplete.
-version: 7
+version: 8
 max_jobs_per_run: 20
 metadata:
   name: Netflix & Amazon — Script example (Setup required)
@@ -368,6 +368,8 @@ filters:
   exclude_keywords: []
   locations: []
   matching:
+    target_roles: []
+    companies: []
     keywords:
       any:
         - Engineer

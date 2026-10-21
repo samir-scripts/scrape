@@ -1,6 +1,6 @@
 # Generated from Rust template catalog v2. Do not edit.
 # Workday ATS example for NVIDIA career site. Title keywords only. Preview before saving; live availability varies.
-version: 7
+version: 8
 max_jobs_per_run: 20
 metadata:
   name: NVIDIA — Systems, CUDA & AI Engineering (Workday)
@@ -26,6 +26,8 @@ filters:
   exclude_keywords: []
   locations: []
   matching:
+    target_roles: []
+    companies: []
     keywords:
       any:
         - Systems

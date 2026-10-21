@@ -8,8 +8,4 @@ import type { TriState } from "./TriState";
 import type { WorkAuthRequirement } from "./WorkAuthRequirement";
 import type { WorkplaceType } from "./WorkplaceType";
 
-export type PostingRules = { keywords: KeywordRules | null, posting_date: PostingDateFilter | null, compensation: CompensationFilter | null, role_types: Array<RoleType>, workplaces: Array<WorkplaceType>, experience_min: number | null, experience_max: number | null, experience_include_unknown: boolean, experience_match_mode: ExperienceMatchMode, 
-/**
- * "any", "only", or "exclude". Exclusion retains unknown classifications.
- */
-new_grad: string | null, sponsorship: Array<TriState>, work_auth: Array<WorkAuthRequirement>, clearance: Array<TriState>, countries: Array<string>, regions: Array<string>, cities: Array<string>, location_include_unknown: boolean, };
+export type PostingRules = { target_roles: Array<string>, companies: Array<string>, keywords: KeywordRules | null, posting_date: PostingDateFilter | null, compensation: CompensationFilter | null, role_types: Array<RoleType>, workplaces: Array<WorkplaceType>, experience_min: number | null, experience_max: number | null, experience_include_unknown: boolean, experience_match_mode: ExperienceMatchMode, new_grad: string | null, sponsorship: Array<TriState>, work_auth: Array<WorkAuthRequirement>, clearance: Array<TriState>, countries: Array<string>, regions: Array<string>, cities: Array<string>, location_include_unknown: boolean, };

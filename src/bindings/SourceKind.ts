@@ -3,4 +3,4 @@
 /**
  * How a source is scraped.
  */
-export type SourceKind = "greenhouse" | "lever" | "ashby" | "jsonld" | "selector" | "workday";
+export type SourceKind = "greenhouse" | "lever" | "ashby" | "jsonld" | "selector" | "workday" | "search";

@@ -1,6 +1,6 @@
 # Generated from Rust template catalog v2. Do not edit.
 # Restrictive example: selected employment, workplace and geography must all match. Missing evidence may produce zero matches; inspect Preview diagnostics. Not added by Load test workflows.
-version: 7
+version: 8
 max_jobs_per_run: 20
 metadata:
   name: Bitwarden — Restrictive role/geography example
@@ -26,6 +26,8 @@ filters:
   exclude_keywords: []
   locations: []
   matching:
+    target_roles: []
+    companies: []
     keywords:
       any:
         - Engineer

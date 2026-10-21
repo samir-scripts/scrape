@@ -1,6 +1,6 @@
 # Generated from Rust template catalog v2. Do not edit.
 # Static selector example, disabled for review. Google URL resolution and Apple selectors/pagination still need verification; this is not verified full-site ingestion.
-version: 7
+version: 8
 max_jobs_per_run: 20
 metadata:
   name: Google & Apple — Static extraction example (Needs review)
@@ -48,6 +48,8 @@ filters:
   exclude_keywords: []
   locations: []
   matching:
+    target_roles: []
+    companies: []
     keywords:
       any:
         - Software

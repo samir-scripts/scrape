@@ -9,7 +9,7 @@
       "seed": true,
       "legacy_identifier": "cloudflare",
       "spec": {
-        "version": 7,
+        "version": 8,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Cloudflare — Engineering (title keywords)",
@@ -41,6 +41,8 @@
           "exclude_keywords": [],
           "locations": [],
           "matching": {
+            "target_roles": [],
+            "companies": [],
             "keywords": {
               "any": [
                 "Software",
@@ -110,7 +112,7 @@
       "seed": false,
       "legacy_identifier": "cloudflare",
       "spec": {
-        "version": 7,
+        "version": 8,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Cloudflare — Restrictive role/geography example",
@@ -142,6 +144,8 @@
           "exclude_keywords": [],
           "locations": [],
           "matching": {
+            "target_roles": [],
+            "companies": [],
             "keywords": {
               "any": [
                 "Software",
@@ -227,7 +231,7 @@
       "seed": true,
       "legacy_identifier": "bitwarden",
       "spec": {
-        "version": 7,
+        "version": 8,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Bitwarden — Engineering (title keywords)",
@@ -259,6 +263,8 @@
           "exclude_keywords": [],
           "locations": [],
           "matching": {
+            "target_roles": [],
+            "companies": [],
             "keywords": {
               "any": [
                 "Engineer",
@@ -324,7 +330,7 @@
       "seed": false,
       "legacy_identifier": "bitwarden",
       "spec": {
-        "version": 7,
+        "version": 8,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Bitwarden — Restrictive role/geography example",
@@ -356,6 +362,8 @@
           "exclude_keywords": [],
           "locations": [],
           "matching": {
+            "target_roles": [],
+            "companies": [],
             "keywords": {
               "any": [
                 "Engineer",
@@ -430,7 +438,7 @@
       "seed": true,
       "legacy_identifier": "linear",
       "spec": {
-        "version": 7,
+        "version": 8,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Linear — Product Engineering (title keywords)",
@@ -462,6 +470,8 @@
           "exclude_keywords": [],
           "locations": [],
           "matching": {
+            "target_roles": [],
+            "companies": [],
             "keywords": {
               "any": [
                 "Engineer",
@@ -527,7 +537,7 @@
       "seed": false,
       "legacy_identifier": "linear",
       "spec": {
-        "version": 7,
+        "version": 8,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Linear — Restrictive role/geography example",
@@ -559,6 +569,8 @@
           "exclude_keywords": [],
           "locations": [],
           "matching": {
+            "target_roles": [],
+            "companies": [],
             "keywords": {
               "any": [
                 "Engineer",
@@ -634,7 +646,7 @@
       "seed": true,
       "legacy_identifier": "sep",
       "spec": {
-        "version": 7,
+        "version": 8,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "SEP — Engineering (title keywords)",
@@ -666,6 +678,8 @@
           "exclude_keywords": [],
           "locations": [],
           "matching": {
+            "target_roles": [],
+            "companies": [],
             "keywords": {
               "any": [
                 "Software",
@@ -732,7 +746,7 @@
       "seed": false,
       "legacy_identifier": "sep",
       "spec": {
-        "version": 7,
+        "version": 8,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "SEP — Restrictive role/geography example",
@@ -764,6 +778,8 @@
           "exclude_keywords": [],
           "locations": [],
           "matching": {
+            "target_roles": [],
+            "companies": [],
             "keywords": {
               "any": [
                 "Software",
@@ -843,7 +859,7 @@
       "seed": true,
       "legacy_identifier": "google-apple-selector",
       "spec": {
-        "version": 7,
+        "version": 8,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Google & Apple — Static extraction example (Needs review)",
@@ -900,6 +916,8 @@
           "exclude_keywords": [],
           "locations": [],
           "matching": {
+            "target_roles": [],
+            "companies": [],
             "keywords": {
               "any": [
                 "Software",
@@ -997,7 +1015,7 @@
       "seed": true,
       "legacy_identifier": "streaming-cloud-script",
       "spec": {
-        "version": 7,
+        "version": 8,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Netflix & Amazon — Script example (Setup required)",
@@ -1049,6 +1067,8 @@
           "exclude_keywords": [],
           "locations": [],
           "matching": {
+            "target_roles": [],
+            "companies": [],
             "keywords": {
               "any": [
                 "Engineer",
@@ -1143,7 +1163,7 @@
       "seed": false,
       "legacy_identifier": "cloudflare",
       "spec": {
-        "version": 7,
+        "version": 8,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Cloudflare — Internship/location example (Restrictive)",
@@ -1222,7 +1242,7 @@
       "seed": false,
       "legacy_identifier": "nvidia",
       "spec": {
-        "version": 7,
+        "version": 8,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "NVIDIA — Systems, CUDA & AI Engineering (Workday)",
@@ -1254,6 +1274,8 @@
           "exclude_keywords": [],
           "locations": [],
           "matching": {
+            "target_roles": [],
+            "companies": [],
             "keywords": {
               "any": [
                 "Systems",

@@ -3,4 +3,4 @@
 /**
  * Stable primary categories. Detailed failures may overlap; primary counts do not.
  */
-export type RejectionReason = "query" | "policy" | "legacy_keywords" | "legacy_exclusion" | "legacy_location" | "legacy_role_type" | "keyword_any" | "keyword_all" | "keyword_exclusion" | "posting_date" | "compensation" | "role_type" | "workplace" | "experience" | "new_grad" | "sponsorship" | "work_authorization" | "clearance" | "geography" | "invalid_candidate";
+export type RejectionReason = "query" | "policy" | "legacy_keywords" | "legacy_exclusion" | "legacy_location" | "legacy_role_type" | "keyword_any" | "keyword_all" | "keyword_exclusion" | "posting_date" | "compensation" | "role_type" | "company" | "workplace" | "experience" | "new_grad" | "sponsorship" | "work_authorization" | "clearance" | "geography" | "invalid_candidate";
