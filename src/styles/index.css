@@ -3,9 +3,9 @@
 :root {
   --color-logo-surface: #FAFAFA;
   color-scheme: light;
-  --palette-paper: #F5F5DC;
+  --palette-paper: #CEC8B8;
   --palette-obsidian: #262628;
-  --palette-ink: #1A1A1A;
+  --palette-ink: #3F3F37;
   --palette-cream: #FFF6EE;
   --palette-lavender: #C6C2F2;
   --palette-lime: #D6DC82;
@@ -25,12 +25,13 @@
 
 @theme {
   --color-surface: var(--palette-paper);
-  --color-surface-raised: #E6E2C8;
+  --color-surface-raised: #D9D3C3;
   --color-text: var(--palette-ink);
-  --color-text-muted: #676357;
-  --color-border: var(--color-text);
+  --color-text-muted: #535448;
+  --color-border: #6C6D5F;
+  --color-rule: #929080;
   --color-focus: var(--color-text);
-  --color-selection: var(--palette-lavender);
+  --color-selection: #B9B5A5;
   --color-accent-ink: var(--palette-ink);
   /* Compatibility aliases for existing primitives; semantic roles are authoritative. */
   --color-paper: var(--color-surface);
@@ -43,10 +44,10 @@
   --color-lime: var(--palette-lime);
   --color-cherry: var(--palette-cherry);
   --color-signal: var(--palette-signal);
-  --color-danger: #A52A43;
-  --color-success: #35602D;
-  --color-warning: #765000;
-  --color-information: #3030B0;
+  --color-danger: #8C3345;
+  --color-success: #3B5834;
+  --color-warning: #685019;
+  --color-information: #44486B;
 
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-sans: var(--font-ui);
@@ -70,6 +71,9 @@
   --color-surface-raised: #36363a;
   --color-text: var(--palette-cream);
   --color-text-muted: #B9B5AF;
+  --color-border: var(--color-text-muted);
+  --color-rule: #62625B;
+  --color-selection: var(--palette-lavender);
   --color-danger: #F08FA2;
   --color-success: #C4DA92;
   --color-warning: #F0CB80;
