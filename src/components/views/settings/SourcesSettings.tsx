@@ -5,6 +5,7 @@ import { WorkflowImportButton } from "./WorkflowImportButton";
 import { IconButton } from "../../ui/IconButton";
 import { Icon } from "../../ui/Icon";
 import { isRecordedMode } from "../../../lib/runtime";
+import { sourceToWorkflowSpec } from "../../../lib/yamlWorkflow";
 import { useState, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Source } from "../../../bindings/Source";
@@ -29,6 +30,13 @@ import { getWorkflowStatus } from "../../../lib/status";
 import { ActionMenu } from "../../ui/ActionMenu";
 
 type FilterTab = "all" | "ats" | "custom" | "errors";
+
+function workflowHasRunnableSources(source: Source): boolean {
+  if (!source.enabled) return false;
+  const config = source.config as Record<string, unknown> | null;
+  const spec = config?.__workflow_spec as { sources?: Array<{ enabled?: boolean }> } | undefined;
+  return spec?.sources ? spec.sources.some(child => child.enabled === true) : true;
+}
 
 function workflowTimezone(source: Source, settings?: Settings): string {
   const config = source.config && typeof source.config === "object" && !Array.isArray(source.config) ? source.config : {};
@@ -60,7 +68,8 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   const [testEvents, setTestEvents] = useState<WorkerEvent[] | null>(null);
 
   // Inspector & Consolidated Logs Dock state
-  const [inspectedSource, setInspectedSource] = useState<Source | null>(null);
+  const [inspectedSourceId, setInspectedSourceId] = useState<string | null>(null);
+  const inspectedSource = sources.find(source => source.id === inspectedSourceId) ?? null;
   const [sourceRuns, setSourceRuns] = useState<ScrapeRun[]>([]);
   const [isLoadingRuns, setIsLoadingRuns] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -169,8 +178,12 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
     if (!window.confirm(`DELETE WORKFLOW ${source.name.toUpperCase()}?`)) return;
     try {
       await api.deleteSource(source.id);
-      if (inspectedSource?.id === source.id) setInspectedSource(null);
       fetchSources();
+      notifySuccess(`Deleted workflow ${source.name}`);
+      if (inspectedSourceId === source.id) {
+        const remaining = sources.filter(s => s.id !== source.id);
+        setInspectedSourceId(remaining[0]?.id ?? null);
+      }
     } catch (error) {
       notifyError(String(error), "WORKFLOW DELETE FAILED");
     }
@@ -189,10 +202,10 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
     finally { setRunningAll(false); refreshAfterRun(); }
   };
   const handleRunSourceNow = async (source: Source) => {
-    if (isRecordedMode() || activeRun) return;
+    if (isRecordedMode() || activeRun || source.needs_review || !workflowHasRunnableSources(source)) return;
     try {
       setRunningSourceId(source.id);
-      setInspectedSource(source);
+      setInspectedSourceId(source.id);
       const runPromise = api.runSourceNow(source.id);
       await refreshInspectedRunsAndLogs(source.id);
       const run = await runPromise;
@@ -272,12 +285,20 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
     return { all: sources.length, ats, custom, errors };
   }, [sources]);
 
+  const selectedRun = sourceRuns.find(run => run.id === selectedRunId) ?? null;
+
+  const scopedLogs = useMemo(() => {
+    // A workflow-owned run includes its child sources, even if they were edited later.
+    if (!inspectedSource || selectedRun?.source_id === inspectedSource.id) return runLogs;
+    const sourceIds = new Set([
+      inspectedSource.id,
+      ...sourceToWorkflowSpec(inspectedSource).sources.map(source => source.id),
+    ]);
+    return runLogs.filter(log => !log.source_id || sourceIds.has(log.source_id));
+  }, [runLogs, inspectedSource, selectedRun]);
+
   // Filter logs based on level toggle / dropdown
   const displayedLogs = useMemo(() => {
-    const scopedLogs = inspectedSource
-      ? runLogs.filter((l) => !l.source_id || l.source_id === inspectedSource.id)
-      : runLogs;
-
     if (logFilter === "errors") {
       return scopedLogs.filter((l) => l.level === "error" || l.level === "warn");
     }
@@ -285,20 +306,13 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
       return scopedLogs.filter((l) => l.level === "info");
     }
     return scopedLogs;
-  }, [runLogs, logFilter, inspectedSource]);
+  }, [scopedLogs, logFilter]);
 
   const logCounts = useMemo(() => {
-    const scopedLogs = inspectedSource
-      ? runLogs.filter((l) => !l.source_id || l.source_id === inspectedSource.id)
-      : runLogs;
     const errors = scopedLogs.filter((l) => l.level === "error" || l.level === "warn").length;
     const successes = scopedLogs.filter((l) => l.level === "info").length;
     return { all: scopedLogs.length, successes, errors };
-  }, [runLogs, inspectedSource]);
-
-  const selectedRun = useMemo(() => {
-    return sourceRuns.find((r) => r.id === selectedRunId) || null;
-  }, [sourceRuns, selectedRunId]);
+  }, [scopedLogs]);
 
   return (
     <div className="flex flex-col gap-5 w-full select-text font-mono">
@@ -343,403 +357,477 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           {activeRun ? <>
             <span role="status" className="max-w-48 truncate text-xs">{scanStatusText || "Running workflows…"}</span>
             <Button variant="danger" onClick={() => api.cancelScrape().then(cancelled => notifyInfo(cancelled ? "Cancellation requested; committed results remain saved." : "No active run to cancel.")).catch(error => notifyError(String(error)))}>Cancel run</Button>
-          </> : <Button variant="default" disabled={isRecordedMode() || !sources.some(source => source.enabled && !source.needs_review)} onClick={() => void handleRunAll()}>Run all</Button>}
+          </> : <Button variant="default" disabled={isRecordedMode() || !sources.some(source => workflowHasRunnableSources(source) && !source.needs_review)} onClick={() => void handleRunAll()}>Run all</Button>}
           <WorkflowImportButton disabled={isRecordedMode() || isAddModalOpen} onImport={spec => { setEditingSource(null); setImportedSpec(spec); setIsAddModalOpen(true); }} />
         </div>
       </div>
 
       {isRecordedMode() && <p className="text-sm text-[var(--color-ink-mute)]">Recorded examples cannot run, test or import workflows. Open the desktop application to use live sources.</p>}
-      {/* Sub-Filter Segmented Row + Search */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap gap-1">
-          <button
-            onClick={() => setActiveTab("all")}
-            className={`px-3 py-1 text-xs uppercase tracking-wider font-bold cursor-pointer border ${
-              activeTab === "all"
-                ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
-                : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-            }`}
-          >
-            ALL ({counts.all})
-          </button>
-          <button
-            onClick={() => setActiveTab("ats")}
-            className={`px-3 py-1 text-xs uppercase tracking-wider font-bold cursor-pointer border ${
-              activeTab === "ats"
-                ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
-                : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-            }`}
-          >
-            ATS ({counts.ats})
-          </button>
-          <button
-            onClick={() => setActiveTab("custom")}
-            className={`px-3 py-1 text-xs uppercase tracking-wider font-bold cursor-pointer border ${
-              activeTab === "custom"
-                ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
-                : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
-            }`}
-          >
-            CUSTOM ({counts.custom})
-          </button>
-          <button
-            onClick={() => setActiveTab("errors")}
-            className={`px-3 py-1 text-xs uppercase tracking-wider font-bold cursor-pointer border ${
-              activeTab === "errors"
-                ? "bg-[var(--color-danger)] text-[var(--color-paper)] border-[var(--color-danger)]"
-                : "bg-[var(--color-paper)] text-[var(--color-danger)] border-[var(--color-danger)] hover:bg-[var(--color-cherry)]/10"
-            }`}
-          >
-            ERRORS ({counts.errors})
-          </button>
-        </div>
-
-        <div className="w-64">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="SEARCH WORKFLOWS..."
-            className="text-xs"
-          />
-        </div>
-      </div>
-
-      <Rule />
-
-      {/* Workflows Table */}
-      {sources.length === 0 ? (
-        <div className="p-8 border border-dashed border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 flex flex-col items-center justify-center text-center gap-3">
-          <span className="text-2xl text-[var(--color-ink)]">■</span>
-          <div className="flex flex-col gap-1 max-w-md">
-            <span className="font-bold text-sm uppercase tracking-wider text-[var(--color-ink)]">
-              NO WORKFLOWS IN REGISTRY
-            </span>
-            <span className="text-xs text-[var(--color-ink-mute)]">
-              Add a careers URL or import workflow YAML to begin. You can also load the sample Cloudflare configuration.
-            </span>
-          </div>
-          <Button
-            variant="inverted"
-            onClick={handleSeedSampleWorkflow}
-          >
-            LOAD SAMPLE SWE INTERNSHIP WORKFLOW
-          </Button>
-        </div>
-      ) : filteredSources.length === 0 ? (
-        <div className="p-8 border border-dashed border-[var(--color-ink-mute)] text-center text-xs font-mono text-[var(--color-ink-mute)]">
-          NO MATCHING WORKFLOWS FOUND. CLICK &quot;+ ADD WORKFLOW&quot; TO CONFIGURE A TARGET.
-        </div>
-      ) : (
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableHeader>
-                <Tooltip content="Toggle automated scheduling for this workflow">
-                  <span>ON</span>
-                </Tooltip>
-              </TableHeader>
-              <TableHeader>WORKFLOW / COMPANY</TableHeader>
-          <TableHeader>EXTRACTOR</TableHeader>
-              <TableHeader>
-                <Tooltip content="Dedicated execution frequency for this workflow">
-                  <span>CADENCE</span>
-                </Tooltip>
-              </TableHeader>
-          <TableHeader>RETENTION</TableHeader>
-              <TableHeader>
-                <Tooltip content="Status of the most recent execution run">
-                  <span>STATUS</span>
-                </Tooltip>
-              </TableHeader>
-              <TableHeader>ACTIONS</TableHeader>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {filteredSources.map((s) => {
-              const isRunning = runningSourceId === s.id || runningSourceIds.includes(s.id);
-              const isTesting = testingSourceId === s.id;
-              const isInspected = inspectedSource?.id === s.id;
-              const statusVisual = s.needs_review
-                ? { label: "NEEDS REVIEW", colorClass: "text-[var(--color-warning)]", bulletClass: "text-[var(--color-warning)]", bulletGlyph: "●" }
-                : getWorkflowStatus(s, isRunning);
-
-              return (
-                <TableRow
-                  key={s.id}
-                  className={isInspected ? "bg-[var(--color-paper-2)]/60 font-semibold" : ""}
-                >
-                  <TableCell>
-                    <Toggle
-                      checked={s.enabled}
-                      disabled={s.needs_review}
-                      onChange={(checked) => handleToggleSource(s, checked)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col items-start">
-                      <button type="button" aria-label={`Edit workflow ${s.name}`}
-                        onClick={() => { setImportedSpec(null); setEditingSource(s); setIsAddModalOpen(true); }}
-                        className="font-bold tracking-tight text-left text-[var(--color-ink)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-signal)]">
-                        {s.name}
-                      </button>
-                      <span className="text-xs text-[var(--color-ink-mute)] truncate max-w-[240px]">
-                        {s.identifier}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-xs">{s.kind}</span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-xs">{s.cadence === "manual" ? "Manual only" : `${s.cadence.replaceAll("_", " ")} · ${workflowTimezone(s, settings)}`}</span>
-                    {s.next_run_at && <p className="text-xs mt-1 text-[var(--color-ink-mute)]">Next {formatDateTime(s.next_run_at, settings)}</p>}
-                  </TableCell>
-                  <TableCell className="text-xs font-mono whitespace-nowrap">
-                    {Number(s.retention_days) === 0
-                      ? "Forever"
-                      : `${s.retention_days} days · ${s.retention_policy === "untracked_only" ? "untracked" : "all"}`}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1.5" data-testid={`status-${s.id}`}>
-                      <span className={`text-xs ${statusVisual.bulletClass}`}>
-                        {statusVisual.bulletGlyph}
-                      </span>
-                      {sourceNeedsAttention(s) && !s.needs_review ? <button type="button"
-                        aria-label={`View failed run for ${s.name}`} onClick={() => setInspectedSource(s)}
-                        className={`text-xs font-mono uppercase font-bold underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-signal)] ${statusVisual.colorClass}`}>
-                        {statusVisual.label}
-                      </button> : <span className={`text-xs font-mono uppercase font-bold ${statusVisual.colorClass}`}>{statusVisual.label}</span>}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1.5">
-                      <Tooltip content="Run this workflow immediately into database">
-                        <button
-                          onClick={() => handleRunSourceNow(s)}
-                          disabled={isRecordedMode() || activeRun || s.needs_review}
-                          className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-80 text-xs font-mono uppercase cursor-pointer disabled:opacity-50"
-                        >
-                          {isRunning ? "RUNNING…" : "RUN"}
-                        </button>
-                      </Tooltip>
-
-                      <ActionMenu label={`More actions for ${s.name}`} items={[
-                        { label: "Edit workflow", onSelect: () => { setImportedSpec(null); setEditingSource(s); setIsAddModalOpen(true); } },
-                        { label: isTesting ? "Previewing matches…" : "Preview matches", disabled: isRecordedMode() || isTesting || activeRun || s.needs_review, onSelect: () => void handleTestSource(s.id) },
-                        { label: "View run history", onSelect: () => setInspectedSource(s) },
-                        { label: "Delete workflow", danger: true, dividerBefore: true, onSelect: () => void handleDeleteSource(s) },
-                      ]} />
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      )}
-
-      {/* Consolidated Workflow Inspector & Execution Logs Dock */}
-      {inspectedSource && (
-        <div className="flex flex-col gap-3 p-4 border-2 border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 text-xs">
-          {/* Dock Header */}
-          <div className="flex justify-between items-center border-b border-[var(--color-ink)] pb-2 font-bold">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm uppercase tracking-tight text-[var(--color-ink)]">
-                {inspectedSource.name} // WORKFLOW OBSERVABILITY & EXECUTION LOGS
-              </span>
-              <span className="px-1.5 py-0.5 text-xs border border-[var(--color-ink)] bg-[var(--color-paper)] uppercase">
-                {inspectedSource.kind}
-              </span>
-              <span className="px-1.5 py-0.5 text-xs border border-[var(--color-ink)] bg-[var(--color-paper)] uppercase">
-                {inspectedSource.cadence}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col lg:flex-row gap-5 items-start w-full min-h-0">
+        {/* Left Column: Workflow Index */}
+        <div className="w-full lg:w-[450px] shrink-0 flex flex-col gap-3">
+          {/* Sub-Filter Segmented Row + Search */}
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap gap-1">
               <button
-                onClick={() => handleRunSourceNow(inspectedSource)}
-                disabled={isRecordedMode() || activeRun}
-                className="px-2.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-85 text-xs uppercase font-bold cursor-pointer disabled:opacity-50"
+                onClick={() => setActiveTab("all")}
+                className={`px-2.5 py-1 text-xs uppercase tracking-wider font-bold cursor-pointer border ${
+                  activeTab === "all"
+                    ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
+                    : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
+                }`}
               >
-                {runningSourceId === inspectedSource.id ? "RUNNING WORKFLOW…" : "RUN WORKFLOW NOW"}
+                ALL ({counts.all})
               </button>
               <button
-                onClick={() => handleViewInInbox(inspectedSource)}
-                className="px-2.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-xs uppercase font-bold cursor-pointer inline-flex items-center gap-2"
+                onClick={() => setActiveTab("ats")}
+                className={`px-2.5 py-1 text-xs uppercase tracking-wider font-bold cursor-pointer border ${
+                  activeTab === "ats"
+                    ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
+                    : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
+                }`}
               >
-                <span>VIEW JOBS IN INBOX</span><Icon name="right" />
+                ATS ({counts.ats})
               </button>
-              <IconButton label={`Close workflow logs for ${inspectedSource.name}`} onClick={() => setInspectedSource(null)} variant="danger">
-                <Icon name="close" />
-              </IconButton>
+              <button
+                onClick={() => setActiveTab("custom")}
+                className={`px-2.5 py-1 text-xs uppercase tracking-wider font-bold cursor-pointer border ${
+                  activeTab === "custom"
+                    ? "bg-[var(--color-ink)] text-[var(--color-paper)] border-[var(--color-ink)]"
+                    : "bg-[var(--color-paper)] text-[var(--color-ink)] border-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
+                }`}
+              >
+                CUSTOM ({counts.custom})
+              </button>
+              <button
+                onClick={() => setActiveTab("errors")}
+                className={`px-2.5 py-1 text-xs uppercase tracking-wider font-bold cursor-pointer border ${
+                  activeTab === "errors"
+                    ? "bg-[var(--color-danger)] text-[var(--color-paper)] border-[var(--color-danger)]"
+                    : "bg-[var(--color-paper)] text-[var(--color-danger)] border-[var(--color-danger)] hover:bg-[var(--color-cherry)]/10"
+                }`}
+              >
+                ERRORS ({counts.errors})
+              </button>
+            </div>
+            <div>
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="SEARCH WORKFLOWS..."
+                className="text-xs"
+              />
             </div>
           </div>
 
-          {/* Telemetry Row */}
-          <div className="grid grid-cols-4 gap-2 p-2 border border-[var(--color-ink)] bg-[var(--color-paper)] text-xs">
-            <div>
-              <span className="text-xs text-[var(--color-ink-mute)] uppercase">TARGET URL:</span>
-              <div className="font-mono truncate">{inspectedSource.identifier}</div>
-            </div>
-            <div>
-              <span className="text-xs text-[var(--color-ink-mute)] uppercase">CADENCE / NEXT RUN:</span>
-              <div className="font-mono">
-                {inspectedSource.cadence.toUpperCase()}
-                {inspectedSource.next_run_at ? ` · ${inspectedSource.next_run_at.slice(0, 16)}` : ""}
-              </div>
-            </div>
-            <div>
-              <span className="text-xs text-[var(--color-ink-mute)] uppercase">LAST DURATION:</span>
-              <div className="font-mono">
-                {inspectedSource.last_run_duration_ms
-                  ? `${(Number(inspectedSource.last_run_duration_ms) / 1000).toFixed(2)}s`
-                  : "NONE"}
-              </div>
-            </div>
-            <div>
-              <span className="text-xs text-[var(--color-ink-mute)] uppercase">TTL RETENTION:</span>
-              <div className="font-mono">
-                {Number(inspectedSource.retention_days) === 0
-                  ? "KEEP FOREVER"
-                  : `${inspectedSource.retention_days} DAYS (${inspectedSource.retention_policy})`}
-              </div>
-            </div>
-          </div>
-
-          {/* Master-Detail Split: Runs History (Left) + Terminal Log Stream (Right) */}
-          <div className="grid grid-cols-12 gap-3 pt-1">
-            {/* Left 4 Cols: Recent Runs List */}
-            <div className="col-span-4 flex flex-col gap-1.5 border border-[var(--color-ink)] bg-[var(--color-paper)] p-2">
-              <span className="font-bold text-xs uppercase tracking-wider text-[var(--color-ink)] border-b border-[var(--color-ink)]/30 pb-1">
-                EXECUTION RUNS (LAST 10)
-              </span>
-
-              {isLoadingRuns ? (
-                <span className="text-[var(--color-ink-mute)] text-xs p-2">LOADING RUNS…</span>
-              ) : sourceRuns.length === 0 ? (
-                <span className="text-[var(--color-ink-mute)] text-xs p-2">
-                  NO ISOLATED RUNS RECORDED YET. CLICK &quot;RUN WORKFLOW NOW&quot; TO TRIGGER.
+          {/* Workflows Table */}
+          {sources.length === 0 ? (
+            <div className="p-8 border border-dashed border-[var(--color-ink)] bg-[var(--color-paper-2)]/30 flex flex-col items-center justify-center text-center gap-3">
+              <span className="text-2xl text-[var(--color-ink)]">■</span>
+              <div className="flex flex-col gap-1 max-w-md">
+                <span className="font-bold text-sm uppercase tracking-wider text-[var(--color-ink)]">
+                  NO WORKFLOWS IN REGISTRY
                 </span>
-              ) : (
-                <div className="flex flex-col divide-y divide-[var(--color-ink)]/20 max-h-64 overflow-y-auto">
-                  {sourceRuns.map((r) => {
-                    const isSelected = selectedRunId === r.id;
+                <span className="text-xs text-[var(--color-ink-mute)]">
+                  Add a careers URL or import workflow YAML to begin. You can also load the sample Cloudflare configuration.
+                </span>
+              </div>
+              <Button
+                variant="inverted"
+                onClick={handleSeedSampleWorkflow}
+              >
+                LOAD SAMPLE SWE INTERNSHIP WORKFLOW
+              </Button>
+            </div>
+          ) : filteredSources.length === 0 ? (
+            <div className="p-8 border border-dashed border-[var(--color-ink-mute)] text-center text-xs font-mono text-[var(--color-ink-mute)]">
+              NO MATCHING WORKFLOWS FOUND. CLICK &quot;+ ADD WORKFLOW&quot; TO CONFIGURE A TARGET.
+            </div>
+          ) : (
+            <div className="border border-[var(--color-border)] bg-[var(--color-surface)]">
+              <Table className="w-full">
+                <TableHead>
+                  <TableRow className="border-b border-[var(--color-border)] bg-[var(--color-surface-raised)]/50 text-[10px]">
+                    <TableHeader className="w-10 py-1.5 px-2">ON</TableHeader>
+                    <TableHeader className="py-1.5 px-2">WORKFLOW</TableHeader>
+                    <TableHeader className="w-24 py-1.5 px-1 text-right">STATUS</TableHeader>
+                    <TableHeader className="w-24 py-1.5 px-2 text-right">ACTIONS</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredSources.map((s) => {
+                    const isRunning = runningSourceId === s.id || runningSourceIds.includes(s.id);
+                    const isTesting = testingSourceId === s.id;
+                    const isSelected = inspectedSource?.id === s.id;
+                    const statusVisual = s.needs_review
+                      ? { label: "NEEDS REVIEW", colorClass: "text-[var(--color-warning)]", bulletClass: "text-[var(--color-warning)]", bulletGlyph: "●" }
+                      : getWorkflowStatus(s, isRunning);
+
                     return (
-                      <div
-                        key={r.id}
-                        onClick={() => setSelectedRunId(r.id)}
-                        className={`p-2 flex flex-col gap-0.5 cursor-pointer text-xs transition-none ${
+                      <TableRow
+                        key={s.id}
+                        data-source-id={s.id}
+                        onClick={() => setInspectedSourceId(s.id)}
+                        className={`cursor-pointer transition-colors border-b border-[var(--color-border)] last:border-b-0 ${
                           isSelected
-                            ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold"
-                            : "hover:bg-[var(--color-paper-2)]"
+                            ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-semibold"
+                            : "hover:bg-[var(--color-surface-raised)] text-[var(--color-ink)]"
                         }`}
                       >
-                        <div className="flex flex-wrap gap-3 items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className={`px-1 py-0.2 text-[9px] uppercase font-bold border ${
-                                runStatusBadge(r.status)
+                        <TableCell className="w-10 py-2 px-2" onClick={(e) => e.stopPropagation()}>
+                          <Toggle
+                            checked={s.enabled}
+                            disabled={s.needs_review}
+                            onChange={(checked) => handleToggleSource(s, checked)}
+                          />
+                        </TableCell>
+                        <TableCell className="py-2 px-2 min-w-0">
+                          <div className="flex flex-col items-start min-w-0">
+                            <button
+                              type="button"
+                              aria-label={`Edit workflow ${s.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setImportedSpec(null);
+                                setEditingSource(s);
+                                setIsAddModalOpen(true);
+                              }}
+                              className={`font-bold tracking-tight text-left truncate max-w-full hover:underline focus-visible:outline focus-visible:outline-2 ${
+                                isSelected ? "text-[var(--color-paper)] focus-visible:outline-[var(--color-paper)]" : "text-[var(--color-ink)] focus-visible:outline-[var(--color-signal)]"
                               }`}
                             >
-                              {runStatusLabel(r.status)}
-                            </span>
-                            <span className="text-xs">
-                              {formatDateTime(r.started_at, settings)}
+                              {s.name}
+                            </button>
+                            <span className={`text-[11px] truncate max-w-full font-mono ${isSelected ? "text-[var(--color-paper)]/75" : "text-[var(--color-ink-mute)]"}`}>
+                              {s.identifier}
                             </span>
                           </div>
-                          <span className="text-xs">
-                            {r.status === "running" ? "RUNNING…" : `+${Number(r.jobs_new)}`}
-                          </span>
-                        </div>
-                        {r.counts && <p className="text-xs">Examined {r.counts.examination_incomplete ? "at least " : ""}{r.counts.fetched} · rejected {r.counts.examination_incomplete ? "unknown" : r.counts.rejected} · blocked {r.counts.examination_incomplete ? "at least " : ""}{r.counts.blocked} · inserted {r.counts.inserted} · updated {r.counts.updated} · failed {r.counts.failed} · enrichment warnings {r.counts.enrichment_warnings ?? 0} · retention removed {r.counts.retention_removed}</p>}
-                        {r.counts?.examination_incomplete && <p className="text-xs">Worker counters are incomplete; saved-record counts are confirmed.</p>}
-                        {r.error && (
-                          <span className={`text-xs truncate ${isSelected ? "text-[var(--color-paper)]" : r.status === "success_with_warnings" ? "text-[var(--color-warning)]" : r.status === "cancelled" ? "text-[var(--color-ink-mute)]" : "text-[var(--color-danger)]"}`}>
-                            {r.status === "success_with_warnings" ? "WARNING" : r.status === "cancelled" ? "CANCELLED" : "DETAIL"}: {r.error}
-                          </span>
-                        )}
-                      </div>
+                        </TableCell>
+                        <TableCell className="w-24 py-2 px-1 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1" data-testid={`status-${s.id}`}>
+                            <span className={`text-xs ${statusVisual.bulletClass}`}>
+                              {statusVisual.bulletGlyph}
+                            </span>
+                            {sourceNeedsAttention(s) && !s.needs_review ? (
+                              <button
+                                type="button"
+                                 aria-label={`View failed run for ${s.name}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setInspectedSourceId(s.id);
+                                }}
+                                className={`text-[10px] font-mono uppercase font-bold underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-signal)] ${
+                                  isSelected ? "text-[var(--color-paper)]" : statusVisual.colorClass
+                                }`}
+                              >
+                                {statusVisual.label}
+                              </button>
+                            ) : (
+                              <span className={`text-[10px] font-mono uppercase font-bold ${
+                                isSelected ? "text-[var(--color-paper)]" : statusVisual.colorClass
+                              }`}>
+                                {statusVisual.label}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="w-24 py-2 px-2 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1">
+                            <Tooltip content={workflowHasRunnableSources(s) ? "Run this workflow immediately into database" : "Workflow or all child sources are disabled. Open workflow editor to enable them before running."}>
+                              <button
+                                onClick={() => handleRunSourceNow(s)}
+                                disabled={isRecordedMode() || activeRun || s.needs_review || !workflowHasRunnableSources(s)}
+                                className={`px-2 py-0.5 border text-xs font-mono uppercase cursor-pointer disabled:opacity-50 ${
+                                  isSelected
+                                    ? "border-[var(--color-paper)] bg-[var(--color-paper)] text-[var(--color-ink)] hover:bg-[var(--color-surface-raised)]"
+                                    : "border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-80"
+                                }`}
+                              >
+                                {isRunning ? "RUNNING…" : "RUN"}
+                              </button>
+                            </Tooltip>
+                            <ActionMenu label={`More actions for ${s.name}`} items={[
+                              { label: "Edit workflow", onSelect: () => { setImportedSpec(null); setEditingSource(s); setIsAddModalOpen(true); } },
+                              { label: isTesting ? "Previewing matches…" : "Preview matches", disabled: isRecordedMode() || isTesting || activeRun || s.needs_review, onSelect: () => void handleTestSource(s.id) },
+                              { label: "View run history", onSelect: () => setInspectedSourceId(s.id) },
+                              { label: "Delete workflow", danger: true, dividerBefore: true, onSelect: () => void handleDeleteSource(s) },
+                            ]} />
+                          </div>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </div>
-              )}
+                </TableBody>
+              </Table>
             </div>
+          )}
+        </div>
 
-            {/* Right 8 Cols: Terminal Execution Log Viewer */}
-            <div className="col-span-8 flex flex-col gap-1.5 border border-[var(--color-ink)] bg-[var(--color-paper)] p-2">
-              <div className="flex items-center justify-between border-b border-[var(--color-ink)]/30 pb-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-bold text-xs uppercase tracking-wider text-[var(--color-ink)]">
-                    TERMINAL LOG STREAM {selectedRun ? `· RUN ${selectedRun.id.slice(0, 8)}` : ""}
-                  </span>
-                  {selectedRun?.status === "running" && (
-                    <span className="px-1.5 py-0.2 text-[9px] bg-[var(--color-paper-2)] text-[var(--color-ink)] border border-[var(--color-ink)] animate-pulse font-mono font-bold">
-                      EXECUTING…
+        {/* Right Column: Workflow Dossier & Execution Observability */}
+        <div className="flex-1 min-w-0 w-full">
+          {inspectedSource ? (
+            <div className="flex flex-col gap-4 p-5 border border-[var(--color-border)] bg-[var(--color-surface)]">
+              {/* Dossier Header */}
+              <div className="flex flex-col gap-3 pb-3 border-b border-[var(--color-border)]">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[var(--color-text-muted)] uppercase tracking-wider">
+                      WORKFLOW DOSSIER //
                     </span>
-                  )}
+                    <span className="px-1.5 py-0.2 border border-[var(--color-border)] text-[10px] uppercase font-mono">
+                      {inspectedSource.kind}
+                    </span>
+                    <span className="px-1.5 py-0.2 border border-[var(--color-border)] text-[10px] uppercase font-mono">
+                      {inspectedSource.cadence}
+                    </span>
+                  </div>
+                  <IconButton label={`Close workflow logs for ${inspectedSource.name}`} onClick={() => setInspectedSourceId(null)} variant="danger">
+                    <Icon name="close" />
+                  </IconButton>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-[var(--color-ink-mute)] font-mono uppercase">
-                    FILTER:
-                  </span>
-                  <Select aria-label="Filter execution logs" value={logFilter}
-                    onChange={value => setLogFilter(value as "all" | "successes" | "errors")}
-                    options={[
-                      { value: "all", label: `ALL LOGS (${logCounts.all})` },
-                      { value: "successes", label: `SUCCESSES (${logCounts.successes})` },
-                      { value: "errors", label: `ERRORS (${logCounts.errors})` },
-                    ]} />
+
+                <div>
+                  <h3 className="text-2xl font-bold tracking-tight uppercase text-[var(--color-ink)]">
+                    {inspectedSource.name}
+                  </h3>
+                  <p className="text-xs font-mono text-[var(--color-ink-mute)] break-all mt-0.5">
+                    {inspectedSource.identifier}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <Button
+                    variant="inverted"
+                    disabled={isRecordedMode() || activeRun || inspectedSource.needs_review || !workflowHasRunnableSources(inspectedSource)}
+                    onClick={() => handleRunSourceNow(inspectedSource)}
+                    title={workflowHasRunnableSources(inspectedSource) ? undefined : "Workflow or all child sources are disabled. Open workflow editor to enable them before running."}
+                  >
+                    {runningSourceId === inspectedSource.id ? "RUNNING WORKFLOW…" : "RUN WORKFLOW NOW"}
+                  </Button>
+                  <Button
+                    disabled={isRecordedMode() || testingSourceId === inspectedSource.id || activeRun || inspectedSource.needs_review}
+                    onClick={() => void handleTestSource(inspectedSource.id)}
+                  >
+                    {testingSourceId === inspectedSource.id ? "PREVIEWING MATCHES…" : "PREVIEW MATCHES"}
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setImportedSpec(null);
+                      setEditingSource(inspectedSource);
+                      setIsAddModalOpen(true);
+                    }}
+                  >
+                    EDIT WORKFLOW
+                  </Button>
+                  <Button
+                    onClick={() => handleViewInInbox(inspectedSource)}
+                  >
+                    <span>VIEW JOBS IN INBOX</span><Icon name="right" />
+                  </Button>
                 </div>
               </div>
 
-              <ScanDiagnostics sources={selectedRun?.counts?.sources} />
-              {isLoadingLogs ? (
-                <div className="p-4 text-center text-xs text-[var(--color-ink-mute)] font-mono">
-                  STREAMING LOGS…
-                </div>
-              ) : !selectedRunId ? (
-                <div className="p-4 text-center text-xs text-[var(--color-ink-mute)] font-mono">
-                  SELECT AN EXECUTION RUN ON THE LEFT TO INSPECT ITS TERMINAL LOGS.
-                </div>
-              ) : displayedLogs.length === 0 ? (
-                <div className="p-4 text-center text-xs text-[var(--color-ink-mute)] font-mono">
-                  NO LOG EVENTS RECORDED FOR THIS RUN.
-                </div>
-              ) : (
-                <div className="flex flex-col gap-1 max-h-64 overflow-y-auto font-mono text-xs p-1 bg-[var(--color-paper-2)]/20 border border-[var(--color-ink)]/20">
-                  {displayedLogs.map((log) => {
-                    const isError = log.level === "error";
-                    const isWarn = log.level === "warn";
-                    return (
-                      <div
-                        key={log.id}
-                        className={`p-1.5 border text-xs leading-relaxed ${
-                          isError
-                            ? "border-[var(--color-danger)] bg-[var(--color-paper-2)] text-[var(--color-danger)]"
-                            : isWarn
-                            ? "border-[var(--color-warning)] bg-[var(--color-paper-2)] text-[var(--color-warning)]"
-                            : "border-[var(--color-ink)]/20 bg-[var(--color-paper)] text-[var(--color-ink)]"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between text-xs opacity-80 mb-0.5 font-bold">
-                          <span className={isError ? "text-[var(--color-danger)]" : isWarn ? "text-[var(--color-warning)]" : "text-[var(--color-ink)]"}>
-                            [{log.level.toUpperCase()}]
-                          </span>
-                          <span>
-                            {formatTime(log.timestamp, settings)}
-                          </span>
-                        </div>
-                        <div className="break-all whitespace-pre-wrap">
-                          {log.message}
-                        </div>
-                      </div>
-                    );
-                  })}
+              {!workflowHasRunnableSources(inspectedSource) && (
+                <div role="alert" className="border border-[var(--color-warning)] p-2 text-xs text-[var(--color-warning)]">
+                  Workflow or all sources disabled. Enable the workflow and at least one source before running.{" "}
+                  <button type="button" className="underline" onClick={() => { setImportedSpec(null); setEditingSource(inspectedSource); setIsAddModalOpen(true); }}>Edit workflow</button>
                 </div>
               )}
+
+              {/* Telemetry Row */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 border border-[var(--color-border)] bg-[var(--color-surface-raised)]/40 text-xs">
+                <div>
+                  <span className="text-[10px] text-[var(--color-ink-mute)] uppercase font-semibold">TARGET IDENTIFIER:</span>
+                  <div className="font-mono text-xs truncate text-[var(--color-ink)] mt-0.5">{inspectedSource.identifier}</div>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[var(--color-ink-mute)] uppercase font-semibold">CADENCE / SCHEDULE:</span>
+                  <div className="font-mono text-xs text-[var(--color-ink)] mt-0.5">
+                    {inspectedSource.cadence === "manual" ? "MANUAL ONLY" : `${inspectedSource.cadence.toUpperCase()} · ${workflowTimezone(inspectedSource, settings)}`}
+                    {inspectedSource.next_run_at ? ` (NEXT: ${formatDateTime(inspectedSource.next_run_at, settings)})` : ""}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[var(--color-ink-mute)] uppercase font-semibold">LAST DURATION:</span>
+                  <div className="font-mono text-xs text-[var(--color-ink)] mt-0.5">
+                    {inspectedSource.last_run_duration_ms
+                      ? `${(Number(inspectedSource.last_run_duration_ms) / 1000).toFixed(2)}s`
+                      : "NONE"}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[var(--color-ink-mute)] uppercase font-semibold">TTL RETENTION:</span>
+                  <div className="font-mono text-xs text-[var(--color-ink)] mt-0.5">
+                    {Number(inspectedSource.retention_days) === 0
+                      ? "KEEP FOREVER"
+                      : `${inspectedSource.retention_days} DAYS (${inspectedSource.retention_policy})`}
+                  </div>
+                </div>
+              </div>
+
+              {/* Observability Section Header */}
+              <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-2 font-bold">
+                <span className="text-xs font-bold uppercase tracking-wider text-[var(--color-text)]">
+                  {inspectedSource.name} // WORKFLOW OBSERVABILITY & EXECUTION LOGS
+                </span>
+              </div>
+
+              {/* Master-Detail Split: Runs History (Left) + Terminal Log Stream (Right) */}
+              <div className="grid grid-cols-12 gap-3 pt-1">
+                {/* Left 4 Cols: Recent Runs List */}
+                <div className="col-span-12 md:col-span-4 flex flex-col gap-1.5 border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
+                  <span className="font-bold text-xs uppercase tracking-wider text-[var(--color-ink)] border-b border-[var(--color-border)] pb-1">
+                    EXECUTION RUNS (LAST 10)
+                  </span>
+
+                  {isLoadingRuns ? (
+                    <span className="text-[var(--color-ink-mute)] text-xs p-2">LOADING RUNS…</span>
+                  ) : sourceRuns.length === 0 ? (
+                    <span className="text-[var(--color-ink-mute)] text-xs p-2">
+                      NO ISOLATED RUNS RECORDED YET. CLICK &quot;RUN WORKFLOW NOW&quot; TO TRIGGER.
+                    </span>
+                  ) : (
+                    <div className="flex flex-col divide-y divide-[var(--color-border)] max-h-72 overflow-y-auto">
+                      {sourceRuns.map((r) => {
+                        const isSelected = selectedRunId === r.id;
+                        return (
+                          <div
+                            key={r.id}
+                            onClick={() => setSelectedRunId(r.id)}
+                            className={`p-2 flex flex-col gap-0.5 cursor-pointer text-xs transition-none ${
+                              isSelected
+                                ? "bg-[var(--color-ink)] text-[var(--color-paper)] font-bold"
+                                : "hover:bg-[var(--color-surface-raised)]"
+                            }`}
+                          >
+                            <div className="flex flex-wrap gap-2 items-center justify-between">
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className={`px-1 py-0.2 text-[9px] uppercase font-bold border ${
+                                    runStatusBadge(r.status)
+                                  }`}
+                                >
+                                  {runStatusLabel(r.status)}
+                                </span>
+                                <span className="text-xs">
+                                  {formatDateTime(r.started_at, settings)}
+                                </span>
+                              </div>
+                              <span className="text-xs">
+                                {r.status === "running" ? "RUNNING…" : `+${Number(r.jobs_new)}`}
+                              </span>
+                            </div>
+                            {r.counts && <p className="text-xs mt-1">Examined {r.counts.examination_incomplete ? "at least " : ""}{r.counts.fetched} · rejected {r.counts.examination_incomplete ? "unknown" : r.counts.rejected} · blocked {r.counts.examination_incomplete ? "at least " : ""}{r.counts.blocked} · inserted {r.counts.inserted} · updated {r.counts.updated} · failed {r.counts.failed} · enrichment warnings {r.counts.enrichment_warnings ?? 0} · retention removed {r.counts.retention_removed}</p>}
+                            {r.counts?.examination_incomplete && <p className="text-xs">Worker counters are incomplete; saved-record counts are confirmed.</p>}
+                            {r.error && (
+                              <span className={`text-xs truncate ${isSelected ? "text-[var(--color-paper)]" : r.status === "success_with_warnings" ? "text-[var(--color-warning)]" : r.status === "cancelled" ? "text-[var(--color-ink-mute)]" : "text-[var(--color-danger)]"}`}>
+                                {r.status === "success_with_warnings" ? "WARNING" : r.status === "cancelled" ? "CANCELLED" : "DETAIL"}: {r.error}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Right 8 Cols: Terminal Execution Log Viewer */}
+                <div className="col-span-12 md:col-span-8 flex flex-col gap-1.5 border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
+                  <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-bold text-xs uppercase tracking-wider text-[var(--color-ink)]">
+                        TERMINAL LOG STREAM {selectedRun ? `· RUN ${selectedRun.id.slice(0, 8)}` : ""}
+                      </span>
+                      {selectedRun?.status === "running" && (
+                        <span className="px-1.5 py-0.2 text-[9px] bg-[var(--color-surface-raised)] text-[var(--color-ink)] border border-[var(--color-border)] animate-pulse font-mono font-bold">
+                          EXECUTING…
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-[var(--color-ink-mute)] font-mono uppercase">
+                        FILTER:
+                      </span>
+                      <Select aria-label="Filter execution logs" value={logFilter}
+                        onChange={value => setLogFilter(value as "all" | "successes" | "errors")}
+                        options={[
+                          { value: "all", label: `ALL LOGS (${logCounts.all})` },
+                          { value: "successes", label: `SUCCESSES (${logCounts.successes})` },
+                          { value: "errors", label: `ERRORS (${logCounts.errors})` },
+                        ]} />
+                    </div>
+                  </div>
+
+                  <ScanDiagnostics sources={selectedRun?.counts?.sources} />
+                  {isLoadingLogs ? (
+                    <div className="p-4 text-center text-xs text-[var(--color-ink-mute)] font-mono">
+                      STREAMING LOGS…
+                    </div>
+                  ) : !selectedRunId ? (
+                    <div className="p-4 text-center text-xs text-[var(--color-ink-mute)] font-mono">
+                      SELECT AN EXECUTION RUN ON THE LEFT TO INSPECT ITS TERMINAL LOGS.
+                    </div>
+                  ) : displayedLogs.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-[var(--color-ink-mute)] font-mono">
+                      NO LOG EVENTS RECORDED FOR THIS RUN.
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1 max-h-72 overflow-y-auto font-mono text-xs p-1 bg-[var(--color-surface-raised)]/20 border border-[var(--color-border)]">
+                      {displayedLogs.map((log) => {
+                        const isError = log.level === "error";
+                        const isWarn = log.level === "warn";
+                        return (
+                          <div
+                            key={log.id}
+                            className={`p-1.5 border text-xs leading-relaxed ${
+                              isError
+                                ? "border-[var(--color-danger)] bg-[var(--color-surface-raised)] text-[var(--color-danger)]"
+                                : isWarn
+                                ? "border-[var(--color-warning)] bg-[var(--color-surface-raised)] text-[var(--color-warning)]"
+                                : "border-[var(--color-border)]/40 bg-[var(--color-surface)] text-[var(--color-ink)]"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between text-xs opacity-80 mb-0.5 font-bold">
+                              <span className={isError ? "text-[var(--color-danger)]" : isWarn ? "text-[var(--color-warning)]" : "text-[var(--color-ink)]"}>
+                                [{log.level.toUpperCase()}]
+                              </span>
+                              <span>
+                                {formatTime(log.timestamp, settings)}
+                              </span>
+                            </div>
+                            <div className="break-all whitespace-pre-wrap">
+                              {log.message}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center p-12 text-center border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] h-full min-h-[360px] gap-3">
+              <span className="text-3xl text-[var(--color-text-muted)]">■</span>
+              <h4 className="text-sm font-bold uppercase tracking-wider text-[var(--color-text)]">
+                SELECT A WORKFLOW
+              </h4>
+              <p className="text-xs text-[var(--color-text-muted)] max-w-sm">
+                Choose a workflow from the index on the left to inspect its criteria, preview matches, and view observability logs.
+              </p>
+              {filteredSources.length > 0 && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => setInspectedSourceId(filteredSources[0].id)}
+                >
+                  INSPECT {filteredSources[0].name.toUpperCase()}
+                </Button>
+              )}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Dry Run Preview Drawer */}
       {testEvents && (
