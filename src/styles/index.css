@@ -92,6 +92,33 @@
   --color-kanban-card: #36363a;
 }
 
+[data-theme="parchment"] {
+  color-scheme: light;
+  --palette-paper: #F5F5DC;
+  --palette-ink: #1A1A1A;
+  --color-surface: #F5F5DC;
+  --color-surface-raised: #E6E2C8;
+  --color-card: #FFFFFF;
+  --color-text: #1A1A1A;
+  --color-text-muted: #676357;
+  --color-border: #1A1A1A;
+  --color-rule: #C8C3A8;
+  --color-focus: #1A1A1A;
+  --color-selection: var(--palette-lavender);
+  --color-accent-ink: #1A1A1A;
+  --color-paper: var(--color-surface);
+  --color-paper-2: var(--color-surface-raised);
+  --color-ink: var(--color-text);
+  --color-ink-mute: var(--color-text-muted);
+  --color-danger: #A52A43;
+  --color-success: #35602D;
+  --color-warning: #765000;
+  --color-information: #3030B0;
+  --color-kanban-board: #F5F5DC;
+  --color-kanban-column: #F5F5DC;
+  --color-kanban-card: #FFF6EE;
+}
+
 /* One selected family throughout the interface. Code remains fixed-width. */
 [data-font="jetbrains"] { --font-ui: "JetBrains Mono Variable", monospace; }
 [data-font="inter"] { --font-ui: "Inter Variable", sans-serif; }
