@@ -1,5 +1,4 @@
 import { CompatibilityFilters } from "./CompatibilityFilters";
-import { useState } from "react";
 import { CompanyPicker, selectedCompanyId } from "./CompanyPicker";
 import { ExperienceFilter } from "../../filters/ExperienceFilter";
 import type { WorkflowPreview } from "../../../bindings/WorkflowPreview";
@@ -66,7 +65,6 @@ export function WorkflowSections({
   onDetect?: (sourceIndex: number) => void;
   preview?: WorkflowPreview | null;
 }) {
-  const [customSources, setCustomSources] = useState<Set<string>>(new Set());
   const filters = draft.filters || {};
   const rules = { ...emptyRules(), ...filters.matching };
   const setRules = (patch: Partial<PostingRules>) =>
@@ -219,8 +217,8 @@ export function WorkflowSections({
                 </div>
               </div>
               <CompanyPicker value={selectedCompanyId(source)}
-                onChange={companyId => { setCustomSources(current => { const next = new Set(current); next.delete(source.id); return next; }); selectCompany?.(source.id, companyId); }}
-                onCustom={() => setCustomSources(current => new Set([...current, source.id]))}
+                onChange={companyId => selectCompany?.(source.id, companyId)}
+                onCustom={() => {}}
                 logo={preview?.branding.find(item => item.source_id === source.id && item.company === source.employer_hint)?.logo} />
 
               <div className="grid gap-3">

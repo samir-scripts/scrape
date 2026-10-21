@@ -21,7 +21,6 @@ import { Button } from "../../ui/Button";
 import { Toggle } from "../../ui/Toggle";
 import { Input } from "../../ui/Input";
 import { Table, TableHead, TableHeader, TableBody, TableRow, TableCell } from "../../ui/Table";
-import { Rule } from "../../ui/Rule";
 import { Tooltip } from "../../ui/Tooltip";
 import { Select } from "../../ui/Select";
 import { AddSourceModal } from "./AddSourceModal";
