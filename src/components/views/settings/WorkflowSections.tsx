@@ -1,4 +1,8 @@
 import { CompatibilityFilters } from "./CompatibilityFilters";
+import { useState } from "react";
+import { CompanyPicker, selectedCompanyId } from "./CompanyPicker";
+import { ExperienceFilter } from "../../filters/ExperienceFilter";
+import type { WorkflowPreview } from "../../../bindings/WorkflowPreview";
 import type { WorkflowDraftChange } from "../../../hooks/useWorkflowDraft";
 import { KeywordMatching } from "./KeywordMatching";
 import { GeographyMatching } from "./GeographyMatching";
@@ -13,8 +17,7 @@ import { Button } from "../../ui/Button";
 import { JobLimitInput } from "./JobLimitInput";
 import { CustomExtractorConfig } from "./CustomExtractorConfig";
 import type { Source } from "../../../bindings/Source";
-import { api } from "../../../lib/api";
-import { canonicalizeAtsUrl, normalizedEndpoint, SAMPLE_WORKFLOW_TEMPLATES } from "../../../lib/yamlWorkflow";
+import { normalizedEndpoint } from "../../../lib/yamlWorkflow";
 
 export const emptyRules = (): PostingRules => ({
   keywords: null,
@@ -25,6 +28,7 @@ export const emptyRules = (): PostingRules => ({
   experience_min: null,
   experience_max: null,
   experience_include_unknown: false,
+  experience_match_mode: "required_minimum",
   new_grad: null,
   sponsorship: [],
   work_auth: [],
@@ -47,6 +51,9 @@ export function WorkflowSections({
   onSourceBlur,
   initialSource,
   onTrustChanged,
+  selectCompany,
+  onDetect,
+  preview,
 }: {
   onSourceBlur?: () => void;
   draft: WorkflowSpec;
@@ -55,7 +62,11 @@ export function WorkflowSections({
   section: "Source" | "Matching" | "Schedule" | "Retention";
   initialSource?: Source | null;
   onTrustChanged?: () => void;
+  selectCompany?: (sourceId: string, companyId: string) => void;
+  onDetect?: (sourceIndex: number) => void;
+  preview?: WorkflowPreview | null;
 }) {
+  const [customSources, setCustomSources] = useState<Set<string>>(new Set());
   const filters = draft.filters || {};
   const rules = { ...emptyRules(), ...filters.matching };
   const setRules = (patch: Partial<PostingRules>) =>
@@ -96,48 +107,6 @@ export function WorkflowSections({
 
     return (
       <div className="grid gap-4">
-        {!initialSource && (
-          <div className="flex flex-col gap-1 text-sm border p-3 bg-[var(--color-surface)]">
-            <label className="font-bold flex items-center justify-between">
-              <span>Sample Workflow Template</span>
-              <span className="text-xs font-normal text-[var(--color-ink-mute)]">Quick setup</span>
-            </label>
-            <p className="text-xs text-[var(--color-ink-mute)]">
-              ATS templates use title keywords only. Restrictive examples and unverified static/script examples are labelled separately.
-            </p>
-            <Select
-              aria-label="Choose sample workflow template"
-              value=""
-              options={[
-                { value: "", label: "Select a sample template to load..." },
-                ...SAMPLE_WORKFLOW_TEMPLATES.map((t) => ({ value: t.id, label: t.name })),
-              ]}
-              onChange={(id) => {
-                const tpl = SAMPLE_WORKFLOW_TEMPLATES.find((t) => t.id === id);
-                if (tpl) {
-                  change(structuredClone(tpl.spec));
-                }
-              }}
-            />
-          </div>
-        )}
-        {SAMPLE_WORKFLOW_TEMPLATES.filter(t => t.spec.metadata.name === draft.metadata.name).map(t => <p key={t.id} role="status" className="text-sm text-[var(--color-ink-mute)]">{t.description}</p>)}
-        {field("Workflow name", draft.metadata.name, (name) =>
-          change({ ...draft, metadata: { ...draft.metadata, name } }),
-        )}
-        {field(
-          "Company hint (optional)",
-          draft.metadata.company || "",
-          (company) =>
-            change({
-              ...draft,
-              metadata: {
-                ...draft.metadata,
-                company: company || undefined,
-              },
-            }),
-        )}
-
         <div className="flex items-center justify-between gap-2 pt-2 border-t border-[var(--color-border)]">
           <h4 className="font-bold text-sm">
             Sources ({draft.sources?.length ?? 0})
@@ -249,22 +218,12 @@ export function WorkflowSections({
                   </Button>
                 </div>
               </div>
+              <CompanyPicker value={selectedCompanyId(source)}
+                onChange={companyId => { setCustomSources(current => { const next = new Set(current); next.delete(source.id); return next; }); selectCompany?.(source.id, companyId); }}
+                onCustom={() => setCustomSources(current => new Set([...current, source.id]))}
+                logo={preview?.branding.find(item => item.source_id === source.id && item.company === source.employer_hint)?.logo} />
 
               <div className="grid gap-3">
-                <label className="flex flex-col gap-1 text-sm">
-                  Source label
-                  <Input
-                    aria-label={index === 0 ? "Source label" : `Source ${index + 1} label`}
-                    value={source.label}
-                    placeholder="e.g. Cloudflare Greenhouse"
-                    onChange={(e) => {
-                      const nextSources = [...draft.sources];
-                      nextSources[index] = { ...source, label: e.target.value };
-                      change({ ...draft, sources: nextSources });
-                    }}
-                  />
-                </label>
-
                 <div className="flex flex-col gap-1 text-sm">
                   Source URL or board identifier
                   <div className="flex gap-2">
@@ -287,60 +246,69 @@ export function WorkflowSections({
                     <Button
                       type="button"
                       size="sm"
+                      tabIndex={-1}
                       aria-label={`Detect source ${index + 1}`}
-                      onClick={async () => {
-                        if (!source.extractor.url.trim()) return;
-                        try {
-                          const res = await api.detectSource(source.extractor.url);
-                          const url = canonicalizeAtsUrl(res.kind, res.identifier);
-                          const isDefault = !source.label || source.label.startsWith("Source ") || source.label.startsWith("Career Board");
-                          const nextSources = [...draft.sources];
-                          nextSources[index] = {
-                            ...source,
-                            label: isDefault && res.name ? res.name : source.label,
-                            employer_hint: source.employer_hint || res.name || undefined,
-                            extractor: {
-                              ...source.extractor,
-                              kind: res.kind as WorkflowSourceSpec["extractor"]["kind"],
-                              url,
-                            },
-                          };
-                          change({
-                            ...draft,
-                            metadata: {
-                              ...draft.metadata,
-                              name: draft.metadata.name || res.name,
-                              company: draft.metadata.company || res.name,
-                            },
-                            sources: nextSources,
-                          });
-                        } catch {
-                          // ignore or let user configure manually
-                        }
-                      }}
+                      onClick={() => onDetect?.(index)}
                     >
                       Detect
                     </Button>
                   </div>
                 </div>
 
-                <label className="flex flex-col gap-1 text-sm">
-                  Employer hint (used for branding if unlabelled)
-                  <Input
-                    aria-label={`Source ${index + 1} employer hint`}
-                    value={source.employer_hint || ""}
-                    placeholder="e.g. Acme Corp"
-                    onChange={(e) => {
-                      const nextSources = [...draft.sources];
-                      nextSources[index] = {
-                        ...source,
-                        employer_hint: e.target.value || undefined,
-                      };
-                      change({ ...draft, sources: nextSources });
-                    }}
-                  />
-                </label>
+                {index === 0 && field("Workflow name", draft.metadata.name, (name) =>
+                  change({ ...draft, metadata: { ...draft.metadata, name } }),
+                )}
 
+                <details className="border-t border-[var(--color-border)] pt-2 text-xs">
+                  <summary className="cursor-pointer font-semibold uppercase text-[var(--color-text-muted)] hover:text-[var(--color-text)] py-1">
+                    Customize source labels and metadata
+                  </summary>
+                  <div className="grid gap-3 pt-2">
+                    <label className="flex flex-col gap-1 text-sm">
+                      Source label
+                      <Input
+                        aria-label={index === 0 ? "Source label" : `Source ${index + 1} label`}
+                        value={source.label}
+                        placeholder="e.g. Cloudflare Greenhouse"
+                        onChange={(e) => {
+                          const nextSources = [...draft.sources];
+                          nextSources[index] = { ...source, label: e.target.value };
+                          change({ ...draft, sources: nextSources });
+                        }}
+                      />
+                    </label>
+
+                    <label className="flex flex-col gap-1 text-sm">
+                      Employer hint (used for branding if unlabelled)
+                      <Input
+                        aria-label={`Source ${index + 1} employer hint`}
+                        value={source.employer_hint || ""}
+                        placeholder="e.g. Acme Corp"
+                        onChange={(e) => {
+                          const nextSources = [...draft.sources];
+                          nextSources[index] = {
+                            ...source,
+                            employer_hint: e.target.value || undefined,
+                          };
+                          change({ ...draft, sources: nextSources });
+                        }}
+                      />
+                    </label>
+
+                    {index === 0 && field(
+                      "Company hint (optional)",
+                      draft.metadata.company || "",
+                      (company) =>
+                        change({
+                          ...draft,
+                          metadata: {
+                            ...draft.metadata,
+                            company: company || undefined,
+                          },
+                        }),
+                    )}
+                  </div>
+                </details>
                 {advanced && (
                   <div className="grid gap-3 border-t border-[var(--color-border)] pt-2">
                     <label className="flex flex-col gap-1 text-sm">
@@ -352,6 +320,7 @@ export function WorkflowSections({
                           "greenhouse",
                           "lever",
                           "ashby",
+                          "workday",
                           "jsonld",
                           "selector",
                         ].map((value) => ({ value, label: value }))}
@@ -393,41 +362,64 @@ export function WorkflowSections({
   }
   if (section === "Matching")
     return (
-      <div className="grid gap-3">
-        <JobLimitInput value={draft.max_jobs_per_run ?? INGESTION_LIMITS.default} onChange={value => change(value == null ? { ...draft } : { ...draft, max_jobs_per_run: value })} />
-        <CompatibilityFilters draft={draft} change={change} advanced={advanced} />
-        <KeywordMatching rules={rules} change={change} />
-        <fieldset className="flex flex-wrap gap-4 border-t pt-3 text-sm">
-          <legend className="font-bold mb-1">Role types</legend>
-          {(
-            [
-              ["full_time", "Full-time"],
-              ["internship", "Internship"],
-              ["contract", "Contract"],
-              ["part_time", "Part-time"],
-              ["seasonal", "Seasonal"],
-              ["unknown", "Unknown employment"],
-            ] as const
-          ).map(([value, label]) => (
-            <label key={value} className="flex min-h-8 items-center gap-2">
-              <input
-                type="checkbox"
-                checked={rules.role_types.includes(value)}
-                onChange={(e) => {
-                  const updated = e.target.checked
-                    ? [...rules.role_types, value]
-                    : rules.role_types.filter((v) => v !== value);
-                  setRules({ role_types: updated });
-                }}
-              />
-              {label}
-            </label>
-          ))}
-        </fieldset>
-        <p className="text-xs text-[var(--color-ink-mute)]">
-          Leave all unchecked to match any role type, including unknown. Select Unknown employment alongside known types to include both.
-        </p>
-        <GeographyMatching rules={rules} onChange={setRules} onDraftChange={() => change({ ...draft })} />
+      <div className="grid gap-4">
+        <section aria-label="Job role and keywords" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
+          <h4 className="font-bold text-sm">Role & Keywords</h4>
+          <KeywordMatching rules={rules} change={change} />
+        </section>
+        <section aria-label="Location and workplace" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
+          <GeographyMatching rules={rules} onChange={setRules} onDraftChange={() => change({ ...draft })} />
+        </section>
+        <section aria-label="Experience, employment and ingestion limits" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-4">
+          <h4 className="font-bold text-sm">Experience, Employment & Limits</h4>
+          <ExperienceFilter
+            experienceMin={rules.experience_min}
+            experienceMax={rules.experience_max}
+            experienceMatchMode={rules.experience_match_mode}
+            includeUnknown={rules.experience_include_unknown}
+            newGrad={rules.new_grad ?? "any"}
+            onDraftChange={() => change({ ...draft })}
+            onChange={values => setRules({
+              experience_min: values.experienceMin, experience_max: values.experienceMax,
+              experience_match_mode: values.experienceMatchMode,
+              experience_include_unknown: values.includeUnknown, new_grad: values.newGrad,
+            })}
+          />
+          <fieldset className="flex flex-wrap gap-4 border-t border-[var(--color-border)] pt-3 text-sm">
+            <legend className="font-bold mb-1">Employment type</legend>
+            {(
+              [
+                ["full_time", "Full-time"],
+                ["internship", "Internship"],
+                ["contract", "Contract"],
+                ["part_time", "Part-time"],
+                ["seasonal", "Seasonal"],
+                ["unknown", "Unknown employment"],
+              ] as const
+            ).map(([value, label]) => (
+              <label key={value} className="flex min-h-8 items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={rules.role_types.includes(value)}
+                  onChange={(e) => {
+                    const updated = e.target.checked
+                      ? [...rules.role_types, value]
+                      : rules.role_types.filter((v) => v !== value);
+                    setRules({ role_types: updated });
+                  }}
+                />
+                {label}
+              </label>
+            ))}
+          </fieldset>
+          <p className="text-xs text-[var(--color-ink-mute)]">
+            Leave all unchecked to match any role type, including unknown. Select Unknown employment alongside known types to include both.
+          </p>
+          <div className="border-t border-[var(--color-border)] pt-3">
+            <JobLimitInput value={draft.max_jobs_per_run ?? INGESTION_LIMITS.default} onChange={value => change(value == null ? { ...draft } : { ...draft, max_jobs_per_run: value })} />
+          </div>
+          <CompatibilityFilters draft={draft} change={change} advanced={advanced} />
+        </section>
         {advanced && (
           <>
             <SalaryRangeFilter
@@ -469,42 +461,6 @@ export function WorkflowSections({
                 })
               }
             />
-            {field(
-              "Experience minimum (years)",
-              rules.experience_min ?? "",
-              (value) =>
-                setRules({ experience_min: value ? Number(value) : null }),
-              "number",
-            )}
-            {field(
-              "Experience maximum (years)",
-              rules.experience_max ?? "",
-              (value) =>
-                setRules({ experience_max: value ? Number(value) : null }),
-              "number",
-            )}
-            <label>
-              <input
-                type="checkbox"
-                checked={rules.experience_include_unknown}
-                onChange={(e) =>
-                  setRules({ experience_include_unknown: e.target.checked })
-                }
-              />{" "}
-              Include unknown experience
-            </label>
-            <label>
-              New graduate roles
-              <Select
-                aria-label="New graduate roles"
-                value={rules.new_grad || "any"}
-                options={["any", "only", "exclude"].map((value) => ({
-                  value,
-                  label: value,
-                }))}
-                onChange={(new_grad) => setRules({ new_grad })}
-              />
-            </label>
             {(["sponsorship", "clearance", "work_auth"] as const).map((key) => (
               <fieldset key={key} className="flex flex-wrap gap-3">
                 <legend>{key.replaceAll("_", " ")}</legend>
@@ -634,43 +590,66 @@ export function WorkflowSections({
     );
   if (section === "Schedule")
     return (
-      <div className="grid gap-3">
-        <label>
-          Schedule
-          <Select
-            aria-label="Schedule"
-            value={schedule.cadence || "daily"}
-            options={(advanced
-              ? [
-                  "daily",
-                  "weekly",
-                  "manual",
-                  "hourly",
-                  "every_6h",
-                  "every_12h",
-                  "cron",
-                ]
-              : [
-                  "daily",
-                  "manual",
-                  ...(schedule.cadence &&
-                  !["daily", "manual"].includes(schedule.cadence)
-                    ? [schedule.cadence]
-                    : []),
-                ]
-            ).map((value) => ({
-              value,
-              label: value,
-            }))}
-            onChange={(cadence) =>
-              setSchedule({
-                cadence: cadence as NonNullable<
-                  WorkflowSpec["schedule"]
-                >["cadence"],
-              })
-            }
-          />
-        </label>
+      <div className="grid gap-4">
+        <section aria-label="Crawl schedule" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="font-bold text-sm">Automated Crawl Frequency</h4>
+            <div className="flex flex-wrap gap-1.5 text-xs">
+              <span className="text-[var(--color-text-muted)] font-semibold uppercase">Presets:</span>
+              <button
+                type="button"
+                aria-pressed={schedule.cadence === "daily" || !schedule.cadence}
+                className={`min-h-7 px-2 border text-xs font-semibold uppercase transition-colors ${(schedule.cadence === "daily" || !schedule.cadence) ? "bg-[var(--color-text)] text-[var(--color-surface)] border-[var(--color-border)]" : "border-[var(--color-border)] hover:bg-[var(--color-surface-raised)]"}`}
+                onClick={() => setSchedule({ cadence: "daily" })}
+              >
+                Daily
+              </button>
+              <button
+                type="button"
+                aria-pressed={schedule.cadence === "manual"}
+                className={`min-h-7 px-2 border text-xs font-semibold uppercase transition-colors ${schedule.cadence === "manual" ? "bg-[var(--color-text)] text-[var(--color-surface)] border-[var(--color-border)]" : "border-[var(--color-border)] hover:bg-[var(--color-surface-raised)]"}`}
+                onClick={() => setSchedule({ cadence: "manual" })}
+              >
+                Manual
+              </button>
+            </div>
+          </div>
+          <label className="flex flex-col gap-1 text-sm">
+            Schedule
+            <Select
+              aria-label="Schedule"
+              value={schedule.cadence || "daily"}
+              options={(advanced
+                ? [
+                    "daily",
+                    "weekly",
+                    "manual",
+                    "hourly",
+                    "every_6h",
+                    "every_12h",
+                    "cron",
+                  ]
+                : [
+                    "daily",
+                    "manual",
+                    ...(schedule.cadence &&
+                    !["daily", "manual"].includes(schedule.cadence)
+                      ? [schedule.cadence]
+                      : []),
+                  ]
+              ).map((value) => ({
+                value,
+                label: value,
+              }))}
+              onChange={(cadence) =>
+                setSchedule({
+                  cadence: cadence as NonNullable<
+                    WorkflowSpec["schedule"]
+                  >["cadence"],
+                })
+              }
+            />
+          </label>
         {["daily", "weekly"].includes(schedule.cadence || "") && (
           <>
             {field(
@@ -755,6 +734,7 @@ export function WorkflowSections({
           Automatic runs also respect the global scheduling pause. Manual runs
           remain available.
         </p>
+        </section>
       </div>
     );
   return (
