@@ -1,6 +1,6 @@
 # Incident 28 — Seeded workflows produce no Discovered jobs
 
-Status: **Sections 1–4 diagnostics, ownership, matching compatibility and field evidence/geography parity implemented; templates/extraction acceptance remains open.** See [current evidence](../12-implementation-evidence.md). Recorded 2026-10-18 against `8d8c45a49faeb829e2b2d99cd6840ebbe54b243d`, branch `implementation/trustworthy-scraping`. Requested deliverable: diagnosis, research, error log, and an implementation handoff for GPT-6.1 Sol. See [Plan 12](../12-workflow-ingestion-repair.md).
+Status: **Sections 1–8 implemented and verified; Plan 12 is complete.** See [current evidence](../12-implementation-evidence.md). Recorded 2026-10-18 against `8d8c45a49faeb829e2b2d99cd6840ebbe54b243d`, branch `implementation/trustworthy-scraping`. Requested deliverable: diagnosis, research, error log, and an implementation handoff for GPT-6.1 Sol. See [Plan 12](../12-workflow-ingestion-repair.md).
 
 ## Scope and confidence
 

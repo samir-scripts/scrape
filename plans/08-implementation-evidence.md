@@ -529,3 +529,31 @@ Native rerun details from 2026-10-15 (each creates its own profile under `/var/f
 `npm ci` and the complete CI sequence have not been repeated from a newly installed clean checkout in this section; the isolated worktree used copied, already installed dependencies. No remote CI run was performed. The native harness did not synthesize OS pointer input or open the native file chooser, and no human native screenshot review was performed; those gates remain open. The full Cloudflare API response is retained locally at `/private/tmp/cloudflare-job-8024849.json` for this verification and identified by its committed checksum/projection; it is not stored in the repository. This work uses the macOS WKWebView host; results do not establish behavior on Windows/Linux. Never use or mutate the live database to complete these gates.
 
 The four pre-existing user edits in `IconButton.tsx`, `RemoveJobButton.tsx`, discovered `JobCard.tsx`, and its interaction test remain uncommitted and unchanged by this section. Section 8 must remain in progress until the real native manual gates above are recorded or explicitly accepted as outstanding for handoff.
+
+### 2026-10-20 — Current-tree native acceptance rerun
+
+**Section 8 remains in progress: two requested feature harnesses passed and four failed.** The 2026-10-15 results above remain historical; they do not establish acceptance of the current working tree. Before execution, `git status --short` reported 33 modified and 11 untracked files. Existing Plan 12 Sections 1–8 changes were preserved; this acceptance update changes documentation only. No tests, harnesses, timeouts, screenshot baselines, or application implementation were modified.
+
+Prerequisites: `cargo metadata --no-deps --format-version 1` resolved the repository `target` directory through `scripts/cargo-target-dir.mjs`; `CARGO_TARGET_DIR` was unset. `npm run build:sidecar && cargo build -p scrape` passed. The six commands below ran sequentially on macOS Darwin 24.6.0 arm64 using the actual Tauri/WKWebView application. Each launcher also rebuilt the sidecar and ran the development host.
+
+All artifact paths below are relative to `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/`; each contains `result.json`, `dev-startup.log`, the injected `smoke.js`, and its isolated SQLite profile.
+
+| Exact command | Observed result | Artifact directory |
+|---|---|---|
+| `SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_LAYOUT=1 node scripts/test-native-startup.mjs` | Exit 1; `Native layout deadline: first page`. Pane resizing/persistence acceptance was not reached. | `scrape-native-smoke-37Euhj` |
+| `SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_KANBAN=1 node scripts/test-native-startup.mjs` | Exit 1; `Native Kanban deadline`. The generic error does not identify the failed wait; current transition/restart acceptance is not established. | `scrape-native-smoke-Ng6Z20` |
+| `SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_APPEARANCE=1 SCRAPE_SCROLLBAR_MODE=Always node scripts/test-native-startup.mjs` | Exit 1 at 1280×600; `Native UI deadline: apply inter`. Subsequent font/theme/scrollbar assertions were not reached. | `scrape-native-smoke-pTcXJV` |
+| `SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_APPEARANCE=1 SCRAPE_NATIVE_WIDTH=480 SCRAPE_SCROLLBAR_MODE=Automatic node scripts/test-native-startup.mjs` | Exit 1 at 480×600; `Native UI deadline: apply inter`. Subsequent font/theme/scrollbar assertions were not reached. | `scrape-native-smoke-3Cnf0l` |
+| `SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_SCHEDULE=1 node scripts/test-native-startup.mjs` | Passed: summary, create/update/toggle/delete, pause/resume, no implicit run, Pacific/Auckland next-run agreement. Result next run: `2026-10-20T20:00:00.000Z`. | `scrape-native-smoke-eR9Xke` |
+| `SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_DATA_MANAGEMENT=1 node scripts/test-native-startup.mjs` | Passed: four cleanup modes, actual worker cancellation, favorite/tracked-state preservation, reset paused. Post-run SQLite audit passed integrity/foreign-key checks, migration history, empty reset tables except settings/migrations, and four backup databases with job counts `[0,1,1,1]`. | `scrape-native-smoke-Z4YOXA` |
+
+The failures are observed acceptance failures, not diagnosed application defects. No rerun was used to turn them into passes. In particular, one wide appearance probe reported hidden/unfocused state, but the narrow run was visible/focused and failed at the same font step; focus alone is not an established cause.
+
+#### Automated evidence versus outstanding native gates
+
+- **Physical separator and Kanban dragging: pending.** `native-job-layout.mjs` dispatches a synthetic `ArrowLeft` keyboard event; `native-kanban.mjs` dispatches select changes and synthetic keyboard drag/cancel/commit events. Neither supplies physical OS pointer gestures. Their current failures additionally leave their automated acceptance paths unverified.
+- **Native OS YAML chooser: pending.** None of these six runs opens or exercises the operating-system file chooser. Browser chooser coverage and injected events do not satisfy this gate.
+- **Native Paper/Obsidian screenshots at 200% zoom: pending.** The appearance helper checks DOM/computed styles and does not capture screenshots or set native zoom. Both runs failed before theme iteration. The inspected narrow-run artifact directory contains no screenshot; no native screenshot review, font/scrollbar visual approval, or 200% zoom approval is claimed.
+- **Scope and safety:** temporary `current19` profiles only; no live database or user application data was opened for testing. No Windows/Linux verification, live provider checks, clean-checkout full CI sequence, or physical/manual acceptance was performed in this rerun.
+
+Next acceptance work is to diagnose the layout/Kanban/font-control deadlines without weakening verification, then rerun the affected native journeys. Separately record real pointer drags (including populated/empty Kanban columns), native YAML chooser interaction, and visually inspected Paper/Obsidian native 200% screenshots with OS/WebView, font, viewport, and zoom metadata. Until those gates and the required final integration sequence are satisfied, Section 8 is not complete.

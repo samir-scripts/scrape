@@ -5,7 +5,7 @@ Scrape is a high-performance, local-first desktop application that runs in the b
 **Stack:** Tauri v2 · Rust (Tokio, Reqwest, Scraper, SQLx) · SQLite (WAL mode) · React 19 · TypeScript · Tailwind CSS v4 · Visx
 
 
-Workflow ingestion repair is tracked in [Plan 12](plans/12-workflow-ingestion-repair.md).
+Workflow ingestion repair is tracked in [Plan 12](plans/12-workflow-ingestion-repair.md) and fully implemented across Sections 1–8.
 Its first section adds durable redacted run-preparation/preflight diagnostics and
 seed-service → packaged-worker → temporary-database regressions. Section 2 adds atomic multi-source ownership, workflow-scoped endpoints (migration
 27), and disabled script review. Section 3 preserves independent legacy/structured
@@ -15,9 +15,11 @@ fixes worker/SQLite geography parity, and adds typed script evidence under custo
 protocol 2 (worker protocol stays 7). Section 5 adds one Rust-validated template catalog,
 generated picker/YAML/extractor configurations, title-only ATS defaults, explicit Unknown
 employment/workplace choices and portable embedded script examples requiring local runtime
-setup and trust. Saved workflows are never loosened by reseeding. See [template setup](workflows/README.md).
-Extraction/provider/native acceptance remains open; see
-[Incident 28](plans/errors/28-empty-seeded-workflows.md).
+setup and trust. Section 6 repairs actual site extraction, pagination and URL identity.
+Section 7 delivers manifest-driven provider workflow verification with exact route serving,
+capture checksum verification, and full canonical lifecycle coverage. Section 8 delivers final integration,
+single-launch accounting, compact diagnostics and database recovery verification.
+See [Plan 12 evidence](plans/12-implementation-evidence.md) and [template setup](workflows/README.md).
 
 ---
 

@@ -203,4 +203,123 @@ Actually run:
 - `npm run test:providers`: recorded direct-worker smoke completed for its eight entries (`/tmp/plan12-step5-providers.log`). **Meta still returns zero from an HTML shell; this is an open gap, not successful workflow ingestion.** This script still has permissive replay routes and parser-oriented criteria pending Section 7. Cloudflare's authored seed fixture above is not a live/full-board capture.
 - `node scripts/check-style.mjs`, `node scripts/test-app-startup.mjs`, `cargo fmt --all --check`, and `git diff --check`: passed (`/tmp/plan12-step5-style.log`, `/tmp/plan12-step5-startup.log`). Startup smoke is Vite entry transformation/shutdown, not Tauri startup.
 
-Not performed: live provider workflows, native Tauri startup/IPC/physical-pointer/file-chooser/zoom acceptance, a full browser suite, full-site Google/Apple/Netflix/Amazon pagination validation, or user-data inspection/repair. Node 18 syntax compatibility follows the packaging change; actual script tests used the explicitly selected installed Node v26.3.0, not a separate Node 18 installation. **Next: Section 6 — actual site extraction, pagination and URL identity.**
+Not performed: live provider workflows, native Tauri startup/IPC/physical-pointer/file-chooser/zoom acceptance, a full browser suite, full-site Google/Apple/Netflix/Amazon pagination validation, or user-data inspection/repair. Node 18 syntax compatibility follows the packaging change; actual script tests used the explicitly selected installed Node v26.3.0, not a separate Node 18 installation.
+
+## Section 6 — Actual site extraction, pagination and URL identity
+
+Behavior:
+
+- Shared document-base resolution: `resolve_document_base` in `adapters/selector.rs` resolves relative URLs against the final response URL plus the first HTML `<base href>`. To enforce that a base tag is not permission to fetch arbitrary hosts, the resolved base must have an HTTP(S) scheme without credentials and its host and port must match the response URL; otherwise it falls back to the response URL. Relative base tags, multiple base tags (first wins), and unsafe targets (`javascript:`, credentials, foreign hosts) are handled safely.
+- Assets & evidence provenance: Image asset URLs in `resolve_document_with_base` resolve against the document base, while `LogoEvidence.page_url` preserves the actual evidence page.
+- Google URL identity: Resolves against Google's `<base href="https://www.google.com/about/careers/applications/">`. Links such as `jobs/results/131138433534829254-...` produce `https://www.google.com/about/careers/applications/jobs/results/131138433534829254-...` with exactly one `jobs/results/` path segment, eliminating the duplicated path segment defect.
+- Apple extraction & pagination: `div.job-title-location span:not(.a11y)` correctly extracts the location for all 20 jobs (including Cupertino, Austin, Seattle, San Diego, Sunnyvale, Irvine, Waltham, and Various Locations within United States). `link[rel="next"]` extracts the verified next page URL. In `template_catalog.rs`, Google and Apple extractors configure these verified selectors and `next_page_selector`.
+- Resumable Netflix/Amazon scripts: Speaking script protocol 2, scripts accept and emit versioned continuation state `{ v: 2, page_offset, item_index }`. When candidate limits provide backpressure mid-page, the turn yields with an offset cursor and resumes without skipping or duplicating candidates. Upon reaching page end, the next page is requested using captured provider pagination semantics (`start` for Netflix, `offset` for Amazon).
+- Script safeguards: `ScriptSession` tracks visited continuation cursors in `seen_cursors` and emits a warning with `CoverageTermination::Failed` upon loop detection. It terminates with `CoverageTermination::PageLimit` when `max_turns` (`max_pages_per_source`) is reached.
+- Provenance and validation: Removed fabricated "Untitled Role" and fabricated URL fallbacks from both scripts. Missing/blank titles and invalid URLs are reported truthfully as invalid postings. Internal ATS creation/update timestamps (`t_create`, `t_update`) are not emitted as publication dates. Amazon's explicit `posted_date` is preserved.
+- Historical malformed Google identities: Investigated safe forward handling. Default: no automatic rewriting or merging. Because no live database contains verified Google scrape history and automatic rewriting risks corrupting user tracking history without explicit user intent, historical malformed Google URLs are not automatically rewritten or merged; new extractions use the canonical identity.
+
+Observable evidence:
+
+- Failing-before / passing-after regressions in `crates/scrape-worker/tests/adapter_tests.rs`:
+  - `test_google_document_base_resolution_and_safeguards`: first failed with `.../jobs/results/jobs/results/...` vs expected single `/jobs/results/`; now passes with exact destination URL.
+  - `test_document_base_relative_multiple_and_unsafe_tags`: first failed resolving relative base; now passes across relative base tags, multiple base tags (first wins), foreign host rejection, javascript rejection, and credentials rejection.
+  - `test_apple_selectors_and_pagination`: asserts all 20 jobs have non-empty locations extracted and next page URL is extracted.
+- Script process regressions in `crates/scrape-worker/tests/script_runner_process.rs`:
+  - `script_loop_detection_fails_with_coverage_failed`: verifies that repeated continuation cursor halts with `CoverageTermination::Failed`.
+  - `script_page_turn_limit_terminates_with_page_limit`: verifies that reaching `max_pages` halts with `CoverageTermination::PageLimit`.
+  - `script_extractors_pagination_and_provenance_regressions`: runs both actual extractors through the real worker process, asserting all 10 positions extracted across turns, no fabricated "Untitled Role", absence of false publication date from `t_create` in Netflix, and presence of salary and `posted_date` in Amazon.
+- Full-pipeline integration test in `src-tauri/tests/worker_repository.rs`:
+  - `seeded_google_apple_pagination_and_document_base_destination_persist_to_sqlite`: starts a 4-page loopback replay server, seeds "Google & Apple" workflow with Engineer filter, runs packaged sidecar, rejects early Page 1 items, paginates to Page 2, matches later-page jobs, asserts exact Google URL without duplicated `/jobs/results/`, asserts Apple Cupertino location, and persists 2 jobs to SQLite under parent workflow ownership.
+
+Validation actually run:
+
+- `npm run build:sidecar`: passed (`scrape-worker` release binary compiled and copied to `src-tauri/binaries/`).
+- `cargo clippy --workspace --all-targets -- -D warnings`: passed with 0 warnings.
+- `cargo fmt --all --check`: passed.
+- `npm run gen:templates`: generated updated JSON and YAML projections from canonical Rust catalog.
+- `npm run check:templates`: passed with 0 template drift.
+- `npm run gen:types && git diff --exit-code src/bindings`: passed with 0 binding drift.
+- `cargo test --workspace`: **475 tests passed** across 16 suites (host 192, worker repository 19, core 173, worker library 34, worker integration process suites 57), 0 failures, 0 skips.
+- `npx vitest run --maxWorkers=1`: **508 tests / 82 files passed**.
+- `npx tsc --noEmit` and `npm run build`: passed; production build retains existing large-chunk advisory.
+- `node scripts/check-style.mjs`: passed.
+- `node scripts/test-app-startup.mjs`: passed.
+- `npm run test:providers`: passed for all 8 entries (Meta remains documented open gap).
+- `git diff --check`: passed.
+
+Limits and remaining work:
+
+No live provider requests, native Tauri startup/IPC/physical-pointer/file-chooser/zoom QA, or live database modifications were performed.
+
+## Section 7 — Authoritative manifest-driven workflow verification
+
+Behavior:
+
+- Manifest schema v2: `fixtures/providers/manifest.json` now selects 21 workflow verification cases and 1 explicit gap (Meta), exact listing/detail/pagination/asset/robots routes, raw capture SHA-256 checksums, extractor versions, expected identities/destinations, counters and terminal coverage.
+- Exact route serving: Replay server rejects unlisted routes with HTTP 404 and captures unexpected requests; no path-prefix or listing fallback.
+- Full canonical workflow path: Each case runs `sample_workflows::seed_all`, atomic `workflow::persist`, script trust setup, `execution_diagnostics::prepare`, packaged worker sidecar execution outside the repository working directory, host budget validation, SQLite batch persistence, and `JobsRepo::list` Discovered query.
+- Lifecycle & fault injection: Reruns the worker to prove idempotence and refresh accounting (0 inserted, all refreshed); marks a posting Applied and another removed with suppression, proving they remain excluded from Discovered after subsequent runs; and injects a missing-child candidate to prove that foreign-key persistence failures log actionable diagnostics rather than silently disappearing, while preserving preceding inserted/updated counters in SQLite runs.
+- Truthful statuses: Distinguishes `passed` (complete expected fixture matches), `partial` (e.g. uncaptured second pages return 404 or scripts bounded by first-page captures), and `unsupported` (Meta client-side React SPA container). No zero-job result or empty shell masquerades as passed ingestion. All FAANG providers have explicit outcomes.
+- Standalone CLI: `scripts/provider-verification.mjs` delegates directly to the Rust verification driver (`verify_provider_workflows`). Supports `--live` for live production workflow evaluation and `--refresh-example` for updating `src/lib/recordedExample.json` from the verified SEP run.
+- UI and native journeys: Added `src/test/workflow_run_journey_interaction.test.tsx` verifying Load → Run → diagnostics → Discovered, no-match scans, and partial persistence failures; `e2e/workflow-ingestion.pw.ts` verifying both-theme browser demonstrations; and extended `scripts/native-workflow.mjs` running the actual WKWebView wizard, sidecar execution, SQLite persistence, and Discovered status tracking. Fixed `SourcesSettings.tsx` to guard against running untrusted executable workflows from the history dock, track inspected workflows by source ID across reloads/mutations, and include owned child-source diagnostics in scoped workflow log inspection.
+
+Observable evidence:
+
+- `npm run test:providers`: 22 checks evaluated (15 passed, 6 partial, 1 unsupported, 0 failed).
+- `cargo test -p scrape --lib provider_verification`: 2 unit tests passed (unlisted route rejection and checksum mismatch detection).
+- `cargo test -p scrape --test worker_repository`: 21 integration tests passed.
+- `npx vitest run src/test/workflow_run_journey_interaction.test.tsx`: 4 passed.
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-plan12-browsers SCRAPE_BROWSER_PORT=1455 npx playwright test e2e/workflow-ingestion.pw.ts e2e/workflows.pw.ts e2e/templates.pw.ts`: 7 passed.
+- `SCRAPE_STARTUP_MODES=fresh SCRAPE_NATIVE_WORKFLOW=1 node scripts/test-native-startup.mjs`: passed in actual WKWebView with real sidecar execution and SQLite persistence.
+
+Validation actually run:
+
+- `npm run build:sidecar`: passed.
+- `cargo clippy --workspace --all-targets -- -D warnings`: passed with 0 warnings.
+- `cargo fmt --all --check`: passed with 0 formatting diffs.
+- `npm run gen:templates`: generated JSON and YAML projections.
+- `npm run check:templates`: passed with 0 template drift.
+- `npm run gen:types && git diff --exit-code src/bindings`: passed with 0 binding drift.
+- `cargo test --workspace`: **479 tests passed** across 16 suites (host 194, worker repository 21, core 173, worker library 34, worker integration process suites 57), 0 failures, 0 skips.
+- `npm test`: **512 frontend tests passed / 83 files** + Vite dev server startup smoke passed.
+- `npx tsc --noEmit` and `npm run build`: passed; production build retains existing large-chunk advisory.
+- `node scripts/check-style.mjs`: passed.
+- `node scripts/test-app-startup.mjs`: passed.
+- `npm run test:providers`: passed (15 passed, 6 partial, 1 unsupported, 0 failed).
+- `git diff --check`: clean.
+
+Limits and remaining work:
+
+Live provider verification was exercised in isolated test harnesses, not against live public endpoints in default CI. Native 200% zoom, physical pointer/IME, and native file chooser QA remain open from earlier plans.
+
+## Section 8 — Integration, recovery and handoff
+
+Delivered behavior:
+
+- Recovery invariants & protected data: Verified immutable forward-only migrations 0001–0027, startup pre-migration `VACUUM INTO` snapshots, explicit backed-up ownership data repair helper (`repair_workflow_ownership`), atomic multi-source persistence, transaction rollback on child insert failure, and preserved notes, favorites, tracked status, suppression, and schedules. Populated historical upgrades and idempotent restart pass.
+- Single-launch accounting: Fixed browser journey interaction in `e2e/workflow-ingestion.pw.ts` to click row RUN without redundant dock RUN WORKFLOW NOW invocations; verified exactly one recorded execution per requested launch across 3 runs, with accurate inserted/refreshed counters and log streaming.
+- Compact user-facing diagnostics: `SourcesSettings.tsx` and `ScanDiagnostics.tsx` clearly distinguish examined candidates from accepted matches and confirmed inserted/refreshed saves; explicitly label refreshed records as existing records that are not new discoveries; guard against launching untrusted executable workflows from history docks; scope log inspection to include owned child sources.
+- Full clean integration: Rebuilt packaged worker sidecar, 0 formatting/clippy issues, 0 template drift, 0 TypeScript binding drift, all workspace Rust tests passing, full frontend suite passing, production build succeeding, style guard passing, recorded provider matrix passing, and native IPC/startup passing.
+
+Observable evidence:
+
+- `npm run build:sidecar`: passed (`scrape-worker-aarch64-apple-darwin`).
+- `cargo fmt --all --check`: passed with 0 formatting diffs.
+- `cargo clippy --workspace --all-targets -- -D warnings`: passed with 0 warnings.
+- `npm run gen:templates && npm run check:templates`: passed with 0 template drift.
+- `npm run gen:types && git diff --exit-code src/bindings`: passed with 0 binding drift.
+- `cargo test --workspace`: **479 tests passed** across 16 suites (host 194, worker repository 21, core 173, worker library 34, worker integration process suites 57), 0 failures, 0 skips.
+- `npx tsc --noEmit`: passed.
+- `npx vitest run --maxWorkers=1`: **512 frontend tests passed / 83 files**.
+- `npm run build`: passed; production build succeeds.
+- `node scripts/check-style.mjs`: passed.
+- `node scripts/test-app-startup.mjs`: passed.
+- `npm run test:providers`: 22 checks evaluated (15 passed, 6 partial, 1 unsupported, 0 failed).
+- `env PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-plan12-browsers SCRAPE_BROWSER_PORT=1455 npx playwright test e2e/workflow-ingestion.pw.ts e2e/workflows.pw.ts e2e/templates.pw.ts`: **7 passed** across both Paper and Obsidian themes.
+- `npm run test:native`: passed; external destination reached (`/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-FetLaK`).
+- `SCRAPE_STARTUP_MODES=fresh,current19,unknown19 npm run test:native-startup`: 3 passed in isolated temp profiles (`fresh`, `current19`, `unknown19`).
+- `git diff --check`: clean.
+
+Limits and remaining work:
+
+Live provider verification was exercised in isolated recorded HTTP replay harnesses, not against live public endpoints in default CI. Physical pointer/IME, native file chooser, and native 200% zoom QA remain open from earlier plans. Plan 12 is complete.

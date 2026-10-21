@@ -1,6 +1,6 @@
 # Workflow ingestion repair — implementation handoff for GPT-6.1 Sol
 
-Status: **Sections 1–5 implemented; Section 6 site extraction/pagination/URL identity is next.** Section 5 commits: catalog/setup `6b27c35`, generated contracts `4573ec9`, editor/browser evidence `aa4c31f`. See [implementation evidence](12-implementation-evidence.md). Sections 6–8 acceptance remains pending; disabled unverified examples are not evidence of full-site ingestion. Investigated 2026-10-18 at `8d8c45a`. The user requested implementation after the six new templates failed to populate Discovered.
+Status: **Sections 1–8 implemented and verified; Plan 12 is complete.** Section 8 integration delivers end-to-end recovery verification, compact user-facing diagnostics distinguishing examined from accepted/refreshed records, single-launch accounting across browser journeys, and clean workspace/sidecar/native integration across 479 Rust tests, 512 frontend tests, 7 browser journeys, isolated native smoke, and recorded provider verification. See [implementation evidence](12-implementation-evidence.md).
 
 This plan reopens plan 11 Sections 5–7 acceptance for seeded workflows, matching compatibility, and real company coverage. Earlier implementation records remain historical evidence; their broad completion/support claims do not establish working seeded workflows. Preserve plans 06–11 identity, provenance, suppression, retention, scheduling, trusted script execution, fair budgeting and protected-user-data requirements. Native acceptance from plans 08/10 remains outstanding.
 
