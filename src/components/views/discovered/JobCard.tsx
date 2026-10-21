@@ -56,10 +56,10 @@ export function JobCard({
 
   return (
     <div
-      className={`group relative flex flex-col gap-2 p-4 border border-[var(--color-ink)]/20 hover:border-[var(--color-ink)]/50 transition-colors select-text ${
+      className={`group relative flex flex-col gap-2 p-4 border-2 transition-colors select-text ${
         selected
-          ? "bg-[var(--color-paper-2)]/80 border-l-4 border-l-[var(--color-ink)] pl-3 border-[var(--color-ink)]/60"
-          : "bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)]/40"
+          ? "bg-[var(--color-card)] border-l-4 border-l-[var(--color-ink)] pl-3 border-[var(--color-ink)]"
+          : "bg-[var(--color-card)] border-[var(--color-ink)] hover:border-[var(--color-ink)]"
       } ${className}`}
     >
       {/* Top Line: Title + Actions */}

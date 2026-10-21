@@ -82,8 +82,8 @@ describe("Discovered Tab Card View and Consolidated Job Window", () => {
       // 5. Description snippet preview
       expect(html).toContain("Lead critical infrastructure systems scaling");
 
-      // 6. 1px card border
-      expect(html).toContain("border-[var(--color-ink)]/20");
+      // 6. Thick card border
+      expect(html).toContain("border-2");
     });
 
     it("renders selected card accent border when selected is true", () => {

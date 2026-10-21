@@ -33,6 +33,7 @@
   --color-focus: var(--color-text);
   --color-selection: #B9B5A5;
   --color-accent-ink: var(--palette-ink);
+  --color-card: #ECE7DB;
   /* Compatibility aliases for existing primitives; semantic roles are authoritative. */
   --color-paper: var(--color-surface);
   --color-paper-2: var(--color-surface-raised);
@@ -74,6 +75,7 @@
   --color-border: var(--color-text-muted);
   --color-rule: #62625B;
   --color-selection: var(--palette-lavender);
+  --color-card: #36363a;
   --color-danger: #F08FA2;
   --color-success: #C4DA92;
   --color-warning: #F0CB80;
