@@ -332,7 +332,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                 setImportedSpec(null);
                 setIsAddModalOpen(true);
               }}
-              aria-label="ADD WORKFLOW"
+              aria-label="Add workflow"
             >
               ADD WORKFLOW
             </Button>
@@ -409,26 +409,13 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                 ERRORS ({counts.errors})
               </button>
             </div>
-            <div className="flex gap-2">
+            <div>
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="SEARCH WORKFLOWS..."
-                className="text-xs flex-1"
+                className="text-xs"
               />
-              <Button
-                variant="default"
-                size="sm"
-                disabled={isRecordedMode()}
-                onClick={() => {
-                  setEditingSource(null);
-                  setImportedSpec(null);
-                  setIsAddModalOpen(true);
-                }}
-                aria-label="Add workflow"
-              >
-                + Add
-              </Button>
             </div>
           </div>
           {/* Workflows Table */}
