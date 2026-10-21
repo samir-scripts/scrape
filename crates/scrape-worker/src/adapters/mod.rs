@@ -3,6 +3,7 @@ pub mod branding;
 pub mod greenhouse;
 pub mod jsonld;
 pub mod lever;
+pub mod search;
 pub mod selector;
 pub(crate) mod selector_session;
 pub mod workday;
@@ -100,6 +101,13 @@ pub async fn scrape_source_with_evidence(
         }
         SourceKind::Workday => {
             workday::scrape_workday_with(client, source, &mut |event| validated(event, None)).await
+        }
+        SourceKind::Search => {
+            search::scrape_search_with(client, source, &mut |event| {
+                let evidence = scrape_core::matching::MatchingEvidence::from_event(&event, true);
+                validated(event, Some(evidence))
+            })
+            .await
         }
     }
 }

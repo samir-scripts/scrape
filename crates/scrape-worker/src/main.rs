@@ -79,10 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             config: serde_json::json!({"url": page_url}),
         };
         let branding = scrape_worker::adapters::branding::CompanyBranding::fetch_source(
-            &client,
-            &page_url,
-            &company,
-            &source,
+            &client, &page_url, &company, &source,
         )
         .await;
         let mut logo = scrape_core::branding::CompanyLogo {
@@ -114,7 +111,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("{}", serde_json::to_string(&logo)?);
         return Ok(());
     }
-
 
     if let Some(source_spec) = args.source {
         run_single_source(
@@ -182,6 +178,7 @@ async fn run_single_source(
         "jsonld" => SourceKind::Jsonld,
         "selector" => SourceKind::Selector,
         "workday" => SourceKind::Workday,
+        "search" => SourceKind::Search,
         other => {
             eprintln!("Unknown source kind: {}", other);
             std::process::exit(1);

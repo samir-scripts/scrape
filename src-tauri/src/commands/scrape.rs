@@ -159,7 +159,7 @@ async fn execute_dry_run_worker(
 ) -> Result<Vec<WorkerEvent>> {
     let PreviewHost { app, pool } = host;
     crate::services::script_trust::validate_execution(pool, &sources).await?;
-    let config = WorkerConfig {
+    let mut config = WorkerConfig {
         version: PROTOCOL_VERSION,
         run_started_at: Some(scrape_core::now_iso()),
         filters_by_source: Default::default(),
@@ -170,6 +170,11 @@ async fn execute_dry_run_worker(
         max_jobs_per_run,
         starting_source_index: Some(0),
     };
+    crate::services::execution_diagnostics::prepare_search_sources(
+        &mut config.sources,
+        &config.filters,
+        config.run_started_at.as_deref().unwrap(),
+    )?;
 
     let (mut rx, child) = crate::services::process::worker_command(app)?
         .args(["--stdin", "--dry-run"])

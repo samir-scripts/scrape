@@ -617,6 +617,8 @@ impl JobsRepo {
             }
         };
         let rules = scrape_core::matching::PostingRules {
+            target_roles: vec![],
+            companies: vec![],
             keywords: None,
             posting_date: None,
             compensation,

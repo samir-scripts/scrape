@@ -47,6 +47,7 @@ pub enum SourceKind {
     Jsonld,
     Selector,
     Workday,
+    Search,
 }
 
 impl SourceKind {
@@ -199,6 +200,10 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&SourceKind::Workday).unwrap(),
             "\"workday\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SourceKind::Search).unwrap(),
+            "\"search\""
         );
         assert_eq!(
             serde_json::to_string(&SourceCadence::Every12h).unwrap(),

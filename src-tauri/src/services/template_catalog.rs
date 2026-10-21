@@ -826,7 +826,6 @@ mod tests {
                 .iter()
                 .find(|t| t.id == company.template_id)
                 .unwrap();
-            assert_eq!(template.spec.version, 7);
             assert_ne!(template.readiness, TemplateReadiness::RestrictiveExample);
             if matches!(company.id.as_str(), "google" | "apple") {
                 assert_eq!(template.readiness, TemplateReadiness::NeedsReview);

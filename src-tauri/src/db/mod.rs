@@ -17,6 +17,8 @@ pub mod notifications;
 mod ownership_upgrade_tests;
 pub mod postings;
 pub mod runs;
+#[cfg(test)]
+mod search_upgrade_tests;
 pub mod settings;
 pub mod sources;
 

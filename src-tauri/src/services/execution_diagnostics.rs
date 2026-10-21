@@ -64,7 +64,7 @@ pub fn prepare(source: &Source, timezone: &str, started_at: &str) -> Result<Work
             None,
         )
     };
-    Ok(WorkerConfig {
+    let mut config = WorkerConfig {
         version: PROTOCOL_VERSION,
         sources,
         filters: super::runner::resolve_worker_filters(&source.filters)?,
@@ -79,7 +79,75 @@ pub fn prepare(source: &Source, timezone: &str, started_at: &str) -> Result<Work
                 .unwrap_or(0) as usize,
         ),
         ..Default::default()
-    })
+    };
+    prepare_search_sources(&mut config.sources, &config.filters, started_at)?;
+    Ok(config)
+}
+
+/// Search context is derived identically for previews and saved executions.
+/// Providers do not promise arbitrary title/date/YOE query filters; the shared
+/// worker matcher remains authoritative even when the API can narrow a query.
+pub fn prepare_search_sources(
+    sources: &mut [WorkerSource],
+    filters: &scrape_core::WorkerFilters,
+    started_at: &str,
+) -> Result<()> {
+    if !sources
+        .iter()
+        .any(|source| source.kind == scrape_core::SourceKind::Search)
+    {
+        return Ok(());
+    }
+    let started = chrono::DateTime::parse_from_rfc3339(started_at)
+        .map_err(|_| {
+            crate::error::AppError::Validation("run_started_at: invalid timestamp".into())
+        })?
+        .with_timezone(&chrono::Utc);
+    let rules = filters.matching.as_ref();
+    let mut query = rules.map(|r| r.target_roles.clone()).unwrap_or_default();
+    if let Some(keywords) = rules.and_then(|r| r.keywords.as_ref()) {
+        query.extend(keywords.any.iter().cloned());
+        query.extend(keywords.all.iter().cloned());
+    }
+    let mut locations = filters.locations.clone();
+    if let Some(rules) = rules {
+        locations.extend(rules.countries.iter().cloned());
+        locations.extend(rules.regions.iter().cloned());
+        locations.extend(rules.cities.iter().cloned());
+    }
+    let from = rules
+        .and_then(|r| r.posting_date.as_ref())
+        .map(|date| date.bounds(started))
+        .transpose()
+        .map_err(crate::error::AppError::Validation)?
+        .and_then(|bounds| bounds.0);
+    for source in sources
+        .iter_mut()
+        .filter(|source| source.kind == scrape_core::SourceKind::Search)
+    {
+        if source.config.is_null() {
+            source.config = json!({});
+        }
+        scrape_core::search_source::validate_config(&source.config)
+            .map_err(crate::error::AppError::Validation)?;
+        source.config["query"] = json!(query.join(" "));
+        source.config["target_roles"] =
+            json!(rules.map(|r| r.target_roles.as_slice()).unwrap_or_default());
+        source.config["companies"] =
+            json!(rules.map(|r| r.companies.as_slice()).unwrap_or_default());
+        source.config["location"] = json!(locations.join(", "));
+        if let Some(from) = from {
+            let seconds = (started - from).num_seconds().max(0) as u64;
+            source.config["max_days_old"] = json!(seconds.div_ceil(86_400));
+        } else {
+            source
+                .config
+                .as_object_mut()
+                .unwrap()
+                .remove("max_days_old");
+        }
+    }
+    Ok(())
 }
 
 fn secret_key(key: &str) -> bool {

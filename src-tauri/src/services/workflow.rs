@@ -7,7 +7,7 @@ use scrape_core::{RoleType, SourceCadence, SourceKind, WorkerFilters};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
-pub const WORKFLOW_SPEC_VERSION: u32 = 7;
+pub const WORKFLOW_SPEC_VERSION: u32 = 8;
 
 macro_rules! optional_fields {
     ($name:ident { $($field:ident: $kind:ty),* $(,)? }) => {
@@ -335,11 +335,11 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
             }
         }
         value = serde_json::json!({"version":3,"metadata":{"name":value.get("company"),"company":value.get("company")},"extractor":extractor,"schedule":{"cadence":value.pointer("/cadence/type").cloned().unwrap_or(Value::String("global".into())),"cron":value.pointer("/cadence/cron")}});
-    } else if matches!(version, 2..=7) {
+    } else if matches!(version, 2..=8) {
         // Legacy extractor roots become source collections before decoding.
     } else {
         return Err(AppError::Validation(format!(
-            "version: unsupported workflow version {version}; supported versions are 1, 2, 3, 4, 5, 6, 7"
+            "version: unsupported workflow version {version}; supported versions are 1–8"
         )));
     }
     if submitted_version <= 4 && value.get("sources").is_none() {
@@ -521,6 +521,14 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
 }
 
 pub fn normalized_source_endpoint(extractor: &WorkflowExtractor) -> Result<String> {
+    if extractor.kind == SourceKind::Search {
+        let provider =
+            scrape_core::search_source::identifier(&extractor.url).map_err(AppError::Validation)?;
+        let config = extractor.source_config.as_ref().unwrap_or(&Value::Null);
+        scrape_core::search_source::validate_config(config).map_err(AppError::Validation)?;
+        scrape_core::search_source::endpoint(provider, config).map_err(AppError::Validation)?;
+        return Ok(format!("Search:{provider}"));
+    }
     if extractor.kind.expects_url() {
         let normalized = scrape_core::identity::normalized_detail_url(&extractor.url)
             .map_err(AppError::Validation)?;
@@ -692,7 +700,11 @@ pub fn extract_source_input(
     )
     .map_err(AppError::Validation)?;
     let extractor = &source.extractor;
-    let identifier = if extractor.kind.expects_url() {
+    let identifier = if extractor.kind == SourceKind::Search {
+        scrape_core::search_source::identifier(&extractor.url)
+            .map_err(AppError::Validation)?
+            .to_string()
+    } else if extractor.kind.expects_url() {
         scrape_core::identity::normalized_detail_url(&extractor.url)
             .map_err(AppError::Validation)?;
         if extractor.kind == SourceKind::Workday {
@@ -734,6 +746,7 @@ pub fn extract_source_input(
             .into()
     };
     if !extractor.kind.expects_url()
+        && extractor.kind != SourceKind::Search
         && (identifier.is_empty()
             || !identifier
                 .chars()
@@ -958,6 +971,9 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
             "extractor.source_config: expected mapping".into(),
         ));
     }
+    if kind == SourceKind::Search {
+        return scrape_core::search_source::validate_config(config).map_err(AppError::Validation);
+    }
     let mode = scrape_core::extraction::mode(config).map_err(AppError::Validation)?;
     if kind != SourceKind::Selector && mode != ExtractionMode::Static {
         return Err(AppError::Validation(
@@ -1173,9 +1189,64 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn role_first_search_validates_relative_dates_provider_identity_and_old_filter_preservation() {
+        let value = serde_json::json!({
+            "version":8,"metadata":{"name":"Software Engineer at Google & Amazon"},
+            "sources":[{"id":"search","label":"Cross-Company Search","extractor":{"kind":"search","url":""}}],
+            "filters":{"matching":{"target_roles":["Software Engineer"],"companies":["Google","Amazon"],
+                "posting_date":{"preset":"today","timezone":"America/New_York"}}}
+        });
+        let spec = validate(value.clone(), "UTC").unwrap();
+        let input = source_input(&spec, "UTC").unwrap();
+        assert_eq!(input.identifier, "themuse");
+        let reopened = validate(serde_json::to_value(&spec).unwrap(), "UTC").unwrap();
+        assert_eq!(reopened.filters, spec.filters);
+
+        let mut duplicate = value.clone();
+        let mut second = duplicate["sources"][0].clone();
+        second["id"] = Value::String("another".into());
+        second["extractor"]["url"] = Value::String("themuse".into());
+        duplicate["sources"].as_array_mut().unwrap().push(second);
+        assert!(validate(duplicate, "UTC")
+            .unwrap_err()
+            .to_string()
+            .contains("duplicate source endpoint"));
+        for invalid in [
+            serde_json::json!({"preset":"today","last_hours":12,"timezone":"UTC"}),
+            serde_json::json!({"preset":"invalid","timezone":"UTC"}),
+        ] {
+            let mut invalid_spec = value.clone();
+            invalid_spec["filters"]["matching"]["posting_date"] = invalid;
+            assert!(validate(invalid_spec, "UTC").is_err());
+        }
+        let mut invalid_spec = value;
+        invalid_spec["sources"][0]["extractor"]["url"] = Value::String("unknown-provider".into());
+        assert!(validate(invalid_spec, "UTC")
+            .unwrap_err()
+            .to_string()
+            .contains("search provider"));
+
+        for version in 2..=7 {
+            let legacy = serde_json::json!({
+                "version":version,"metadata":{"name":"Saved board"},
+                "sources":[{"id":"saved","label":"Saved","extractor":{"kind":"greenhouse","url":"fixture"}}],
+                "filters":{"include_keywords":["Engineer"],"matching":{"keywords":{"all":["Rust"]},
+                    "posting_date":{"last_hours":36,"timezone":"UTC","include_unknown":true}}}
+            });
+            let old = validate(legacy, "UTC").unwrap();
+            let resaved = validate(serde_json::to_value(&old).unwrap(), "UTC").unwrap();
+            assert_eq!(old.filters, resaved.filters);
+            let matching = resaved.filters.unwrap().matching.unwrap();
+            assert!(matching.target_roles.is_empty());
+            assert!(matching.companies.is_empty());
+            assert_eq!(matching.posting_date.unwrap().last_hours, Some(36));
+        }
+    }
     #[test]
     fn experience_modes_preserve_legacy_rules_and_explicit_v7_edits() {
-        for version in 2..=7 {
+        for version in 2..=WORKFLOW_SPEC_VERSION {
             let value = serde_json::json!({"version":version,"metadata":{"name":"Experience compatibility"},"sources":[{"id":"fixture","label":"Fixture","enabled":true,"extractor":{"kind":"greenhouse","url":"https://boards.greenhouse.io/fixture"}}],"filters":{"matching":{"experience_min":3,"experience_max":5}}});
             let mut spec = validate(value, "UTC").unwrap();
             let expected = if version <= 6 {

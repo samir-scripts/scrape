@@ -272,6 +272,7 @@ mod rule_parity_tests {
             },
             PostingRules {
                 posting_date: Some(PostingDateFilter {
+                    preset: None,
                     last_hours: None,
                     from: Some("2026-10-13".into()),
                     through: Some("2026-10-13".into()),
@@ -282,12 +283,27 @@ mod rule_parity_tests {
             },
             PostingRules {
                 posting_date: Some(PostingDateFilter {
+                    preset: None,
                     last_hours: Some(24),
                     from: None,
                     through: None,
                     timezone: "America/New_York".into(),
                     include_unknown: false,
                 }),
+                ..Default::default()
+            },
+            PostingRules {
+                target_roles: vec!["Engineer".into()],
+                companies: vec!["Co".into()],
+                ..Default::default()
+            },
+            PostingRules {
+                target_roles: vec!["Engineer".into()],
+                companies: vec!["Google".into()],
+                ..Default::default()
+            },
+            PostingRules {
+                target_roles: vec!["Doctor".into()],
                 ..Default::default()
             },
         ];
@@ -330,5 +346,56 @@ mod rule_parity_tests {
             assert_eq!(actual, expected);
             assert_eq!(page.total as usize, expected.len());
         }
+    }
+
+    #[tokio::test]
+    async fn literal_role_company_choices_keep_worker_and_sql_parity() {
+        let pool = init_memory_db().await.unwrap();
+        let clock = DateTime::parse_from_rfc3339("2026-10-21T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let rows = [
+            ("literal", "100%_ENGINEER\\ II", "A_B%\\ LLC"),
+            ("wildcard-negative", "100xxEngineer", "AxBxx"),
+            ("unicode", "ÉNGINEER", "Google"),
+            ("unicode-negative", "éngineer", "Google"),
+            ("wrong-company", "100%_ENGINEER\\ II", "Meta"),
+            ("short-company", "ÉNGINEER", "Goo"),
+        ];
+        let rules = PostingRules {
+            target_roles: vec![" 100%_Engineer\\ ".into(), "Éngineer".into()],
+            companies: vec![" A_B%\\ ".into(), "Google".into()],
+            ..Default::default()
+        };
+        for (id, title, company) in rows {
+            sqlx::query("INSERT INTO jobs(id,dedupe_key,title,company,url,date_added,last_seen_at,status_changed_at) VALUES (?1,?1,?2,?3,?4,'2026-10-21','2026-10-21','2026-10-21')")
+                .bind(id).bind(title).bind(company).bind(format!("https://fixture.test/{id}"))
+                .execute(&pool).await.unwrap();
+            let event: WorkerEvent = serde_json::from_value(serde_json::json!({
+                "type":"job","source_id":"fixture","external_id":id,
+                "title":title,"company":company,"url":format!("https://fixture.test/{id}"),
+                "location":"","role_type":"unknown"
+            }))
+            .unwrap();
+            assert_eq!(
+                rules.matches_event_at(&event, clock),
+                matches!(id, "literal" | "unicode"),
+                "{id}"
+            );
+        }
+        let page = JobsRepo::list_at(
+            &pool,
+            JobFilter {
+                matching: Some(rules),
+                ..Default::default()
+            },
+            clock,
+        )
+        .await
+        .unwrap();
+        let mut ids: Vec<_> = page.items.iter().map(|job| job.id.as_str()).collect();
+        ids.sort_unstable();
+        assert_eq!(ids, ["literal", "unicode"]);
+        assert_eq!(page.total, 2);
     }
 }

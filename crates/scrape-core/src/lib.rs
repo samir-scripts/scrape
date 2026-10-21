@@ -19,6 +19,7 @@ pub mod xpath;
 pub use identity::PostingIdentity;
 pub mod protocol;
 mod role;
+pub mod search_source;
 pub mod static_source;
 mod types;
 

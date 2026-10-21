@@ -42,6 +42,7 @@ pub struct CoordinatorSession {
     selector_session: Option<crate::adapters::selector_session::SelectorSession>,
     script_session: Option<crate::script_runner::ScriptSession>,
     workday_session: Option<crate::adapters::workday::WorkdaySession>,
+    search_session: Option<crate::adapters::search::SearchSession>,
     coverage_incomplete: bool,
     yield_after_candidate: bool,
 }
@@ -115,6 +116,7 @@ impl CoordinatorSession {
             selector_session: None,
             script_session: None,
             workday_session: None,
+            search_session: None,
             coverage_incomplete: false,
             yield_after_candidate: false,
         };
@@ -255,6 +257,13 @@ impl CoordinatorSession {
                 session.exhausted = ws.is_exhausted();
                 session.workday_session = Some(ws);
             }
+            SourceKind::Search => {
+                session.search_session = Some(crate::adapters::search::SearchSession::new(
+                    &session.source,
+                    extraction_limits,
+                    workflow_deadline,
+                )?);
+            }
         }
 
         Ok(session)
@@ -347,6 +356,22 @@ impl CoordinatorSession {
                 }
                 crate::adapters::workday::WorkdayStep::Yield => Ok(None),
                 crate::adapters::workday::WorkdayStep::Exhausted => {
+                    self.exhausted = true;
+                    Ok(None)
+                }
+            };
+        }
+        if let Some(search) = &mut self.search_session {
+            let step = search.next(client).await?;
+            self.yield_after_candidate = true;
+            return match step {
+                crate::adapters::search::SearchStep::Event(event) => {
+                    self.exhausted = search.is_exhausted();
+                    let evidence = MatchingEvidence::from_event(&event, true);
+                    Ok(Some((*event, Some(evidence))))
+                }
+                crate::adapters::search::SearchStep::Yield => Ok(None),
+                crate::adapters::search::SearchStep::Exhausted => {
                     self.exhausted = true;
                     Ok(None)
                 }
@@ -876,6 +901,7 @@ impl SourceCoordinator {
                         let next = if session.selector_session.is_some()
                             || session.script_session.is_some()
                             || session.workday_session.is_some()
+                            || session.search_session.is_some()
                             || session.has_pending()
                         {
                             session.next_candidate(&self.client, self.started).await

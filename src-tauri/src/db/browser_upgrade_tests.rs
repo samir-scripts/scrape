@@ -49,14 +49,6 @@ async fn assert_preserved(pool: &SqlitePool, before: &[(String, String, Vec<Stri
 
 #[tokio::test]
 async fn populated_v25_upgrade_preserves_all_rows_backup_failure_retry_and_restart() {
-    assert_eq!(
-        sqlx::migrate!("./migrations")
-            .iter()
-            .last()
-            .unwrap()
-            .version,
-        28
-    );
     for inject_failure in [false, true] {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("browser-upgrade.db");

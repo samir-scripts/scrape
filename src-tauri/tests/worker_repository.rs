@@ -3826,3 +3826,422 @@ async fn required_experience_and_exact_employer_artwork_survive_worker_sql_and_r
     );
     reopened.close().await;
 }
+
+/// Authored publication evidence crosses the real canonical workflow, packaged
+/// NDJSON producer, production mapper and durable Discovered repository boundary.
+#[tokio::test]
+async fn role_first_search_survives_canonical_save_worker_discovered_refresh_and_reopen() {
+    use scrape_core::{matching::PostingRules, JobStatus};
+    use scrape_lib::services::{execution_diagnostics, workflow};
+    use serde_json::json;
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    };
+
+    const STARTED: &str = "2026-10-18T12:00:00Z";
+    const PUBLISHED: &str = "2026-10-18T06:00:00Z";
+    const DESCRIPTION: &str =
+        "<p>Build reliable systems. 3 years of professional experience required.</p>";
+    // The Muse publication_date is original posting evidence. In particular,
+    // an aggregator import timestamp must not stand in for this missing field.
+    let fixtures = [
+        (
+            1,
+            "Software Engineer",
+            "Google",
+            "Austin, TX",
+            Some(PUBLISHED),
+            DESCRIPTION,
+        ),
+        (
+            2,
+            "Software Engineer II",
+            "Amazon",
+            "Austin, TX",
+            Some(PUBLISHED),
+            DESCRIPTION,
+        ),
+        (
+            3,
+            "Software Engineer",
+            "Meta",
+            "Austin, TX",
+            Some(PUBLISHED),
+            DESCRIPTION,
+        ),
+        (
+            4,
+            "Product Manager",
+            "Google",
+            "Austin, TX",
+            Some(PUBLISHED),
+            DESCRIPTION,
+        ),
+        (
+            5,
+            "Software Engineer",
+            "Google",
+            "Austin, TX",
+            Some("2026-10-17T23:00:00Z"),
+            DESCRIPTION,
+        ),
+        (
+            6,
+            "Software Engineer",
+            "Amazon",
+            "Austin, TX",
+            Some(PUBLISHED),
+            "<p>8 years of professional experience required.</p>",
+        ),
+        (
+            7,
+            "Software Engineer",
+            "Google",
+            "London, United Kingdom",
+            Some(PUBLISHED),
+            DESCRIPTION,
+        ),
+        (
+            8,
+            "Software Engineer",
+            "Amazon",
+            "Austin, TX",
+            None,
+            DESCRIPTION,
+        ),
+    ];
+    let results: Vec<_> = fixtures
+        .iter()
+        .map(|(id, title, company, location, published, description)| {
+            json!({
+                "id":id, "name":title, "contents":description,
+                "publication_date":published,
+                "locations":[{"name":location}],
+                "refs":{"landing_page":format!("https://role-search.fixture.test/postings/{id}")},
+                "company":{"id":if *company == "Google" { 10 } else { 20 }, "name":company}
+            })
+        })
+        .collect();
+    let feed = json!({"page":0,"page_count":1,"total":8,"results":results}).to_string();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    listener.set_nonblocking(true).unwrap();
+    let stopped = Arc::new(AtomicBool::new(false));
+    let stop_server = Arc::clone(&stopped);
+    let requests = Arc::new(Mutex::new(Vec::<String>::new()));
+    let server_requests = Arc::clone(&requests);
+    let server = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(60);
+        while !stop_server.load(Ordering::SeqCst) && Instant::now() < deadline {
+            let Ok((mut stream, _)) = listener.accept() else {
+                std::thread::sleep(Duration::from_millis(5));
+                continue;
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut bytes = [0; 8192];
+            let n = stream.read(&mut bytes).unwrap();
+            let request = String::from_utf8_lossy(&bytes[..n]);
+            let path = request.split_whitespace().nth(1).unwrap().to_string();
+            assert_eq!(
+                path.split('?').next().unwrap(),
+                "/role-search.fixture.test/feed",
+                "No career-board, detail, branding or second-page request is needed"
+            );
+            server_requests.lock().unwrap().push(path);
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{feed}",
+                feed.len()
+            ).unwrap();
+        }
+    });
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("role-first.db");
+    let pool = scrape_lib::db::init_db(&database).await.unwrap();
+    let authored = json!({
+        "version":workflow::WORKFLOW_SPEC_VERSION,
+        "metadata":{"name":"Software Engineer at Google & Amazon"},
+        "sources":[{"id":"broad-search","label":"Cross-Company Search","enabled":true,
+            "extractor":{"kind":"search","url":"","source_config":{
+                "endpoint":"https://role-search.fixture.test/feed","max_pages":5
+            }}}],
+        "max_jobs_per_run":20,
+        "schedule":{"cadence":"manual"},
+        "filters":{"matching":{
+            "target_roles":["Software Engineer"],"companies":["Google","Amazon"],
+            "posting_date":{"preset":"past_12h","timezone":"UTC","include_unknown":false},
+            "countries":["US"],"cities":["Austin"],
+            "experience_min":3,"experience_max":5,
+            "experience_match_mode":"required_minimum","experience_include_unknown":false
+        }}
+    });
+    assert!(authored
+        .pointer("/filters/matching/posting_date/last_hours")
+        .is_none());
+    let spec = workflow::validate(authored, "UTC").unwrap();
+    let original_filters = serde_json::to_value(&spec.filters).unwrap();
+    let saved = workflow::persist(&pool, spec, None, true, "UTC")
+        .await
+        .unwrap();
+    let source = SourcesRepo::get(&pool, &saved.id).await.unwrap();
+    assert_eq!(source.kind, SourceKind::Search);
+    assert_eq!(source.identifier, "themuse");
+    assert_eq!(
+        source.config["__workflow_spec"]["filters"], original_filters,
+        "Saving must not rewrite preset-only canonical rules"
+    );
+    let mut config = execution_diagnostics::prepare(&source, "UTC", STARTED).unwrap();
+    config.limits.per_host_delay_ms = 0;
+    config.limits.request_timeout_s = 3;
+    assert_eq!(config.version, PROTOCOL_VERSION);
+    assert_eq!(config.sources.len(), 1);
+    assert_eq!(config.sources[0].id, source.id);
+    assert_eq!(config.sources[0].identifier, "themuse");
+    assert_eq!(
+        config
+            .filters
+            .matching
+            .as_ref()
+            .unwrap()
+            .posting_date
+            .as_ref()
+            .unwrap()
+            .preset
+            .as_deref(),
+        Some("past_12h")
+    );
+    let ids = |events: &[WorkerEvent]| {
+        let mut ids: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                WorkerEvent::Job { external_id, .. } => Some(external_id.clone()),
+                _ => None,
+            })
+            .collect();
+        ids.sort();
+        ids
+    };
+    for preview in [true, false] {
+        let events = invoke_replay(&config, preview, Some(&origin));
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, WorkerEvent::Error { .. })),
+            "{events:?}"
+        );
+        assert_eq!(ids(&events), vec!["1", "2"]);
+        let WorkerEvent::Done { stats } = events.last().unwrap() else {
+            panic!("Missing terminal worker accounting")
+        };
+        assert_eq!(stats.sources.len(), 1);
+        let scan = &stats.sources[0];
+        scan.validate().unwrap();
+        assert_eq!(
+            (scan.examined, scan.accepted, scan.rejected, scan.unresolved),
+            (8, 2, 5, 1)
+        );
+        assert_eq!(scan.outcome, Some(scrape_core::protocol::ScanOutcome::Partial),
+            "A missing publication date must remain unresolved, not become a complete empty/rejected scan");
+        let batch: Vec<_> = events
+            .into_iter()
+            .filter(|event| matches!(event, WorkerEvent::Job { .. }))
+            .map(|event| scraped_job_from_event(event).unwrap())
+            .collect();
+        for row in &batch {
+            assert_eq!(row.source_id.as_deref(), Some(source.id.as_str()));
+            assert_eq!(row.date_posted.as_deref(), Some(PUBLISHED));
+            assert_eq!(row.experience_min, Some(3));
+            assert_eq!(row.description_source.as_deref(), Some(DESCRIPTION));
+            assert!(row
+                .description_text
+                .as_deref()
+                .unwrap()
+                .contains("Build reliable systems."));
+        }
+        if !preview {
+            let counts = JobsRepo::upsert_scraped(&pool, &batch).await.unwrap();
+            assert_eq!((counts.inserted, counts.updated), (2, 0));
+        }
+        let discovered = JobsRepo::list(
+            &pool,
+            JobFilter {
+                source_id: Some(source.id.clone()),
+                statuses: Some(vec![JobStatus::Scraped, JobStatus::Viewed]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(discovered.total, if preview { 0 } else { 2 });
+    }
+    let discovered = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+    let mut owners = std::collections::BTreeMap::new();
+    for job in &discovered.items {
+        let external_id = job.external_id.as_deref().unwrap();
+        let (title, company) = match external_id {
+            "1" => ("Software Engineer", "Google"),
+            "2" => ("Software Engineer II", "Amazon"),
+            other => panic!("Unexpected persisted identity {other}"),
+        };
+        let url = format!("https://role-search.fixture.test/postings/{external_id}");
+        assert_eq!(job.title, title);
+        assert_eq!(job.company, company);
+        assert_eq!(job.url, url);
+        assert_eq!(job.source_id.as_deref(), Some(source.id.as_str()));
+        assert_eq!(job.date_posted.as_deref(), Some(PUBLISHED));
+        assert_eq!(job.experience_min, Some(3));
+        assert!(job
+            .experience_evidence
+            .as_deref()
+            .unwrap()
+            .contains("3 years"));
+        assert_eq!(
+            job.posting_identity.as_deref(),
+            Some(serde_json::to_string(&("url", &url)).unwrap().as_str())
+        );
+        let raw: String = sqlx::query_scalar("SELECT description_source FROM jobs WHERE id=?")
+            .bind(&job.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(raw, DESCRIPTION);
+        owners.insert(external_id.to_string(), job.id.clone());
+    }
+    // This is the production SQL compiler used by Discovered, not an in-memory
+    // company comparison or a worker-filtered mock response.
+    for (company, expected) in [
+        ("gOoGlE", vec!["1"]),
+        ("Amazon", vec!["2"]),
+        ("Meta", vec![]),
+    ] {
+        let rules: PostingRules = serde_json::from_value(json!({"companies":[company]})).unwrap();
+        let rows = JobsRepo::list(
+            &pool,
+            JobFilter {
+                source_id: Some(source.id.clone()),
+                matching: Some(rules),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let actual: Vec<_> = rows
+            .items
+            .iter()
+            .map(|job| job.external_id.as_deref().unwrap())
+            .collect();
+        assert_eq!(actual, expected);
+    }
+    let protected = &owners["1"];
+    JobsRepo::update_notes(
+        &pool,
+        protected,
+        Some("Do not overwrite my application notes"),
+    )
+    .await
+    .unwrap();
+    JobsRepo::set_favorite(&pool, protected, true)
+        .await
+        .unwrap();
+    JobsRepo::update_status(&pool, protected, JobStatus::Applied)
+        .await
+        .unwrap();
+    let history = JobsRepo::get_status_events(&pool, protected).await.unwrap();
+    let refresh = invoke_replay(&config, false, Some(&origin));
+    assert_eq!(ids(&refresh), vec!["1", "2"]);
+    assert!(!refresh
+        .iter()
+        .any(|event| matches!(event, WorkerEvent::Error { .. })));
+    let batch: Vec<_> = refresh
+        .into_iter()
+        .filter(|event| matches!(event, WorkerEvent::Job { .. }))
+        .map(|event| scraped_job_from_event(event).unwrap())
+        .collect();
+    let counts = JobsRepo::upsert_scraped(&pool, &batch).await.unwrap();
+    assert_eq!((counts.inserted, counts.updated), (0, 2));
+
+    // A pre-role-first company-board specification retains its exact matching
+    // semantics through canonical validation and save alongside broad search.
+    let board_filters = json!({"include_keywords":["Systems"],"locations":["Remote","Austin"],
+        "matching":{"experience_min":3,"experience_max":5,"experience_match_mode":"advertised_range_overlap"}});
+    let board = workflow::validate(json!({
+        "version":7,"metadata":{"name":"Existing company board"},
+        "sources":[{"id":"existing","label":"Existing board","employer_hint":"Existing employer",
+            "extractor":{"kind":"lever","url":"https://jobs.lever.co/existing"}}],
+        "schedule":{"cadence":"manual"},"filters":board_filters
+    }), "UTC").unwrap();
+    let before = serde_json::to_value(&board.filters).unwrap();
+    let board = workflow::persist(&pool, board, None, true, "UTC")
+        .await
+        .unwrap();
+    let board = SourcesRepo::get(&pool, &board.id).await.unwrap();
+    assert_eq!(board.config["__workflow_spec"]["filters"], before);
+    let prepared_board = execution_diagnostics::prepare(&board, "UTC", STARTED).unwrap();
+    let expected_board: WorkerFilters = serde_json::from_value(board_filters).unwrap();
+    assert_eq!(prepared_board.filters, expected_board);
+    assert_eq!(
+        JobsRepo::list(
+            &pool,
+            JobFilter {
+                source_id: Some(board.id.clone()),
+                ..Default::default()
+            }
+        )
+        .await
+        .unwrap()
+        .total,
+        0,
+        "The attached company-board workflow must not own search rows"
+    );
+
+    stopped.store(true, Ordering::SeqCst);
+    server.join().unwrap();
+    assert_eq!(
+        requests.lock().unwrap().len(),
+        3,
+        "Exactly one provider page per preview, run and refresh"
+    );
+    pool.close().await;
+    let reopened = scrape_lib::db::init_db(&database).await.unwrap();
+    let job = JobsRepo::get(&reopened, protected).await.unwrap();
+    assert_eq!(
+        job.notes.as_deref(),
+        Some("Do not overwrite my application notes")
+    );
+    assert!(job.favorited);
+    assert_eq!(job.status, JobStatus::Applied);
+    assert_eq!(job.source_id.as_deref(), Some(source.id.as_str()));
+    assert_eq!(job.external_id.as_deref(), Some("1"));
+    assert_eq!(
+        serde_json::to_value(
+            JobsRepo::get_status_events(&reopened, protected)
+                .await
+                .unwrap()
+        )
+        .unwrap(),
+        serde_json::to_value(history).unwrap()
+    );
+    let rows = JobsRepo::list(
+        &reopened,
+        JobFilter {
+            source_id: Some(source.id.clone()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(rows.total, 2);
+    for job in rows.items {
+        assert_eq!(&job.id, &owners[job.external_id.as_deref().unwrap()]);
+    }
+    let reopened_source = SourcesRepo::get(&reopened, &source.id).await.unwrap();
+    assert_eq!(
+        reopened_source.config["__workflow_spec"]["filters"],
+        original_filters
+    );
+    reopened.close().await;
+}

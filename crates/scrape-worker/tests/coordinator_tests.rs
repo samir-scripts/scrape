@@ -14,7 +14,7 @@ use std::{
 
 struct Server {
     origin: String,
-    _requests: Arc<Mutex<Vec<String>>>,
+    requests: Arc<Mutex<Vec<String>>>,
     stop: Arc<AtomicBool>,
     thread: Option<thread::JoinHandle<()>>,
 }
@@ -62,7 +62,7 @@ impl Server {
         });
         Self {
             origin,
-            _requests: requests,
+            requests,
             stop,
             thread: Some(thread),
         }
@@ -101,6 +101,55 @@ fn run_worker(
     starting_source_index: usize,
     preview: bool,
 ) -> Vec<WorkerEvent> {
+    run_worker_config(
+        server,
+        sources,
+        json!({}),
+        max_jobs_per_run,
+        starting_source_index,
+        preview,
+        worker_limits(),
+    )
+}
+
+fn worker_limits() -> Value {
+    json!({"per_host_delay_ms": 0, "request_timeout_s": 3})
+}
+
+fn run_worker_config(
+    server: &Server,
+    sources: Vec<Value>,
+    filters: Value,
+    max_jobs_per_run: u32,
+    starting_source_index: usize,
+    preview: bool,
+    limits: Value,
+) -> Vec<WorkerEvent> {
+    let config = json!({
+        "version": PROTOCOL_VERSION,
+        "sources": sources,
+        "filters": filters,
+        "blocked_postings": [],
+        "run_started_at": "2026-10-16T00:00:00Z",
+        "limits": limits,
+        "max_jobs_per_run": max_jobs_per_run,
+        "starting_source_index": starting_source_index,
+    });
+    let output = worker_output(server, &config, preview);
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str::<WorkerEvent>(line).unwrap())
+        .collect()
+}
+
+fn worker_output(server: &Server, config: &Value, preview: bool) -> std::process::Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_scrape-worker"));
     command.args(["--stdin", "--replay-origin", &server.origin]);
     if preview {
@@ -113,20 +162,6 @@ fn run_worker(
         .spawn()
         .unwrap();
 
-    let config = json!({
-        "version": PROTOCOL_VERSION,
-        "sources": sources,
-        "filters": {},
-        "blocked_postings": [],
-        "run_started_at": "2026-10-16T00:00:00Z",
-        "limits": {
-            "per_host_delay_ms": 0,
-            "request_timeout_s": 3,
-        },
-        "max_jobs_per_run": max_jobs_per_run,
-        "starting_source_index": starting_source_index,
-    });
-
     child
         .stdin
         .take()
@@ -134,19 +169,7 @@ fn run_worker(
         .write_all(&serde_json::to_vec(&config).unwrap())
         .unwrap();
 
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    String::from_utf8(output.stdout)
-        .unwrap()
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| serde_json::from_str::<WorkerEvent>(line).unwrap())
-        .collect()
+    child.wait_with_output().unwrap()
 }
 
 #[test]
@@ -517,4 +540,621 @@ fn verify_paginated_fairness(optional_warnings: bool) {
         })
         .collect();
     assert_eq!(counts, [7, 7, 6]);
+}
+
+fn search_source(provider: &str, config: Value) -> Value {
+    json!({
+        "id": "search", "name": "Cross-company feed", "kind": "search",
+        "identifier": provider, "config": config,
+    })
+}
+
+fn arbeitnow_job(id: &str, title: &str, company: &str) -> Value {
+    json!({
+        "slug": id, "title": title, "company_name": company,
+        "url": format!("https://employer.test/jobs/{id}"),
+        "location": "Berlin, Germany", "remote": true,
+        "description": "<p>Requires 2 years of experience.</p><p>Visa sponsorship available.</p>",
+        "created_at": 1792101600,
+    })
+}
+
+fn muse_job(id: u64, title: &str, company: &str, publication: Value) -> Value {
+    json!({
+        "id": id, "name": title, "company": {"name": company},
+        "refs": {"landing_page": format!("https://www.themuse.com/jobs/employer/{id}")},
+        "contents": "<p>Requires 2 years of experience.</p>",
+        "publication_date": publication,
+        "locations": [{"name": "Austin, TX"}, {"name": "Berlin, Germany"}],
+    })
+}
+
+fn scans(events: &[WorkerEvent]) -> &[scrape_core::protocol::SourceScanStats] {
+    events
+        .iter()
+        .find_map(|event| match event {
+            WorkerEvent::Done { stats } => Some(stats.sources.as_slice()),
+            _ => None,
+        })
+        .expect("worker summary")
+}
+
+fn feed_requests(server: &Server) -> Vec<String> {
+    server
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|path| !path.ends_with("/robots.txt"))
+        .cloned()
+        .collect()
+}
+
+#[test]
+fn search_arbeitnow_admits_later_page_employers_without_inventing_publication_dates() {
+    let server = Server::new(|path| match path {
+        "/www.arbeitnow.com/api/job-board-api" => json!({
+            "data": [
+                arbeitnow_job("wrong-role", "Product Manager", "Google"),
+                arbeitnow_job("wrong-company", "Software Engineer", "Meta"),
+            ],
+            "links": {"next": "https://www.arbeitnow.com/api/job-board-api?page=2"}
+        })
+        .to_string(),
+        "/www.arbeitnow.com/api/job-board-api?page=2" => json!({
+            "data": [
+                arbeitnow_job("google", "Software Engineer", "Google"),
+                arbeitnow_job("amazon", "Software Engineer", "Amazon"),
+            ],
+            "links": {"next": null}
+        })
+        .to_string(),
+        _ => panic!("unexpected request {path}"),
+    });
+    let events = run_worker_config(
+        &server,
+        vec![search_source(
+            "arbeitnow",
+            json!({
+                "query": "Software Engineer Google Amazon",
+                "target_roles": ["Software Engineer"], "companies": ["Google", "Amazon"],
+                "location": "Germany", "max_days_old": 7,
+            }),
+        )],
+        json!({"matching": {"target_roles": ["Software Engineer"], "companies": ["Google", "Amazon"]}}),
+        10,
+        0,
+        false,
+        worker_limits(),
+    );
+    let companies: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            WorkerEvent::Job {
+                company,
+                date_posted,
+                description_text,
+                description_source,
+                description_format,
+                sponsorship,
+                experience,
+                locations,
+                ..
+            } => {
+                assert!(
+                    date_posted.is_none(),
+                    "import/order timestamp is not publication evidence"
+                );
+                assert!(description_text.as_ref().unwrap().contains("2 years"));
+                assert!(!description_text.as_ref().unwrap().contains("<p>"));
+                assert!(description_source.as_ref().unwrap().contains("<p>"));
+                assert_eq!(
+                    *description_format,
+                    Some(scrape_core::enrich::DescriptionFormat::Html)
+                );
+                assert!(sponsorship.is_some());
+                assert!(experience.is_some());
+                assert!(!locations.is_empty());
+                Some(company.as_str())
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(companies, ["Google", "Amazon"]);
+    assert_eq!(
+        feed_requests(&server),
+        [
+            "/www.arbeitnow.com/api/job-board-api",
+            "/www.arbeitnow.com/api/job-board-api?page=2",
+        ]
+    );
+}
+
+#[test]
+fn search_default_muse_evaluates_later_page_roles_companies_and_publication_window() {
+    let server = Server::new(|path| match path {
+        "/www.themuse.com/api/public/jobs?page=0" => json!({
+            "page": 0, "page_count": 2,
+            "results": [
+                muse_job(1, "Software Engineer", "Google", json!("2026-10-14T00:00:00Z")),
+                muse_job(2, "Product Manager", "Google", json!("2026-10-15T20:00:00Z")),
+                muse_job(3, "Software Engineer", "Meta", json!("2026-10-15T20:00:00Z")),
+            ]
+        })
+        .to_string(),
+        "/www.themuse.com/api/public/jobs?page=1" => json!({
+            "page": 1, "page_count": 2,
+            "results": [
+                muse_job(4, "Software Engineer", "Google", json!("2026-10-15T20:00:00Z")),
+                muse_job(5, "Software Engineer", "Amazon", json!("2026-10-15T18:00:00Z")),
+                muse_job(6, "Software Engineer", "Google", Value::Null),
+            ]
+        })
+        .to_string(),
+        _ => panic!("unexpected request {path}"),
+    });
+    let events = run_worker_config(
+        &server,
+        vec![search_source("", json!({}))],
+        json!({"matching": {
+            "target_roles": ["Software Engineer"], "companies": ["Google", "Amazon"],
+            "posting_date": {"preset": "past_12h", "timezone": "UTC", "include_unknown": false}
+        }}),
+        10,
+        0,
+        false,
+        worker_limits(),
+    );
+    let jobs: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            WorkerEvent::Job {
+                external_id,
+                company,
+                date_posted,
+                locations,
+                ..
+            } => {
+                assert!(date_posted.is_some());
+                assert!(locations
+                    .iter()
+                    .any(|location| location.raw.contains("Austin")));
+                assert!(locations
+                    .iter()
+                    .any(|location| location.raw.contains("Berlin")));
+                Some((external_id.as_str(), company.as_str()))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(jobs, [("4", "Google"), ("5", "Amazon")]);
+    assert_eq!(scans(&events)[0].accepted, 2);
+    assert_eq!(scans(&events)[0].unresolved, 1);
+    assert_eq!(
+        feed_requests(&server),
+        [
+            "/www.themuse.com/api/public/jobs?page=0",
+            "/www.themuse.com/api/public/jobs?page=1",
+        ]
+    );
+}
+
+#[test]
+fn search_first_page_workflow_and_source_caps_stop_before_next_request() {
+    for source_cap in [false, true] {
+        let server = Server::new(|path| {
+            assert_eq!(path, "/www.arbeitnow.com/api/job-board-api");
+            json!({
+                "data": [arbeitnow_job("one", "Line Cook", "Chipotle"),
+                    arbeitnow_job("two", "Store Associate", "Target")],
+                "links": {"next": "?page=2"}
+            })
+            .to_string()
+        });
+        let config = if source_cap {
+            json!({"__workflow_spec": {"max_jobs_per_run": 1}})
+        } else {
+            json!({})
+        };
+        let events = run_worker(
+            &server,
+            vec![search_source("arbeitnow", config)],
+            if source_cap { 10 } else { 1 },
+            0,
+            false,
+        );
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event, WorkerEvent::Job { .. }))
+                .count(),
+            1
+        );
+        assert_eq!(
+            feed_requests(&server),
+            ["/www.arbeitnow.com/api/job-board-api"]
+        );
+        assert_eq!(
+            scans(&events)[0].termination,
+            scrape_core::protocol::CoverageTermination::JobLimit
+        );
+    }
+}
+
+#[test]
+fn search_malformed_envelopes_fail_instead_of_claiming_empty_success() {
+    for (provider, payload) in [
+        ("arbeitnow", "{}"),
+        ("arbeitnow", "[]"),
+        ("arbeitnow", r#"{"data":null}"#),
+        ("arbeitnow", r#"{"data":[],"links":{"next":42}}"#),
+        ("themuse", "{}"),
+        ("themuse", r#"{"page":0,"page_count":1,"results":null}"#),
+        ("themuse", r#"{"page":1,"page_count":2,"results":[]}"#),
+    ] {
+        let server = Server::new(move |_| payload.into());
+        let events = run_worker(
+            &server,
+            vec![search_source(provider, json!({}))],
+            10,
+            0,
+            false,
+        );
+        assert!(
+            events.iter().any(|event| matches!(
+                event,
+                WorkerEvent::Error {
+                    invalid_posting: Some(false),
+                    ..
+                }
+            )),
+            "{provider}: {payload}"
+        );
+        assert_eq!(
+            scans(&events)[0].outcome,
+            Some(scrape_core::protocol::ScanOutcome::Failed)
+        );
+        assert_eq!(feed_requests(&server).len(), 1);
+    }
+}
+
+#[test]
+fn search_invalid_individual_postings_are_isolated_and_never_fabricate_employers() {
+    let server = Server::new(|_| {
+        let valid = arbeitnow_job("valid", "Line Cook", "Chipotle");
+        let mut missing_company = valid.clone();
+        missing_company
+            .as_object_mut()
+            .unwrap()
+            .remove("company_name");
+        let mut missing_title = valid.clone();
+        missing_title.as_object_mut().unwrap().remove("title");
+        let mut missing_url = valid.clone();
+        missing_url.as_object_mut().unwrap().remove("url");
+        let mut empty_company = valid.clone();
+        empty_company["company_name"] = json!(" ");
+        let mut empty_title = valid.clone();
+        empty_title["title"] = json!(" ");
+        let mut invalid_url = valid.clone();
+        invalid_url["url"] = json!("https://user:secret@jobs.test/role");
+        let mut no_slug = arbeitnow_job("fallback", "Cashier", "Target");
+        no_slug.as_object_mut().unwrap().remove("slug");
+        no_slug["url"] = json!("https://employer.test/jobs/fallback?utm_source=feed#apply");
+        json!({"data": [missing_company, missing_title, missing_url, empty_company,
+            empty_title, invalid_url, 7, valid, no_slug]})
+        .to_string()
+    });
+    let events = run_worker(
+        &server,
+        vec![search_source("arbeitnow", json!({}))],
+        10,
+        0,
+        false,
+    );
+    assert_eq!(scans(&events)[0].invalid, 7);
+    let jobs: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            WorkerEvent::Job {
+                external_id,
+                company,
+                ..
+            } => Some((external_id.as_str(), company.as_str())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        jobs,
+        [
+            ("valid", "Chipotle"),
+            ("https://employer.test/jobs/fallback", "Target"),
+        ]
+    );
+}
+
+#[test]
+fn search_slug_fallback_uses_canonical_destination_not_a_hash() {
+    let server = Server::new(|_| {
+        let mut job = arbeitnow_job("fallback", "Cashier", "Target");
+        job.as_object_mut().unwrap().remove("slug");
+        job["url"] = json!("https://employer.test/jobs/fallback?utm_source=feed");
+        json!({"data": [job]}).to_string()
+    });
+    let events = run_worker(
+        &server,
+        vec![search_source("arbeitnow", json!({}))],
+        10,
+        0,
+        false,
+    );
+    assert!(events.iter().any(|event| matches!(event, WorkerEvent::Job {
+        external_id, company, .. } if external_id == "https://employer.test/jobs/fallback" && company == "Target")));
+}
+
+#[test]
+fn search_page_limit_reports_partial_coverage_and_honors_global_page_bound() {
+    for global_bound in [false, true] {
+        let server = Server::new(|path| {
+            assert_eq!(path, "/www.arbeitnow.com/api/job-board-api");
+            json!({"data": [arbeitnow_job("reject", "Product Manager", "Google")],
+                "links": {"next": "?page=2"}})
+            .to_string()
+        });
+        let mut limits = worker_limits();
+        if global_bound {
+            limits["max_pages_per_source"] = json!(1);
+        }
+        let events = run_worker_config(
+            &server,
+            vec![search_source(
+                "arbeitnow",
+                json!({"max_pages": if global_bound { 5 } else { 1 }}),
+            )],
+            json!({"matching": {"target_roles": ["Software Engineer"]}}),
+            10,
+            0,
+            false,
+            limits,
+        );
+        let scan = &scans(&events)[0];
+        assert_eq!(
+            scan.termination,
+            scrape_core::protocol::CoverageTermination::PageLimit
+        );
+        assert_eq!(
+            scan.outcome,
+            Some(scrape_core::protocol::ScanOutcome::Partial)
+        );
+        assert!(events.iter().any(|event| matches!(
+            event,
+            WorkerEvent::Warning {
+                eligibility_incomplete: true,
+                termination: Some(scrape_core::protocol::CoverageTermination::PageLimit),
+                ..
+            }
+        )));
+        assert_eq!(
+            feed_requests(&server),
+            ["/www.arbeitnow.com/api/job-board-api"]
+        );
+    }
+}
+
+#[test]
+fn search_unsafe_or_cyclic_continuations_are_never_requested() {
+    for next in [
+        "https://evil.test/api/job-board-api?page=2".to_string(),
+        "https://user:secret@www.arbeitnow.com/api/job-board-api?page=2".to_string(),
+        "?page=1".to_string(),
+        "?page=2#fragment".to_string(),
+        "/other?page=2".to_string(),
+        "?page=2&query=imaginary".to_string(),
+        format!("?page=2&padding={}", "x".repeat(8192)),
+    ] {
+        let server = Server::new(move |_| {
+            json!({
+                "data": [arbeitnow_job("one", "Line Cook", "Chipotle")],
+                "links": {"next": next}
+            })
+            .to_string()
+        });
+        let events = run_worker(
+            &server,
+            vec![search_source("arbeitnow", json!({}))],
+            10,
+            0,
+            false,
+        );
+        assert!(events.iter().any(|event| matches!(
+            event,
+            WorkerEvent::Error {
+                invalid_posting: Some(false),
+                ..
+            }
+        )));
+        assert_eq!(
+            feed_requests(&server),
+            ["/www.arbeitnow.com/api/job-board-api"]
+        );
+    }
+}
+
+#[test]
+fn search_same_schema_endpoint_uses_configured_origin_without_extra_query_filters() {
+    let server = Server::new(|path| match path {
+        "/feed.fixture.test/listings?tenant=demo" => json!({
+            "data": [arbeitnow_job("one", "Line Cook", "Chipotle")],
+            "links": {"next": "?tenant=demo&page=2"}
+        })
+        .to_string(),
+        "/feed.fixture.test/listings?tenant=demo&page=2" => json!({
+            "data": [arbeitnow_job("two", "Cashier", "Target")], "links": {"next": null}
+        })
+        .to_string(),
+        _ => panic!("unexpected request {path}"),
+    });
+    let events = run_worker(
+        &server,
+        vec![search_source(
+            "arbeitnow",
+            json!({
+                "endpoint": "https://feed.fixture.test/listings?tenant=demo",
+                "query": "Line Cook Cashier", "companies": [], "location": "", "max_days_old": 7
+            }),
+        )],
+        10,
+        0,
+        false,
+    );
+    assert_eq!(scans(&events)[0].accepted, 2);
+    assert_eq!(
+        feed_requests(&server),
+        [
+            "/feed.fixture.test/listings?tenant=demo",
+            "/feed.fixture.test/listings?tenant=demo&page=2",
+        ]
+    );
+}
+
+#[test]
+fn search_and_company_board_sources_get_fair_candidate_turns_at_shared_cap() {
+    let server = Server::new(|path| {
+        if path == "/www.arbeitnow.com/api/job-board-api" {
+            return json!({"data": (0..30).map(|index|
+                arbeitnow_job(&format!("feed-{index}"), "Software Engineer",
+                    if index % 2 == 0 { "Apple" } else { "Google" })).collect::<Vec<_>>(),
+                "links": {"next": "?page=2"}
+            })
+            .to_string();
+        }
+        if path.contains("/v0/postings/company-board") {
+            return generate_lever_postings(30, "company-board");
+        }
+        if path == "/board.fixture.test/jobs" {
+            return (0..30).map(|index| format!(
+                "<div class=job-item><a class=job-title href='/jobs/{index}'>Software Engineer {index}</a></div>"
+            )).collect();
+        }
+        if path == "/jobs.lever.co/company-board/company-board-0" {
+            return "<html><title>Company Board</title></html>".into();
+        }
+        panic!("unexpected request {path}");
+    });
+    let events = run_worker(
+        &server,
+        vec![
+            search_source("arbeitnow", json!({})),
+            json!({"id":"lever","name":"Company Board","kind":"lever","identifier":"company-board","config":{}}),
+            json!({"id":"selector","name":"Direct Board","kind":"selector","identifier":"https://board.fixture.test/jobs","config":{}}),
+        ],
+        20,
+        0,
+        false,
+    );
+    let counts: Vec<_> = ["search", "lever", "selector"]
+        .iter()
+        .map(|id| {
+            events
+                .iter()
+                .filter(|event| {
+                    matches!(event, WorkerEvent::Job {
+            source_id, .. } if source_id.as_str() == *id)
+                })
+                .count()
+        })
+        .collect();
+    assert_eq!(counts.iter().sum::<usize>(), 20);
+    assert!(
+        counts.iter().max().unwrap() - counts.iter().min().unwrap() <= 1,
+        "{counts:?}"
+    );
+    assert_eq!(
+        feed_requests(&server)
+            .iter()
+            .filter(|path| path.contains("arbeitnow"))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn search_muse_invalid_items_do_not_hide_later_matches_or_fetch_past_cap() {
+    let server = Server::new(|path| {
+        assert_eq!(path, "/www.themuse.com/api/public/jobs?page=0");
+        let mut missing_employer = muse_job(1, "Cashier", "Walmart", Value::Null);
+        missing_employer.as_object_mut().unwrap().remove("company");
+        json!({"page": 0, "page_count": 2, "results": [
+            muse_job(2, "Cashier", "Walmart", json!("not-a-date")),
+            missing_employer,
+            muse_job(3, "Cashier", "Walmart", json!("2026-10-15T20:00:00Z")),
+            muse_job(4, "Software Engineer", "Google", json!("2026-10-15T20:00:00Z")),
+        ]})
+        .to_string()
+    });
+    let events = run_worker(
+        &server,
+        vec![search_source("default", json!({}))],
+        1,
+        0,
+        false,
+    );
+    assert_eq!(scans(&events)[0].invalid, 2);
+    assert_eq!(scans(&events)[0].accepted, 1);
+    assert!(events.iter().any(|event| matches!(event, WorkerEvent::Job {
+        external_id, company, .. } if external_id == "3" && company == "Walmart")));
+    assert_eq!(
+        feed_requests(&server),
+        ["/www.themuse.com/api/public/jobs?page=0"]
+    );
+}
+
+#[test]
+fn search_unknown_provider_and_malformed_config_fail_before_requests() {
+    for source in [
+        search_source("imaginary-provider", json!({})),
+        search_source(
+            "themuse",
+            json!({"endpoint": "https://user:secret@feed.test/jobs"}),
+        ),
+        search_source("arbeitnow", json!({"max_pages": 0})),
+        search_source("arbeitnow", json!({"max_pages": 1.5})),
+        search_source("themuse", json!({"companies": [" "]})),
+        search_source("themuse", json!({"endpoint": "file:///etc/passwd"})),
+        search_source(
+            "themuse",
+            json!({"endpoint": "https://feed.test/jobs#fragment"}),
+        ),
+    ] {
+        let server = Server::new(|path| panic!("invalid config requested {path}"));
+        let output = worker_output(
+            &server,
+            &json!({
+                "version":PROTOCOL_VERSION, "sources":[source], "filters":{},
+                "limits":worker_limits(), "max_jobs_per_run":10,
+            }),
+            false,
+        );
+        if output.status.success() {
+            let events: Vec<WorkerEvent> = String::from_utf8(output.stdout)
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect();
+            assert!(events.iter().any(|event| matches!(
+                event,
+                WorkerEvent::Error {
+                    invalid_posting: Some(false),
+                    ..
+                }
+            )));
+            assert_eq!(
+                scans(&events)[0].outcome,
+                Some(scrape_core::protocol::ScanOutcome::Failed)
+            );
+        } else {
+            let stderr = String::from_utf8(output.stderr).unwrap();
+            assert!(stderr.contains("max_pages"), "{stderr}");
+        }
+        assert!(feed_requests(&server).is_empty());
+    }
 }

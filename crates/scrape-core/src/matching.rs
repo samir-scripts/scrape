@@ -25,6 +25,7 @@ pub enum RejectionReason {
     PostingDate,
     Compensation,
     RoleType,
+    Company,
     Workplace,
     Experience,
     NewGrad,
@@ -145,6 +146,7 @@ impl MatchingEvidence {
             RejectionReason::PostingDate => self.posting_date,
             RejectionReason::Compensation => self.compensation,
             RejectionReason::RoleType => has(FilterField::RoleType),
+            RejectionReason::Company => has(FilterField::Company),
             RejectionReason::Geography | RejectionReason::Workplace => false,
             RejectionReason::Experience | RejectionReason::NewGrad => {
                 has(FilterField::Description) && has(FilterField::Title)
@@ -382,6 +384,12 @@ pub enum ExperienceMatchMode {
 #[serde(default, deny_unknown_fields)]
 #[ts(export)]
 pub struct PostingRules {
+    // Literal title substrings, OR within the list and AND with other filters.
+    #[serde(default)]
+    pub target_roles: Vec<String>,
+    // Literal employer substrings; an empty list accepts every employer.
+    #[serde(default)]
+    pub companies: Vec<String>,
     pub keywords: Option<KeywordRules>,
     pub posting_date: Option<crate::posting_date::PostingDateFilter>,
     pub compensation: Option<CompensationFilter>,
@@ -393,7 +401,7 @@ pub struct PostingRules {
     pub experience_max: Option<i64>,
     pub experience_include_unknown: bool,
     pub experience_match_mode: ExperienceMatchMode,
-    /// "any", "only", or "exclude". Exclusion retains unknown classifications.
+    // "any", "only", or "exclude". Exclusion retains unknown classifications.
     pub new_grad: Option<String>,
     pub sponsorship: Vec<TriState>,
     pub work_auth: Vec<WorkAuthRequirement>,
@@ -405,6 +413,14 @@ pub struct PostingRules {
 }
 impl PostingRules {
     pub fn validate(&self) -> Result<(), String> {
+        for (name, values) in [
+            ("target_roles", &self.target_roles),
+            ("companies", &self.companies),
+        ] {
+            if values.iter().any(|value| value.trim().is_empty()) {
+                return Err(format!("matching.{name}: must not contain blank entries"));
+            }
+        }
         if self.countries.iter().any(|value| {
             !crate::geography::country_code(value)
                 .is_some_and(|code| code.eq_ignore_ascii_case(value))
@@ -482,6 +498,18 @@ impl PostingRules {
             return Err("new_grad must be any, only, or exclude".into());
         }
         Ok(())
+    }
+    // Compare bytes without allocating lowercase copies for every candidate.
+    // ASCII folding preserves SQLite lower() semantics for non-ASCII text.
+    fn contains_choice(value: &str, choices: &[String]) -> bool {
+        choices.iter().any(|choice| {
+            let needle = choice.trim().as_bytes();
+            needle.is_empty()
+                || value
+                    .as_bytes()
+                    .windows(needle.len())
+                    .any(|window| window.eq_ignore_ascii_case(needle))
+        })
     }
     fn geography_matches(&self, locations: &[ParsedLocation]) -> bool {
         if self.countries.is_empty() && self.regions.is_empty() && self.cities.is_empty() {
@@ -609,8 +637,13 @@ impl PostingRules {
         }) {
             reasons.push(RejectionReason::Compensation);
         }
-        if !self.role_types.is_empty() && !self.role_types.contains(role_type) {
+        if (!self.target_roles.is_empty() && !Self::contains_choice(title, &self.target_roles))
+            || (!self.role_types.is_empty() && !self.role_types.contains(role_type))
+        {
             reasons.push(RejectionReason::RoleType);
+        }
+        if !self.companies.is_empty() && !Self::contains_choice(company, &self.companies) {
+            reasons.push(RejectionReason::Company);
         }
         if !self.workplaces.is_empty() && !self.workplaces.contains(workplace_type) {
             reasons.push(RejectionReason::Workplace);
@@ -717,10 +750,42 @@ impl PostingRules {
                 assessment.check(reason, decision);
             }
         }
+        // Target titles and employment types share a diagnostic category, but
+        // their evidence is independent. A known failure wins over an unknown.
+        let role_checks = [
+            (
+                !self.target_roles.is_empty(),
+                evidence.fields.contains(&FilterField::Title),
+                Self::contains_choice(title, &self.target_roles),
+            ),
+            (
+                !self.role_types.is_empty(),
+                evidence.knows(RejectionReason::RoleType),
+                self.role_types.contains(role_type),
+            ),
+        ];
+        if role_checks.iter().any(|(active, _, _)| *active) {
+            let rejected = role_checks
+                .iter()
+                .any(|(active, known, matches)| *active && *known && !matches);
+            let unresolved = role_checks
+                .iter()
+                .any(|(active, known, _)| *active && !known);
+            assessment.check(
+                RejectionReason::RoleType,
+                if rejected {
+                    Some(false)
+                } else if unresolved {
+                    None
+                } else {
+                    Some(true)
+                },
+            );
+        }
         let active = [
             (RejectionReason::PostingDate, self.posting_date.is_some()),
             (RejectionReason::Compensation, self.compensation.is_some()),
-            (RejectionReason::RoleType, !self.role_types.is_empty()),
+            (RejectionReason::Company, !self.companies.is_empty()),
             (RejectionReason::Workplace, !self.workplaces.is_empty()),
             (
                 RejectionReason::Experience,
@@ -846,6 +911,18 @@ impl PostingRules {
                     .iter()
                     .map(|v| Bind::Text(serde_json::to_value(v).unwrap().as_str().unwrap().into())),
             );
+        }
+        for (column, values) in [("title", &self.target_roles), ("company", &self.companies)] {
+            if !values.is_empty() {
+                let predicates = values
+                    .iter()
+                    .map(|value| {
+                        bindings.push(Bind::Text(value.trim().into()));
+                        format!("instr(lower(COALESCE({column}, '')), lower(?)) > 0")
+                    })
+                    .collect::<Vec<_>>();
+                clauses.push(format!("({})", predicates.join(" OR ")));
+            }
         }
         if let Some(date) = &self.posting_date {
             if let Ok((start, end)) = date.bounds(started) {
@@ -1367,5 +1444,210 @@ mod field_evidence_tests {
             vec![RejectionReason::KeywordAny, RejectionReason::Geography]
         );
         assert!(assessed.rejected.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod role_company_tests {
+    use super::*;
+
+    fn event(title: &str, company: &str) -> WorkerEvent {
+        serde_json::from_value(serde_json::json!({
+            "type": "job", "source_id": "fixture", "external_id": "1",
+            "title": title, "company": company, "location": "Remote",
+            "role_type": "full_time", "url": "https://fixture.test/1"
+        }))
+        .unwrap()
+    }
+
+    fn assert_decision(
+        rules: &PostingRules,
+        title: &str,
+        company: &str,
+        reasons: &[RejectionReason],
+    ) {
+        let candidate = event(title, company);
+        let started = chrono::Utc::now();
+        let filters = crate::WorkerFilters {
+            matching: Some(rules.clone()),
+            ..Default::default()
+        };
+        let evaluator = MatchingEvaluator::new(&filters).unwrap();
+        assert_eq!(rules.rejection_reasons_at(&candidate, started), reasons);
+        assert_eq!(evaluator.rejection_reasons(&candidate, started), reasons);
+        assert_eq!(
+            evaluator.matches_at(&candidate, started),
+            reasons.is_empty()
+        );
+        let assessment = rules.assess(&candidate, started, &MatchingEvidence::complete());
+        assert_eq!(assessment.rejected, reasons);
+        assert!(assessment.unresolved.is_empty());
+    }
+
+    #[test]
+    fn matching_roles_and_companies_are_or_within_and_across_lists() {
+        let rules = PostingRules {
+            target_roles: vec![" Software Engineer ".into()],
+            companies: vec![" Google ".into(), "Amazon".into()],
+            ..Default::default()
+        };
+        rules.validate().unwrap();
+        assert_decision(&rules, "Senior SOFTWARE ENGINEER", "Google LLC", &[]);
+        assert_decision(&rules, "Software Engineer", "amazon", &[]);
+        assert_decision(
+            &rules,
+            "Software Engineer",
+            "Meta",
+            &[RejectionReason::Company],
+        );
+        assert_decision(
+            &rules,
+            "Product Manager",
+            "Google",
+            &[RejectionReason::RoleType],
+        );
+        assert_decision(
+            &rules,
+            "Product Manager",
+            "Meta",
+            &[RejectionReason::RoleType, RejectionReason::Company],
+        );
+        // Matching is directional: shorter candidate text must not match.
+        assert_decision(
+            &rules,
+            "Software",
+            "Goo",
+            &[RejectionReason::RoleType, RejectionReason::Company],
+        );
+
+        let rules = PostingRules {
+            target_roles: vec!["Line Cook".into(), "Store Associate".into()],
+            companies: vec!["McDonald's".into(), "Burger King".into()],
+            ..Default::default()
+        };
+        assert_decision(&rules, "Line Cook", "McDonald's", &[]);
+        assert_decision(&rules, "Store Associate", "BURGER KING", &[]);
+        assert_decision(&rules, "Line Cook", "Wendy's", &[RejectionReason::Company]);
+        let unrestricted_employers = PostingRules {
+            companies: vec![],
+            ..rules
+        };
+        assert_decision(&unrestricted_employers, "Line Cook", "Wendy's", &[]);
+    }
+
+    #[test]
+    fn matching_defaults_and_validation_preserve_existing_workflows() {
+        let rules: PostingRules = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert!(rules.target_roles.is_empty());
+        assert!(rules.companies.is_empty());
+        assert_decision(&rules, "", "", &[]);
+        assert!(rules.sqlite_predicates().0.is_empty());
+        for blank in ["", " ", "\t\n", "\u{2003}"] {
+            let roles = PostingRules {
+                target_roles: vec!["Engineer".into(), blank.into()],
+                ..Default::default()
+            };
+            assert_eq!(
+                roles.validate().unwrap_err(),
+                "matching.target_roles: must not contain blank entries"
+            );
+            let companies = PostingRules {
+                companies: vec![blank.into()],
+                ..Default::default()
+            };
+            assert_eq!(
+                companies.validate().unwrap_err(),
+                "matching.companies: must not contain blank entries"
+            );
+        }
+        let rules = PostingRules {
+            target_roles: vec!["Engineer".into()],
+            companies: vec!["Google".into()],
+            ..Default::default()
+        };
+        assert_decision(
+            &rules,
+            "",
+            "",
+            &[RejectionReason::RoleType, RejectionReason::Company],
+        );
+    }
+
+    #[test]
+    fn matching_substrings_are_literal_and_ascii_case_insensitive() {
+        let rules = PostingRules {
+            target_roles: vec!["  100%_Engineer\\  ".into(), "Éngineer".into()],
+            companies: vec!["  A_B%\\  ".into(), "Google".into()],
+            ..Default::default()
+        };
+        rules.validate().unwrap();
+        assert_decision(&rules, "100%_ENGINEER\\ II", "A_B%\\ LLC", &[]);
+        assert_decision(
+            &rules,
+            "100xxEngineer",
+            "AxBxx",
+            &[RejectionReason::RoleType, RejectionReason::Company],
+        );
+        assert_decision(&rules, "éngineer", "Google", &[RejectionReason::RoleType]);
+        assert_decision(&rules, "ÉNGINEER", "Google", &[]);
+    }
+
+    #[test]
+    fn matching_role_and_company_partial_evidence_is_independent() {
+        let rules = PostingRules {
+            target_roles: vec!["Engineer".into()],
+            companies: vec!["Google".into()],
+            role_types: vec![RoleType::Internship],
+            ..Default::default()
+        };
+        let started = chrono::Utc::now();
+        let candidate = event("Engineer", "Meta");
+        let mut evidence = MatchingEvidence::default();
+        let assessment = rules.assess(&candidate, started, &evidence);
+        assert_eq!(
+            assessment.unresolved,
+            vec![RejectionReason::RoleType, RejectionReason::Company]
+        );
+        assert!(assessment.rejected.is_empty());
+        evidence.fields = vec![FilterField::Title, FilterField::Company];
+        let assessment = rules.assess(&candidate, started, &evidence);
+        assert_eq!(assessment.unresolved, vec![RejectionReason::RoleType]);
+        assert_eq!(assessment.rejected, vec![RejectionReason::Company]);
+        evidence.fields.push(FilterField::RoleType);
+        let assessment = rules.assess(&candidate, started, &evidence);
+        assert!(assessment.unresolved.is_empty());
+        assert_eq!(
+            assessment.rejected,
+            vec![RejectionReason::RoleType, RejectionReason::Company]
+        );
+        // Known employment-type failure rejects even without title evidence.
+        evidence.fields = vec![FilterField::RoleType];
+        assert_eq!(
+            rules.assess(&candidate, started, &evidence).rejected,
+            vec![RejectionReason::RoleType]
+        );
+        // And a known title failure rejects without employment-type evidence.
+        evidence.fields = vec![FilterField::Title];
+        assert_eq!(
+            rules
+                .assess(&event("Manager", "Google"), started, &evidence)
+                .rejected,
+            vec![RejectionReason::RoleType]
+        );
+        // With only target roles active, RoleType evidence cannot resolve titles.
+        let title_only = PostingRules {
+            target_roles: vec!["Engineer".into()],
+            ..Default::default()
+        };
+        evidence.fields = vec![FilterField::RoleType];
+        assert_eq!(
+            title_only.assess(&candidate, started, &evidence).unresolved,
+            vec![RejectionReason::RoleType]
+        );
+        evidence.fields = vec![FilterField::Title];
+        assert_eq!(
+            title_only.assess(&candidate, started, &evidence),
+            MatchingAssessment::default()
+        );
     }
 }
