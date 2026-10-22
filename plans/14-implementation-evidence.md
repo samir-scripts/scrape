@@ -50,6 +50,8 @@
 
 ## Section 9 — O*NET role-title seed and indexed search
 
+**Commit:** `ea58780` (`feat: seed searchable O*NET role titles`)
+
 **Implemented:** replaced the incomplete static BLS/O*NET title catalog and workbook inputs with one normalized O*NET 31.0 TSV (45,716 case-insensitively unique titles; 1,535,832 bytes), with source URLs, downloaded-file SHA-256 digests, CC BY 4.0 terms, attribution and output digest in the data manifest. No XLSX, legacy static catalog or generated role-title projection remains. Migration 30 creates indexed SQLite role and token tables; startup seeds only an empty table in one prepared-batch transaction. The Tauri search command feeds the existing multi-select's async suggestions and preserves literal custom titles and the unchanged role-filter contract.
 
 **Checks run:**
