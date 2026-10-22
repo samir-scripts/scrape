@@ -22,6 +22,7 @@ it("allows saving a preview with optional warnings and blocks incomplete require
   await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
   await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
   await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
+  await user.click(screen.getByRole("button", { name: "Continue to Review" }));
   await user.click(screen.getByRole("button", { name: "Preview matches" }));
   expect(await screen.findByText(/Warning: Optional publication date/)).toBeTruthy();
   await waitFor(() => expect((screen.getByRole("button",{name:"Save workflow"}) as HTMLButtonElement).disabled).toBe(false));

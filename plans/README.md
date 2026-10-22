@@ -14,13 +14,14 @@ Prior revision: [Reliable ingestion, multi-source workflows, and UI repair](11-r
 
 Plan 11 remains a completed prior revision. Its eight implementation sections, evidence and unresolved original-report reproduction status are retained in [the Plan 11 ledger](11-implementation-evidence.md).
 
-The latest proposed desktop repair is [Desktop usability and extraction](08-desktop-usability-and-extraction.md). It documents the screenshot-reported regressions, replaces conflicting plan 07 layout decisions, and requires actual native interaction verification before completion.
+New UI usability work is scoped by [Plan 14](14-workflow-editor-usability.md). Execute one section per pass and stop at its acceptance gate before starting the next. It preserves the current Plan 13 role/company catalog and Rust-owned workflow contracts unless investigation proves a contract change necessary.
 
 Current UI refinement and independent workflow configuration is specified in
 [plan 10](10-ui-workflow-refinement.md). It supersedes conflicting global
 workflow settings and Scraper Settings decisions in plans 06–08, while
 preserving data-protection and domain contracts.
 
+| [`14-workflow-editor-usability.md`](14-workflow-editor-usability.md) | One-section-at-a-time workflow editor repair: navigation, themed controls, criteria, geography, sources, clock, Review, role/company search, colors and end-to-end acceptance. |
 | [`13-searchable-workflow-role-company-selection.md`](13-searchable-workflow-role-company-selection.md) | Offline BLS/O*NET literal role catalog, searchable multi-select role/company filters, atomic company-board attachment and contextual keyword autocomplete. |
 | [`10-ui-workflow-refinement.md`](10-ui-workflow-refinement.md) | Themed accessible menus, independent workflow settings, automatic retention, Kanban movement, and consolidated sorting. |
 

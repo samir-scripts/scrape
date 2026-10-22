@@ -11,7 +11,7 @@ import { sourceToWorkflowSpec, canonicalizeAtsUrl, normalizedEndpoint } from "..
 import { companyOptions, selectedCompanyId } from "../components/views/settings/CompanyPicker";
 import { emptyRules } from "../components/views/settings/WorkflowSections";
 
-export const WORKFLOW_STEPS = ["Roles", "Criteria", "Sources", "Schedule"] as const;
+export const WORKFLOW_STEPS = ["Roles", "Criteria", "Sources", "Schedule", "Review"] as const;
 export type WorkflowStep = typeof WORKFLOW_STEPS[number];
 export type WorkflowDraftChange = (next: WorkflowSpec | ((current: WorkflowSpec) => WorkflowSpec)) => void;
 const appendCompanyBoards = (sources: WorkflowSourceSpec[], companyIds: readonly string[]): WorkflowSourceSpec[] => {
@@ -240,7 +240,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
       catch (error) { if (revision.current === current) report(error); return; }
       finally { if (revision.current === current) setOperation(null); }
     }
-    const index = Math.min(3, WORKFLOW_STEPS.indexOf(step) + 1); setVisited(value => Math.max(value, index)); navigate(WORKFLOW_STEPS[index]);
+    const index = Math.min(WORKFLOW_STEPS.length - 1, WORKFLOW_STEPS.indexOf(step) + 1); setVisited(value => Math.max(value, index)); navigate(WORKFLOW_STEPS[index]);
   };
   const runPreview = async () => {
     if (invalidInputs()) return;

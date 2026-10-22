@@ -42,7 +42,7 @@ it("keeps example loading in Advanced and requires whole-draft replacement confi
   await user.clear(screen.getByRole("textbox", { name: "Workflow name" }));
   await user.type(screen.getByRole("textbox", { name: "Workflow name" }), "Keep my edits");
   expect(screen.queryByRole("button", { name: "Load example workflow" })).toBeNull();
-  await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+  await user.click(screen.getByRole("button", { name: "Advanced" }));
   await user.click(screen.getByRole("button", { name: "Load example workflow" }));
   const template = SAMPLE_WORKFLOW_TEMPLATES.find(template => template.id === "streaming-cloud-script")!;
   await user.click(screen.getByRole("option", { name: template.name }));

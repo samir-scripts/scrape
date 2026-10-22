@@ -13,7 +13,7 @@ for (const theme of ["paper", "obsidian"]) {
       await page.getByRole("button", { name: "SETTINGS", exact: true }).click();
       await page.getByRole("button", { name: /^OBSIDIAN/ }).click();
     }
-    await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+    await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
     await page.getByRole("button", { name: "Load test workflows" }).click();
     await expect(page.getByText(/Scripts remain disabled until reviewed and explicitly enabled/)).toBeVisible();
     const row = page.getByRole("row").filter({ hasText: "Cloudflare — Software Engineering Internships" });
@@ -64,7 +64,7 @@ for (const theme of ["paper", "obsidian"]) {
     await page.reload();
     await expect(page.getByRole("textbox", { name: "Search jobs" })).toHaveValue("Software Engineer Intern");
     await expect(view).toBeVisible();
-    await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+    await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
     const refreshed = await run(0, 2);
     await page.getByRole("button", { name: /^DISCOVERED/ }).click();
     await expect(view).toBeVisible();
@@ -73,14 +73,14 @@ for (const theme of ["paper", "obsidian"]) {
     await removal.getByRole("checkbox", { name: "Keep this job out of future scrapes" }).check();
     await removal.getByRole("button", { name: "Remove job", exact: true }).click();
     await expect(view).toHaveCount(0);
-    await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+    await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
     const suppressed = await run(0, 1);
     await page.getByRole("button", { name: /^DISCOVERED/ }).click();
     await expect(page.getByRole("textbox", { name: "Search jobs" })).toHaveValue("Software Engineer Intern");
     await expect(view).toHaveCount(0);
     await page.reload();
     await expect(view).toHaveCount(0);
-    await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+    await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
     await row.getByRole("button", { name: "Edit workflow Cloudflare — Software Engineering Internships" }).click();
     const edit = page.getByRole("dialog", { name: "Edit workflow" });
     await edit.getByRole("button", { name: "Continue to Criteria" }).click();

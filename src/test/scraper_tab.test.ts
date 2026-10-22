@@ -11,10 +11,10 @@ describe("Scraper Tab & Operations Hub", () => {
     });
   });
 
-  it("includes SCRAPER in NAV_TABS positioned before SETTINGS", () => {
+  it("includes WORKFLOWS in NAV_TABS positioned before SETTINGS", () => {
     const tabIds = NAV_TABS.map((t) => t.id);
     expect(tabIds).toEqual(["discovered", "tracked", "metrics", "scraper", "settings"]);
-    expect(NAV_TABS.find((t) => t.id === "scraper")?.label).toBe("SCRAPER");
+    expect(NAV_TABS.find((t) => t.id === "scraper")?.label).toBe("WORKFLOWS");
   });
 
   it("handles scraper subcategory navigation across sources, schedule, filters, and logs", () => {
@@ -91,7 +91,7 @@ describe("Scraper Tab & Operations Hub", () => {
   });
 
   it("redirects directly to scraper sources view from error log remediation actions", () => {
-    // When user clicks [EDIT SOURCE IN SCRAPER ->] in logs
+    // When user clicks [EDIT SOURCE IN WORKFLOWS ->] in logs
     const store = useUIStore.getState();
     store.setView("scraper");
     store.setScraperCategory("logs");

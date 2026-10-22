@@ -43,7 +43,7 @@ The `src/` directory contains the single-page web application frontend for Scrap
 | File | Type | Responsibilities & Implementation |
 |---|---|---|
 | [`main.tsx`](main.tsx) | Application Entry Point | Bootstraps the React DOM root (`#root`), initializes `QueryClient` with default stale-time and cache policies, and mounts `App.tsx` within `React.StrictMode`. |
-| [`App.tsx`](App.tsx) | Root Component | Shell container orchestrating top-level view switching (`DISCOVERED`, `TRACKED`, `SCRAPER`, `METRICS`, `SETTINGS`), repository job pagination and filter/sort queries, global hotkey listeners, toast notifications, soft-removal confirmation dialogs with Undo, and the desktop-required gate vs. explicit `?demo=1` recorded mode. |
+| [`App.tsx`](App.tsx) | Root Component | Shell container orchestrating top-level view switching (`DISCOVERED`, `TRACKED`, `WORKFLOWS`, `METRICS`, `SETTINGS`), repository job pagination and filter/sort queries, global hotkey listeners, toast notifications, soft-removal confirmation dialogs with Undo, and the desktop-required gate vs. explicit `?demo=1` recorded mode. |
 
 ---
 

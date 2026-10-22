@@ -22,6 +22,7 @@ describe("workflow role selection draft boundary", () => {
     await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
     await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
     await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Review" }));
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
     await screen.findByText(/0 examined/);
     const save = screen.getByRole("button", { name: "Save workflow" });

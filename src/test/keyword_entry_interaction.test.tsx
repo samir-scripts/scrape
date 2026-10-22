@@ -13,7 +13,7 @@ beforeAll(() => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 async function goToSchedule(user: UserEvent) {
-  for (const name of ["Continue to Criteria", "Continue to Sources", "Continue to Schedule"]) {
+  for (const name of ["Continue to Criteria", "Continue to Sources", "Continue to Schedule", "Continue to Review"]) {
     const button = screen.queryByRole("button", { name });
     if (button) await user.click(button);
   }
@@ -23,7 +23,7 @@ async function previewFromSchedule(user: UserEvent) {
   await user.click(screen.getByRole("button", { name: "Preview matches" }));
 }
 async function backToRoles(user: UserEvent) {
-  for (let step = 0; step < 3; step++) await user.click(screen.getByRole("button", { name: "Back" }));
+  for (let step = 0; step < 4; step++) await user.click(screen.getByRole("button", { name: "Back" }));
 }
 it("commits a typed comma and preserves the next keyword", async () => {
   const user = userEvent.setup();
@@ -134,7 +134,7 @@ it("commits unfinished text before opening YAML and clears old drafts when repla
   const view = render(<AddSourceModal {...props} initialSource={{ ...SAMPLE_SWE_SOURCE, filters: {} }} />);
   ;
   await user.type(screen.getByRole("combobox", { name: "Any keywords" }), "Machine Learning");
-  await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+  await user.click(screen.getByRole("button", { name: "Advanced" }));
   await user.click(screen.getByRole("button", { name: "Edit YAML" }));
   expect((screen.getByRole("textbox", { name: "Workflow YAML" }) as HTMLTextAreaElement).value).toContain("Machine Learning");
   await user.click(screen.getByRole("button", { name: "Apply YAML to form" }));

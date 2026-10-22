@@ -2,7 +2,7 @@ import { test, expect } from "./fixtures";
 
 test("workflow role and company selectors preserve literal criteria and keep preview/save explicit", async ({ page }) => {
   await page.goto("/?demo=1&fixtures=1");
-  await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+  await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
   await page.getByRole("button", { name: "Add workflow", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Create workflow" });
   await dialog.getByRole("textbox", { name: "Workflow name", exact: true }).fill("selection browser fixture");
@@ -30,6 +30,7 @@ test("workflow role and company selectors preserve literal criteria and keep pre
   await expect(dialog.getByText("Sources (3)", { exact: true })).toBeVisible();
   await expect(dialog.getByText("✓ Cross-Company Search", { exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "Continue to Schedule" }).click();
+  await dialog.getByRole("button", { name: "Continue to Review" }).click();
   await expect(dialog.getByRole("button", { name: "Preview matches" })).toBeVisible();
   await dialog.getByText("All configured rules", { exact: true }).click();
   const spec = await dialog.locator("details pre").textContent();
@@ -48,6 +49,7 @@ test("workflow role and company selectors preserve literal criteria and keep pre
   await dialog.getByRole("button", { name: "Date posted range", exact: true }).click();
   await dialog.getByRole("option", { name: "Any time", exact: true }).click();
   await steps.getByRole("button", { name: /Schedule/ }).click();
+  await steps.getByRole("button", { name: /Review/ }).click();
   await expect(dialog.getByRole("button", { name: "Save workflow" })).toBeDisabled();
   await dialog.getByRole("button", { name: "Preview matches" }).click();
   await expect(dialog.getByRole("button", { name: "Save workflow" })).toBeEnabled();

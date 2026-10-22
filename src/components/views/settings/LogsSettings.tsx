@@ -139,7 +139,7 @@ export function LogsSettings() {
             disabled={runNowMutation.isPending}
             className="px-3 py-1 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-90 active:translate-y-[1px] text-xs font-bold uppercase cursor-pointer disabled:opacity-50"
           >
-            {runNowMutation.isPending ? "STARTING…" : "RUN SCRAPER NOW"}
+            {runNowMutation.isPending ? "STARTING…" : "RUN ALL WORKFLOWS"}
           </button>
         </div>
       </div>
@@ -348,7 +348,7 @@ export function LogsSettings() {
                                 }}
                                 className="px-2 py-0.5 border border-[var(--color-danger)] bg-white text-[var(--color-danger)] hover:bg-[var(--color-paper-2)] hover:text-white text-xs font-bold uppercase cursor-pointer inline-flex items-center gap-2"
                               >
-                                <span>EDIT SOURCE IN SCRAPER</span><Icon name="right" />
+                                <span>EDIT SOURCE IN WORKFLOWS</span><Icon name="right" />
                               </button>
                             </div>
                           )}

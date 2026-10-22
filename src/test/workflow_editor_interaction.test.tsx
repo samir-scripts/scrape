@@ -24,6 +24,7 @@ async function chooseMulti(user: UserEvent, label: string, text: string) {
 async function toSchedule(user: UserEvent) {
   await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
   await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
+  await user.click(screen.getByRole("button", { name: "Continue to Review" }));
 }
 describe("role-first workflow boundaries", () => {
   it.each([
@@ -91,7 +92,7 @@ describe("role-first workflow boundaries", () => {
       expect(extract).toHaveBeenCalledTimes(1);
     }
     await user.clear(limit); await user.type(limit, "7");
-    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.click(screen.getByRole("button", { name: "Edit YAML" }));
     expect((screen.getByLabelText("Workflow YAML") as HTMLTextAreaElement).value).toContain("max_jobs_per_run: 7");
     await user.click(screen.getByRole("button", { name: "Apply YAML to form" }));
@@ -141,18 +142,23 @@ describe("role-first workflow boundaries", () => {
     const settings = vi.spyOn(api, "updateSetting");
     render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, cadence: "global" }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "Continue to Criteria" })); await toSchedule(user);
+    await user.click(screen.getByRole("button", { name: "Schedule" }));
     expect(screen.getByRole("button", { name: "Schedule", expanded: false }).textContent).toContain("daily");
+    await user.click(screen.getByRole("button", { name: "Continue to Review" }));
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
     await user.click(screen.getByRole("button", { name: "Cancel preview" }));
     finish(preview(extract.mock.calls[0][0]));
     await waitFor(() => expect(screen.queryByText(/3 examined/)).toBeNull());
     expect(cancel).toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Preview matches" })); await screen.findByText(/3 examined/);
+    await user.click(screen.getByRole("button", { name: "Preview matches" }));
+    await screen.findByText(/3 examined/);
+    await user.click(screen.getByRole("button", { name: "Schedule" }));
     await user.click(screen.getByRole("button", { name: "Schedule", expanded: false }));
     expect(screen.queryByRole("option", { name: "global" })).toBeNull();
     await user.click(screen.getByRole("option", { name: "manual" }));
-    expect((screen.getByRole("button", { name: "Save workflow" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByRole("checkbox", { name: "Run this workflow when the app starts" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Continue to Review" }));
+    expect((screen.getByRole("button", { name: "Save workflow" }) as HTMLButtonElement).disabled).toBe(true);
     expect(settings).not.toHaveBeenCalled();
   });
   it("re-detects an interrupted board edit and keeps the latest keywords", async () => {
@@ -171,6 +177,7 @@ describe("role-first workflow boundaries", () => {
     await user.click(screen.getByRole("button", { name: "Detect source 1" }));
     await user.clear(url); await user.type(url, "https://boards.greenhouse.io/acme-new");
     await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Review" }));
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
     await screen.findByText(/3 examined/);
     expect(detect).toHaveBeenCalledTimes(2);
@@ -179,6 +186,24 @@ describe("role-first workflow boundaries", () => {
     finish({ kind: "lever", identifier: "stale", name: "Stale" });
     await waitFor(() => expect(screen.getByText(/3 examined/)).toBeTruthy());
     expect(screen.queryByText("Stale")).toBeNull();
+  });
+  it("keeps the populated workflow draft across mode switches and exposes Review as the final step", async () => {
+    const user = userEvent.setup();
+    render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    const advanced = screen.getByRole("button", { name: "Advanced" });
+    await user.click(advanced);
+    expect(advanced.getAttribute("aria-pressed")).toBe("true");
+    await user.type(screen.getByRole("combobox", { name: "Any keywords" }), "distributed systems{Enter}");
+    expect(screen.getByRole("button", { name: "Remove distributed systems from Any keywords" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Simple" }));
+    expect(screen.getByRole("button", { name: "Simple" }).getAttribute("aria-pressed")).toBe("true");
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(screen.getByRole("button", { name: "Remove distributed systems from Any keywords" })).toBeTruthy();
+    for (const step of ["Criteria", "Sources", "Schedule", "Review"]) {
+      await user.click(screen.getByRole("button", { name: `Continue to ${step}` }));
+    }
+    expect(screen.getByRole("button", { name: "Review", current: "step" })).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Save workflow" }) as HTMLButtonElement).disabled).toBe(true);
   });
   it("roundtrips version8 search and role/company/date rules without silent drops", () => {
     const spec = sourceToWorkflowSpec(SAMPLE_SWE_SOURCE); spec.version = 8;

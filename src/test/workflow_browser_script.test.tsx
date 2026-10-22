@@ -15,7 +15,7 @@ import type { WorkflowSpec } from "../bindings/WorkflowSpec";
 async function openExtractorSettings(user: UserEvent) {
   await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
   await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
-  await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+  await user.click(screen.getByRole("button", { name: "Advanced" }));
 }
 beforeAll(() => {
   HTMLDialogElement.prototype.showModal = function () {
@@ -101,7 +101,7 @@ describe("Workflow Editor — Custom Extractor, Browser Sessions, & Script Trust
       />
     );
 
-    // Advanced settings must be opened to edit extractor details
+    // Advanced mode must be selected to edit extractor details
     await openExtractorSettings(user);
 
     // Mode selector is visible

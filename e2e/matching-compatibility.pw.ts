@@ -20,7 +20,7 @@ for (const theme of ["paper", "obsidian"]) {
     await page.goto("/?demo=1&fixtures=1");
     await page.getByRole("button", { name: "SETTINGS", exact: true }).click();
     if (theme === "obsidian") await page.getByRole("button", { name: /^OBSIDIAN/ }).click();
-    await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+    await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
     await page.getByRole("button", { name: "Edit workflow Authored compatibility fixture", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Edit workflow" });
     await dialog.getByRole("button", { name: "Continue to Criteria" }).click();
@@ -34,7 +34,7 @@ for (const theme of ["paper", "obsidian"]) {
     await expect(query).toHaveValue("title LIKE '%Engineer%' OR title LIKE '%Intern%'");
     await query.fill("title LIKE '%Software%'");
     await dialog.getByRole("button", { name: "Remove legacy role-type restriction", exact: true }).click();
-    await dialog.getByRole("button", { name: "Advanced settings", exact: true }).click();
+    await dialog.getByRole("button", { name: "Advanced", exact: true }).click();
     const downloading = page.waitForEvent("download");
     await dialog.getByRole("button", { name: "Export YAML", exact: true }).click();
     const yaml = await readFile((await (await downloading).path())!, "utf8");

@@ -40,7 +40,7 @@ for (const theme of ["paper", "obsidian"] as const) {
       await page.getByRole("option", { name: /24-hour/ }).click();
       await expect(time).toContainText("24-hour · 15:25");
 
-      await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+      await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
       await page.getByRole("button", { name: /add workflow/i }).click();
       await page.getByRole("button", { name: "Continue to Criteria" }).click();
       const country = page.getByRole("combobox", { name: "Country", exact: true });

@@ -8,7 +8,7 @@ for (const theme of ["paper", "obsidian"]) {
     await page.getByRole("button", { name: "SETTINGS", exact: true }).click();
     if (theme === "obsidian") await page.getByRole("button", { name: /^OBSIDIAN/ }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
-    await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+    await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
     await page.getByRole("button", { name: "Add workflow", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Create workflow" });
     await dialog.getByRole("textbox", { name: "Workflow name", exact: true }).fill("keyword-fixture");
@@ -32,6 +32,7 @@ for (const theme of ["paper", "obsidian"]) {
     await dialog.getByRole("textbox", { name: "Source 2 URL or board identifier", exact: true }).fill("https://boards.greenhouse.io/keyword-fixture");
     await dialog.getByRole("button", { name: "Remove source Cross-Company Search", exact: true }).click();
     await dialog.getByRole("button", { name: "Continue to Schedule" }).click();
+    await dialog.getByRole("button", { name: "Continue to Review" }).click();
     await dialog.getByRole("button", { name: "Preview matches" }).click();
     await expect(dialog.getByRole("button", { name: "Save workflow" })).toBeEnabled();
     await dialog.getByRole("button", { name: "Save workflow" }).click();
@@ -56,7 +57,7 @@ for (const theme of ["paper", "obsidian"]) {
     expect(overflow).toBe(false);
     await page.screenshot({ path: `/tmp/scrape-keywords-${theme}-480.png` });
     await edit.getByRole("combobox", { name: "All keywords", exact: true }).fill("Distributed Systems");
-    await edit.getByRole("button", { name: "Advanced settings", exact: true }).click();
+    await edit.getByRole("button", { name: "Advanced", exact: true }).click();
     const exported = page.waitForEvent("download");
     await edit.getByRole("button", { name: "Export YAML", exact: true }).click();
     const download = await exported;

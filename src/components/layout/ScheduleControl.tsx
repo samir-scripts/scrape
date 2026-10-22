@@ -49,7 +49,7 @@ export function ScheduleControl() {
           {running && <Button disabled={busy} onClick={() => void act(async () => {
             if (!await api.cancelScrape()) throw new Error("No active worker accepted cancellation. Refresh status.");
           })}>Cancel active run</Button>}
-          <Button onClick={() => { setView("scraper"); setOpen(false); }}>Open Scraper</Button>
+          <Button onClick={() => { setView("scraper"); setOpen(false); }}>Open Workflows</Button>
         </div>
       </div>
     </Modal>

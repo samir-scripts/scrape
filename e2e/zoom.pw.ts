@@ -33,7 +33,7 @@ test("both themes remain operable at actual 200% browser zoom", async () => {
       await page.getByRole("button", { name: "SETTINGS", exact: true }).click();
       if (theme === "obsidian") await page.getByRole("button", { name: /^OBSIDIAN/ }).click();
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
-      await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+      await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
       const add = page.getByRole("button", { name: /add workflow/i });
       await add.click();
       const dialog = page.getByRole("dialog", { name: "Create workflow" });
@@ -55,7 +55,7 @@ test("both themes remain operable at actual 200% browser zoom", async () => {
       await expect(dialog.getByRole("option", { name: /^Cloudflare\b/ })).toBeVisible();
       await page.keyboard.press("Escape");
       await expect(dialog.getByRole("combobox", { name: "Companies (Optional)", exact: true })).toBeFocused();
-      for (const step of ["Criteria", "Sources", "Schedule"]) {
+      for (const step of ["Criteria", "Sources", "Schedule", "Review"]) {
         await dialog.getByRole("button", { name: `Continue to ${step}`, exact: true }).click();
       }
       await dialog.getByText("All configured rules", { exact: true }).click();

@@ -11,11 +11,11 @@ for (const theme of ["paper", "obsidian"]) {
     await page.goto("/?demo=1&fixtures=1");
     await page.getByRole("button", { name: "SETTINGS", exact: true }).click();
     if (theme === "obsidian") await page.getByRole("button", { name: /^OBSIDIAN/ }).click();
-    await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+    await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
     await page.getByRole("button", { name: /add workflow|new workflow|create workflow/i }).click();
     const dialog = page.getByRole("dialog", { name: "Create workflow" });
     const template = catalog.templates.find(template => template.id === "sep-midwest-consulting")!;
-    await dialog.getByRole("button", { name: "Advanced settings" }).click();
+    await dialog.getByRole("button", { name: "Advanced" }).click();
     await dialog.getByRole("button", { name: "Load example workflow" }).click();
     await page.getByRole("option", { name: template.name, exact: true }).click();
     await dialog.getByRole("button", { name: "Continue to Criteria" }).click();
@@ -28,6 +28,7 @@ for (const theme of ["paper", "obsidian"]) {
     await dialog.getByRole("button", { name: "Continue to Sources" }).click();
     await expect(dialog.getByLabel("Selected company details").getByText(template.description)).toBeVisible();
     await dialog.getByRole("button", { name: "Continue to Schedule" }).click();
+    await dialog.getByRole("button", { name: "Continue to Review" }).click();
     await dialog.getByRole("button", { name: "Preview matches", exact: true }).click();
     await expect(dialog.getByRole("heading", { name: "1 eligible matches", exact: true })).toBeVisible();
     await expect(dialog.getByRole("link", { name: "Systems Engineer Intern - Distributed Data", exact: true })).toBeVisible();

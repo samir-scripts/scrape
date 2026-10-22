@@ -1,9 +1,9 @@
 # Settings and workflow configuration
 
 Settings provides Appearance, System, Removed & blocked jobs, and Data management.
-System contains the application-wide automatic-scraping pause. Scraper provides workflow configuration.
+System contains the application-wide automatic-scraping pause. Workflows provides workflow configuration.
 
-`AddSourceModal` and `WorkflowSections` share one draft across **Roles → Criteria → Sources → Schedule**, Advanced controls and YAML. Target roles and optional companies use searchable multi-selects that persist literal filter strings; BLS 2018 and O*NET 31.0 titles provide offline suggestions without changing Rust's substring matching. Supported company selections append their available board sources atomically. Removing a company filter never deletes a configured source. New workflows retain The Muse public search by default. Names are derived only for unnamed drafts and never replace explicit user names.
+`AddSourceModal` and `WorkflowSections` share one draft across **Roles → Criteria → Sources → Schedule → Review**. The top-level **Simple/Advanced** selector controls the same draft; advanced values persist when switching modes. Target roles and optional companies use searchable multi-selects that persist literal filter strings; BLS 2018 and O*NET 31.0 titles provide offline suggestions without changing Rust's substring matching. Supported company selections append their available board sources atomically. Removing a company filter never deletes a configured source. New workflows retain The Muse public search by default. Names are derived only for unnamed drafts and never replace explicit user names.
 
 Sources can be edited, enabled, reordered and removed with duplicate-provider/board
 validation and independent ATS detection. Selector sources reuse Static HTML,
@@ -51,15 +51,15 @@ retained only to convert older workflows and imports. See
 ## Workflow editor
 
 The workflow editor uses `useWorkflowDraft` as its only draft/request controller.
-Roles → Criteria → Sources → Schedule is ordered navigation with completed steps
+Roles → Criteria → Sources → Schedule → Review is ordered navigation with completed steps
 available for backtracking. Hidden inputs retain their draft state. Criteria
 exposes dynamic date presets, location/workplace, YOE/employment and native pay.
 Existing arbitrary-hour/custom date filters remain editable without conversion.
 Sources labels provider coverage and offers optional direct-board attachments,
 preserving disabled/readiness/script trust. When a selected known company lacks
 a board in an imported draft, Sources offers an explicit attach action; removing
-the company filter never removes a source. Schedule includes retention, complete
-rule review, current preview and Save; saving never runs a scrape.
+the company filter never removes a source. Schedule includes retention. Review owns
+readiness, readable rules, current preview and Save; saving never runs a scrape.
 
 `WorkflowImportButton` is shared by the registry and editor. It reads a selected
 file, parses it through `workflowImport`, and calls the canonical workflow
@@ -68,7 +68,7 @@ draft intact; replacing edited input requires confirmation. The file input reset
 so the same file can be selected again. Closed/disabled importers reject stale
 validation completions.
 
-The Scraper registry owns Run all, cancellation/progress, upload and Add workflow.
+The Workflows registry owns Run all, cancellation/progress, upload and Add workflow.
 Routine retention runs automatically at startup and every 24 elapsed hours,
 including while scraping is paused or a workflow is disabled. Only the automatic-scraping pause is application-wide;
 schedule, startup, matching, ingestion limit and retention belong to each workflow.

@@ -16,7 +16,7 @@ for (const theme of ["paper", "obsidian"]) {
       await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
       expect(await contrastFailures(page)).toEqual([]);
       await expect.soft(page).toHaveScreenshot(`${theme}-${width}-settings.png`, { animations: "disabled" });
-      await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+      await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
       await page.getByRole("button", { name: "Add workflow", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "Create workflow" });
       await expect(dialog).toBeVisible();
@@ -49,7 +49,7 @@ for (const theme of ["paper", "obsidian"]) {
       expect(await contrastFailures(page)).toEqual([]);
       await expect.soft(page).toHaveScreenshot(`${theme}-${width}-removal.png`, { animations: "disabled" });
       await page.keyboard.press("Escape");
-      await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+      await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
       // A 200% zoom-equivalent viewport exercises reflow at the same CSS width.
       await page.setViewportSize({ width: Math.floor(width / 2), height: 450 });
       await page.getByRole("button", { name: "Add workflow", exact: true }).click();

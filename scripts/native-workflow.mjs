@@ -35,7 +35,7 @@ export async function checkNativeWorkflow(origin) {
  document.querySelector('dialog[aria-label="Schedule summary"] button[aria-label="Close dialog"]').click();
  await wait(() => !document.querySelector('dialog[aria-label="Schedule summary"][open]'), 'closed scheduler summary');
  const before = await invoke('list_jobs', { filter: {} }); const runs = await invoke('list_scrape_runs', { limit: 100 });
- (await wait(() => button('SCRAPER'), 'Scraper navigation')).click();
+ (await wait(() => button('WORKFLOWS'), 'Workflows navigation')).click();
  (await wait(() => [...document.querySelectorAll('button')].find(element => element.textContent.includes('ADD WORKFLOW')), 'Add workflow')).click();
  await wait(() => field('Workflow name'), 'role-first wizard');
  change(field('Workflow name'), 'Native wizard fixture');
@@ -88,11 +88,12 @@ export async function checkNativeWorkflow(origin) {
  document.querySelector("[data-source-index='0'] details > summary").click();
  change(field('Source 1 employer hint'), 'Fixture Co');
  await settle('Explicit custom employer identity');
- button('Continue to Schedule').click(); await wait(() => button('Save workflow'), 'schedule preview and save step');
+ button('Continue to Schedule').click(); await wait(() => field('Schedule'), 'schedule settings');
  field('Schedule').focus();
  field('Schedule').click();
  (await wait(() => [...document.querySelectorAll('[role=option]')].find(option => option.textContent.trim() === 'manual'), 'manual cadence option')).click();
  await wait(() => field('Schedule').textContent.includes('manual') && !document.querySelector('[role=option]'), 'manual cadence');
+ button('Continue to Review').click(); await wait(() => button('Save workflow'), 'review and save step');
  button('Preview matches').click(); await wait(() => button('Save workflow') && !button('Save workflow').disabled, 'completed read-only preview');
  assert(document.querySelector('[aria-label="Preview results"]').textContent.includes('1 eligible matches'), 'Preview did not use current keyword rule');
  assert((await invoke('list_jobs', { filter: {} })).total === before.total, 'Preview persisted postings');
@@ -105,8 +106,8 @@ export async function checkNativeWorkflow(origin) {
  change(field('Maximum experience (years)'), '2');
  await settle('Restore numeric bound without restoring stale preview');
  button('Continue to Sources').click(); await wait(() => button('Continue to Schedule'), 'sources after rule edit');
- button('Continue to Schedule').click(); await wait(() => button('Save workflow')?.disabled, 'stale preview cannot save');
- button('Preview matches').click(); await wait(() => button('Save workflow') && !button('Save workflow').disabled, 'fresh preview after rule edit');
+ button('Continue to Schedule').click(); await wait(() => button('Continue to Review'), 'schedule after rule edit');
+ button('Continue to Review').click(); await wait(() => button('Save workflow')?.disabled, 'stale preview cannot save');
  assert((await invoke('list_jobs', { filter: {} })).total === before.total, 'Repeated preview persisted jobs');
  button('Save workflow').click(); await wait(() => button('Done'), 'saved workflow confirmation');
  const sources = await invoke('list_sources'); const saved = sources.find(source => source.name === 'Native wizard fixture');
@@ -151,7 +152,7 @@ export async function checkNativeWorkflow(origin) {
  await wait(() => document.body.textContent.includes(job.experience_evidence), 'inspector requirement evidence');
  (await wait(() => button('Mark as applied'), 'native posting status control')).click();
  await wait(async () => (await invoke('get_job', { id: job.id })).status === 'applied', 'persisted Applied status');
- (await wait(() => button('SCRAPER'), 'Scraper navigation after tracking')).click();
+ (await wait(() => button('WORKFLOWS'), 'Workflows navigation after tracking')).click();
  const refreshed = await run();
  assert(refreshed.counts.inserted === 0 && refreshed.counts.updated === 1 && refreshed.jobs_new === 0, 'Refresh was presented as a new discovery');
  assert((await invoke('get_job', { id: job.id })).status === 'applied', 'Refresh lost tracked status');
@@ -164,7 +165,7 @@ export async function checkNativeWorkflow(origin) {
  assert(finalRuns.length === 2 && new Set(finalRuns.map(item => item.id)).size === 2, 'Two Run gestures did not create exactly two executions: ' + JSON.stringify(finalRuns));
  assert((await invoke('list_scrape_runs', { limit: 100 })).length === runs.length + 2, 'Native workflow launched an unexpected execution');
  await mark('Starting role-first public search fixture');
- (await wait(() => button('SCRAPER'), 'search workflow registry')).click();
+ (await wait(() => button('WORKFLOWS'), 'search Workflows registry')).click();
 (await wait(() => document.querySelector('button[aria-label="Add workflow"]'), 'new role-first workflow')).click();
  await new Promise(resolve => requestAnimationFrame(resolve));
  const rolePicker = await wait(() => field('Target roles'), 'role picker mount');
@@ -183,7 +184,7 @@ export async function checkNativeWorkflow(origin) {
  button('Continue to Sources').click();
  await wait(() => button('Continue to Schedule'), 'public search sources');
  assert(!field('Source URL or board identifier'), 'Default search displayed a mandatory career URL');
- button('Advanced settings').click();
+ button('Advanced').click();
  (await wait(() => button('Edit YAML'), 'search YAML controls')).click();
  const searchYaml = await wait(() => document.querySelector('textarea[aria-label="Workflow YAML"]'), 'search YAML');
  const withEndpoint = searchYaml.value.replace(/^(\s+)url:.*$/m,
@@ -194,9 +195,12 @@ export async function checkNativeWorkflow(origin) {
  button('Apply YAML to form').click();
  await wait(() => !document.querySelector('textarea[aria-label="Workflow YAML"]'), 'validated search YAML');
  button('Continue to Schedule').click();
- await wait(() => button('Save workflow'), 'search workflow schedule');
+ await wait(() => field('Schedule'), 'search schedule settings');
  field('Schedule').click();
  (await wait(() => [...document.querySelectorAll('[role=option]')].find(option => option.textContent.trim() === 'manual'), 'search manual cadence')).click();
+ await wait(() => field('Schedule').textContent.includes('manual') && !document.querySelector('[role=option]'), 'search manual cadence');
+ button('Continue to Review').click();
+ await wait(() => button('Save workflow'), 'search workflow review');
  const searchBefore = await invoke('list_jobs', { filter: {} });
  const searchRunsBefore = await invoke('list_scrape_runs', { limit: 100 });
  button('Preview matches').click();

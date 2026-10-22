@@ -3,7 +3,7 @@ test("create a workflow through actual controls without an implicit scrape", asy
   page,
 }) => {
   await page.goto("/?demo=1&fixtures=1");
-  await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+  await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
   await page
     .getByRole("button", { name: /add workflow|new workflow|create workflow/i })
     .click();
@@ -29,9 +29,8 @@ test("create a workflow through actual controls without an implicit scrape", asy
   await dialog.getByRole("textbox", { name: "Source 2 URL or board identifier", exact: true }).fill("https://boards.greenhouse.io/fixture-board");
   await dialog.getByRole("button", { name: "Remove source Cross-Company Search", exact: true }).click();
   await dialog.getByRole("button", { name: "Continue to Schedule" }).click();
-  await expect(
-    dialog.getByRole("textbox", { name: "IANA timezone" }),
-  ).toHaveValue("America/New_York");
+  await dialog.getByRole("button", { name: "Continue to Review" }).click();
+  await expect(dialog.getByText(/daily.*America\/New_York/)).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Save workflow" })).toBeDisabled();
   await dialog.getByRole("button", { name: "Preview matches" }).click();
   await expect(dialog.getByText(/No eligible postings/)).toBeVisible();
@@ -59,7 +58,7 @@ test("create a workflow through actual controls without an implicit scrape", asy
 
 test("registry file chooser imports an unsaved draft and invalid replacement keeps edits", async ({ page }) => {
   await page.goto("/?demo=1&fixtures=1");
-  await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+  await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
   const choose = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Import workflow YAML", exact: true }).click();
   await (await choose).setFiles({ name: "authored-workflow.yaml", mimeType: "text/yaml", buffer: Buffer.from(`version: 3
@@ -90,7 +89,7 @@ filters: {include_keywords: [], exclude_keywords: [], locations: []}
 
 test("workflow registry consolidates actions while keeping execution and import visible", async ({ page }) => {
   await page.goto("/?demo=1&fixtures=1");
-  await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+  await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
   const row = page.getByRole("row").filter({ hasText: "Cloudflare — Software Engineering Internships" });
   await expect(page.getByRole("button", { name: "Add workflow" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Run all" })).toBeVisible();

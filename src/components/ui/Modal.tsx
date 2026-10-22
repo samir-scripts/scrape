@@ -4,11 +4,11 @@ import { IconButton } from "./IconButton";
 
 interface ModalProps {
   isOpen: boolean; onClose: () => void; title: string; children: ReactNode;
-  width?: string; footer?: ReactNode; inline?: boolean;
+  width?: string; footer?: ReactNode; inline?: boolean; wideOnMobile?: boolean;
 }
 // A responsive inspector can switch modal/inline presentation without moving its children.
 // Other dialogs use the same focus, Escape, cancellation and restoration lifecycle.
-export function Modal({ isOpen, onClose, title, children, width = "max-w-lg", footer, inline = false }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, width = "max-w-lg", footer, inline = false, wideOnMobile = false }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null), scrollRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null), wasOpen = useRef(false);
   const previousInline = useRef<boolean | null>(null);
@@ -60,8 +60,8 @@ export function Modal({ isOpen, onClose, title, children, width = "max-w-lg", fo
       if (dialogRef.current?.querySelector('[aria-haspopup="listbox"][aria-expanded="true"], [aria-haspopup="menu"][aria-expanded="true"], [role="combobox"][aria-expanded="true"]')) return;
       onClose();
     }}
-    className={`${inline ? "relative m-0 w-full h-full min-w-0" : "fixed inset-0 m-auto max-w-[calc(100vw-32px)] max-h-[calc(100dvh-32px)] overflow-hidden backdrop:bg-black/50"} p-0 border-0 bg-transparent ${isOpen ? "block" : "hidden"}`}>
-    <div className={`${inline ? "w-full h-full min-h-0" : `w-full ${width} border-2 border-[var(--color-ink)] max-h-[calc(100dvh-32px)] min-h-0 overflow-hidden`} bg-[var(--color-paper)] text-[var(--color-ink)] flex flex-col`}>
+    className={`${inline ? "relative m-0 w-full h-full min-w-0" : `fixed inset-0 m-auto ${wideOnMobile ? `max-w-[calc(100vw-16px)] ${width}` : "max-w-[calc(100vw-32px)]"} max-h-[calc(100dvh-32px)] overflow-hidden backdrop:bg-black/50`} p-0 border-0 bg-transparent ${isOpen ? "block" : "hidden"}`}>
+    <div className={`${inline ? "w-full h-full min-h-0" : `${wideOnMobile ? "" : "w-full"} ${width} border-2 border-[var(--color-ink)] max-h-[calc(100dvh-32px)] min-h-0 overflow-hidden`} bg-[var(--color-paper)] text-[var(--color-ink)] flex flex-col`}>
       <div className={`${inline ? "hidden" : "flex"} bg-[var(--color-ink)] text-[var(--color-paper)] px-4 py-3 shrink-0 items-center justify-between select-none`}>
         <h2 className="font-bold text-xs uppercase tracking-wider">{title}</h2>
         <IconButton label="Close dialog" onClick={onClose} variant="inverse"><Icon name="close" /></IconButton>

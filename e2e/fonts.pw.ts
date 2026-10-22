@@ -20,7 +20,7 @@ test('selected fonts load locally and apply to navigation, body, fields and dial
   await page.clock.setFixedTime(new Date("2026-10-13T13:00:00Z"));
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-font', 'ibm_plex');
-  await page.getByRole('button', { name: 'SCRAPER', exact: true }).click();
+  await page.getByRole('button', { name: 'WORKFLOWS', exact: true }).click();
   await page.getByRole('button', { name: 'Add workflow', exact: true }).click();
   expect(await page.getByRole('dialog').evaluate(el => getComputedStyle(el).fontFamily)).toContain('IBM Plex Mono');
   expect(await page.getByRole('textbox', { name: 'Workflow name', exact: true }).evaluate(el => getComputedStyle(el).fontFamily)).toContain('IBM Plex Mono');

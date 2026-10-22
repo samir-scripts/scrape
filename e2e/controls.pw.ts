@@ -8,7 +8,7 @@ for (const theme of ['paper', 'obsidian']) {
     await page.getByRole('button', { name: 'SETTINGS', exact: true }).click();
     if (theme === 'obsidian') await page.getByRole('button', { name: /^OBSIDIAN/ }).click();
     expect(await page.locator('html').evaluate(el => getComputedStyle(el).colorScheme)).toBe(theme === 'paper' ? 'light' : 'dark');
-    await page.getByRole('button', { name: 'SCRAPER', exact: true }).click();
+    await page.getByRole('button', { name: 'WORKFLOWS', exact: true }).click();
     await page.getByRole('button', { name: 'RUN', exact: true }).first().click();
     await expect(page.getByRole('button', { name: 'RUNNING…', exact: true })).toHaveCount(0, { timeout: 15000 });
     await page.getByRole('button', { name: /^DISCOVERED/ }).click();

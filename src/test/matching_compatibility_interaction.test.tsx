@@ -16,7 +16,7 @@ beforeAll(() => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 async function goToSchedule(user: UserEvent) {
-  for (const name of ["Continue to Criteria", "Continue to Sources", "Continue to Schedule"]) {
+  for (const name of ["Continue to Criteria", "Continue to Sources", "Continue to Schedule", "Continue to Review"]) {
     const button = screen.queryByRole("button", { name });
     if (button) await user.click(button);
   }
@@ -59,7 +59,6 @@ it("keeps every compatibility restriction visible and intact through Preview, YA
   const encoded = workflowSpecToYaml(preview.mock.calls[0][0]);
   expect(validateWorkflowYaml(encoded).parsedSpec?.filters).toEqual(filters);
   await goToSchedule(user);
-  ;
   await user.click(screen.getByRole("button", { name: "Save workflow" }));
   await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
   expect(save.mock.calls[0][0].filters).toEqual(filters);
@@ -67,11 +66,9 @@ it("keeps every compatibility restriction visible and intact through Preview, YA
 });
 it("explicit edits invalidate Preview, retain the other groups, and commit multiple unfinished compatibility inputs", async () => {
   const user = userEvent.setup(); const { preview } = setup();
-  ;
   await previewFromSchedule(user);
   await waitFor(() => expect(preview).toHaveBeenCalledTimes(1));
-  await user.click(screen.getByRole("button", { name: "Back" }));
-  await user.click(screen.getByRole("button", { name: "Back" }));
+  await user.click(screen.getByRole("button", { name: "Criteria" }));
   await user.click(screen.getByRole("button", { name: "Remove legacy role-type restriction" }));
   expect(screen.queryByText("Legacy role types: internship")).toBeNull();
   fireEvent.change(screen.getByRole("textbox", { name: "Legacy include keywords" }), { target: { value: "Developer" } });
@@ -89,7 +86,7 @@ it("allows ordinary typing in new expert fields and forwards malformed policy dr
   const preview = vi.spyOn(api, "previewWorkflow").mockRejectedValue(new Error("workflow.filters.policy: invalid policy expression"));
   render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
   await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
-  await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+  await user.click(screen.getByRole("button", { name: "Advanced" }));
   const query = screen.getByRole("textbox", { name: "Expert query" });
   await user.type(query, "title LIKE '%Engineer%'");
   expect((query as HTMLInputElement).value).toBe("title LIKE '%Engineer%'");

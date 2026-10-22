@@ -187,7 +187,7 @@ export function WorkflowSections({
             </span>
           </div>
           <p className="text-xs text-[var(--color-ink-mute)]">
-            The Muse public listings provide bounded cross-employer coverage, not all employers. Roles, companies, keywords and criteria are evaluated locally. No API key or company URL is required. Arbeitnow is an alternative Germany-focused public feed; original posting dates may be unknown.
+            The Muse covers bounded public listings, not every employer. No API key or career URL is needed. Arbeitnow is Germany-focused; original dates may be unknown.
           </p>
         </div>
 

@@ -17,7 +17,7 @@ const TAB_TOOLTIPS: Record<NavTabId, string> = {
   discovered: "Unprocessed postings intake queue",
   tracked: "Application pipeline & Kanban board",
   metrics: "Analytics, conversions, and salary benchmarks",
-  scraper: "Autonomous workflows, runners, and telemetry",
+  scraper: "Configure workflows",
   settings: "System preferences, appearance, and global options",
 };
 

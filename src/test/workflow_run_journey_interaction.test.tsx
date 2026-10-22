@@ -62,7 +62,7 @@ it.each(["success", "no-match", "persistence-failure"] as const)("mocked IPC Loa
   render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
   const user = userEvent.setup();
   await screen.findByRole("button", { name: /^View Retained engineer / });
-  await user.click(screen.getByRole("button", { name: "SCRAPER" }));
+  await user.click(screen.getByRole("button", { name: "WORKFLOWS" }));
   await user.click(await screen.findByRole("button", { name: "Load test workflows" }));
   expect(seed).toHaveBeenCalledTimes(1);
   const row = await screen.findByRole("button", { name: `Edit workflow ${source.name}` });

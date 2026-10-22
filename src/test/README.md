@@ -31,15 +31,15 @@ The `src/test` directory contains the automated test suites for the React fronte
 | [`location_data.test.ts`](location_data.test.ts) | Geographic dataset lookup and state/province autocomplete options. |
 | [`logs.test.ts`](logs.test.ts) | Telemetry log formatting, level filtering (DEBUG, INFO, WARN, ERROR), and search. |
 | [`metrics.test.ts`](metrics.test.ts) | Metrics computations, conversion rates, and analytics card calculations. |
-| [`navigation.test.ts`](navigation.test.ts) | Tab switching between Discovered, Tracked, Scraper, Metrics, and Settings. |
+| [`navigation.test.ts`](navigation.test.ts) | Tab switching between Discovered, Tracked, Workflows, Metrics, and Settings. |
 | [`notifications.test.ts`](notifications.test.ts) | Notification bell badge count, popover toggle, mark-read, and dismissal. |
 | [`range_slider.test.ts`](range_slider.test.ts) | Dual-thumb brutalist range slider interactions, step increments, and value clamping. |
 | [`readiness.test.ts`](readiness.test.ts) | Sanity and readiness smoke assertions. |
 | [`salary_input_parser.test.ts`](salary_input_parser.test.ts) | Free-form user salary string parsing (`$100k`, `50/hr`). |
 | [`sample_workflow.test.ts`](sample_workflow.test.ts) | Parsing and running bundled sample YAML workflows. |
 | [`schedule_settings.test.ts`](schedule_settings.test.ts) | Schedule settings form controls, cron validity checks, and cadence pickers. |
-| [`scraper_ergonomics.test.ts`](scraper_ergonomics.test.ts) | Scraper view hotkeys, run trigger button states, and keyboard accessibility. |
-| [`scraper_tab.test.ts`](scraper_tab.test.ts) | Scraper tab layout, active source monitoring, and run history tables. |
+| [`scraper_ergonomics.test.ts`](scraper_ergonomics.test.ts) | Workflow view hotkeys, run trigger button states, and keyboard accessibility. |
+| [`scraper_tab.test.ts`](scraper_tab.test.ts) | Workflows tab layout, active source monitoring, and run history tables. |
 | [`store.test.ts`](store.test.ts) | Zustand store actions, selection mutations, and state resets. |
 | [`store_filters.test.ts`](store_filters.test.ts) | Filter state synchronization within the Zustand store. |
 | [`telemetry_console_and_sources.test.ts`](telemetry_console_and_sources.test.ts) | Real-time crawl telemetry log viewer and source status badges. |
@@ -48,7 +48,7 @@ The `src/test` directory contains the automated test suites for the React fronte
 | [`tooltip.test.ts`](tooltip.test.ts) | Tooltip delay, viewport collision detection, and keyboard focus display. |
 | [`tracked_list_sorting.test.ts`](tracked_list_sorting.test.ts) | Tracked table list sorting by company, title, date applied, and status. |
 | [`tristate_filter_logic.test.ts`](tristate_filter_logic.test.ts) | TriState logic for visa sponsorship, security clearance, and new grad filters. |
-| [`workflow_editor_interaction.test.tsx`](workflow_editor_interaction.test.tsx) | End-to-end `AddSourceModal` and `WorkflowSections` wizard navigation, preview gating, and save behavior. |
+| [`workflow_editor_interaction.test.tsx`](workflow_editor_interaction.test.tsx) | Single-draft editor mode/section navigation, preview gating, and save behavior. |
 | [`workflow_browser_script.test.tsx`](workflow_browser_script.test.tsx) | Custom Extractor controls in `AddSourceModal`: mode switching, keyboard CSS/XPath locators, Test Extractor preview, Browser CDP sessions (`Open`/`Save`/`Clear` and `Needs login`/`Ready` badge transitions), and Script environment diagnostics, truthful disclosure, real `initialSource` edit path, and stale-draft trust gating. |
 | [`sources_editor_interaction.test.tsx`](sources_editor_interaction.test.tsx) | Multi-source editor interactions in `WorkflowSections`: adding/removing sources, reordering, duplicate normalized endpoint detection, and independent per-source testing. |
 | [`workflow_geography_interaction.test.tsx`](workflow_geography_interaction.test.tsx) | Searchable country/subdivision comboboxes, workplace selection, and unknown-geography opt-in. |

@@ -13,8 +13,8 @@ for (const theme of ["paper", "obsidian"]) {
       await expect(page.locator("html")).toHaveAttribute("data-theme", "obsidian");
     }
 
-    // Open Scraper tab and create workflow modal
-    await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+    // Open Workflows tab and create workflow modal
+    await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
     await page.getByRole("button", { name: "Add workflow", exact: true }).click();
 
     const dialog = page.getByRole("dialog", { name: "Create workflow" });
@@ -24,8 +24,8 @@ for (const theme of ["paper", "obsidian"]) {
     await dialog.getByRole("button", { name: "Add source", exact: true }).click();
     await dialog.getByRole("button", { name: "Remove source Cross-Company Search", exact: true }).click();
 
-    // Expand Advanced settings
-    await dialog.getByRole("button", { name: "Advanced settings" }).click();
+    // Switch to Advanced mode to edit extraction controls.
+    await dialog.getByRole("button", { name: "Advanced" }).click();
 
     // Switch adapter to selector
     const adapterSelect = dialog.getByRole("button", { name: "Source 1 adapter" });

@@ -62,7 +62,7 @@ for (const theme of themes) {
         await page.getByRole("button", { name: "SETTINGS", exact: true }).click();
         await page.getByRole("button", { name: /^OBSIDIAN/ }).click();
       }
-      await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+      await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
       const registry = await findRegistryScroller(page);
       const shell = page.locator("body > #root > div").first();
       const footer = page.locator("footer").first();
@@ -83,6 +83,7 @@ for (const theme of themes) {
       await dialog.getByRole("button", { name: "Continue to Criteria" }).click();
       await dialog.getByRole("button", { name: "Continue to Sources" }).click();
       await dialog.getByRole("button", { name: "Continue to Schedule" }).click();
+      await dialog.getByRole("button", { name: "Continue to Review" }).click();
       await dialog.getByText("All configured rules", { exact: true }).click();
       const body = dialog.locator("[data-dialog-scroll]");
       expect(await registry.evaluate(element => getComputedStyle(element).overflowY)).toBe("hidden");
@@ -184,7 +185,7 @@ test("empty workflow registry can open and close a usable editor without a stale
   await page.setViewportSize({ width: 480, height: 700 });
   await page.goto("/?demo=1&fixtures=1");
   await seedSources(page, 0);
-  await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+  await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
   const add = page.getByRole("button", { name: "Add workflow", exact: true });
   await add.click();
   const dialog = page.getByRole("dialog", { name: "Create workflow" });
@@ -193,6 +194,7 @@ test("empty workflow registry can open and close a usable editor without a stale
   await dialog.getByRole("button", { name: "Continue to Criteria" }).click();
   await dialog.getByRole("button", { name: "Continue to Sources" }).click();
   await dialog.getByRole("button", { name: "Continue to Schedule" }).click();
+  await dialog.getByRole("button", { name: "Continue to Review" }).click();
   await dialog.getByText("All configured rules", { exact: true }).click();
   const body = dialog.locator("[data-dialog-scroll]");
   await expect.poll(() => body.evaluate(element => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0);

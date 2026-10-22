@@ -40,12 +40,11 @@ describe("Application Startup & Entrypoint Smoke Suite", () => {
   it("renders top application chrome (TopNav) cleanly on initial startup", () => {
     const markup = renderToStaticMarkup(React.createElement(TopNav));
 
-    // Must render branding and all navigation tabs
-    expect(markup).toContain("SCRAPE");
+    // Must render all navigation tabs, including the renamed workflow tab
     expect(markup).toContain("DISCOVERED");
     expect(markup).toContain("TRACKED");
     expect(markup).toContain("METRICS");
-    expect(markup).toContain("SCRAPER");
+    expect(markup).toContain("WORKFLOWS");
     expect(markup).toContain("SETTINGS");
 
     // Must render telemetry console launcher and notification bell

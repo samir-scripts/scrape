@@ -20,7 +20,7 @@ for (const theme of ["paper", "obsidian"]) {
     await page.goto("/?demo=1&fixtures=1");
     await page.getByRole("button", { name: "SETTINGS", exact: true }).click();
     if (theme === "obsidian") await page.getByRole("button", { name: /^OBSIDIAN/ }).click();
-    await page.getByRole("button", { name: "SCRAPER", exact: true }).click();
+    await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
     await expect(page.getByTestId("status-warning")).toContainText("SUCCESS WITH WARNINGS");
     await expect(page.getByTestId("status-partial")).toContainText("PARTIAL");
     await expect(page.getByTestId("status-cancelled")).toContainText("CANCELLED");
