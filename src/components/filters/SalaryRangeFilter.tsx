@@ -30,9 +30,9 @@ export function SalaryRangeFilter({ salaryMin, salaryMax, currency, interval = n
   };
   return <fieldset className="flex flex-col gap-3 text-sm">
     <legend className="font-bold mb-2">Compensation</legend>
-    <div className="flex gap-2">
-      <button type="button" aria-pressed={mode === "year"} onClick={() => changeMode("year")} className="border px-3 py-2">Annual</button>
-      <button type="button" aria-pressed={mode === "hour"} onClick={() => changeMode("hour")} className="border px-3 py-2">Hourly</button>
+    <div className="flex gap-2" role="group" aria-label="Pay interval">
+      <button type="button" aria-pressed={mode === "year"} onClick={() => changeMode("year")} className={`border px-3 py-2 ${mode === "year" ? "bg-[var(--color-ink)] text-[var(--color-paper)]" : "bg-[var(--color-paper)] text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"}`}>Annual</button>
+      <button type="button" aria-pressed={mode === "hour"} onClick={() => changeMode("hour")} className={`border px-3 py-2 ${mode === "hour" ? "bg-[var(--color-ink)] text-[var(--color-paper)]" : "bg-[var(--color-paper)] text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"}`}>Hourly</button>
     </div>
     <p className="text-[var(--color-ink-mute)]">Matches explicitly {mode === "hour" ? "hourly" : "annual"} pay. Switching units clears the amount bounds.</p>
     <div className="flex gap-3">

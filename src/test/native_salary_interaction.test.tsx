@@ -31,6 +31,8 @@ describe("native hourly filter controls", () => {
   it("retains cents, rejects inverted input, restores persisted units and clears on mode/reset", async () => {
     window.localStorage.removeItem("test-native-pay");
     const mounted = render(<Harness />); const user = userEvent.setup();
+    expect(screen.getByRole("button", { name: "Hourly" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Annual" }).getAttribute("aria-pressed")).toBe("false");
     await user.type(screen.getByLabelText("Minimum per hour"), "50.25");
     await user.tab();
     await user.type(screen.getByLabelText("Maximum per hour"), "60.75");
@@ -44,6 +46,8 @@ describe("native hourly filter controls", () => {
     mounted.unmount(); render(<Harness />);
     expect((screen.getByLabelText("Minimum per hour") as HTMLInputElement).value).toBe("50.25");
     await user.click(screen.getByRole("button", { name: "Annual" }));
+    expect(screen.getByRole("button", { name: "Annual" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Hourly" }).getAttribute("aria-pressed")).toBe("false");
     expect((screen.getByLabelText("Minimum per year") as HTMLInputElement).value).toBe("");
     expect(screen.getByLabelText("Fixture matches").textContent).toBe("false");
     await user.click(screen.getByRole("button", { name: "Clear compensation filter" }));

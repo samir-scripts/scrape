@@ -81,6 +81,7 @@ export function ExperienceFilter({ experienceMin, experienceMax, experienceMatch
         <label>Min <input aria-label="Minimum experience (years)" aria-invalid={!minValid || !ordered} aria-describedby={!valid ? errorId : undefined} type="text" inputMode="numeric" value={minText} onChange={(event) => editBound("min", event.target.value)} className="w-16 border border-[var(--color-ink)] bg-[var(--color-paper)] p-1" /></label>
         <label>Max <input aria-label="Maximum experience (years)" aria-invalid={!maxValid || !ordered} aria-describedby={!valid ? errorId : undefined} type="text" inputMode="numeric" value={maxText} onChange={(event) => editBound("max", event.target.value)} className="w-16 border border-[var(--color-ink)] bg-[var(--color-paper)] p-1" /></label>
         <span>years, inclusive</span>
+        <p className="text-[var(--color-ink-mute)]">Leave either bound blank for no limit.</p>
       </div>
       {!valid && <p id={errorId} role="alert" className="text-[var(--color-danger)]">Enter non-negative whole years, with minimum no greater than maximum.</p>}
       <label className="flex items-center gap-2"><input type="checkbox" checked={includeUnknown} onChange={(event) => onChange({ ...values, includeUnknown: event.target.checked })} />{overlap ? "Include jobs without stated experience" : "Include jobs with unknown required experience"}</label>

@@ -24,14 +24,14 @@ Status: Section 1 implemented and browser-verified; Section 2 is next. Execute *
 
 1. Inventory native checkboxes/radios/toggles in the workflow editor and reuse existing themed primitives/tokens; do not add a parallel control system.
 2. Replace browser-default checkbox rendering where it breaks Paper/Obsidian themes; preserve keyboard, focus-visible, disabled, indeterminate, and label behavior.
-3. Make selected choices visibly distinct and state their selected value in accessible names/semantics. In particular, show whether compensation is Annual or Hourly at all times.
+3. Make selected choices visibly distinct and state their selected value in accessible names/semantics. In particular, show whether compensation is Annual or Hourly at all times; this selector now uses theme-token selected styling and `aria-pressed`, so Section 2 should verify it in both themes while covering remaining controls.
 
 **Gate:** control interactions in both themes; screenshot and contrast inspection; keyboard and focus checks. No hard-coded component colors.
 
 ## Section 3 — Range-based compensation and experience criteria
 
 1. Inspect the existing Rust filter schema, its units, validation and current range control before changing presentation. Compensation is a minimum/maximum amount range with an explicit annual/hourly unit; do not infer or convert missing bounds. Switching units must retain the established contract and clearly communicate any cleared values.
-2. Present minimum required experience as a bounded range where supported by the current model. Preserve inclusive bounds, unknown-experience behavior, and any existing advertised-range overlap mode; do not conflate those semantics.
+2. Keep required experience as precise inclusive integer minimum/maximum inputs; either endpoint can be blank and therefore unbounded. This is already a numeric range. Do not substitute a slider: MDN recommends `<input type="range">` only when the exact value is unimportant, and range inputs require bounded endpoints ([MDN](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/input/range)). Preserve unknown-experience behavior and advertised-range overlap semantics.
 3. Keep numeric boundary validation authoritative in Rust and expose actionable inline errors.
 
 **Gate:** boundary cases (empty, min-only, max-only, reversed/equal, unit switch, unknown values) through the real controls, preview and persisted workflow; no matcher changes without separate approval.
@@ -64,8 +64,8 @@ Status: Section 1 implemented and browser-verified; Section 2 is next. Execute *
 
 ## Section 7 — Reuse the existing themed clock control
 
-1. Locate the existing Clock React component and its consumers. Verify its theme, keyboard, locale and 12/24-hour contracts before reuse.
-2. Replace only the workflow local-run-time field with that component, adapting through an existing shared wrapper if required. Retain IANA timezone semantics and store the same canonical time value.
+1. Locate the existing Clock React component and its consumers. The workflow Schedule field now uses `ClockPicker`; verify its theme, keyboard, locale and 12/24-hour contracts before changing anything further.
+2. Preserve the existing hookup, adapting only if the gate exposes a gap. Retain IANA timezone semantics and the same canonical `HH:MM` stored value.
 3. Do not implement a second time picker or alter scheduler interpretation.
 
 **Gate:** set/read/save/reopen a time through the actual control in Paper and Obsidian, with keyboard operation and timezone unchanged.

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { CompatibilityFilters } from "./CompatibilityFilters";
 import { CompanyPicker, selectedCompanyId, companyOptions } from "./CompanyPicker";
 import { ExperienceFilter } from "../../filters/ExperienceFilter";
@@ -20,6 +21,8 @@ import { MultiSelectCombobox } from "../../ui/MultiSelectCombobox";
 import type { MultiSelectOption } from "../../ui/MultiSelectCombobox";
 import { OCCUPATION_CATALOG } from "../../../bindings/occupationCatalogData";
 import { normalizedEndpoint } from "../../../lib/yamlWorkflow";
+import { ClockPicker } from "../../ui/ClockPicker";
+import { from24Hour, pad2, to24Hour } from "../../../lib/cronClock";
 
 const occupationGroups = new Map<string, string>(OCCUPATION_CATALOG.groups.map(group => [group.code, group.name]));
 const roleOptions: MultiSelectOption[] = (() => {
@@ -78,6 +81,7 @@ export function WorkflowSections({
   attachCompanyBoard,
   onDetect,
   preview,
+  is24h = false,
 }: {
   onSourceBlur?: () => void;
   draft: WorkflowSpec;
@@ -91,6 +95,7 @@ export function WorkflowSections({
   attachCompanyBoard: (companyId: string) => void;
   onDetect?: (sourceIndex: number) => void;
   preview?: WorkflowPreview | null;
+  is24h?: boolean;
 }) {
   const filters = draft.filters || {};
   const rules = { ...emptyRules(), ...filters.matching };
@@ -100,6 +105,11 @@ export function WorkflowSections({
       filters: { ...current.filters, matching: { ...emptyRules(), ...current.filters?.matching, ...patch } },
     }));
   const schedule = draft.schedule || {};
+  const clockValue = useMemo(() => {
+    const timeMatch = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(schedule.time || "09:00");
+    const clockTime = from24Hour(Number(timeMatch?.[1] ?? 9));
+    return { ...clockTime, minute: Number(timeMatch?.[2] ?? 0), cadence: "daily" as const };
+  }, [schedule.time]);
   const setSchedule = (patch: Partial<NonNullable<WorkflowSpec["schedule"]>>) =>
     change(current => ({ ...current, schedule: { ...current.schedule, ...patch } }));
   const field = (
@@ -719,12 +729,15 @@ export function WorkflowSections({
           </label>
         {["daily", "weekly"].includes(schedule.cadence || "") && (
           <>
-            {field(
-              "Local run time",
-              schedule.time || "09:00",
-              (time) => setSchedule({ time }),
-              "time",
-            )}
+            <div role="group" aria-label="Local run time" className="grid gap-2">
+              <span className="text-sm">Local run time</span>
+              <ClockPicker
+                value={clockValue}
+                onChange={(value) => setSchedule({ time: `${pad2(to24Hour(value.hour12, value.ampm))}:${pad2(value.minute)}` })}
+                is24h={is24h}
+                hideCadenceOptions
+              />
+            </div>
             {advanced && (
               <fieldset className="flex flex-wrap gap-3">
                 <legend>Weekdays (none means every day)</legend>

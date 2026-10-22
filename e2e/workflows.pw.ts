@@ -29,8 +29,12 @@ test("create a workflow through actual controls without an implicit scrape", asy
   await dialog.getByRole("textbox", { name: "Source 2 URL or board identifier", exact: true }).fill("https://boards.greenhouse.io/fixture-board");
   await dialog.getByRole("button", { name: "Remove source Cross-Company Search", exact: true }).click();
   await dialog.getByRole("button", { name: "Continue to Schedule" }).click();
+  const minute = dialog.getByRole("textbox", { name: "Minute input" });
+  await minute.click();
+  await page.keyboard.press("ArrowUp");
+  await expect(minute).toHaveValue("01");
   await dialog.getByRole("button", { name: "Continue to Review" }).click();
-  await expect(dialog.getByText(/daily.*America\/New_York/)).toBeVisible();
+  await expect(dialog.getByText(/daily 09:01.*America\/New_York/)).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Save workflow" })).toBeDisabled();
   await dialog.getByRole("button", { name: "Preview matches" }).click();
   await expect(dialog.getByText(/No eligible postings/)).toBeVisible();

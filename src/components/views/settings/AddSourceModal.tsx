@@ -17,9 +17,9 @@ import { SAMPLE_WORKFLOW_TEMPLATES } from "../../../lib/yamlWorkflow";
 
 interface AddSourceModalProps {
   isOpen: boolean; onClose: () => void; onSourceSaved: () => void;
-  initialSource?: Source | null; initialSpec?: WorkflowSpec | null;
+  initialSource?: Source | null; initialSpec?: WorkflowSpec | null; is24h?: boolean;
 }
-export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, initialSpec }: AddSourceModalProps) {
+export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, initialSpec, is24h = false }: AddSourceModalProps) {
   const model = useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceSaved });
   const { draft, change, step, advanced, setAdvanced, yaml, setYaml, preview, error, setError, busy, saved } = model;
   const persisting = model.operation === "save" || model.operation === "run";
@@ -144,7 +144,7 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
         <fieldset disabled={locked} className={yaml != null ? "hidden" : "min-w-0 grid gap-4"}>
           {WORKFLOW_STEPS.filter(section => section !== "Review").map(section => <section key={section} data-workflow-step={section} hidden={step !== section} className={step === section ? "grid gap-3" : "hidden"}>
             <h3 className="text-base font-bold normal-case">{section}</h3>
-            <WorkflowSections key={`${section}:${model.inputSession}`} draft={draft} change={change} advanced={advanced} section={section} initialSource={initialSource} onTrustChanged={() => model.invalidate()} selectCompany={model.selectCompany} setTargetCompanies={model.setTargetCompanies} attachCompanyBoard={model.attachCompanyBoard} onDetect={index => void model.detect(index)} preview={preview} />
+            <WorkflowSections key={`${section}:${model.inputSession}`} draft={draft} change={change} advanced={advanced} section={section} initialSource={initialSource} onTrustChanged={() => model.invalidate()} selectCompany={model.selectCompany} setTargetCompanies={model.setTargetCompanies} attachCompanyBoard={model.attachCompanyBoard} onDetect={index => void model.detect(index)} preview={preview} is24h={is24h} />
             {section === "Schedule" && <details><summary className="cursor-pointer min-h-9">Retention</summary><WorkflowSections draft={draft} change={change} advanced section="Retention" initialSource={initialSource} onTrustChanged={() => model.invalidate()} setTargetCompanies={model.setTargetCompanies} attachCompanyBoard={model.attachCompanyBoard} /></details>}
           </section>)}
         </fieldset>

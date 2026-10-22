@@ -20,3 +20,17 @@
 **Reviewed captures:** `plans/assets/29-workflow-scroll-review/paper-desktop.png`, `paper-narrow.png`, `obsidian-desktop.png`, and `obsidian-narrow.png`. All four reflect the five-step Review state and were visually inspected before inclusion.
 
 **Limits:** browser journeys used `?demo=1&fixtures=1`; their previews and saves are demonstrations, not live scraping or production persistence. No native WKWebView workflow interaction, physical pointer/IME, native file chooser, live provider or user's database was exercised in this section. Plan 14 remains incomplete; Section 2 is next and must be executed separately.
+
+## Criteria and local-time refinements
+
+**Implemented:** retained exact inclusive experience min/max fields with either endpoint unbounded; documented why a slider is inappropriate for precise/unbounded years. Annual/Hourly now show a distinct semantic-token selected state and accessible pressed state. Workflow schedule now reuses the existing themed `ClockPicker`, follows the system 12/24-hour preference and converts to/from the unchanged canonical `HH:MM` schedule value. No matcher, workflow schema, or scheduler behavior changed.
+
+**Checks run:**
+
+- `npx vitest run src/test/workflow_editor_interaction.test.tsx src/test/native_salary_interaction.test.tsx src/test/experience_filter.test.ts --maxWorkers=1` — 3 files, 21 tests passed.
+- `npx tsc --noEmit` — passed.
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/workflows.pw.ts` — 3 tests passed, including keyboard minute adjustment and review/save time round-trip.
+
+**Real UI smoke:** managed Chromium at `http://localhost:1432/?demo=1&fixtures=1`; navigated to Schedule and observed the existing ClockPicker, editable hour/minute controls, AM/PM controls and timezone. Computed styles showed Paper and Obsidian token values on the actual clock surface, then restored Paper. Browser screenshot calls timed out; no capture is claimed.
+
+**Limits:** this is fixture/demo mode, not live scraping or production persistence. Does not close Plan 14 Section 2's complete checkbox/radio inventory or Section 7's native save/reopen acceptance; those gates remain open. Physical pointer/IME, native WKWebView, and native file chooser were not exercised.

@@ -816,6 +816,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
         onSourceSaved={fetchSources}
         initialSource={editingSource}
         initialSpec={importedSpec}
+        is24h={settings?.system_time_format === "24h"}
       />
     </div>
   );

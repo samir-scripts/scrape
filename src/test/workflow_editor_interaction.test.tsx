@@ -205,6 +205,28 @@ describe("role-first workflow boundaries", () => {
     expect(screen.getByRole("button", { name: "Review", current: "step" })).toBeTruthy();
     expect((screen.getByRole("button", { name: "Save workflow" }) as HTMLButtonElement).disabled).toBe(true);
   });
+  it("uses ClockPicker in the selected time format and saves the edited local run time", async () => {
+    const user = userEvent.setup();
+    const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_SWE_SOURCE);
+    const extract = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => preview(spec));
+    render(<AddSourceModal isOpen is24h onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
+    expect(screen.getByText("24H MODE")).toBeTruthy();
+    expect((screen.getByRole("textbox", { name: "Hour input" }) as HTMLInputElement).value).toBe("09");
+    await user.click(screen.getByRole("textbox", { name: "Minute input" }));
+    await user.keyboard("{ArrowUp}");
+    expect((screen.getByRole("textbox", { name: "Minute input" }) as HTMLInputElement).value).toBe("01");
+    await user.click(screen.getByRole("button", { name: "Continue to Review" }));
+    expect(screen.getByText(/daily 09:01/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Preview matches" }));
+    await screen.findByText(/3 examined/);
+    await user.click(screen.getByRole("button", { name: "Save workflow" }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(extract.mock.calls[0][0].schedule?.time).toBe("09:01");
+    expect(save.mock.calls[0][0].schedule?.time).toBe("09:01");
+  });
   it("roundtrips version8 search and role/company/date rules without silent drops", () => {
     const spec = sourceToWorkflowSpec(SAMPLE_SWE_SOURCE); spec.version = 8;
     spec.sources = [{ id: "search", label: "Public listings", enabled: true, extractor: { kind: "search", url: "" } }];
