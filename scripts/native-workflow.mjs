@@ -165,7 +165,7 @@ export async function checkNativeWorkflow(origin) {
  assert((await invoke('list_scrape_runs', { limit: 100 })).length === runs.length + 2, 'Native workflow launched an unexpected execution');
  await mark('Starting role-first public search fixture');
  (await wait(() => button('SCRAPER'), 'search workflow registry')).click();
- (await wait(() => button('Add workflow'), 'new role-first workflow')).click();
+(await wait(() => document.querySelector('button[aria-label="Add workflow"]'), 'new role-first workflow')).click();
  await new Promise(resolve => requestAnimationFrame(resolve));
  const rolePicker = await wait(() => field('Target roles'), 'role picker mount');
  change(rolePicker, 'Software Engineer');

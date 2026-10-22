@@ -31,6 +31,7 @@
 21. [SQLx SQLite Text Column NULL Coercion in Option Decoding](#21-sqlx-sqlite-text-column-null-coercion-in-option-decoding)
 23. [Vite / esbuild JSX Transformation Error in `.test.ts` Test Files](#23-vite--esbuild-jsx-transformation-error-in-testts-test-files)
 24. [SQLx Migration Checksum VersionMismatch & Non-Unwinding macOS Startup Panic](#24-sqlx-migration-checksum-versionmismatch--non-unwinding-macos-startup-panic)
+29. [Workflow editor: duplicate scrollbar and background scrolling](#29-workflow-editor-duplicate-scrollbar-and-background-scrolling)
 
 ---
 
@@ -459,3 +460,12 @@ Incident 28 Section 4 update: `621d495`/`2e4e426` repair source field evidence a
 ### Incident 28 — Section 5: divergent template defaults and nonportable scripts
 
 Catalog repair `6b27c35`, generated contracts `4573ec9`, editor/browser evidence `aa4c31f`: Rust now validates one versioned catalog and projects picker/YAML/provider extractor configurations. New title-only ATS templates no longer require unknown employment or unsupported geography; restrictive examples remain explicit and saved workflows are unchanged by reseeding. Embedded script examples require absolute local Node.js setup, saved per-source trust and explicit enablement. Unknown employment/workplace controls and disabled YAML review agree with Rust. Full-site extraction/pagination/native/live acceptance remains open. See [Incident 28](28-empty-seeded-workflows.md) and [Section 5 evidence](../12-implementation-evidence.md).
+
+### 29. Workflow editor: duplicate scrollbar and background scrolling
+
+- **Recorded:** 2026-10-21; user confirmed the Create/Edit workflow window.
+- **Error Signature:** A second scrollbar appears on the right while the workflow editor is open; scrolling can continue beyond the actual editor.
+- **Status:** Browser repair verified; native visual and physical-wheel acceptance remains unverified.
+- **Root Cause:** The workflow registry viewport is a scroll owner behind its descendant editor dialog; the shared modal also left outer dialog overflow at the browser default. The pre-change Chromium capture measured the editor body as vertically scrollable (`1268px` range at 1280×800 and `1561px` at 480×700), with the outer dialog's computed overflow `auto` and the panel `visible`. The pre-change outer dialog had no scroll range in those captures, so its visible track was not established as the reported second scrollbar's owner. A stable gutter alone is not an active scrollbar.
+- **Solution & Rule:** The registry viewport is suspended while a non-inline dialog is open; the dialog and panel clip overflow; only the modal body owns vertical scrolling and contains overscroll. In the repaired Chromium journeys, the registry computed overflow is `hidden`, body wheel input at both boundaries and over the backdrop does not move the registry/document/shell/footer, and Cancel/Escape restore registry scrolling and focus. `e2e/workflow-scroll.pw.ts` passed 5/5 across Paper/Obsidian and desktop/narrow sizes; zoom/workflow/inspector browser coverage passed 10/10, and focused interaction tests passed 13/13. TypeScript and style checks passed. Reviewed captures: `../assets/29-workflow-scroll-review/paper-desktop.png`, `paper-narrow.png`, `obsidian-desktop.png`, and `obsidian-narrow.png`.
+- **Acceptance limits:** The isolated native workflow harness was attempted twice. Its first attempt timed out on the stale `Add workflow` text selector; that selector was changed to the control's accessible name. The next attempt timed out waiting for the Cloudflare catalog option before reaching that call site. The cause is not established. Native visual and physical-wheel behavior and live-data behavior were not tested; do not mark those verified.

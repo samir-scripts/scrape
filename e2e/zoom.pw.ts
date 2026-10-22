@@ -55,6 +55,50 @@ test("both themes remain operable at actual 200% browser zoom", async () => {
       await expect(dialog.getByRole("option", { name: /^Cloudflare\b/ })).toBeVisible();
       await page.keyboard.press("Escape");
       await expect(dialog.getByRole("combobox", { name: "Companies (Optional)", exact: true })).toBeFocused();
+      for (const step of ["Criteria", "Sources", "Schedule"]) {
+        await dialog.getByRole("button", { name: `Continue to ${step}`, exact: true }).click();
+      }
+      await dialog.getByText("All configured rules", { exact: true }).click();
+      const body = dialog.locator("[data-dialog-scroll]");
+      const review = dialog.locator("details pre");
+      const expectOuterLayersStill = async () => {
+        expect(await body.evaluate(el => {
+          const panel = el.parentElement!;
+          const outer = el.closest("dialog")!;
+          return [panel, outer].every(layer =>
+            layer.scrollTop === 0 && layer.scrollHeight <= layer.clientHeight + 1);
+        })).toBe(true);
+      };
+      await expectOuterLayersStill();
+      await body.hover();
+      await page.mouse.wheel(0, 10000);
+      await expect.poll(() => body.evaluate(el =>
+        el.scrollHeight - el.clientHeight - el.scrollTop)).toBeLessThanOrEqual(1);
+      // Check the final YAML character against the body's clipping rectangle,
+      // rather than accepting Playwright's visibility check for offscreen text.
+      expect(await review.evaluate(el => {
+        const text = el.firstChild;
+        if (!text?.textContent?.length) return false;
+        const range = document.createRange();
+        range.setStart(text, text.textContent.length - 1);
+        range.setEnd(text, text.textContent.length);
+        const last = range.getBoundingClientRect();
+        const viewport = el.closest("[data-dialog-scroll]")!.getBoundingClientRect();
+        return last.top >= viewport.top && last.bottom <= viewport.bottom + 1;
+      })).toBe(true);
+      for (const name of ["Cancel", "Save workflow"]) {
+        const action = dialog.getByRole("button", { name, exact: true });
+        await expect(action).toBeVisible();
+        expect(await action.evaluate(el => {
+          const rect = el.getBoundingClientRect();
+          return rect.top >= 0 && rect.bottom <= innerHeight &&
+            rect.left >= 0 && rect.right <= innerWidth;
+        })).toBe(true);
+      }
+      await expectOuterLayersStill();
+      await page.mouse.wheel(0, -10000);
+      await expect.poll(() => body.evaluate(el => el.scrollTop)).toBe(0);
+      await expectOuterLayersStill();
       await page.keyboard.press("Escape");
       await expect(add).toBeFocused();
     }

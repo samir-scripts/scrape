@@ -261,6 +261,7 @@
 .ui-icon-button { min-width: var(--control-height-sm); min-height: var(--control-height-sm); padding: 4px; }
 .ui-icon { flex: none; vertical-align: middle; }
 .overflow-y-auto, .overflow-auto { scrollbar-gutter: stable; }
+.workflow-viewport:has(dialog[open]:not([data-inline-dialog="true"])) { overflow-y: hidden; }
 
 .split-handle:hover, .split-handle:focus-visible { background: var(--color-selection); }
 .split-handle:focus-visible { outline-offset: -2px; }
