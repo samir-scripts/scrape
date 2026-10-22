@@ -1,5 +1,5 @@
 import { CompatibilityFilters } from "./CompatibilityFilters";
-import { CompanyPicker, selectedCompanyId } from "./CompanyPicker";
+import { CompanyPicker, selectedCompanyId, companyOptions } from "./CompanyPicker";
 import { ExperienceFilter } from "../../filters/ExperienceFilter";
 import type { WorkflowPreview } from "../../../bindings/WorkflowPreview";
 import type { WorkflowDraftChange } from "../../../hooks/useWorkflowDraft";
@@ -16,26 +16,28 @@ import { Button } from "../../ui/Button";
 import { JobLimitInput } from "./JobLimitInput";
 import { CustomExtractorConfig } from "./CustomExtractorConfig";
 import type { Source } from "../../../bindings/Source";
+import { MultiSelectCombobox } from "../../ui/MultiSelectCombobox";
+import type { MultiSelectOption } from "../../ui/MultiSelectCombobox";
+import { OCCUPATION_CATALOG } from "../../../bindings/occupationCatalogData";
 import { normalizedEndpoint } from "../../../lib/yamlWorkflow";
-import { KeywordInput } from "../../ui/KeywordInput";
-import { companyOptions } from "./CompanyPicker";
 
-export const ROLE_SUGGESTIONS = [
-  "Software Engineer",
-  "Frontend Developer",
-  "Backend Developer",
-  "Data Engineer",
-  "Intern",
-  "Software Engineer Intern",
-  "New Grad",
-  "Line Cook",
-  "Prep Cook",
-  "Server",
-  "Barista",
-  "Store Associate",
-  "Sales Associate",
-  "Cashier",
-] as const;
+const occupationGroups = new Map<string, string>(OCCUPATION_CATALOG.groups.map(group => [group.code, group.name]));
+const roleOptions: MultiSelectOption[] = (() => {
+  const grouped = new Map<string, Set<string>>();
+  for (const title of OCCUPATION_CATALOG.titles) {
+    const groupNames = title.soc_codes.map(code => occupationGroups.get(`${code.slice(0, 2)}-0000`)).filter(Boolean);
+    const detail = `${title.origin.toUpperCase()} · SOC ${title.soc_codes.join(", ")}${title.onetsoc_codes.length ? ` · O*NET ${title.onetsoc_codes.join(", ")}` : ""}${title.source_codes.length ? ` · Sources ${title.source_codes.join(", ")}` : ""}${groupNames.length ? ` · ${[...new Set(groupNames)].join(", ")}` : ""}`;
+    const metadata = grouped.get(title.label) ?? new Set<string>();
+    metadata.add(detail);
+    grouped.set(title.label, metadata);
+  }
+  return [...grouped].map(([label, metadata]) => ({ value: label, label, description: [...metadata].join("; "), searchText: [...metadata].join(" ") }));
+})();
+const companySelectionOptions: MultiSelectOption[] = companyOptions.map(({ company, source, domain, template }) => ({
+  value: company.name, label: company.name,
+  searchText: `${company.name} ${source.extractor.kind} ${domain} ${template.readiness}`,
+  description: `${source.extractor.kind} · ${template.readiness.replaceAll("_", " ")}`,
+}));
 
 export const emptyRules = (): PostingRules => ({
   target_roles: [],
@@ -72,6 +74,8 @@ export function WorkflowSections({
   initialSource,
   onTrustChanged,
   selectCompany,
+  setTargetCompanies,
+  attachCompanyBoard,
   onDetect,
   preview,
 }: {
@@ -83,6 +87,8 @@ export function WorkflowSections({
   initialSource?: Source | null;
   onTrustChanged?: () => void;
   selectCompany?: (sourceId: string, companyId: string) => void;
+  setTargetCompanies: (companies: string[]) => void;
+  attachCompanyBoard: (companyId: string) => void;
   onDetect?: (sourceIndex: number) => void;
   preview?: WorkflowPreview | null;
 }) {
@@ -130,55 +136,28 @@ export function WorkflowSections({
 
         <section aria-label="Target roles" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
           <h4 className="font-bold text-sm">Target Roles</h4>
-          <KeywordInput
-            label="Target roles"
-            value={rules.target_roles || []}
-            onChange={(terms) => setRules({ target_roles: terms })}
-            onDraftChange={() => change(current => ({ ...current }))}
-          />
-          <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <span className="text-[var(--color-text-muted)] font-semibold uppercase">Popular roles:</span>
-            {ROLE_SUGGESTIONS.map((suggestion) => {
-              const active = (rules.target_roles || []).some(
-                (r) => r.toLowerCase() === suggestion.toLowerCase()
-              );
-              return (
-                <button
-                  key={suggestion}
-                  type="button"
-                  aria-label={`Add target role ${suggestion}`}
-                  disabled={active}
-                  className="min-h-7 px-2 border border-[var(--color-border)] text-xs font-semibold uppercase hover:bg-[var(--color-surface-raised)] disabled:opacity-40"
-                  onClick={() => change(current => {
-                    const matching = { ...emptyRules(), ...current.filters?.matching };
-                    return { ...current, filters: { ...current.filters, matching: { ...matching,
-                      target_roles: matching.target_roles.some(role => role.toLowerCase() === suggestion.toLowerCase())
-                        ? matching.target_roles : [...matching.target_roles, suggestion],
-                    } } };
-                  })}
-                >
-                  + {suggestion}
-                </button>
-              );
-            })}
-          </div>
+          <MultiSelectCombobox label="Target roles" value={rules.target_roles || []}
+            options={roleOptions} allowCustom onChange={target_roles => setRules({ target_roles })} />
           <p className="text-xs text-[var(--color-ink-mute)]">
-            Job titles must contain any of your target roles. Leave empty to match any role.
+            Job titles must contain any selected text; matching is literal, not every title in an occupation. Choose alternate titles or add custom text as needed. Leave empty to match any role.
           </p>
+          <details className="text-xs text-[var(--color-ink-mute)]">
+            <summary className="cursor-pointer underline">Catalog sources & attribution · BLS 2018 · O*NET 31.0</summary>
+            <p className="mt-2">
+              <a className="underline" href="https://www.bls.gov/soc/2018/" target="_blank" rel="noreferrer">BLS SOC</a> · <a className="underline" href="https://www.onetcenter.org/database.html" target="_blank" rel="noreferrer">O*NET database</a> · <a className="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0 license</a>. Includes information from the O*NET 31.0 Database by USDOL/ETA, used under CC BY 4.0. Scrape selected and reorganized these titles; USDOL/ETA has not approved, endorsed, or tested these modifications.
+            </p>
+          </details>
         </section>
 
         <section aria-label="Target companies" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
           <h4 className="font-bold text-sm">Target Companies (Optional)</h4>
-          <KeywordInput
-            label="Companies (Optional)"
-            value={rules.companies || []}
-            onChange={(terms) => setRules({ companies: terms })}
-            onDraftChange={() => change(current => ({ ...current }))}
-          />
-          <p className="text-xs text-[var(--color-ink-mute)]">
-            Leave empty to discover listings across all employers. Enter specific employers (e.g. Google, Amazon, McDonald&apos;s, Burger King) to restrict matching.
+          <MultiSelectCombobox label="Companies (Optional)" value={rules.companies || []}
+            options={companySelectionOptions} allowCustom describedBy="company-coverage-help" onChange={setTargetCompanies} />
+          <p id="company-coverage-help" className="text-xs text-[var(--color-ink-mute)]">
+            Available career boards attach automatically when selected. Removing a company filter leaves its sources in Sources. Custom company filters restrict matching; public-feed coverage is not guaranteed.
           </p>
         </section>
+
 
         <section aria-label="Job keywords" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
           <h4 className="font-bold text-sm">Keywords</h4>
@@ -212,41 +191,17 @@ export function WorkflowSections({
           </p>
         </div>
 
-        {rules.companies?.map((targetCo) => {
-          const match = companyOptions.find(opt =>
-            opt.company.name.toLowerCase().includes(targetCo.toLowerCase()) ||
-            targetCo.toLowerCase().includes(opt.company.name.toLowerCase())
-          );
+        {rules.companies?.map(targetCo => {
+          const match = companyOptions.find(option => option.company.name.toLocaleLowerCase() === targetCo.trim().toLocaleLowerCase());
           if (!match) return null;
-          const alreadyAttached = (draft.sources || []).some(
-            s => s.employer_hint === match.company.name || s.label === match.company.name
-          );
+          const endpoint = normalizedEndpoint(match.source.extractor.kind, match.source.extractor.url);
+          const alreadyAttached = (draft.sources || []).some(source => normalizedEndpoint(source.extractor.kind, source.extractor.url) === endpoint);
           if (alreadyAttached) return null;
-          return (
-            <div key={targetCo} className="border border-[var(--color-border)] p-3 bg-[var(--color-surface-raised)] flex items-center justify-between gap-3 text-xs">
-              <span>Direct career board available for <strong>{match.company.name}</strong> · {match.template.readiness.replaceAll("_", " ")}. Non-ready or script sources attach disabled for review.</span>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => {
-                  const newId = `source-${Date.now().toString(36)}`;
-                  const newSource: WorkflowSourceSpec = {
-                    id: newId,
-                    label: match.source.label,
-                    employer_hint: match.source.employer_hint,
-                    enabled: match.source.enabled && match.template.readiness === "ready" && !match.source.extractor.script && match.source.extractor.mode !== "script",
-                    extractor: structuredClone(match.source.extractor),
-                  };
-                  change(current => ({
-                    ...current,
-                    sources: [...current.sources, newSource],
-                  }));
-                }}
-              >
-                + Attach direct board
-              </Button>
-            </div>
-          );
+          return <div key={targetCo} className="border border-[var(--color-border)] p-3 bg-[var(--color-surface-raised)] flex items-center justify-between gap-3 text-xs">
+            <span>Career board for <strong>{match.company.name}</strong> · {match.template.readiness.replaceAll("_", " ")}. Setup-required, review and script sources attach disabled.</span>
+            <Button type="button" size="sm" aria-label={`Attach career board for ${match.company.name}`}
+              onClick={() => attachCompanyBoard(match.company.id)}>Attach career board</Button>
+          </div>;
         })}
         <div className="flex items-center justify-between gap-2 pt-2 border-t border-[var(--color-border)]">
           <h4 className="font-bold text-sm">

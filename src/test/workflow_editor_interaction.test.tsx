@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { AddSourceModal } from "../components/views/settings/AddSourceModal";
 import { api, SAMPLE_SWE_SOURCE } from "../lib/api";
@@ -13,13 +13,21 @@ beforeAll(() => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const preview = (spec: WorkflowSpec): WorkflowPreview => ({ spec, branding: [], jobs: [], fetched: 3, matched: 0, rejected: 3, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: "2026-10-14T13:00:00Z" });
+async function chooseMulti(user: UserEvent, label: string, text: string) {
+  const input = screen.getByRole("combobox", { name: label });
+  await user.click(input); await user.clear(input); await user.type(input, text);
+  const options = screen.getAllByRole("option");
+  const option = options.find(item => item.textContent?.includes(`Use “${text}”`)) ??
+    options.find(item => item.textContent?.includes(text)) ?? options[0];
+  await user.click(option);
+}
 async function toSchedule(user: UserEvent) {
   await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
   await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
 }
 describe("role-first workflow boundaries", () => {
   it.each([
-    { roles: "Software Engineer", companies: "Google,Amazon", date: "Past 12 hours", preset: "past_12h" },
+    { roles: "Software Engineer", companies: "Cloudflare,Linear", date: "Past 12 hours", preset: "past_12h" },
     { roles: "Line Cook,Store Associate", companies: "", date: "Today (since local midnight)", preset: "today" },
   ])("creates $roles without a career URL, previews and saves without scraping", async ({ roles, companies, date, preset }) => {
     const user = userEvent.setup();
@@ -29,8 +37,8 @@ describe("role-first workflow boundaries", () => {
     const extract = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => preview(spec));
     render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
     expect(screen.queryByRole("textbox", { name: "Source URL or board identifier" })).toBeNull();
-    fireEvent.change(screen.getByRole("textbox", { name: "Target roles" }), { target: { value: roles } });
-    fireEvent.change(screen.getByRole("textbox", { name: "Companies (Optional)" }), { target: { value: companies } });
+    for (const role of roles.split(",")) await chooseMulti(user, "Target roles", role);
+    for (const company of companies.split(",").filter(Boolean)) await chooseMulti(user, "Companies (Optional)", company);
     await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
     await user.click(screen.getByRole("button", { name: "Date posted range", expanded: false }));
     await user.click(screen.getByRole("option", { name: date }));
@@ -42,8 +50,8 @@ describe("role-first workflow boundaries", () => {
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     const spec = save.mock.calls[0][0];
     expect(spec.version).toBe(8);
-    expect(spec.sources).toHaveLength(1);
-    expect(spec.sources[0].extractor).toEqual({ kind: "search", url: "" });
+    expect(spec.sources).toHaveLength(companies ? companies.split(",").length + 1 : 1);
+    expect(spec.sources.filter(source => source.extractor.kind === "search")).toHaveLength(1);
     expect(spec.filters?.matching?.target_roles).toEqual(roles.split(","));
     expect(spec.filters?.matching?.companies).toEqual(companies ? companies.split(",") : []);
     expect(spec.filters?.matching?.posting_date).toMatchObject({ preset, last_hours: null, from: null, through: null, include_unknown: false });
@@ -53,12 +61,12 @@ describe("role-first workflow boundaries", () => {
   it("only auto-names drafts until a user supplies a name, including names containing jobs or at", async () => {
     const user = userEvent.setup();
     render(<AddSourceModal isOpen onClose={vi.fn()} onSourceSaved={vi.fn()} />);
-    await user.type(screen.getByRole("textbox", { name: "Target roles" }), "Engineer{Enter}");
+    await chooseMulti(user, "Target roles", "Engineer");
     expect((screen.getByLabelText("Workflow name") as HTMLInputElement).value).toBe("Engineer jobs");
     await user.clear(screen.getByLabelText("Workflow name"));
     await user.type(screen.getByLabelText("Workflow name"), "My jobs at home");
-    await user.type(screen.getByRole("textbox", { name: "Companies (Optional)" }), "Acme{Enter}");
-    await user.click(screen.getByRole("button", { name: "Add target role Intern" }));
+    await chooseMulti(user, "Companies (Optional)", "Acme");
+    await chooseMulti(user, "Target roles", "Intern");
     expect((screen.getByLabelText("Workflow name") as HTMLInputElement).value).toBe("My jobs at home");
     expect(screen.getByRole("button", { name: "Remove Engineer from Target roles" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Remove Intern from Target roles" })).toBeTruthy();
@@ -102,7 +110,7 @@ describe("role-first workflow boundaries", () => {
     spec.filters = { ...spec.filters, matching: { ...spec.filters?.matching, target_roles: ["Engineer"], companies: ["Acme"], posting_date: { preset: null, last_hours: 37, from: null, through: null, timezone: "America/New_York", include_unknown: true }, compensation: { min_minor: 5025, max_minor: 6075, currency: "USD", interval: "hour", include_unknown: false } } } as WorkflowSpec["filters"];
     const extract = vi.spyOn(api, "previewWorkflow").mockImplementation(async input => preview(input));
     render(<AddSourceModal isOpen initialSpec={spec} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
-    await user.type(screen.getByRole("textbox", { name: "Target roles" }), "Intern{Enter}");
+    await chooseMulti(user, "Target roles", "Intern");
     expect((screen.getByLabelText("Workflow name") as HTMLInputElement).value).toBe("My jobs at home");
     await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
     expect((screen.getByLabelText("Last N hours") as HTMLInputElement).value).toBe("37");
@@ -155,7 +163,7 @@ describe("role-first workflow boundaries", () => {
     const detect = vi.spyOn(api, "detectSource").mockImplementationOnce(() => pending).mockResolvedValue(result);
     const extract = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => preview(spec));
     render(<AddSourceModal isOpen initialSource={SAMPLE_SWE_SOURCE} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
-    await user.type(screen.getByRole("textbox", { name: "Any keywords" }), "Engineer");
+    await user.type(screen.getByRole("combobox", { name: "Any keywords" }), "Engineer");
     await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
     await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
     const url = screen.getByRole("textbox", { name: "Source URL or board identifier" });

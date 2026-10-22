@@ -9,7 +9,7 @@ test("create a workflow through actual controls without an implicit scrape", asy
     .click();
   const dialog = page.getByRole("dialog", { name: "Create workflow" });
   await dialog.getByRole("textbox", { name: "Workflow name", exact: true }).fill("fixture-board");
-  await dialog.getByRole("textbox", { name: "Any keywords", exact: true }).fill("NoSuchRole");
+  await dialog.getByRole("combobox", { name: "Any keywords", exact: true }).fill("NoSuchRole");
   await expect(dialog.getByRole("button", { name: "Preview matches" })).toHaveCount(0);
   await dialog.getByRole("button", { name: "Continue to Criteria" }).click();
   // Date matching is exercised through Rust/native fixtures, not this UI demo.

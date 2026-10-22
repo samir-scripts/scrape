@@ -22,10 +22,11 @@ for (const theme of ["paper", "obsidian"]) {
       await expect(dialog).toBeVisible();
       await dialog.getByRole("textbox", { name: "Workflow name", exact: true }).focus();
       await page.keyboard.press("Tab");
-      await expect(dialog.getByRole("textbox", { name: "Target roles", exact: true })).toBeFocused();
+      await expect(dialog.getByRole("combobox", { name: "Target roles", exact: true })).toBeFocused();
       await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
       expect(await contrastFailures(page)).toEqual([]);
       await expect.soft(page).toHaveScreenshot(`${theme}-${width}-workflow.png`, { animations: "disabled" });
+      await page.keyboard.press("Escape");
       await page.keyboard.press("Escape");
       await expect(page.getByRole("button", { name: "Add workflow", exact: true })).toBeFocused();
       await page.getByRole("button", { name: "RUN", exact: true }).first().click();

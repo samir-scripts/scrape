@@ -1,14 +1,18 @@
-Latest implemented revision: **role-first cross-employer workflows**, specified in
-[the current v8 workflow contract](workflow-v3.md). Roles → Criteria → Sources →
-Schedule replaces the company-first editor. Search defaults to The Muse, with
-optional Arbeitnow/direct ATS sources, literal role/company matching and dynamic
-posting-date presets. Worker protocol 9 and migration 29 preserve existing rules
-and protected state. Verification and limits are recorded in
-[the evidence ledger](11-implementation-evidence.md#role-first-cross-employer-workflows).
+Latest implementation revision: **searchable workflow role and company selection**,
+specified in [Plan 13](13-searchable-workflow-role-company-selection.md).
+The role catalog includes all detailed BLS 2018 occupations and pinned O*NET
+31.0 technology alternate titles; company filters attach only known available
+boards, preserve source identity, and leave imported drafts unchanged until an
+explicit user action. Keyword completion reuses current workflow context. No
+matching semantics, persisted schema, or workflow/protocol versions changed.
+The [implementation evidence](13-implementation-evidence.md) records passing
+browser/frontend/Rust checks and the blocked native workflow acceptance gate.
 
-Current priority: [Workflow ingestion repair — Plan 12](12-workflow-ingestion-repair.md), following [Incident 28](errors/28-empty-seeded-workflows.md). Sections 1–8 are implemented and verified with [evidence](12-implementation-evidence.md): diagnostics, ownership, matching compatibility, field evidence/geography, template catalog, site extraction/pagination, manifest-driven provider verification, and final integration/recovery. Plan 12 is complete. Saved user filters remain unchanged; disabled examples do not establish provider coverage. Historical completion statements below are superseded for that scope.
+Current completed integration base: [Plan 12 — Workflow ingestion repair](12-workflow-ingestion-repair.md), based on [Incident 28](errors/28-empty-seeded-workflows.md). Sections 1–8 are implemented and verified with [evidence](12-implementation-evidence.md). Plan 12 remains complete; Plan 13 adds editor selection behavior without changing its provider, persistence, or execution contracts.
 
-Current revision: [Reliable ingestion, multi-source workflows, and UI repair](11-reliable-ingestion-and-ui-repair.md). Sections 1 diagnostics, 2 keywords, 3 bounded enrichment/outcomes, 4 employer branding, 5 multi-source workflow ownership, 6 low-resource browser and script extraction (Phases 6A–6F), 7 provider/company verification, and 8 regional settings and Kanban have [implementation evidence](11-implementation-evidence.md); Sections 1–8 are fully implemented and verified. Original-report reproduction remains open (screenshots/config missing). Plan 11 implementation complete. Next: Desktop usability and extraction (Plan 08 native acceptance) or subsequent roadmap priorities. See [Section 6 execution blueprint](11-section-6-browser-and-script-extraction.md) for browser and script extraction and [Section 7 execution blueprint](11-section-7-provider-and-company-verification.md) for provider and company verification.
+Prior revision: [Reliable ingestion, multi-source workflows, and UI repair](11-reliable-ingestion-and-ui-repair.md). Sections 1–8 are implemented and verified; original-report reproduction remains open because source screenshots/configuration are missing. See the [Plan 11 evidence ledger](11-implementation-evidence.md).
+
+Plan 11 remains a completed prior revision. Its eight implementation sections, evidence and unresolved original-report reproduction status are retained in [the Plan 11 ledger](11-implementation-evidence.md).
 
 The latest proposed desktop repair is [Desktop usability and extraction](08-desktop-usability-and-extraction.md). It documents the screenshot-reported regressions, replaces conflicting plan 07 layout decisions, and requires actual native interaction verification before completion.
 
@@ -17,6 +21,7 @@ Current UI refinement and independent workflow configuration is specified in
 workflow settings and Scraper Settings decisions in plans 06–08, while
 preserving data-protection and domain contracts.
 
+| [`13-searchable-workflow-role-company-selection.md`](13-searchable-workflow-role-company-selection.md) | Offline BLS/O*NET literal role catalog, searchable multi-select role/company filters, atomic company-board attachment and contextual keyword autocomplete. |
 | [`10-ui-workflow-refinement.md`](10-ui-workflow-refinement.md) | Themed accessible menus, independent workflow settings, automatic retention, Kanban movement, and consolidated sorting. |
 
 # Plan status

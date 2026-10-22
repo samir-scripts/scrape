@@ -37,8 +37,24 @@ test("both themes remain operable at actual 200% browser zoom", async () => {
       const add = page.getByRole("button", { name: /add workflow/i });
       await add.click();
       const dialog = page.getByRole("dialog", { name: "Create workflow" });
-      await expect(dialog.getByRole("textbox", { name: "Workflow name", exact: true })).toBeVisible();
-      expect(await dialog.evaluate(el => el.getBoundingClientRect().right <= innerWidth && el.getBoundingClientRect().left >= 0)).toBe(true);
+      await expect(dialog.getByRole("combobox", { name: "Target roles", exact: true })).toBeVisible();
+      const role = dialog.getByRole("combobox", { name: "Target roles", exact: true });
+      await role.fill("Zoom Custom Job Role");
+      await expect(dialog.getByRole("option", { name: "Use “Zoom Custom Job Role”", exact: true })).toBeVisible();
+      await role.press("ArrowDown");
+      await role.press("Enter");
+      const company = dialog.getByRole("combobox", { name: "Companies (Optional)", exact: true });
+      await company.fill("Cloudflare");
+      await expect(dialog.getByRole("option", { name: /^Cloudflare\b/ })).toBeVisible();
+      await company.press("ArrowDown");
+      await company.press("Enter");
+      await expect(dialog.getByRole("button", { name: "Remove Zoom Custom Job Role from Target roles", exact: true })).toBeVisible();
+      expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+      await company.press("ArrowDown");
+      await expect(dialog.getByRole("option", { name: /^Cloudflare\b/ })).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(dialog.getByRole("combobox", { name: "Companies (Optional)", exact: true })).toBeFocused();
       await page.keyboard.press("Escape");
       await expect(add).toBeFocused();
     }

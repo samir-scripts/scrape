@@ -23,7 +23,7 @@ The `src/components/ui` directory contains atomic, reusable UI components implem
 | **Field** | [`Field.tsx`](Field.tsx) | Form field wrapper binding labels, required asterisks, helper text, and error validation messages to form controls. |
 | **Input** | [`Input.tsx`](Input.tsx) | Text input with 0px radius, 1px border, clear button, and optional prefix/suffix icons. |
 | **KeyHint** | [`KeyHint.tsx`](KeyHint.tsx) | Keyboard shortcut pill (e.g. `⌘K`, `J`, `K`, `ESC`) used throughout buttons, menus, and footer bars. |
-| **KeywordInput** | [`KeywordInput.tsx`](KeywordInput.tsx) | Reusable chip input keeping unfinished text separate from committed terms. Supports Enter/Add/comma/newline/paste commits, phrase preservation, case-insensitive deduplication, IME composition safety, two-stage Backspace focus/deletion, and synchronous flush before editor actions. |
+| **KeywordInput** | [`KeywordInput.tsx`](KeywordInput.tsx) | Reusable chip input keeping unfinished text separate from committed terms. Supports Enter/Add/comma/newline/paste commits, phrase preservation, case-insensitive deduplication, IME composition safety, two-stage Backspace focus/deletion, synchronous flush before editor actions, and optional caller-supplied contextual autocomplete. |
 | **ListRow** | [`ListRow.tsx`](ListRow.tsx) | Standardized hoverable list item container with left/right slots and border separators. |
 | **Modal** | [`Modal.tsx`](Modal.tsx) | Shared modal/inline inspector shell. Modal presentation uses native dialog focus trapping; inline presentation retains content without remounting. Manages Escape, focus restoration and scroll across responsive transitions. |
 | **Panel** | [`Panel.tsx`](Panel.tsx) | Heavy-bordered content container with optional title header bar and collapsible body. |
@@ -31,6 +31,7 @@ The `src/components/ui` directory contains atomic, reusable UI components implem
 | **RemoveJobButton** | [`RemoveJobButton.tsx`](RemoveJobButton.tsx) | Shared trash SVG trigger with danger styling and contextual accessible name (`Remove [title] at [company]`). |
 | **Rule** | [`Rule.tsx`](Rule.tsx) | Hairline 1px horizontal or vertical divider (`hr` / `div`) styled with `--color-border`. |
 | **Select** | [`Select.tsx`](Select.tsx) | Headless UI–based themed `Select` (Listbox) and searchable `Combobox` with top-layer portal positioning, unclipped popups, nested Escape handling, global `--font-ui` inheritance, and keyboard/typeahead navigation. |
+| **MultiSelectCombobox** | [`MultiSelectCombobox.tsx`](MultiSelectCombobox.tsx) | Searchable, token-ranked multi-select with literal/custom values, bounded 50-result batches, accessible listbox controls, selected-value removal rows, keyboard navigation and dialog-local popup placement. |
 | **Table** | [`Table.tsx`](Table.tsx) | Data table components (`Table`, `TableHead`, `TableRow`, `TableCell`) with sort headers and zebra striping. |
 | **Tag** | [`Tag.tsx`](Tag.tsx) | Badge tag displaying role categories, workplace arrangements (`IN-OFFICE`, `REMOTE`, `HYBRID`), and semantic stage labels. |
 | **Toast** | [`Toast.tsx`](Toast.tsx) | Floating alert notification item displaying progress countdown, status icon, optional action (such as Undo), and dismiss button. |

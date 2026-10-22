@@ -16,12 +16,6 @@ export const companyOptions = catalog.companies.map(company => {
   try { domain = new URL(source.extractor.url).hostname; } catch { /* Board identifiers remain visible. */ }
   return { company, template, source, domain };
 });
-export const COMPANY_QUICK_PRESETS = [
-  { id: "cloudflare", label: "Cloudflare" },
-  { id: "linear", label: "Linear" },
-  { id: "bitwarden", label: "Bitwarden" },
-  { id: "sep", label: "SEP" },
-];
 export function selectedCompanyId(source: WorkflowSourceSpec): string | null {
   const endpoint = normalizedEndpoint(source.extractor.kind, source.extractor.url);
   return companyOptions.find(option => normalizedEndpoint(option.source.extractor.kind, option.source.extractor.url) === endpoint)?.company.id ?? null;
@@ -35,22 +29,7 @@ export function CompanyPicker({ value, onChange, onCustom, disabled, logo }: {
   useEffect(() => { setQuery(selected?.company.name ?? ""); }, [value]);
   const restore = () => setQuery(selected?.company.name ?? "");
   return <div className="grid min-w-0 gap-2">
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <div className="flex flex-wrap items-center gap-1.5 text-xs">
-        <span className="text-[var(--color-text-muted)] font-semibold uppercase">Popular:</span>
-        {COMPANY_QUICK_PRESETS.map(preset => (
-          <button
-            key={preset.id}
-            type="button"
-            disabled={disabled}
-            aria-pressed={value === preset.id}
-            className={`min-h-7 px-2 border text-xs font-semibold uppercase transition-colors ${value === preset.id ? "bg-[var(--color-text)] text-[var(--color-surface)] border-[var(--color-border)]" : "border-[var(--color-border)] hover:bg-[var(--color-surface-raised)]"}`}
-            onClick={() => onChange(preset.id)}
-          >
-            {preset.label}
-          </button>
-        ))}
-      </div>
+    <div className="flex justify-end">
       <Button type="button" size="sm" disabled={disabled} onClick={onCustom}>Enter a custom careers URL</Button>
     </div>
     <SearchCombobox aria-label="Search companies" value={value ?? ""} query={query}

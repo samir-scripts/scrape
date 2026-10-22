@@ -1,7 +1,9 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+// Suggestions use the same listbox placement, while plain keyword fields stay textboxes.
 import { Button } from "./Button";
 import { Input } from "./Input";
-
+import { PopupPosition, positionOptions } from "./Select";
 // An editor action flushes every mounted input synchronously before reading its draft.
 export const COMMIT_KEYWORDS = "scrape:commit-keywords";
 export function keywordTerms(existing: readonly string[], text: string): string[] {
@@ -14,8 +16,8 @@ export function keywordTerms(existing: readonly string[], text: string): string[
   });
 }
 
-export function KeywordInput({ label, value, onChange, onDraftChange }: {
-  label: string; value: string[]; onChange: (terms: string[]) => void; onDraftChange: () => void;
+export function KeywordInput({ label, value, onChange, onDraftChange, suggestions }: {
+  label: string; value: string[]; onChange: (terms: string[]) => void; onDraftChange: () => void; suggestions?: readonly string[];
 }) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -25,6 +27,24 @@ export function KeywordInput({ label, value, onChange, onDraftChange }: {
   const composing = useRef(false);
   const current = useRef({ value, onChange });
   current.current = { value, onChange };
+  const root = useRef<HTMLDivElement>(null);
+  const [popupTarget, setPopupTarget] = useState<HTMLElement | null>(null);
+  const [active, setActive] = useState(-1);
+  const [open, setOpen] = useState(false);
+  const matchingSuggestions = useMemo(() => {
+    const query = text.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+    return [...new Set(suggestions ?? [])].filter(term => !value.some(item => item.toLocaleLowerCase() === term.toLocaleLowerCase()))
+      .filter(term => query.every(token => term.toLocaleLowerCase().includes(token)))
+      .sort((a, b) => a.localeCompare(b)).slice(0, 20);
+  }, [suggestions, text, value]);
+  const complete = (term: string) => {
+    onDraftChange();
+    add(term);
+    updateText("");
+    setOpen(false);
+    setActive(-1);
+    requestAnimationFrame(() => input.current?.focus());
+  };
   const updateText = (next: string) => { pending.current = next; setText(next); };
   const add = (next: string) => {
     if (!next.trim()) return;
@@ -71,27 +91,47 @@ export function KeywordInput({ label, value, onChange, onDraftChange }: {
         </button>
       </li>)}
     </ul>}
-    <div className="flex min-w-0 items-start gap-2">
-      <Input ref={input} id={id} data-keyword-input aria-label={label} value={text} placeholder="Type a phrase"
-        onChange={event => edit(event.target.value)} onBlur={commit}
-        onCompositionStart={() => { composing.current = true; }}
-        onCompositionEnd={event => { composing.current = false; edit(event.currentTarget.value); }}
-        onPaste={event => {
-          const pasted = event.clipboardData.getData("text");
-          if (!/[,\r\n]/.test(pasted) || composing.current) return;
-          event.preventDefault();
-          const field = event.currentTarget;
-          const combined = pending.current.slice(0, field.selectionStart ?? pending.current.length) + pasted + pending.current.slice(field.selectionEnd ?? pending.current.length);
-          onDraftChange(); add(combined); updateText("");
-        }}
-        onKeyDown={event => {
-          if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) return;
-          if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); commit(); }
-          if (event.key === "Backspace" && !pending.current && current.current.value.length) {
-            event.preventDefault(); removers.current[current.current.value.length - 1]?.focus();
-          }
-        }} />
-      <Button type="button" aria-label={`Add keyword to ${label}`} onMouseDown={event => event.preventDefault()} onClick={() => { commit(); input.current?.focus(); }}>Add</Button>
-    </div>
+    <PopupPosition root={root} open={open && !!suggestions?.length} onTarget={setPopupTarget}>
+      <div ref={root} className="flex min-w-0 items-start gap-2">
+        <Input ref={input} id={id} data-keyword-input aria-label={label} value={text} placeholder="Type a phrase"
+          role={suggestions ? "combobox" : undefined} aria-autocomplete={suggestions ? "list" : undefined}
+          aria-expanded={suggestions ? open && !!matchingSuggestions.length : undefined}
+          aria-controls={suggestions ? `${id}-suggestions` : undefined}
+          aria-activedescendant={suggestions && active >= 0 ? `${id}-suggestion-${active}` : undefined}
+          onChange={event => { edit(event.target.value); setOpen(!!suggestions?.length); setActive(-1); }}
+          onBlur={() => { commit(); setOpen(false); }}
+          onCompositionStart={() => { composing.current = true; }}
+          onCompositionEnd={event => { composing.current = false; edit(event.currentTarget.value); setOpen(!!suggestions?.length); }}
+          onPaste={event => {
+            const pasted = event.clipboardData.getData("text");
+            if (!/[,\r\n]/.test(pasted) || composing.current) return;
+            event.preventDefault();
+            const field = event.currentTarget;
+            const combined = pending.current.slice(0, field.selectionStart ?? pending.current.length) + pasted + pending.current.slice(field.selectionEnd ?? pending.current.length);
+            onDraftChange(); add(combined); updateText(""); setOpen(false);
+          }}
+          onKeyDown={event => {
+            if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) return;
+            if (suggestions && open && matchingSuggestions.length && event.key === "ArrowDown") { event.preventDefault(); setActive(index => (index + 1) % matchingSuggestions.length); return; }
+            if (suggestions && open && matchingSuggestions.length && event.key === "ArrowUp") { event.preventDefault(); setActive(index => index <= 0 ? matchingSuggestions.length - 1 : index - 1); return; }
+            if (suggestions && open && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); setActive(-1); return; }
+            if (event.key === "Enter") {
+              event.preventDefault(); event.stopPropagation();
+              if (suggestions && open && active >= 0 && matchingSuggestions[active]) complete(matchingSuggestions[active]);
+              else commit();
+            }
+            if (event.key === "Backspace" && !pending.current && current.current.value.length) {
+              event.preventDefault(); removers.current[current.current.value.length - 1]?.focus();
+            }
+          }} />
+        {popupTarget && suggestions && open && matchingSuggestions.length > 0 && createPortal(
+          <ul id={`${id}-suggestions`} role="listbox" className="fixed z-[100] max-h-60 overflow-auto border border-[var(--color-ink)] bg-[var(--color-paper)] p-1 text-[var(--color-ink)]" style={positionOptions(root.current)}>
+            {matchingSuggestions.map((term, index) => <li id={`${id}-suggestion-${index}`} key={term} role="option" aria-selected={active === index}
+              className={`cursor-pointer px-2 py-2 text-sm normal-case ${active === index ? "bg-[var(--color-paper-2)]" : ""}`}
+              onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActive(index)} onClick={() => complete(term)}>{term}</li>)}
+          </ul>, popupTarget)}
+        <Button type="button" aria-label={`Add keyword to ${label}`} onMouseDown={event => event.preventDefault()} onClick={() => { commit(); setOpen(false); input.current?.focus(); }}>Add</Button>
+      </div>
+    </PopupPosition>
   </div>;
 }

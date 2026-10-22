@@ -47,9 +47,12 @@ export function positionOptions(root: HTMLDivElement | null, minWidth = 0): CSSP
   if (!button) return { visibility: "hidden" };
   const rect = button.getBoundingClientRect();
   const width = Math.min(Math.max(rect.width, minWidth), window.innerWidth - 16);
-  const maxHeight = Math.min(240, window.innerHeight - 16);
-  const below = window.innerHeight - rect.bottom;
-  const top = below >= Math.min(maxHeight, 160) ? rect.bottom + 2 : Math.max(8, rect.top - maxHeight - 2);
+  const scroll = root?.closest("dialog")?.querySelector<HTMLElement>("[data-dialog-scroll]")?.getBoundingClientRect();
+  const below = Math.max(0, (scroll?.bottom ?? window.innerHeight) - rect.bottom - 8);
+  const above = Math.max(0, rect.top - (scroll?.top ?? 8) - 8);
+  const maxHeight = Math.min(240, window.innerHeight - 16, Math.max(below, above));
+  const placeBelow = below >= Math.min(maxHeight, 160) || below >= above;
+  const top = placeBelow ? rect.bottom + 2 : rect.top - maxHeight - 2;
   return { top, left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)), width, maxHeight };
 }
 

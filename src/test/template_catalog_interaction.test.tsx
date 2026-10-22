@@ -1,21 +1,22 @@
 // @vitest-environment jsdom
-import { useState } from "react";
+import { useRef } from "react";
 import { afterEach, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { WorkflowSections } from "../components/views/settings/WorkflowSections";
 import { SAMPLE_WORKFLOW_TEMPLATES, workflowSpecToYaml, validateWorkflowYaml } from "../lib/yamlWorkflow";
-import type { WorkflowSpec } from "../bindings/WorkflowSpec";
+import { useWorkflowDraft } from "../hooks/useWorkflowDraft";
 import { AddSourceModal } from "../components/views/settings/AddSourceModal";
 
 afterEach(cleanup);
 function Harness() {
-  const [draft, change] = useState<WorkflowSpec>(structuredClone(SAMPLE_WORKFLOW_TEMPLATES[0].spec));
+  const initial = useRef(structuredClone(SAMPLE_WORKFLOW_TEMPLATES[0].spec));
+  const model = useWorkflowDraft({ isOpen: true, initialSpec: initial.current, onSourceSaved: () => {} });
   return <>
-    <WorkflowSections draft={draft} change={change} advanced={false} section="Roles" />
-    <WorkflowSections draft={draft} change={change} advanced={false} section="Criteria" />
-    <WorkflowSections draft={draft} change={change} advanced={false} section="Sources" />
-    <output data-testid="draft">{workflowSpecToYaml(draft)}</output>
+    <WorkflowSections draft={model.draft} change={model.change} advanced={false} section="Roles" setTargetCompanies={model.setTargetCompanies} attachCompanyBoard={model.attachCompanyBoard} />
+    <WorkflowSections draft={model.draft} change={model.change} advanced={false} section="Criteria" setTargetCompanies={model.setTargetCompanies} attachCompanyBoard={model.attachCompanyBoard} />
+    <WorkflowSections draft={model.draft} change={model.change} advanced={false} section="Sources" setTargetCompanies={model.setTargetCompanies} attachCompanyBoard={model.attachCompanyBoard} />
+    <output data-testid="draft">{workflowSpecToYaml(model.draft)}</output>
   </>;
 }
 it("explicitly combines known and unknown evidence choices without mutating the catalog", async () => {

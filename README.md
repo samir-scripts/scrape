@@ -4,15 +4,18 @@ Scrape is a high-performance, local-first desktop application that runs in the b
 
 **Stack:** Tauri v2 · Rust (Tokio, Reqwest, Scraper, SQLx) · SQLite (WAL mode) · React 19 · TypeScript · Tailwind CSS v4 · Visx
 
-Role-first workflows use **Roles → Criteria → Sources → Schedule**, with optional
-company restrictions, literal title-role matching, publication-date presets and
-one preview-gated draft. New workflows default to The Muse public cross-employer
+Role-first workflows use **Roles → Criteria → Sources → Schedule** with searchable
+multi-selects for literal job-title and company filters, backed by an offline
+BLS 2018 / O*NET 31.0 title catalog and contextual keyword autocomplete. Selecting
+a supported company attaches its available career board; removing a filter never
+deletes a separately configured source. New workflows default to The Muse public cross-employer
 listings without a company URL; direct ATS boards remain optional sources.
 Arbeitnow is an explicit Germany-focused alternative with unknown original dates.
 Coverage is bounded, not every employer or posting. Save never runs a scrape.
 Current contracts: WorkflowSpec **8**, worker protocol **9**, migration **29**.
-See the [workflow contract](plans/workflow-v3.md) and
-[implementation evidence](plans/11-implementation-evidence.md).
+See the [workflow contract](plans/workflow-v3.md),
+[selection implementation evidence](plans/13-implementation-evidence.md) and
+[full workflow evidence](plans/11-implementation-evidence.md).
 
 
 Workflow ingestion repair is tracked in [Plan 12](plans/12-workflow-ingestion-repair.md) and fully implemented across Sections 1–8.
@@ -73,9 +76,9 @@ Each directory in this repository contains its own dedicated `README.md` documen
 
 ### 1. Rust Workspace Crates (`crates/`)
 - [`crates/`](crates/README.md) — Rust workspace overview and sidecar architecture.
-  - [`crates/scrape-core/`](crates/scrape-core/README.md) — Shared matching/filtering, search-provider configuration, identity/geography/branding rules, IPC wire protocol 9, and generated TypeScript boundary contracts.
-    - [`crates/scrape-core/data/`](crates/scrape-core/data/README.md) — Pinned ISO country and subdivision catalog (`regions.json`).
-    - [`crates/scrape-core/src/`](crates/scrape-core/src/README.md) — Core enums, categorized matching and rejection diagnostics, SQL filter compiler, canonical posting identity, geography, posting dates, and employer branding evidence.
+  - [`crates/scrape-core/`](crates/scrape-core/README.md) — Shared matching/filtering, search-provider configuration, identity/geography/occupation/branding rules, IPC wire protocol 9, and generated TypeScript boundary contracts.
+    - [`crates/scrape-core/data/`](crates/scrape-core/data/README.md) — Pinned ISO regions and versioned BLS 2018 / O*NET 31.0 literal occupation catalog with import provenance.
+    - [`crates/scrape-core/src/`](crates/scrape-core/src/README.md) — Core enums, categorized matching and rejection diagnostics, SQL filter compiler, canonical posting identity, geography and occupations, posting dates, and employer branding evidence.
     - [`crates/scrape-core/src/enrich/`](crates/scrape-core/src/enrich/README.md) — Information extraction heuristics (salary, location, workplace arrangement, eligibility, experience, HTML/description normalization).
   - [`crates/scrape-worker/`](crates/scrape-worker/README.md) — Scraper sidecar binary and crawl execution engine.
     - [`crates/scrape-worker/src/`](crates/scrape-worker/src/README.md) — Worker CLI entry point, rate-limited HTTP client, robots.txt validator, and ATS detector.

@@ -1,0 +1,27 @@
+{
+  "datasets": [
+    {
+      "name": "BLS Standard Occupational Classification",
+      "version": "2018",
+      "url": "https://www.bls.gov/soc/2018/soc_structure_2018.xlsx",
+      "retrieved_at": "2026-10-21",
+      "license": "Public domain; U.S. government work",
+      "license_url": "https://www.bls.gov/bls/linksite.htm",
+      "stored_file": "bls-2018-structure.xlsx",
+      "sha256_download_bytes": "ade08af40923266f3a854842e888ca3e93c15b26a147c20a2b12a61f4c4f4077",
+      "sha256_stored_bytes": "ade08af40923266f3a854842e888ca3e93c15b26a147c20a2b12a61f4c4f4077"
+    },
+    {
+      "name": "O*NET Database Job Titles",
+      "version": "31.0",
+      "url": "https://www.onetcenter.org/dl_files/database/db_31_0_json/job_titles.json",
+      "retrieved_at": "2026-10-21",
+      "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "stored_file": "onet-31.0-job-titles.json.gz",
+      "sha256_download_bytes": "862953f66de9675402a41380242374077af9dc266b1455bee325e953b079bf21",
+      "sha256_stored_bytes": "b5c5da78c0270fa8ba6e2ec4be927be4e8f7ef80febb9e99bb4ed023b30d1db2"
+    }
+  ],
+  "attribution": "The BLS Standard Occupational Classification is a U.S. government work. Includes information from the O*NET 31.0 Database by USDOL/ETA, used under CC BY 4.0. Scrape selected and reorganized these titles; USDOL/ETA has not approved, endorsed, or tested these modifications."
+}

@@ -23,3 +23,15 @@ remain unknown without supporting context. Remote never implies a country.
 Structured remote applicant eligibility takes precedence over a physical office
 address; extraction does not use general company prose as eligible geography.
 Unsupported names remain unknown; regexes are not a universal geocoder.
+## Occupation-title catalog
+
+`occupations/` vendors the original BLS 2018 SOC coding XLSX and O*NET 31.0
+job-title JSON gzip, their retrieval/license/checksum manifest, and a deterministic
+`catalog.json`. `scripts/import-occupation-catalog.py --check` validates the
+derived file offline; run the importer only for an intentional data refresh.
+Rust loads and validates the catalog once from `scrape-core/src/occupations.rs`
+and exports its generated TypeScript projection. BLS supplies all 867 detailed
+occupations across 23 major groups; O*NET contributes alternate titles mapped
+to their original SOC/O*NET provenance. A title remains a literal match string,
+not a semantic occupation matcher or a complete worldwide job-title registry.
+Review the source manifest and attribution before changing the pinned versions.

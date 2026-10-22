@@ -10,8 +10,8 @@ import type { WorkflowSpec } from "../bindings/WorkflowSpec";
 afterEach(cleanup);
 function Editor({ initialSpec }: { initialSpec?: WorkflowSpec }) {
   const model = useWorkflowDraft({ isOpen: true, initialSpec, onSourceSaved: () => {} });
-  return <><WorkflowSections draft={model.draft} change={model.change} advanced={false} section="Roles" />
-    <WorkflowSections draft={model.draft} change={model.change} advanced={false} section="Sources" selectCompany={model.selectCompany} />
+  return <><WorkflowSections draft={model.draft} change={model.change} advanced={false} section="Roles" setTargetCompanies={model.setTargetCompanies} attachCompanyBoard={model.attachCompanyBoard} />
+    <WorkflowSections draft={model.draft} change={model.change} advanced={false} section="Sources" selectCompany={model.selectCompany} setTargetCompanies={model.setTargetCompanies} attachCompanyBoard={model.attachCompanyBoard} />
     {!initialSpec && <button onClick={() => model.change(draft => ({ ...draft, sources: [{ id: "source-1", enabled: true, label: "", extractor: { kind: "greenhouse", url: "" } }] }))}>Attach company board</button>}
     {model.pendingCompany && <section aria-label="Replace source"><button onClick={model.cancelCompany}>Keep editing</button><button onClick={model.confirmCompany}>Replace source</button></section>}
     <output aria-label="Current draft">{JSON.stringify(model.draft)}</output></>;
@@ -78,5 +78,82 @@ describe("company board attachment editing", () => {
     expect(draft.filters?.matching?.keywords).toBeNull();
     expect(draft.sources[0].enabled).toBe(false);
     expect(screen.getByText(/Source disabled until explicitly enabled/)).toBeTruthy();
+  });
+  it("adds literal role and company filters atomically with deduplicated preset boards", async () => {
+    const user = userEvent.setup(); render(<Editor />);
+    const roles = screen.getByRole("combobox", { name: "Target roles" });
+    await user.type(roles, "software eng");
+    await user.keyboard("{ArrowDown}{Enter}");
+    const companies = screen.getByRole("combobox", { name: "Companies (Optional)" });
+    await user.type(companies, "Cloudflare");
+    await user.keyboard("{ArrowDown}{Enter}");
+    await user.type(companies, "Linear");
+    await user.keyboard("{ArrowDown}{Enter}");
+    const draft = readDraft();
+    expect(draft.filters?.matching?.target_roles).toEqual(["Software Engineer"]);
+    expect(draft.filters?.matching?.companies).toEqual(["Cloudflare", "Linear"]);
+    expect(draft.sources.map(source => source.id)).toHaveLength(3);
+    expect(draft.sources.slice(1).map(source => source.employer_hint)).toEqual(["Cloudflare", "Linear"]);
+    expect(draft.sources[1].enabled).toBe(true);
+    expect(draft.sources[2].enabled).toBe(true);
+    const remove = screen.getByRole("button", { name: "Remove Cloudflare from Companies (Optional)" });
+    await user.click(remove);
+    expect(readDraft().filters?.matching?.companies).toEqual(["Linear"]);
+    expect(readDraft().sources).toHaveLength(3);
+  });
+  it("deduplicates a customized existing board without overwriting source identity or configuration", async () => {
+    const cloudflare = companyOptions.find(option => option.company.id === "cloudflare")!;
+    const customized = { ...structuredClone(cloudflare.source), id: "hand-authored-cloudflare", label: "My Cloudflare source", enabled: false };
+    const spec: WorkflowSpec = {
+      version: 8, metadata: { name: "Keep configured source", enabled: false },
+      sources: [{ id: "public-search", label: "Public search", enabled: true, extractor: { kind: "search", url: "" } }, customized],
+      filters: { matching: emptyRules() },
+    };
+    const user = userEvent.setup(); render(<Editor initialSpec={spec} />);
+    const companies = screen.getByRole("combobox", { name: "Companies (Optional)" });
+    await user.type(companies, "Cloudflare");
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(readDraft().filters?.matching?.companies).toEqual(["Cloudflare"]);
+    expect(readDraft().sources).toEqual(spec.sources);
+    await user.click(screen.getByRole("button", { name: "Remove Cloudflare from Companies (Optional)" }));
+    expect(readDraft().sources).toEqual(spec.sources);
+    await user.type(companies, "Cloudflare");
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(readDraft().filters?.matching?.companies).toEqual(["Cloudflare"]);
+    expect(readDraft().sources).toEqual(spec.sources);
+  });
+  it("keeps substring company names custom and attaches non-ready catalog boards disabled", async () => {
+    const user = userEvent.setup(); render(<Editor />);
+    const companies = screen.getByRole("combobox", { name: "Companies (Optional)" });
+    await user.type(companies, "Cloud");
+    await user.click(screen.getByRole("option", { name: "Use “Cloud”" }));
+    expect(readDraft().sources).toHaveLength(1);
+    await user.type(companies, "Google");
+    await user.keyboard("{ArrowDown}{Enter}");
+    const draft = readDraft();
+    expect(draft.filters?.matching?.companies).toEqual(["Cloud", "Google"]);
+    expect(draft.sources).toHaveLength(2);
+    expect(draft.sources[1].enabled).toBe(false);
+    expect(draft.sources[0].extractor.kind).toBe("search");
+  });
+  it("preserves imported company filters without implicit attachment and offers explicit reattachment", async () => {
+    const cloudflare = companyOptions.find(option => option.company.id === "cloudflare")!;
+    const spec: WorkflowSpec = {
+      version: 8,
+      metadata: { name: "Imported company filter", enabled: true },
+      sources: [{ id: "public-search", label: "Public search", enabled: true, extractor: { kind: "search", url: "" } }],
+      filters: { matching: { ...emptyRules(), companies: ["Cloudflare"] } },
+    };
+    const user = userEvent.setup(); render(<Editor initialSpec={spec} />);
+    expect(readDraft()).toEqual(spec);
+    expect(screen.getByRole("button", { name: "Attach career board for Cloudflare" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Attach career board for Cloudflare" }));
+    const draft = readDraft();
+    expect(draft.sources).toHaveLength(2);
+    expect(draft.sources[0]).toEqual(spec.sources[0]);
+    expect(selectedCompanyId(draft.sources[1])).toBe(cloudflare.company.id);
+    expect(draft.sources[1].enabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Attach career board for Cloudflare" })).toBeNull();
+    expect(readDraft().sources).toHaveLength(2);
   });
 });

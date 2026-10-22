@@ -3,7 +3,7 @@
 Settings provides Appearance, System, Removed & blocked jobs, and Data management.
 System contains the application-wide automatic-scraping pause. Scraper provides workflow configuration.
 
-`AddSourceModal` and `WorkflowSections` share one draft across **Roles → Criteria → Sources → Schedule**, Advanced controls and YAML. New workflows use The Muse search without requiring a career URL; role and optional company chips remain independent literal substring restrictions. Names are derived only for unnamed drafts and never replace explicit user names.
+`AddSourceModal` and `WorkflowSections` share one draft across **Roles → Criteria → Sources → Schedule**, Advanced controls and YAML. Target roles and optional companies use searchable multi-selects that persist literal filter strings; BLS 2018 and O*NET 31.0 titles provide offline suggestions without changing Rust's substring matching. Supported company selections append their available board sources atomically. Removing a company filter never deletes a configured source. New workflows retain The Muse public search by default. Names are derived only for unnamed drafts and never replace explicit user names.
 
 Sources can be edited, enabled, reordered and removed with duplicate-provider/board
 validation and independent ATS detection. Selector sources reuse Static HTML,
@@ -23,7 +23,10 @@ inputs before reading the draft. Input sessions reset only when replacing or
 reopening a workflow, so abandoned text cannot leak across workflows.
 
 `KeywordMatching` exposes independent required-Any, All and Exclude groups with
-explicit Search in fields in Roles. No mode change clears another group.
+contextual autocomplete sourced from the current literal role and other keyword
+groups. Completion adds to only the active group; no canned skill taxonomy or
+cross-workflow history is used. Explicit Search in fields remain in Roles. No
+mode change clears another group.
 Empty imported fields mean every supported field, as in Rust. At least
 one field remains selected during editing. This UI edits Rust `KeywordRules` and
 adds no matcher. Matching decisions and run explanations use Rust's shared
@@ -53,7 +56,9 @@ available for backtracking. Hidden inputs retain their draft state. Criteria
 exposes dynamic date presets, location/workplace, YOE/employment and native pay.
 Existing arbitrary-hour/custom date filters remain editable without conversion.
 Sources labels provider coverage and offers optional direct-board attachments,
-preserving disabled/readiness/script trust. Schedule includes retention, complete
+preserving disabled/readiness/script trust. When a selected known company lacks
+a board in an imported draft, Sources offers an explicit attach action; removing
+the company filter never removes a source. Schedule includes retention, complete
 rule review, current preview and Save; saving never runs a scrape.
 
 `WorkflowImportButton` is shared by the registry and editor. It reads a selected
@@ -110,6 +115,6 @@ functional draft updates. Individual legacy roles/compensation can be edited in 
 Malformed policy drafts are retained for authoritative validation, not silently
 replaced with the last valid policy. No migration button unions groups or clears SQL.
 
-The company picker consumes only the Rust-generated catalog. Search combines company/provider/domain tokens and never downloads artwork. Each choice replaces one source's extractor, label and employer hint, preserving its ID and the workflow's matching, schedule, retention and edited name. Populated-source replacement requires confirmation; catalog setup requirements and disabled states remain intact. No choice grants script trust. Custom careers URLs remain available, while whole-draft examples live under Advanced and reuse import confirmation.
+Role/company selectors use Rust-owned offline occupation and company catalogs. Company selection adds a literal employer filter and appends available company boards through one draft transaction; custom company terms add filters only. Imported company filters do not silently attach boards. This selection is distinct from the single-source company picker below.
 
 Standard Matching separates employment type, minimum-required years of experience and New Grad eligibility. Existing overlap rules remain labelled and require explicit conversion. Invalid numeric drafts invalidate preview and cannot continue or save. Review shows readable matching/source/readiness rows with full YAML in the details disclosure. Preview artwork is keyed by exact source/employer, displays honest failure diagnostics and is discarded whenever the preview is invalidated or cancelled; preview never persists jobs or artwork.

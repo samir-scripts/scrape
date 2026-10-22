@@ -165,11 +165,17 @@ export async function checkNativeWorkflow(origin) {
  assert((await invoke('list_scrape_runs', { limit: 100 })).length === runs.length + 2, 'Native workflow launched an unexpected execution');
  await mark('Starting role-first public search fixture');
  (await wait(() => button('SCRAPER'), 'search workflow registry')).click();
- (await wait(() => document.querySelector('button[aria-label="Add workflow"]'), 'new role-first workflow')).click();
- await wait(() => field('Target roles'), 'role-first initial form');
- assert(!field('Source URL or board identifier'), 'Role-first creation required a career URL');
- change(field('Target roles'), 'Software Engineer');
- change(field('Companies (Optional)'), 'Google,Amazon');
+ (await wait(() => button('Add workflow'), 'new role-first workflow')).click();
+ await new Promise(resolve => requestAnimationFrame(resolve));
+ const rolePicker = await wait(() => field('Target roles'), 'role picker mount');
+ change(rolePicker, 'Software Engineer');
+ (await wait(() => [...document.querySelectorAll('[role="option"]')].find(option => option.textContent.trim().startsWith('Software Engineer')), 'O*NET occupation role')).click();
+ const companyPicker = field('Companies (Optional)');
+ for (const company of ['Google', 'Amazon']) {
+  change(companyPicker, company);
+  (await wait(() => [...document.querySelectorAll('[role="option"]')].find(option => option.textContent.trim().startsWith(company)), company + ' employer option')).click();
+ }
+ await wait(() => document.body.textContent.includes('Software Engineer at Google & Amazon'), 'role/company-derived workflow name');
  button('Continue to Criteria').click();
  await wait(() => field('Date posted range'), 'role-first criteria');
  field('Date posted range').click();
@@ -198,8 +204,9 @@ export async function checkNativeWorkflow(origin) {
  assert(document.querySelector('[aria-label="Preview results"]').textContent.includes('2 eligible matches'), 'Search preview lost role/company/date criteria');
  button('Save workflow').click();
  await wait(() => button('Done'), 'role-first saved confirmation');
- const publicSearch = (await invoke('list_sources')).find(source => source.name === 'Software Engineer at Google & Amazon');
- assert(publicSearch?.kind === 'search' && publicSearch.identifier === 'themuse', 'Saved role-first provider identity changed');
+ const savedRoleCompanies = (await invoke('list_sources')).filter(source => source.name === 'Software Engineer at Google & Amazon');
+ const publicSearch = savedRoleCompanies.find(source => source.kind === 'search' && source.identifier === 'themuse');
+ assert(publicSearch && savedRoleCompanies.length === 3, 'Role/company selection did not persist public search plus both employer boards: ' + JSON.stringify(savedRoleCompanies.map(({ name, kind, identifier, enabled }) => ({ name, kind, identifier, enabled }))));
  assert(publicSearch.filters.matching.posting_date.preset === 'past_12h' && !publicSearch.filters.matching.posting_date.last_hours,
    'Named search preset was frozen or combined with an explicit age');
  assert((await invoke('list_jobs', { filter: {} })).total === searchBefore.total, 'Search preview/save persisted jobs');

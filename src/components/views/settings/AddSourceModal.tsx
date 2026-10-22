@@ -133,9 +133,9 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
         <fieldset disabled={locked} className={yaml != null ? "hidden" : "min-w-0 grid gap-4"}>
           {WORKFLOW_STEPS.map(section => <section key={section} data-workflow-step={section} hidden={step !== section} className={step === section ? "grid gap-3" : "hidden"}>
             <h3 className="text-base font-bold normal-case">{section}</h3>
-            <WorkflowSections key={`${section}:${model.inputSession}`} draft={draft} change={change} advanced={advanced} section={section} initialSource={initialSource} onTrustChanged={() => model.invalidate()} selectCompany={model.selectCompany} onDetect={index => void model.detect(index)} preview={preview} />
+            <WorkflowSections key={`${section}:${model.inputSession}`} draft={draft} change={change} advanced={advanced} section={section} initialSource={initialSource} onTrustChanged={() => model.invalidate()} selectCompany={model.selectCompany} setTargetCompanies={model.setTargetCompanies} attachCompanyBoard={model.attachCompanyBoard} onDetect={index => void model.detect(index)} preview={preview} />
             {section === "Sources" && <p aria-live="polite" className="text-[var(--color-ink-mute)]">{model.operation === "detect" ? "Detecting source…" : detected ? `Sources: ${draft.sources?.map(s => `${s.extractor.kind} (${s.label})`).join(", ") || "None"}` : "Use the public search feed or attach optional company career boards."}</p>}
-            {section === "Schedule" && <details><summary className="cursor-pointer min-h-9">Retention</summary><WorkflowSections draft={draft} change={change} advanced section="Retention" initialSource={initialSource} onTrustChanged={() => model.invalidate()} /></details>}
+            {section === "Schedule" && <details><summary className="cursor-pointer min-h-9">Retention</summary><WorkflowSections draft={draft} change={change} advanced section="Retention" initialSource={initialSource} onTrustChanged={() => model.invalidate()} setTargetCompanies={model.setTargetCompanies} attachCompanyBoard={model.attachCompanyBoard} /></details>}
           </section>)}
         </fieldset>
         {step === "Schedule" && yaml == null && <section className="grid gap-3">

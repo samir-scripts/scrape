@@ -52,8 +52,8 @@ The `src/` directory contains the single-page web application frontend for Scrap
 | Directory | Description |
 |---|---|
 | [`bindings/`](bindings/README.md) | Auto-generated TypeScript type definitions from Rust backend crates (`npm run gen:types`). |
-| [`components/`](components/README.md) | Reusable brutalist UI primitives, layout containers, filter/sort panels, shared job inspector/paginator, and top-level view screens. |
-| [`hooks/`](hooks/README.md) | Custom React hooks for workflow draft management (`useWorkflowDraft`), serialized status transitions (`useJobStatusChange`), keyboard navigation (`useHotkeys`), and input debouncing (`useDebounce`). |
+| [`components/`](components/README.md) | Reusable brutalist UI primitives, including searchable multi-selects and keyword autocomplete, layout containers, filter/sort panels, shared job inspector/paginator, and top-level view screens. |
+| [`hooks/`](hooks/README.md) | Custom React hooks for workflow draft management, including atomic company-board attachment, serialized status transitions (`useJobStatusChange`), keyboard navigation (`useHotkeys`), and input debouncing (`useDebounce`). |
 | [`lib/`](lib/README.md) | IPC client, Zustand store, local company logo cache, formatting helpers, YAML/workflow import bridges, and demo-only filtering/recorded data. |
 | [`styles/`](styles/README.md) | Tailwind CSS v4 styling rules, global typography tokens, and NieR brutalist semantic theme variables. |
 | [`test/`](test/README.md) | Vitest + React Testing Library suites covering components, user interactions, state stores, navigation, and contracts. |

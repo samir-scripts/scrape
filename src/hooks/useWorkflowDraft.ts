@@ -14,6 +14,20 @@ import { emptyRules } from "../components/views/settings/WorkflowSections";
 export const WORKFLOW_STEPS = ["Roles", "Criteria", "Sources", "Schedule"] as const;
 export type WorkflowStep = typeof WORKFLOW_STEPS[number];
 export type WorkflowDraftChange = (next: WorkflowSpec | ((current: WorkflowSpec) => WorkflowSpec)) => void;
+const appendCompanyBoards = (sources: WorkflowSourceSpec[], companyIds: readonly string[]): WorkflowSourceSpec[] => {
+  const next = [...sources];
+  for (const companyId of companyIds) {
+    const option = companyOptions.find(item => item.company.id === companyId);
+    if (!option) continue;
+    const endpoint = normalizedEndpoint(option.source.extractor.kind, option.source.extractor.url);
+    if (next.some(source => normalizedEndpoint(source.extractor.kind, source.extractor.url) === endpoint)) continue;
+    const source = structuredClone(option.source);
+    source.id = `source-${crypto.randomUUID()}`;
+    source.enabled = source.enabled && option.template.readiness === "ready" && !source.extractor.script && source.extractor.mode !== "script";
+    next.push(source);
+  }
+  return next;
+};
 const newDraft = (): WorkflowSpec => ({
   version: 8, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true },
   sources: [{ id: "source-1", label: "Cross-Company Search", enabled: true, extractor: { kind: "search", url: "" } }],
@@ -73,6 +87,23 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     const prevUrl = previous.sources?.[0]?.extractor?.url;
     const nextUrl = next.sources?.[0]?.extractor?.url;
     if (nextUrl !== prevUrl) setDetected(advanced ? (nextUrl || "") : "");
+  };
+  const setTargetCompanies = (companies: string[]) => {
+    const current = draftRef.current;
+    const previous = new Set((current.filters?.matching?.companies ?? []).map(name => name.trim().toLocaleLowerCase()));
+    const additions = companies.filter(name => name.trim() && !previous.has(name.trim().toLocaleLowerCase()));
+    const companyIds = additions.flatMap(name => {
+      const option = companyOptions.find(item => item.company.name.toLocaleLowerCase() === name.trim().toLocaleLowerCase());
+      return option ? [option.company.id] : [];
+    });
+    change(spec => ({
+      ...spec,
+      filters: { ...spec.filters, matching: { ...emptyRules(), ...spec.filters?.matching, companies } },
+      sources: appendCompanyBoards(spec.sources ?? [], companyIds),
+    }));
+  };
+  const attachCompanyBoard = (companyId: string) => {
+    change(spec => ({ ...spec, sources: appendCompanyBoards(spec.sources ?? [], [companyId]) }));
   };
   const applyCompany = (sourceId: string, companyId: string) => {
     const option = companyOptions.find(option => option.company.id === companyId);
@@ -259,5 +290,5 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
     catch (error) { report(error); return false; }
     finally { setOperation(null); }
   };
-  return { draft, change, commitInputs, inputSession, step, visited, navigate, next, advanced, setAdvanced, yaml, setYaml, detected, preview, error, errorStep, setError, operation, busy: !!operation, saved, content, cancel, invalidate, detect, applyYaml, runPreview, save, saveDisabled, canSave, replaceImport, pendingImport, confirmImport, cancelImport, runSaved, selectCompany, pendingCompany, confirmCompany: () => { if (pendingCompany) applyCompany(pendingCompany.sourceId, pendingCompany.companyId); }, cancelCompany: () => setPendingCompany(null) };
+  return { draft, change, commitInputs, inputSession, step, visited, navigate, next, advanced, setAdvanced, yaml, setYaml, detected, preview, error, errorStep, setError, operation, busy: !!operation, saved, content, cancel, invalidate, detect, applyYaml, runPreview, save, saveDisabled, canSave, replaceImport, pendingImport, confirmImport, cancelImport, runSaved, selectCompany, setTargetCompanies, attachCompanyBoard, pendingCompany, confirmCompany: () => { if (pendingCompany) applyCompany(pendingCompany.sourceId, pendingCompany.companyId); }, cancelCompany: () => setPendingCompany(null) };
 }
