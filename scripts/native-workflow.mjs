@@ -27,6 +27,17 @@ export async function checkNativeWorkflow(origin) {
  const nav = text => [...document.querySelectorAll('button')].find(element => element.textContent.trim().startsWith(text) && element.getClientRects().length);
  const field = label => document.querySelector(`input[aria-label="${label}"], textarea[aria-label="${label}"], button[aria-label="${label}"][aria-haspopup="listbox"]`);
  const change = (input, value) => { input.focus(); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })); };
+ await mark('Verifying native role-title autocomplete');
+ (await wait(() => button('WORKFLOWS'), 'role-search Workflows navigation')).click();
+ (await wait(() => [...document.querySelectorAll('button')].find(element => element.textContent.includes('ADD WORKFLOW')), 'new role-search workflow')).click();
+ const nativeRoleInput = await wait(() => field('Target roles'), 'native role picker');
+ change(nativeRoleInput, 'Software Engineer');
+ const roleOption = await wait(() => [...document.querySelectorAll('[role="option"]')].find(option => option.textContent.trim().startsWith('Software Engineer') && !option.textContent.includes('Use “')), 'indexed O*NET Software Engineer suggestion');
+ roleOption.click();
+ await wait(() => [...document.querySelectorAll('button')].some(element => element.getAttribute('aria-label')?.startsWith('Remove Software Engineer') && element.getAttribute('aria-label')?.includes('Target roles')), 'selected indexed role title');
+ document.querySelector('dialog[aria-label="Create workflow"] button[aria-label="Close dialog"]').click();
+ await wait(() => !document.querySelector('dialog[aria-label="Create workflow"][open]'), 'closed native role search workflow');
+ await mark('Native role autocomplete selected a database suggestion');
  const scheduleTrigger = await wait(() => document.querySelector('button[aria-label^="Schedule:"]'), 'scheduler status');
  scheduleTrigger.click();
  await wait(() => document.querySelector('dialog[aria-label="Schedule summary"][open]'), 'scheduler summary');

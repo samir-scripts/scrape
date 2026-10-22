@@ -23,15 +23,17 @@ remain unknown without supporting context. Remote never implies a country.
 Structured remote applicant eligibility takes precedence over a physical office
 address; extraction does not use general company prose as eligible geography.
 Unsupported names remain unknown; regexes are not a universal geocoder.
-## Occupation-title catalog
+## Runtime role-title seed
 
-`occupations/` vendors the original BLS 2018 SOC coding XLSX and O*NET 31.0
-job-title JSON gzip, their retrieval/license/checksum manifest, and a deterministic
-`catalog.json`. `scripts/import-occupation-catalog.py --check` validates the
-derived file offline; run the importer only for an intentional data refresh.
-Rust loads and validates the catalog once from `scrape-core/src/occupations.rs`
-and exports its generated TypeScript projection. BLS supplies all 867 detailed
-occupations across 23 major groups; O*NET contributes alternate titles mapped
-to their original SOC/O*NET provenance. A title remains a literal match string,
-not a semantic occupation matcher or a complete worldwide job-title registry.
-Review the source manifest and attribution before changing the pinned versions.
+`occupations/seed_role_titles.tsv` is the single normalized O*NET 31.0 title
+resource. `manifest.json` records official CSV source URLs, SHA-256 digests,
+license and attribution. The source CSVs are build-time inputs and are not
+checked in; the derived TSV is embedded in `src-tauri` and seeded into the
+indexed SQLite title-search tables on first launch. `scripts/prepare-role-title-seed.py`
+recreates or checks it from the three downloaded source files.
+
+The seed contains canonical occupation titles, reported market titles and
+alternate job titles, deduplicated case-insensitively and ranked by source tier.
+Generic “All Other” titles are omitted. Suggestions persist as literal strings;
+they do not change matching into semantic occupation matching. No spreadsheet
+or legacy BLS/O*NET catalog is bundled.

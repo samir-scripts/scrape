@@ -1,6 +1,6 @@
 # Workflow editor usability and selection repair
 
-Status: Section 1 and Section 4 are implemented and evidence-recorded. Criteria/time refinements are in place, but Sections 2, 3 and 7 still have open acceptance gates; Section 2 is next. Execute **one section per implementation pass**. A pass ends only when its acceptance gate and evidence are complete. Do not start the next section in the same pass. Keep each section's changes reviewable and update this plan/evidence before proceeding.
+Status: Sections 1 and 4 are implemented and evidence-recorded; criteria/time refinements are in place. Section 9 role-title search is in progress. Sections 2, 3 and 7 retain open gates. Execute **one section per implementation pass**. Do not start the next section until the active section's gate and evidence are complete. Keep each section's changes reviewable and update this plan/evidence before proceeding.
 
 ## Contract and boundaries
 
@@ -81,12 +81,12 @@ Status: Section 1 and Section 4 are implemented and evidence-recorded. Criteria/
 
 ## Section 9 — Evaluate and improve selectable role-title data
 
-1. Audit the current bundled BLS/O*NET role catalog, import script, licenses/provenance, query path, payload size and role autocomplete before adding data. The repository already has a generated offline catalog; do not create a second source of truth or a redundant SQLite table by default.
-2. Compare the requested BLS `Occupation Data`, `Sample of Reported Titles`, and `Alternate Titles` inputs against actual gaps in selectable titles. Use official versioned files and retain source/version/hash/license attribution. Exclude generic `All Other` titles and deduplicate case-insensitively while retaining canonical SOC mapping and source tier.
-3. Prefer extending the current generated catalog/resource if it meets startup and query requirements. Add first-launch SQLite seeding only if repository evidence shows the existing query architecture requires a database table; if needed, use an immutable forward migration, one explicit transaction, prepared inserts, an index, idempotent nonempty check, and populated-upgrade/rollback/retry tests. Measure real cold and warm paths rather than assuming <300ms/0ms.
-4. Search suggestions must allow adding a custom title and remain literal filters. Do not use the title catalog to expand jobs or alter matcher behavior. No XLSX in source, generated resources, installer or runtime.
+1. Compare the old bundled catalog with the full official O*NET 31.0 `Occupation Data`, `Sample of Reported Titles`, and `Job Titles` CSVs. The previous selectable catalog held 2,116 labels and imported alternatives only from the 15 SOC major family; it did not meet the requested occupational coverage.
+2. Normalize the three official datasets into one TSV: retain SOC code/title/tier, trim, filter “All Other”, deduplicate case-insensitively keeping the lowest tier, and sort by tier/title. Record exact source hashes, URLs, CC BY 4.0 attribution and the generated TSV hash. The older O*NET release names its third file “Alternate Titles”; version 31.0 distributes `job_titles.csv`.
+3. Use one immutable forward migration to create an indexed local SQLite title and token-search schema, then seed after migrations only when the table is empty. All inserts must share one explicit transaction and use prepared batches. Test idempotent skip, transaction rollback/retry, populated v29→v30 upgrade preservation, indexed prefix search, and actual cold/warm latency. The old catalog does not meet native payload/query requirements; remove the workbook and obsolete static catalog instead of shipping both.
+4. Query suggestions through the existing frontend multi-select and Tauri IPC; preserve its `string[]` value contract, custom literal titles, ranking separate from the matcher, and preview/save semantics. Browser demo mode must not claim the native database is populated.
 
-**Gate:** deterministic catalog importer/checks, license/provenance audit, catalog size/query/startup measurement, and actual role search/selection/custom-title/preview/save flow with unchanged frontend contract. Record why a runtime table is or is not justified.
+**Gate:** deterministic normalizer tests and `--check`, source/license/hash audit, no XLSX or legacy role catalog in source or app resources, a measured fresh seed under 300ms and non-empty skip, plus an actual native role search/selection/custom-title/preview/save flow with unchanged matcher behavior.
 
 ## Section 10 — Repair company autocomplete without claiming a complete directory
 

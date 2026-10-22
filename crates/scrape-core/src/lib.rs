@@ -14,7 +14,6 @@ pub mod hydration;
 pub mod identity;
 pub mod locator;
 pub mod matching;
-pub mod occupations;
 pub mod posting_date;
 pub mod xpath;
 pub use identity::PostingIdentity;

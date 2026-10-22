@@ -16,6 +16,9 @@ pub mod notifications;
 #[cfg(test)]
 mod ownership_upgrade_tests;
 pub mod postings;
+#[cfg(test)]
+mod role_title_tests;
+pub mod role_titles;
 pub mod runs;
 #[cfg(test)]
 mod search_upgrade_tests;
@@ -69,6 +72,7 @@ pub async fn init_db(db_path: &Path) -> Result<SqlitePool> {
         tracing::info!(path = %backup.display(), "Created pre-migration database backup");
     }
     run_migrations(&pool).await?;
+    role_titles::seed_role_titles(&pool).await?;
 
     Ok(pool)
 }

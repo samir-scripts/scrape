@@ -47,3 +47,23 @@
 - `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/workflows.pw.ts` — 3 tests passed; workflow preview, save and reopen retained country, state, city and workplace rules.
 
 **Limits:** browser journey used fixture/demo data only; no live location service or global city directory is used. Native WKWebView, physical pointer and user's database were not exercised.
+
+## Section 9 — O*NET role-title seed and indexed search
+
+**Implemented:** replaced the incomplete static BLS/O*NET title catalog and workbook inputs with one normalized O*NET 31.0 TSV (45,716 case-insensitively unique titles; 1,535,832 bytes), with source URLs, downloaded-file SHA-256 digests, CC BY 4.0 terms, attribution and output digest in the data manifest. No XLSX, legacy static catalog or generated role-title projection remains. Migration 30 creates indexed SQLite role and token tables; startup seeds only an empty table in one prepared-batch transaction. The Tauri search command feeds the existing multi-select's async suggestions and preserves literal custom titles and the unchanged role-filter contract.
+
+**Checks run:**
+
+- `python3 scripts/prepare-role-title-seed.py --occupation-data /tmp/onet-31.0-occupation-data.csv --reported-titles /tmp/onet-31.0-sample-of-reported-titles.csv --alternate-titles /tmp/onet-31.0-job-titles.csv --check && python3 -m unittest scripts.test_role_title_seed` — deterministic output check passed; 3 normalizer tests passed.
+- `cargo test --workspace` — 535 tests passed across 16 suites, including migration 30 population/recovery, role seed rollback/retry and indexed search.
+- `cargo test -p scrape --lib db::role_title_tests -- --nocapture` — 2 database tests passed; debug seed 696ms, populated-table skip 1ms.
+- `cargo test -p scrape --lib --release db::role_title_tests::role_title_seed_search_is_indexed_idempotent_and_atomic -- --nocapture` — 1 test passed; optimized cold seed 231ms for 45,716 rows, populated-table skip 0ms.
+- `npm run gen:types`, `npx tsc --noEmit`, `npm run build`, and `node scripts/check-style.mjs` — passed. Production build transformed 789 modules; existing large-chunk advisory remains.
+- `npx vitest run src/test/workflow_editor_interaction.test.tsx src/test/multi_select_combobox_interaction.test.tsx --maxWorkers=1` — 2 files, 14 tests passed, including asynchronous suggestion selection and custom literal values.
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/workflows.pw.ts --workers=1` — 3 workflow browser journeys passed.
+- `npm run build:sidecar`, `cargo build -p scrape`, `rustfmt --edition 2021 --check` on changed Rust files, `node --check scripts/native-workflow.mjs`, `python3 -m json.tool crates/scrape-core/data/occupations/manifest.json`, and `git diff --check` — passed.
+- Spreadsheet search `**/*.xlsx;**/*.xls;**/*.xlsm` — no files found.
+
+**Native limit:** `SCRAPE_STARTUP_MODES=fresh SCRAPE_NATIVE_WORKFLOW=1 npm run test:native-startup` failed before the WKWebView emitted its first workflow log (`NATIVE_SMOKE_WINDOW ... focused=false`). The native role picker, preview, save and run journey did not execute. The Plan 14 Section 9 gate remains open until isolated native acceptance succeeds.
+
+**Unrelated check blockers:** `cargo fmt --all --check` and workspace Clippy are blocked by formatting and `clippy::iter_overeager_cloned` in the already-modified `src-tauri/tests/worker_repository.rs`; that user-owned file was left untouched. Changed Rust files pass targeted rustfmt checking. No live or user database was opened.

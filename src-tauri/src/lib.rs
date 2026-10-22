@@ -182,6 +182,7 @@ pub fn run() {
             commands::jobs::reclassify_jobs,
             commands::jobs::preview_filter_impact,
             commands::jobs::list_location_options,
+            commands::jobs::search_role_titles,
             commands::jobs::toggle_job_favorite,
             commands::jobs::set_job_favorite,
             commands::jobs::cleanup_expired_jobs,

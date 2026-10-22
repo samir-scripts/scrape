@@ -316,3 +316,21 @@ Startup reclassification repairs saved jobs with stale enrichment versions (`enr
 Version-3 rows update only `experience_min`, `experience_max`, `experience_raw`, `is_new_grad`, and `experience_evidence` from the corrected classifier; title-only records (null descriptions) receive title-only classification without inventing numeric years. Pre-version-3 rows with descriptions run the historical description repair before classification. Known employment types, notes, favorites, tracked status, compensation, and schedules are strictly preserved.
 
 Exact employer branding keys (`relationship_key(source_id, company)`) are linked to unlinked saved jobs (`company_branding_key IS NULL`) where an exact verified relationship already exists in `employer_branding`, without requiring a rescrape. Unlinked jobs from deleted sources or without exact employer records remain untouched; no fuzzy or cross-source employer merging is performed.
+
+## O*NET role-title lookup (migration 30)
+
+Migration `0030_role_titles.sql` adds the canonical role-title table and a
+token-prefix lookup table. It does not update workflows, jobs, settings, sources,
+or historical checksums. The O*NET 31.0 seed is a bundled TSV, not an XLSX or a
+runtime network download. After migrations, startup counts `role_titles`; a
+non-empty table skips seeding. An empty table is populated with prepared batches
+inside one explicit SQLite transaction. A failed insert rolls back the entire
+seed, leaving the empty table safe to retry on the next launch.
+
+`role_title_tests.rs` verifies full seed coverage, indexed prefix search, the
+non-empty skip, injected insert-failure rollback and retry, and a populated
+v29→v30 upgrade that retains a saved job's status, note, favorite and status
+event plus a setting. It also checks that migration failure rolls back schema,
+startup creates one consistent pre-migration snapshot, retry succeeds, and a
+subsequent open does not reseed or create another snapshot. Tests use temporary
+databases only; they do not open the user's live database.

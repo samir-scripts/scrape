@@ -19,23 +19,13 @@ import { CustomExtractorConfig } from "./CustomExtractorConfig";
 import type { Source } from "../../../bindings/Source";
 import { MultiSelectCombobox } from "../../ui/MultiSelectCombobox";
 import type { MultiSelectOption } from "../../ui/MultiSelectCombobox";
-import { OCCUPATION_CATALOG } from "../../../bindings/occupationCatalogData";
+import { api } from "../../../lib/api";
 import { normalizedEndpoint } from "../../../lib/yamlWorkflow";
 import { ClockPicker } from "../../ui/ClockPicker";
 import { from24Hour, pad2, to24Hour } from "../../../lib/cronClock";
 
-const occupationGroups = new Map<string, string>(OCCUPATION_CATALOG.groups.map(group => [group.code, group.name]));
-const roleOptions: MultiSelectOption[] = (() => {
-  const grouped = new Map<string, Set<string>>();
-  for (const title of OCCUPATION_CATALOG.titles) {
-    const groupNames = title.soc_codes.map(code => occupationGroups.get(`${code.slice(0, 2)}-0000`)).filter(Boolean);
-    const detail = `${title.origin.toUpperCase()} · SOC ${title.soc_codes.join(", ")}${title.onetsoc_codes.length ? ` · O*NET ${title.onetsoc_codes.join(", ")}` : ""}${title.source_codes.length ? ` · Sources ${title.source_codes.join(", ")}` : ""}${groupNames.length ? ` · ${[...new Set(groupNames)].join(", ")}` : ""}`;
-    const metadata = grouped.get(title.label) ?? new Set<string>();
-    metadata.add(detail);
-    grouped.set(title.label, metadata);
-  }
-  return [...grouped].map(([label, metadata]) => ({ value: label, label, description: [...metadata].join("; "), searchText: [...metadata].join(" ") }));
-})();
+const loadRoleOptions = async (query: string): Promise<MultiSelectOption[]> =>
+  (await api.searchRoleTitles(query)).map(title => ({ value: title, label: title }));
 const companySelectionOptions: MultiSelectOption[] = companyOptions.map(({ company, source, domain, template }) => ({
   value: company.name, label: company.name,
   searchText: `${company.name} ${source.extractor.kind} ${domain} ${template.readiness}`,
@@ -147,14 +137,14 @@ export function WorkflowSections({
         <section aria-label="Target roles" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
           <h4 className="font-bold text-sm">Target Roles</h4>
           <MultiSelectCombobox label="Target roles" value={rules.target_roles || []}
-            options={roleOptions} allowCustom onChange={target_roles => setRules({ target_roles })} />
+            options={[]} loadOptions={loadRoleOptions} allowCustom onChange={target_roles => setRules({ target_roles })} />
           <p className="text-xs text-[var(--color-ink-mute)]">
             Job titles must contain any selected text; matching is literal, not every title in an occupation. Choose alternate titles or add custom text as needed. Leave empty to match any role.
           </p>
           <details className="text-xs text-[var(--color-ink-mute)]">
-            <summary className="cursor-pointer underline">Catalog sources & attribution · BLS 2018 · O*NET 31.0</summary>
+            <summary className="cursor-pointer underline">Role-title sources & attribution · O*NET 31.0</summary>
             <p className="mt-2">
-              <a className="underline" href="https://www.bls.gov/soc/2018/" target="_blank" rel="noreferrer">BLS SOC</a> · <a className="underline" href="https://www.onetcenter.org/database.html" target="_blank" rel="noreferrer">O*NET database</a> · <a className="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0 license</a>. Includes information from the O*NET 31.0 Database by USDOL/ETA, used under CC BY 4.0. Scrape selected and reorganized these titles; USDOL/ETA has not approved, endorsed, or tested these modifications.
+              <a className="underline" href="https://www.onetcenter.org/database.html" target="_blank" rel="noreferrer">O*NET 31.0 database</a> · <a className="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0 license</a>. Suggestions combine canonical, reported and alternate titles; matching remains literal. Includes information from the O*NET 31.0 Database by USDOL/ETA. Scrape's derived catalog is not endorsed or tested by USDOL/ETA.
             </p>
           </details>
         </section>

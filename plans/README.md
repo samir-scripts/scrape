@@ -14,7 +14,7 @@ Prior revision: [Reliable ingestion, multi-source workflows, and UI repair](11-r
 
 Plan 11 remains a completed prior revision. Its eight implementation sections, evidence and unresolved original-report reproduction status are retained in [the Plan 11 ledger](11-implementation-evidence.md).
 
-Plan 14 is the active, one-section-at-a-time workflow usability repair. Section 1 is implemented in `2cf79a7`; see its [evidence ledger](14-implementation-evidence.md). Section 2 is next. Plan 14 preserves the current Plan 13 role/company catalog and Rust-owned workflow contracts unless investigation proves a contract change necessary.
+Plan 14 is the active, one-section-at-a-time workflow usability repair. Section 1 and Section 4 are implemented; criteria/time refinements are recorded, and Section 9 is being implemented as the separate O*NET role-title seed/search section. See its [evidence ledger](14-implementation-evidence.md). No other section starts until the current section's gate and evidence are complete; the old static catalog/XLSX pipeline is superseded by Section 9.
 
 Current UI refinement and independent workflow configuration is specified in
 [plan 10](10-ui-workflow-refinement.md). It supersedes conflicting global

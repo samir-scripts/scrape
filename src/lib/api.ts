@@ -1371,6 +1371,10 @@ const apiImplementation = {
     if (!isTauri()) return Promise.resolve({ countries: [], regions: [] });
     return invoke<LocationOptions>("list_location_options");
   },
+  searchRoleTitles: (query: string): Promise<string[]> => {
+    if (!isTauri()) return Promise.resolve([]);
+    return invoke<string[]>("search_role_titles", { query });
+  },
 
   getScrapeRun: (runId: string): Promise<ScrapeRun> => {
     if (!isTauri()) {

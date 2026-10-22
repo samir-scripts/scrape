@@ -1,7 +1,22 @@
-# BLS and O*NET occupation catalog
+# O*NET role-title seed
 
-This directory vendors the unmodified BLS 2018 SOC coding XLSX, the original O*NET 31.0 Job Titles JSON compressed as gzip, source/license/checksum metadata in `manifest.json`, and the deterministic derived `catalog.json` consumed by Rust.
+`seed_role_titles.tsv` is the sole normalized role-title asset. It is generated
+from the three official O*NET 31.0 CSV datasets listed with their SHA-256 digests,
+URLs, CC BY 4.0 terms and attribution in `manifest.json`. Source CSV files are
+build-time inputs and are not checked into the repository; the TSV is embedded in
+the native application through `include_str!` and is not a spreadsheet.
 
-Run `python3 scripts/import-occupation-catalog.py` only for an explicit catalog refresh. `--check` validates the checked-in derived JSON offline and never writes. Importer tests use in-memory/temporary fixtures. The application loads the pinned catalog locally and performs no title lookup request.
+Recreate or check the deterministic TSV with
+`python3 scripts/prepare-role-title-seed.py`, passing `--occupation-data`,
+`--reported-titles`, and `--alternate-titles` paths to the matching downloaded
+CSV files. `python3 -m unittest scripts.test_role_title_seed` exercises trimming,
+SOC validation, tier precedence, case-insensitive de-duplication, catch-all
+filtering and ordering.
 
-BLS detailed occupations are complete for the 2018 SOC structure; BLS public-domain material is attributed to the Bureau per its reuse guidance. O*NET alternatives retain their original SOC and source-code references, including ambiguous title mappings. Catalog selection persists literal title strings and does not imply semantic occupation-wide matching. O*NET 31.0 material is used under CC BY 4.0; see `manifest.json` for per-dataset license, attribution and download provenance.
+The seed contains 45,716 unique titles. It combines canonical occupation titles,
+reported market titles and alternate job titles; generic “All Other” records are
+excluded. Tier 1 outranks tier 2, which outranks tier 3. SOC codes remain attached
+for source traceability. UI selections remain literal text filters, not semantic
+occupation matching. Scrape's derivative includes information from the O*NET 31.0
+Database by USDOL/ETA under CC BY 4.0; USDOL/ETA has not approved, endorsed, or
+tested the derivative.

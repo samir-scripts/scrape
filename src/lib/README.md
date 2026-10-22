@@ -10,7 +10,7 @@ The `src/lib` directory contains the Tauri IPC client, Zustand UI state store, l
 
 | File | Purpose & Key Exports |
 |---|---|
-| [`api.ts`](api.ts) | **Tauri IPC Client**: Strongly-typed wrappers for all backend commands (`listJobs`, `getJob`, `updateJobStatus`, `removeJob`, `restorePosting`, `getCompanyLogoAsset`, `validateWorkflow`, `previewWorkflow`, `saveWorkflow`, `runScrapeNow`, `previewDataCleanup`, `executeDataCleanup`, etc.), with an explicit recorded/synthetic browser fallback when `?demo=1` is active. |
+| [`api.ts`](api.ts) | **Tauri IPC Client**: Strongly-typed wrappers for backend commands, including native indexed role-title search (`searchRoleTitles`); browser demonstration mode remains explicit and does not claim a populated native role database. |
 | [`companyLogoCache.ts`](companyLogoCache.ts) | **Local Logo Asset Cache**: Content-addressed in-memory cache (`loadCompanyLogoAsset`, `clearCompanyLogoCache`) that reads verified PNG artwork once per reference over local IPC (`get_company_logo_asset`). |
 | [`constants.ts`](constants.ts) | **Application Constants**: Status display metadata (`STATUS_CONFIG`), tracked pipeline stages (`TRACKED_STAGES`), role metadata (`ROLE_CONFIG`), navigation tabs (`NAV_TABS`), and default filter initializers. |
 | [`cronClock.ts`](cronClock.ts) | **Cron & Clock Math**: Utilities converting 24-hour clock face coordinates into cron expressions and `HH:MM` time strings. |

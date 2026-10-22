@@ -1,27 +1,29 @@
 {
-  "datasets": [
+  "dataset_version": "O*NET 31.0",
+  "sources": [
     {
-      "name": "BLS Standard Occupational Classification",
-      "version": "2018",
-      "url": "https://www.bls.gov/soc/2018/soc_structure_2018.xlsx",
-      "retrieved_at": "2026-10-21",
-      "license": "Public domain; U.S. government work",
-      "license_url": "https://www.bls.gov/bls/linksite.htm",
-      "stored_file": "bls-2018-structure.xlsx",
-      "sha256_download_bytes": "ade08af40923266f3a854842e888ca3e93c15b26a147c20a2b12a61f4c4f4077",
-      "sha256_stored_bytes": "ade08af40923266f3a854842e888ca3e93c15b26a147c20a2b12a61f4c4f4077"
+      "name": "Occupation Data",
+      "url": "https://www.onetcenter.org/dl_files/database/db_31_0_csv/occupation_data.csv",
+      "sha256_download_bytes": "a09eae1d6609686e44e05b7290993a1c8b523d8ca224bc0eedc194c855c3ee02",
+      "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)"
     },
     {
-      "name": "O*NET Database Job Titles",
-      "version": "31.0",
-      "url": "https://www.onetcenter.org/dl_files/database/db_31_0_json/job_titles.json",
-      "retrieved_at": "2026-10-21",
-      "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
-      "license_url": "https://creativecommons.org/licenses/by/4.0/",
-      "stored_file": "onet-31.0-job-titles.json.gz",
-      "sha256_download_bytes": "862953f66de9675402a41380242374077af9dc266b1455bee325e953b079bf21",
-      "sha256_stored_bytes": "b5c5da78c0270fa8ba6e2ec4be927be4e8f7ef80febb9e99bb4ed023b30d1db2"
+      "name": "Sample of Reported Titles",
+      "url": "https://www.onetcenter.org/dl_files/database/db_31_0_csv/sample_of_reported_titles.csv",
+      "sha256_download_bytes": "5d76040b7b0602ea217660648f8363e7980edd1870f96574a2eeaa6a822d2666",
+      "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)"
+    },
+    {
+      "name": "Job Titles (formerly Alternate Titles)",
+      "url": "https://www.onetcenter.org/dl_files/database/db_31_0_csv/job_titles.csv",
+      "sha256_download_bytes": "75a3b46d6edc5996117c10c9ed488c9a06f7495d02969e9d12873ab14a21540",
+      "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)"
     }
   ],
-  "attribution": "The BLS Standard Occupational Classification is a U.S. government work. Includes information from the O*NET 31.0 Database by USDOL/ETA, used under CC BY 4.0. Scrape selected and reorganized these titles; USDOL/ETA has not approved, endorsed, or tested these modifications."
+  "generated_resource": {
+    "file": "seed_role_titles.tsv",
+    "unique_title_rows": 45716,
+    "sha256": "8ae4fe4f2109ec781a8caedd5090b78a5d80459f542159247d254fc5fa49135a"
+  },
+  "attribution": "Includes information from the O*NET 31.0 Database by USDOL/ETA, used under CC BY 4.0. Scrape selected and reorganized these titles; USDOL/ETA has not approved, endorsed, or tested these modifications."
 }

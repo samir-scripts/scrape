@@ -14,7 +14,7 @@
 ```
 scrape-core/
 ├── Cargo.toml      # Package manifest with optional sqlx features and ts-rs bindings
-├── data/           # Pinned ISO geography and BLS/O*NET occupation-title catalogs
+├── data/           # Pinned ISO geography and the normalized O*NET role-title seed
 ├── examples/       # Reproducible branding asset validator (cache-logo-fixture.rs)
 └── src/            # Core domain modules
     ├── branding.rs     # Employer logo evidence resolution, decoding, and bounded lossless WebP/PNG normalization
@@ -23,7 +23,6 @@ scrape-core/
     ├── extraction.rs   # Extraction modes, script validation, canonical hashes and shared bounds
     ├── filter.rs       # SQL filter compilation and legacy/query predicate evaluation
     ├── geography.rs    # Country/subdivision catalog and bounded geographic normalization
-    ├── occupations.rs  # Versioned offline title catalog and generated TS exports
     ├── hydration.rs    # Bounded Next.js and Nuxt framework hydration state extraction
     ├── identity.rs     # Canonical posting identity and URL normalization
     ├── lib.rs          # Crate root, module exports, and timestamp utilities
@@ -45,7 +44,7 @@ scrape-core/
 | File | Responsibilities & Exports |
 |---|---|
 | [`Cargo.toml`](Cargo.toml) | Declares crate metadata and dependencies (`serde`, `chrono`, `ts-rs`, `regex`, `image`, `resvg`, `isocountry`, optional `sqlx`). |
-| [`data/`](data/README.md) | Contains the Rust-owned geography and versioned BLS/O*NET occupation-title catalogs, provenance, import/check workflow, and generated frontend projections. |
+| [`data/`](data/README.md) | Contains the Rust-owned geography catalog and versioned O*NET title seed provenance. |
 | [`examples/cache-logo-fixture.rs`](examples/cache-logo-fixture.rs) | CLI example that runs raw logo bytes through production `branding` validation to reproduce review PNGs. |
 | [`src/lib.rs`](src/README.md) | Crate root. Re-exports public submodules and shared utilities (`now_iso()`, `INGESTION_LIMITS`, `PROTOCOL_VERSION`). |
 | [`src/types.rs`](src/README.md#typesrs) | Canonical domain enumerations: `JobStatus`, `RoleType`, `TriState`, `SalaryInterval`, `SalarySource`, `SourceKind`, `SourceCadence`, `ClearanceLevel`, `WorkAuthRequirement`, and `WorkplaceType`. |
@@ -54,7 +53,6 @@ scrape-core/
 | [`src/filter.rs`](src/README.md#filterrs) | SQL-style filter parser and evaluator plus parameterized SQLite `WHERE` clause compilation for saved-job queries and `PostingRules`. |
 | [`src/identity.rs`](src/README.md#identityrs) | Canonical `PostingIdentity` derivation across ATS providers, JSON-LD, and custom selectors so deduplication, rescraping, and suppression share one identity rule. |
 | [`src/geography.rs`](src/README.md#geographyrs) | ISO alpha-2 country and qualified subdivision (`US-CA`, `CA-ON`, etc.) catalog, alias resolution, and exported `CountryOption`/`RegionOption` bindings. |
-| [`src/occupations.rs`](src/README.md#occupationsrs) | Pinned BLS 2018 detailed occupations plus O*NET 31.0 literal alternate titles; Rust validates provenance/reference integrity and exports `OCCUPATION_CATALOG` to generated TypeScript data. |
 | [`src/posting_date.rs`](src/README.md#posting_daters) | Authoritative publication date parsing and calendar-day comparison in an explicit IANA timezone without conflating provider edit timestamps with publication dates. |
 | [`src/branding.rs`](src/README.md#brandingrs) | Employer identity precedence, `LogoEvidence`/`LogoStatus`/`LogoMethod`, bounded image decoding (PNG/JPEG/WebP/SVG), and canonical PNG re-encoding. |
 | [`src/role.rs`](src/README.md#rolers) | Role classification engine that analyzes job titles and external hints to categorize postings into `RoleType` (`swe`, `data`, `product`, `design`, `seasonal`, `other`). |

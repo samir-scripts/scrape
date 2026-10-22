@@ -1,5 +1,5 @@
 import { createPortal } from "react-dom";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { Icon } from "./Icon";
 import { PopupPosition, positionOptions } from "./Select";
@@ -13,10 +13,11 @@ export interface MultiSelectOption {
 
 const normalize = (value: string) => value.trim().toLocaleLowerCase();
 
-export function MultiSelectCombobox({ label, value, options, onChange, placeholder, allowCustom = false, disabled, describedBy }: {
+export function MultiSelectCombobox({ label, value, options, onChange, placeholder, allowCustom = false, disabled, describedBy, loadOptions }: {
   label: string; value: string[]; options: readonly MultiSelectOption[];
   onChange: (values: string[]) => void; placeholder?: string; allowCustom?: boolean;
   disabled?: boolean; describedBy?: string;
+  loadOptions?: (query: string) => Promise<readonly MultiSelectOption[]>;
 }): React.JSX.Element {
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -26,9 +27,34 @@ export function MultiSelectCombobox({ label, value, options, onChange, placehold
   const [batch, setBatch] = useState(50);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
-  const normalized = useMemo(() => options.map(option => ({
+  const [loadedOptions, setLoadedOptions] = useState<readonly MultiSelectOption[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const updateQuery = (next: string) => {
+    setQuery(next);
+    if (loadOptions) {
+      setLoadedOptions([]);
+      setSearchError("");
+      setLoading(true);
+    }
+  };
+  useEffect(() => {
+    if (!loadOptions) return;
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      setSearchError("");
+      void loadOptions(query)
+        .then(result => { if (active) setLoadedOptions(result); })
+        .catch(() => { if (active) { setLoadedOptions([]); setSearchError("Suggestions unavailable; custom values still work."); } })
+        .finally(() => { if (active) setLoading(false); });
+    }, query ? 120 : 0);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [loadOptions, query]);
+  const availableOptions = loadOptions ? loadedOptions : options;
+  const normalized = useMemo(() => availableOptions.map(option => ({
     option, label: normalize(option.label), text: normalize(`${option.label} ${option.value} ${option.searchText ?? ""}`),
-  })), [options]);
+  })), [availableOptions]);
   const tokens = normalize(query).split(/\s+/).filter(Boolean);
   const matches = normalized.filter(item => tokens.every(token => item.text.includes(token))).sort((a, b) => {
     const queryKey = normalize(query);
@@ -37,7 +63,7 @@ export function MultiSelectCombobox({ label, value, options, onChange, placehold
     return rankA - rankB || a.option.label.localeCompare(b.option.label);
   }).map(item => item.option);
   const selectedKeys = new Set(value.map(normalize));
-  const custom = query.trim() && allowCustom && !normalized.some(item => item.label === normalize(query)) && !selectedKeys.has(normalize(query))
+  const custom = query.trim() && allowCustom && !loading && !normalized.some(item => item.label === normalize(query)) && !selectedKeys.has(normalize(query))
     ? query.trim() : "";
   const choices = custom ? [...matches.slice(0, batch), { value: custom, label: `Use “${custom}”` }] : matches.slice(0, batch);
   const commit = (item: string) => {
@@ -46,7 +72,7 @@ export function MultiSelectCombobox({ label, value, options, onChange, placehold
       : [...value, item];
     const seen = new Set<string>();
     onChange(next.filter(current => { const key = normalize(current); if (!key || seen.has(key)) return false; seen.add(key); return true; }));
-    setQuery(""); setBatch(50); setActiveIndex(-1); setOpen(false);
+    updateQuery(""); setBatch(50); setActiveIndex(-1); setOpen(false);
   };
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.nativeEvent.isComposing || event.keyCode === 229) return;
@@ -57,19 +83,20 @@ export function MultiSelectCombobox({ label, value, options, onChange, placehold
       if (open && activeIndex >= 0 && choices[activeIndex]) commit(choices[activeIndex].value);
       return;
     }
-    if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); setOpen(false); setQuery(""); setActiveIndex(-1); return; }
+    if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); setOpen(false); updateQuery(""); setActiveIndex(-1); return; }
     if (event.key === "Backspace" && !query && value.length) { event.preventDefault(); removers.current[value.length - 1]?.focus(); }
   };
   return <div className="grid min-w-0 gap-2">
-    <span className="sr-only" role="status" aria-live="polite">{value.length} {label} selections. Showing {Math.min(batch, matches.length)} of {matches.length} results.</span>
+    <span className="sr-only" role="status" aria-live="polite">{searchError || (loading ? `Searching ${label.toLocaleLowerCase()}…` : `${value.length} ${label} selections. Showing ${Math.min(batch, matches.length)} of ${matches.length} results.`)}</span>
     <PopupPosition root={root} open={open} onTarget={setPopupTarget}>
       <div ref={root} className="flex min-w-0 gap-2">
         <input ref={input} type="text" role="combobox" aria-label={label} aria-describedby={describedBy}
           aria-expanded={open} aria-autocomplete="list" aria-controls={`${label.replace(/\W+/g, "-")}-options`}
+          aria-busy={loading}
           aria-activedescendant={open && activeIndex >= 0 ? `${label.replace(/\W+/g, "-")}-option-${activeIndex}` : undefined}
           autoComplete="off" value={query} disabled={disabled} placeholder={placeholder ?? `Search ${label.toLocaleLowerCase()}`}
           className="min-h-[var(--control-height)] min-w-0 flex-1 border border-[var(--color-ink)] bg-[var(--color-paper)] px-3 py-2 text-sm normal-case text-[var(--color-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-signal)] disabled:opacity-60"
-          onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onChange={event => { setQuery(event.target.value); setBatch(50); setActiveIndex(-1); setOpen(true); }}
+          onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onChange={event => { updateQuery(event.target.value); setBatch(50); setActiveIndex(-1); setOpen(true); }}
           onKeyDown={handleKeyDown} onBlur={() => { if (!root.current?.contains(document.activeElement)) setOpen(false); }} />
         <button type="button" aria-label={`Open ${label}`} disabled={disabled} aria-expanded={open}
           className="min-h-[var(--control-height)] min-w-9 border border-[var(--color-ink)] bg-[var(--color-paper)] px-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-signal)] disabled:opacity-60"

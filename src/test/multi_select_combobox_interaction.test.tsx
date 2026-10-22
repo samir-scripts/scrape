@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -46,5 +46,28 @@ describe("MultiSelectCombobox", () => {
     await user.type(input, "Official");
     await user.tab();
     expect(screen.getByLabelText("Selection").textContent).toBe("[]");
+  });
+
+  it("loads asynchronous suggestions for the typed query and commits their literal value", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const loadOptions = vi.fn(async (query: string) => query
+      ? [{ value: "Software Developers", label: "Software Developers" }]
+      : []);
+    render(
+      <MultiSelectCombobox
+        label="Target roles"
+        value={[]}
+        options={[]}
+        loadOptions={loadOptions}
+        allowCustom
+        onChange={onChange}
+      />,
+    );
+    const input = screen.getByRole("combobox", { name: "Target roles" });
+    await user.type(input, "software dev");
+    await user.click(await screen.findByRole("option", { name: "Software Developers" }));
+    expect(loadOptions).toHaveBeenCalledWith("software dev");
+    expect(onChange).toHaveBeenCalledWith(["Software Developers"]);
   });
 });

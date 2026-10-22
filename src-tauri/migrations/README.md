@@ -54,6 +54,7 @@ Additional forward migrations:
 | 0027 | Scope source endpoint uniqueness to workflow ownership, preserving job/run links through table replacement. |
 | 0028 | Admit Workday sources while preserving existing source columns, constraints, indexes and foreign-key links. |
 | 0029 | Admit cross-employer `search` sources; populated v28 upgrade tests cover complete historical projections, consistent backup, injected rollback, retry and idempotent restart. |
+| 0030 | Creates indexed `role_titles` and token-prefix lookup tables; the embedded O*NET TSV is seeded after migrations only when the title table is empty. |
 
 The Rust backfills preserve source identities, uncertain legacy salary values and
 unresolved suppression keys. Populated upgrade tests preserve all tracked states,

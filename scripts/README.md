@@ -11,7 +11,7 @@ The `scripts/` directory contains Node.js automation scripts used during develop
 | File | Language / Runtime | Purpose & Execution Flow |
 |---|---|---|
 | [`generate-template-catalog.mjs`](generate-template-catalog.mjs) | Node.js + Rust | Runs the Rust catalog exporter and writes the picker JSON/YAML projections. `--check` fails on drift; does not touch any database or execute scraping. |
-| [`import-occupation-catalog.py`](import-occupation-catalog.py) | Python 3 standard library | Imports checked-in BLS 2018 and O*NET 31.0 source files into the deterministic bundled occupation catalog; `--check` validates drift offline. Tests: `python3 -m unittest discover -s scripts -p 'test_occupation_catalog.py'`. |
+| [`prepare-role-title-seed.py`](prepare-role-title-seed.py) | Python 3 standard library | Normalizes official O*NET 31.0 Occupation Data, Sample of Reported Titles, and Job Titles CSVs into the one bundled TSV; `--check` validates deterministic output. Tests: `python3 -m unittest scripts.test_role_title_seed`. |
 | [`test-app-startup.mjs`](test-app-startup.mjs) | Node.js (ESM) | Automated smoke test for CI and local verification. Boots the Vite development server, performs an HTTP GET request against `http://localhost:1420/index.html`, verifies module bundling and HTML transformation without runtime panics, and cleanly terminates the process. |
 
 ---
@@ -27,13 +27,14 @@ node scripts/test-app-startup.mjs
 ```
 
 ```bash
-python3 scripts/import-occupation-catalog.py
-python3 scripts/import-occupation-catalog.py --check
-python3 -m unittest discover -s scripts -p 'test_occupation_catalog.py'
+python3 scripts/prepare-role-title-seed.py --occupation-data /path/to/occupation_data.csv --reported-titles /path/to/sample_of_reported_titles.csv --alternate-titles /path/to/job_titles.csv
+python3 scripts/prepare-role-title-seed.py --occupation-data /path/to/occupation_data.csv --reported-titles /path/to/sample_of_reported_titles.csv --alternate-titles /path/to/job_titles.csv --check
+python3 -m unittest scripts.test_role_title_seed
+
 ```
 
-The occupation inputs, hashes, retrieval date and license attribution are
-documented in [`crates/scrape-core/data/occupations/manifest.json`](../crates/scrape-core/data/occupations/manifest.json).
+The source CSV URLs, hashes, license and attribution are documented in
+[`crates/scrape-core/data/occupations/manifest.json`](../crates/scrape-core/data/occupations/manifest.json).
 
 `check-style.mjs` checks relevant production class strings rather than comments or
 fixtures. `native-smoke.mjs` drives real Tauri IPC with a temporary database, local

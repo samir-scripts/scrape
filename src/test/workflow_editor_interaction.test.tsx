@@ -16,7 +16,7 @@ const preview = (spec: WorkflowSpec): WorkflowPreview => ({ spec, branding: [], 
 async function chooseMulti(user: UserEvent, label: string, text: string) {
   const input = screen.getByRole("combobox", { name: label });
   await user.click(input); await user.clear(input); await user.type(input, text);
-  const options = screen.getAllByRole("option");
+  const options = await screen.findAllByRole("option");
   const option = options.find(item => item.textContent?.includes(`Use “${text}”`)) ??
     options.find(item => item.textContent?.includes(text)) ?? options[0];
   await user.click(option);

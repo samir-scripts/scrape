@@ -2,6 +2,8 @@
 
 **Status: implementation complete; native workflow acceptance blocked.** Frontend, Rust, catalog, and browser checks passed. The required real WKWebView workflow journey did not complete because the isolated native window remained unfocused/hidden; see the native section below. Do not treat Plan 13 as fully verified until that gate passes.
 
+**Supersession:** the BLS/XLSX-backed role catalog and static generated title projections recorded below have been removed. Plan 14 Section 9 now owns role-title data, embedded seed, runtime SQLite search and current source attribution. The historical checks below describe the earlier implementation only.
+
 ## Behavior delivered
 
 - Pinned BLS 2018 SOC detailed occupations and O*NET 31.0 alternate titles, with original files, hashes, per-dataset license, attribution, importer, and Rust-owned catalog bindings. Role terms remain literal substring filters.
@@ -27,7 +29,7 @@
 | `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/workflow-selection.pw.ts e2e/workflows.pw.ts e2e/keywords.pw.ts e2e/appearance.pw.ts e2e/workflow-sources.pw.ts e2e/themed-selects.pw.ts e2e/zoom.pw.ts --workers=1` | 17 browser tests passed, including both themes, selector composition, save/reopen, and actual 200% browser zoom. |
 | `python3 -m json.tool crates/scrape-core/data/occupations/manifest.json` | Passed after dataset-specific BLS public-domain and O*NET CC BY 4.0 metadata was recorded. |
 
-Catalog evidence: [importer](../scripts/import-occupation-catalog.py), [manifest](../crates/scrape-core/data/occupations/manifest.json), [derived catalog](../crates/scrape-core/data/occupations/catalog.json), and [data notes](../crates/scrape-core/data/occupations/README.md).
+Historical catalog implementation artifacts have been retired. The current seed, source manifest and data notes are [`seed_role_titles.tsv`](../crates/scrape-core/data/occupations/seed_role_titles.tsv), [`manifest.json`](../crates/scrape-core/data/occupations/manifest.json), and [`data notes`](../crates/scrape-core/data/occupations/README.md).
 
 ## Visual evidence
 

@@ -10,7 +10,7 @@ The `src-tauri/src/db` directory encapsulates all data access logic, repository 
 
 | File | Target Table(s) | Key Functions & Operations |
 |---|---|---|
-| [`mod.rs`](mod.rs) | Database Connection Pool & Startup | Configures SQLite pragmas (`WAL`, `synchronous = NORMAL`, `foreign_keys = ON`), validates historical migration prefixes before writable changes, takes `VACUUM INTO` backups, and executes forward-only migrations from `src-tauri/migrations/`. |
+| [`mod.rs`](mod.rs) | Database Connection Pool & Startup | Configures SQLite pragmas (`WAL`, `synchronous = NORMAL`, `foreign_keys = ON`), validates historical migration prefixes before writable changes, takes `VACUUM INTO` backups, executes forward-only migrations, and seeds the role-title catalog after migration when the table is empty. |
 | [`jobs.rs`](jobs.rs) | `jobs`, `job_locations`, `job_status_events` | `JobsRepo`: SQLite-side filtering, sorting, counting, and pagination; upserting scraped postings while preserving user notes, favorites, and tracked status; soft removal (`remove_job`), restoration (`restore_posting`), and cross-workflow blocking via `postings`. |
 | [`postings.rs`](postings.rs) | `postings`, `deleted_jobs` | Canonical posting identity registry (`PostingIdentity`), cross-workflow discovery suppression (`blocked`), and legacy tombstone reconciliation. |
 | [`branding.rs`](branding.rs) | `employer_brandings`, `employer_branding_assets` | Stores verified employer logo evidence (URL, page, method, timestamp, SHA-256) and one deduplicated PNG asset per source/employer relationship, retaining verified artwork across temporary refresh failures and source deletion. |
@@ -21,6 +21,8 @@ The `src-tauri/src/db` directory encapsulates all data access logic, repository 
 | [`runs.rs`](runs.rs) | `scrape_runs`, `scrape_logs` | `RunsRepo`: Records execution telemetry, `ScanOutcome`, `RunCounts` (including per-source `SourceScanStats` summaries), duration, log entries, and trigger types. |
 | [`metrics.rs`](metrics.rs) | `jobs`, `job_status_events` | `MetricsRepo`: Aggregation queries calculating stage totals, conversion rates, role distributions, salary distribution buckets, streaks, and daily velocity. |
 | [`settings.rs`](settings.rs) | `settings` | `SettingsRepo`: Serializes and retrieves user preferences, appearance settings, and automatic-scraping pause state. |
+| [`role_titles.rs`](role_titles.rs) | `role_titles`, `role_title_terms` | Embeds and validates the normalized TSV; performs idempotent transactional batch seeding and indexed token-prefix search for workflow title suggestions. |
+| [`role_title_tests.rs`](role_title_tests.rs) | Temporary SQLite databases | Verifies seed/search/index behavior, warm skip, failed-seed rollback/retry, and populated v29→v30 upgrade recovery. |
 | [`notifications.rs`](notifications.rs) | `notifications` | `NotificationsRepo`: Manages the in-app notification ledger for crawl completions, warnings/errors, and alerts. |
 
 Migration startup now refuses checksum mismatches instead of rewriting history;

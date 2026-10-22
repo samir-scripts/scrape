@@ -49,7 +49,7 @@ src-tauri/
 ├── gen/                    # Auto-generated Tauri schema configurations
 ├── historical-migrations/  # Immutable historical SQL variants for upgrade verification
 ├── icons/                  # Application and tray icons (PNG, ICNS, ICO)
-├── migrations/             # Forward-only embedded SQL migrations (0001–0026)
+├── migrations/             # Forward-only embedded SQL migrations (0001–0030)
 ├── src/                    # Rust backend source code
 │   ├── commands/           # Tauri IPC commands callable from TypeScript
 │   ├── db/                 # SQLite database queries and repositories

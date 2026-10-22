@@ -10,7 +10,7 @@ The `crates/scrape-core/src` directory contains the core source modules that def
 
 ### [`lib.rs`](lib.rs)
 - **Role**: Crate entry point and root module declaration.
-- **Exports**: Re-exports public submodules (`branding`, `enrich`, `filter`, `geography`, `identity`, `locator`, `matching`, `occupations`, `posting_date`, `protocol`, `role`, `types`, `xpath`) and shared ingestion/protocol constants (`PROTOCOL_VERSION`, `INGESTION_LIMITS`).
+- **Exports**: Re-exports public submodules (`branding`, `enrich`, `filter`, `geography`, `identity`, `locator`, `matching`, `posting_date`, `protocol`, `role`, `types`, `xpath`) and shared ingestion/protocol constants (`PROTOCOL_VERSION`, `INGESTION_LIMITS`).
 - **Utilities**: Defines `now_iso() -> String`, generating deterministic UTC timestamps in ISO-8601 millisecond format (`YYYY-MM-DDTHH:MM:SS.sssZ`) used across event logging, run reporting, and database storage.
 
 ### [`types.rs`](types.rs)
@@ -76,9 +76,6 @@ The `crates/scrape-core/src` directory contains the core source modules that def
   - Loads `data/regions.json` and `isocountry` alpha-2 codes, exports `CountryOption`, `RegionOption`, and `geographyCatalog.ts`, and resolves structured address fields and bounded location aliases without guessing ambiguous abbreviations.
 
 
-### [`occupations.rs`](occupations.rs)
-- **Role**: Loads the checked-in BLS 2018 / O*NET 31.0 occupation-title catalog once and validates group, SOC, source-code, and provenance references.
-- **Exports**: `OCCUPATION_CATALOG` and TS/serde catalog types. The UI uses literal title labels with merged display provenance; these exports do not change role matching semantics.
 ### [`posting_date.rs`](posting_date.rs)
 - **Role**: Publication timestamp parsing and date-filter evaluation.
 - **Key Types & Functions**:
