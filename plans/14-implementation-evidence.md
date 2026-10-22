@@ -34,3 +34,16 @@
 **Real UI smoke:** managed Chromium at `http://localhost:1432/?demo=1&fixtures=1`; navigated to Schedule and observed the existing ClockPicker, editable hour/minute controls, AM/PM controls and timezone. Computed styles showed Paper and Obsidian token values on the actual clock surface, then restored Paper. Browser screenshot calls timed out; no capture is claimed.
 
 **Limits:** this is fixture/demo mode, not live scraping or production persistence. Does not close Plan 14 Section 2's complete checkbox/radio inventory or Section 7's native save/reopen acceptance; those gates remain open. Physical pointer/IME, native WKWebView, and native file chooser were not exercised.
+
+## Section 4 — Geography autocomplete repair
+
+**Implemented:** shared `SearchCombobox` now matches every query token against token prefixes in the label/value/search metadata, so typed multiword country/state names work without substring collisions (`US` no longer matches an unrelated word such as “Australia”). Geography options expose canonical name/code search text. City input now reuses the existing eight common-city suggestions while keeping any user-entered location term valid; no complete city database or coverage claim was added.
+
+**Checks run:**
+
+- `npx vitest run src/test/workflow_geography_interaction.test.tsx --maxWorkers=1` — 4 tests passed, including pasted country name, multiword country/state selection, state code, city suggestion, custom city, unknown country, Escape, country change and imported multiple-country preservation.
+- `npx vitest run src/test/workflow_geography_interaction.test.tsx src/test/company_picker_interaction.test.tsx src/test/workflow_selection_interaction.test.tsx src/test/multi_select_combobox_interaction.test.tsx --maxWorkers=1` — 4 files, 15 tests passed.
+- `npx tsc --noEmit` — passed.
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/workflows.pw.ts` — 3 tests passed; workflow preview, save and reopen retained country, state, city and workplace rules.
+
+**Limits:** browser journey used fixture/demo data only; no live location service or global city directory is used. Native WKWebView, physical pointer and user's database were not exercised.

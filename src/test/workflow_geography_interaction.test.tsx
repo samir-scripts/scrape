@@ -55,6 +55,28 @@ describe("workflow geography and workplace", () => {
     await user.clear(country); await user.type(country,"United Kingdom"); await user.tab();
     expect(rules().countries).toEqual(["GB"]); expect(rules().regions).toEqual([]);
   });
+  it("suggests multiword country and state names plus known city terms without rejecting custom cities", async () => {
+    const user = userEvent.setup();
+    render(<Harness invalidate={vi.fn()} />);
+    const country = screen.getByRole("combobox", { name: "Country" });
+    await user.click(country);
+    await user.paste("United States");
+    await user.click(await screen.findByRole("option", { name: /United States \(US\)/ }));
+    expect(rules().countries).toEqual(["US"]);
+
+    const state = screen.getByRole("combobox", { name: "State/province" });
+    await user.type(state, "New Jersey");
+    await user.click(await screen.findByRole("option", { name: /New Jersey \(US-NJ\)/ }));
+    expect(rules().regions).toEqual(["US-NJ"]);
+
+    const cities = screen.getByRole("combobox", { name: "Cities / Location terms" });
+    await user.type(cities, "Seat");
+    expect(await screen.findByRole("option", { name: "Seattle" })).toBeTruthy();
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(rules().cities).toEqual(["Seattle"]);
+    await user.type(cities, "Springfield{Enter}");
+    expect(rules().cities).toEqual(["Seattle", "Springfield"]);
+  });
   it("round trips canonical geography through YAML and source editing", async () => {
     const spec=sourceToWorkflowSpec(SAMPLE_SWE_SOURCE);
     spec.filters={matching:{...emptyRules(),countries:["US"],regions:["US-CA"],workplaces:["remote","hybrid"],location_include_unknown:true}};

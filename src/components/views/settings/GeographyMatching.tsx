@@ -5,6 +5,7 @@ import { SearchCombobox } from "../../ui/Select";
 import { Icon } from "../../ui/Icon";
 import { KeywordInput } from "../../ui/KeywordInput";
 
+const CITY_SUGGESTIONS = ["San Francisco", "Austin", "New York", "Seattle", "London", "Lisbon", "Berlin", "Indianapolis"];
 type Choice = { code: string; name: string };
 function SearchChoice({ label, value, choices, disabled, placeholder, resetAfterSelect, onSelect, onDraftChange }: {
   label: string; value: string; choices: Choice[]; disabled?: boolean; placeholder: string; resetAfterSelect?: boolean;
@@ -30,7 +31,7 @@ function SearchChoice({ label, value, choices, disabled, placeholder, resetAfter
   return <div className="grid gap-1 min-w-0">
     <label htmlFor={id}>{label}</label>
     <SearchCombobox id={id} aria-label={label} value={find(value)?.code || ""} query={text} disabled={disabled} placeholder={placeholder} invalid={invalid}
-      options={choices.map(choice => ({ value: choice.code, label: `${choice.name} (${choice.code})` }))}
+      options={choices.map(choice => ({ value: choice.code, label: `${choice.name} (${choice.code})`, searchText: `${choice.name} ${choice.code}` }))}
       onQueryChange={query => { setText(query); onDraftChange(); }}
       onChange={code => { const choice = choices.find(item => item.code === code); if (choice) { onSelect(code); setText(resetAfterSelect ? "" : choice.name); } }}
       onBlur={commit}
@@ -59,10 +60,11 @@ export function GeographyMatching({ rules, onChange, onDraftChange }: { rules: P
       value={rules.cities || []}
       onChange={cities => onChange({ cities })}
       onDraftChange={onDraftChange}
+      suggestions={CITY_SUGGESTIONS}
     />
     <div className="flex gap-2 flex-wrap items-center text-xs">
       <span className="text-[var(--color-ink-mute)]">Quick add:</span>
-      {["San Francisco", "Austin", "New York", "Seattle", "London", "Lisbon", "Berlin", "Indianapolis"].map(city => (
+      {CITY_SUGGESTIONS.map(city => (
         <button
           key={city}
           type="button"

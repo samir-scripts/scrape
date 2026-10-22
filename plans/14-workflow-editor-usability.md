@@ -1,6 +1,6 @@
 # Workflow editor usability and selection repair
 
-Status: Section 1 implemented and browser-verified; Section 2 is next. Execute **one section per implementation pass**. A pass ends only when its acceptance gate and evidence are complete. Do not start the next section in the same pass. Keep each section's changes reviewable and update this plan/evidence before proceeding.
+Status: Section 1 and Section 4 are implemented and evidence-recorded. Criteria/time refinements are in place, but Sections 2, 3 and 7 still have open acceptance gates; Section 2 is next. Execute **one section per implementation pass**. A pass ends only when its acceptance gate and evidence are complete. Do not start the next section in the same pass. Keep each section's changes reviewable and update this plan/evidence before proceeding.
 
 ## Contract and boundaries
 

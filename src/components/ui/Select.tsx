@@ -101,9 +101,12 @@ export function SearchCombobox({
   const root = useRef<HTMLDivElement>(null);
   const [popupTarget, setPopupTarget] = useState<HTMLElement | null>(null);
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  const matches = options.filter(option => !normalizedQuery || (option.searchText != null
-    ? normalizedQuery.split(/\s+/).every(token => option.searchText!.toLocaleLowerCase().includes(token))
-    : `${option.label} ${option.value}`.toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).some(part => part.startsWith(normalizedQuery))));
+  const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
+  const matches = options.filter(option => {
+    const searchTokens = (option.searchText ?? `${option.label} ${option.value}`)
+      .toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    return queryTokens.every(query => searchTokens.some(token => token.startsWith(query)));
+  });
   return <HeadlessCombobox value={value || null} onChange={selected => onChange(selected ?? "")} disabled={disabled}>
     {({ open }) => <PopupPosition root={root} open={open} onTarget={setPopupTarget}>
       <ComboboxInput id={id} aria-label={label} autoComplete="off" value={query}
