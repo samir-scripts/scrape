@@ -56,7 +56,7 @@ export function MultiSelectCombobox({ label, value, options, onChange, placehold
     option, label: normalize(option.label), text: normalize(`${option.label} ${option.value} ${option.searchText ?? ""}`),
   })), [availableOptions]);
   const tokens = normalize(query).split(/\s+/).filter(Boolean);
-  const matches = normalized.filter(item => tokens.every(token => item.text.includes(token))).sort((a, b) => {
+  const matches = loadOptions ? [...availableOptions] : normalized.filter(item => tokens.every(token => item.text.includes(token))).sort((a, b) => {
     const queryKey = normalize(query);
     const rankA = a.label === queryKey ? 0 : a.label.startsWith(queryKey) ? 1 : 2;
     const rankB = b.label === queryKey ? 0 : b.label.startsWith(queryKey) ? 1 : 2;

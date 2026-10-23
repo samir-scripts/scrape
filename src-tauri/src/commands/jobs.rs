@@ -92,7 +92,10 @@ pub async fn list_location_options(state: State<'_, AppState>) -> Result<Locatio
 }
 
 #[tauri::command]
-pub async fn search_role_titles(state: State<'_, AppState>, query: String) -> Result<Vec<String>> {
+pub async fn search_role_titles(
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<Vec<crate::db::role_titles::RoleTitleSuggestion>> {
     crate::db::role_titles::search_role_titles(&state.db, &query).await
 }
 

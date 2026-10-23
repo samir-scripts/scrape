@@ -100,6 +100,32 @@ pub(super) fn manifest(applied: &[Applied]) -> Migrator {
             .collect::<Vec<_>>()
             .into();
     }
+    let original = manifest
+        .iter()
+        .find(|migration| migration.version == 30)
+        .unwrap();
+    let early_role_titles = Migration::new(
+        30,
+        original.description.clone(),
+        original.migration_type,
+        include_str!("../../historical-migrations/0030_role_titles.sql").into(),
+        false,
+    );
+    if applied.iter().any(|(version, checksum, _)| {
+        *version == 30 && checksum.as_slice() == early_role_titles.checksum.as_ref()
+    }) {
+        manifest.migrations = manifest
+            .iter()
+            .map(|migration| {
+                if migration.version == 30 {
+                    early_role_titles.clone()
+                } else {
+                    migration.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .into();
+    }
     // The caller validates the entire history and independently reconstructed
     // schema against this manifest before permitting writes.
     manifest

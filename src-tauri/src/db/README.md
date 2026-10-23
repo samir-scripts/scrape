@@ -25,6 +25,13 @@ The `src-tauri/src/db` directory encapsulates all data access logic, repository 
 | [`role_title_tests.rs`](role_title_tests.rs) | Temporary SQLite databases | Verifies seed/search/index behavior, warm skip, failed-seed rollback/retry, and populated v29→v30 upgrade recovery. |
 | [`notifications.rs`](notifications.rs) | `notifications` | `NotificationsRepo`: Manages the in-app notification ledger for crawl completions, warnings/errors, and alerts. |
 
+Role search returns at most 50 suggestions with title, SOC code and tier. Exact
+titles rank ahead of full-title prefixes, then other token-prefix matches, with
+tier/title tie-breaks. Queries are limited to 256 UTF-8 bytes and 16 unique words.
+Empty/punctuation-only input returns a bounded tier-ordered set. Token lookups use
+the term-first SQLite index; arbitrary within-word substring search is not offered
+and no leading-wildcard scan is claimed. The async picker preserves server ranking.
+
 Migration startup now refuses checksum mismatches instead of rewriting history;
 pending disk upgrades receive a consistent SQLite snapshot. See
 [database recovery](../../../plans/database-recovery.md). Both retention policies

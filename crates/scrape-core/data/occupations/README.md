@@ -10,8 +10,8 @@ Recreate or check the deterministic TSV with
 `python3 scripts/prepare-role-title-seed.py`, passing `--occupation-data`,
 `--reported-titles`, and `--alternate-titles` paths to the matching downloaded
 CSV files. `python3 -m unittest scripts.test_role_title_seed` exercises trimming,
-SOC validation, tier precedence, case-insensitive de-duplication, catch-all
-filtering and ordering.
+SOC validation, tier precedence, Unicode-casefold de-duplication, same-tier SOC
+tie-breaks, catch-all filtering, malformed rows and casefolded title ordering.
 
 The seed contains 45,716 unique titles. It combines canonical occupation titles,
 reported market titles and alternate job titles; generic “All Other” records are

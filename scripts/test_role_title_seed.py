@@ -49,6 +49,24 @@ class RoleTitleSeedTests(unittest.TestCase):
                 "O*NET-SOC Code,Title,Job Title,Short Title,Source(s)\n",
             )
 
+    def test_casefold_sort_and_same_tier_soc_tie_break_are_deterministic(self):
+        occupations = "O*NET-SOC Code,Title\n15-1253.00,zeta\n15-1252.00,alpha\n15-1253.00,STRASSE\n15-1252.00,Straße\n"
+        result = self.build(occupations, "O*NET-SOC Code,Reported Job Title\n", "O*NET-SOC Code,Job Title\n")
+        self.assertEqual(result.splitlines()[1:], [
+            "15-1252\talpha\t1", "15-1252\tStraße\t1", "15-1253\tzeta\t1",
+        ])
+        self.assertEqual(result, self.build(occupations, "O*NET-SOC Code,Reported Job Title\n", "O*NET-SOC Code,Job Title\n"))
+
+    def test_rejects_missing_headers_empty_titles_and_malformed_rows(self):
+        for invalid in (
+            "Wrong,Title\n15-1252.00,Engineer\n",
+            "O*NET-SOC Code,Title\n15-1252.00,\n",
+            "O*NET-SOC Code,Title\n15-1252.00,Engineer,extra\n",
+            "O*NET-SOC Code,Title\n15-1252.00\n",
+        ):
+            with self.subTest(source=invalid), self.assertRaises(ValueError):
+                self.build(invalid, "O*NET-SOC Code,Reported Job Title\n", "O*NET-SOC Code,Job Title\n")
+
 
 if __name__ == "__main__":
     unittest.main()

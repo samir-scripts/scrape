@@ -48,7 +48,7 @@ describe("MultiSelectCombobox", () => {
     expect(screen.getByLabelText("Selection").textContent).toBe("[]");
   });
 
-  it("loads asynchronous suggestions for the typed query and commits their literal value", async () => {
+  it("preserves server tokenization when selecting an asynchronous literal title", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const loadOptions = vi.fn(async (query: string) => query
@@ -65,9 +65,9 @@ describe("MultiSelectCombobox", () => {
       />,
     );
     const input = screen.getByRole("combobox", { name: "Target roles" });
-    await user.type(input, "software dev");
+    await user.type(input, "software/dev");
     await user.click(await screen.findByRole("option", { name: "Software Developers" }));
-    expect(loadOptions).toHaveBeenCalledWith("software dev");
+    expect(loadOptions).toHaveBeenCalledWith("software/dev");
     expect(onChange).toHaveBeenCalledWith(["Software Developers"]);
   });
 });

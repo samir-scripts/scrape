@@ -28,11 +28,14 @@ def _rows(data: bytes, title_column: str, tier: int) -> list[tuple[str, str, int
     if not reader.fieldnames or not required.issubset(reader.fieldnames):
         raise ValueError(f"O*NET tier {tier} source is missing columns: {', '.join(sorted(required))}")
     result = []
-    for line, row in enumerate(reader, 2):
+    for row in reader:
+        line = reader.line_num
+        if None in row or any(value is None for value in row.values()):
+            raise ValueError(f"Malformed CSV row at tier {tier}, line {line}")
         raw_code = (row.get("O*NET-SOC Code") or "").strip()
         title = (row.get(title_column) or "").strip()
         if not title:
-            continue
+            raise ValueError(f"Empty title at tier {tier}, line {line}")
         if len(raw_code) != 10 or raw_code[2] != "-" or raw_code[7] != "." or not (
             raw_code[:2].isdigit() and raw_code[3:7].isdigit() and raw_code[8:10].isdigit()
         ):
@@ -56,7 +59,7 @@ def build_seed(occupation_data: bytes, reported_titles: bytes, alternate_titles:
             candidate = (soc_code, title, priority)
             if prior is None or (priority, soc_code, title) < (prior[2], prior[0], prior[1]):
                 records[key] = candidate
-    ordered = sorted(records.values(), key=lambda row: (row[2], row[1]))
+    ordered = sorted(records.values(), key=lambda row: (row[2], row[1].casefold(), row[1]))
     output = io.StringIO(newline="")
     writer = csv.writer(output, delimiter="\t", lineterminator="\n")
     writer.writerow(("soc_code", "title", "priority_tier"))
@@ -74,11 +77,17 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="fail if the normalized seed differs")
     args = parser.parse_args()
     try:
-        expected = build_seed(
-            args.occupation_data.read_bytes(),
-            args.reported_titles.read_bytes(),
-            args.alternate_titles.read_bytes(),
-        )
+        inputs = []
+        for path, (title_column, tier) in zip(
+            (args.occupation_data, args.reported_titles, args.alternate_titles), SOURCES, strict=True
+        ):
+            data = path.read_bytes()
+            try:
+                _rows(data, title_column, tier)
+            except ValueError as exc:
+                raise ValueError(f"{path}: {exc}") from exc
+            inputs.append(data)
+        expected = build_seed(*inputs)
         if args.check:
             if not args.output.exists() or args.output.read_bytes() != expected:
                 print(f"{args.output} is missing or stale", file=sys.stderr)

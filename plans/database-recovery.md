@@ -334,3 +334,27 @@ event plus a setting. It also checks that migration failure rolls back schema,
 startup creates one consistent pre-migration snapshot, retry succeeds, and a
 subsequent open does not reseed or create another snapshot. Tests use temporary
 databases only; they do not open the user's live database.
+
+## Migration-30 role-title startup mismatch and forward repair
+
+An early migration 30 created `role_title_terms` with `WITHOUT ROWID`; a later
+revision removed that clause. An installation that already applied the earlier
+SQL correctly refused the later checksum. Neither stored checksum is rewritten.
+The earlier SQL is preserved in `src-tauri/historical-migrations/0030_role_titles.sql`.
+Its SHA-384 is
+`d7fd938c4859b1a605bb7b64a21b28d64c18ca4ebc4a6438b71accd84861a422d2c02c84c1e5ab14ea9685edf477db40`.
+
+Startup recognizes only that exact checksum or the committed migration-30
+checksum, requires a complete successful history and independently reconstructed
+schema, and takes the usual `VACUUM INTO` snapshot before migration 31. The new
+migration copies all term/role links into the canonical rowid table in one
+transaction. It preserves role titles, IDs, tiers and all unrelated user data.
+Failure rolls back; retry and a second restart are covered by temporary-database
+tests. Unknown checksums/schema variants still fail without reconciliation.
+
+Native startup fixtures `legacy30,current30,unknown30` cover both supported
+histories and safe unknown-history refusal. No user's live database was opened
+to validate this repair. A version-30 error alone does not establish which
+checksum an installation contains. If this build still refuses startup, preserve
+the database and WAL/SHM files and use the existing reviewed-recovery procedure;
+do not delete the database or manually edit `_sqlx_migrations`.

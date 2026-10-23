@@ -25,7 +25,10 @@ import { ClockPicker } from "../../ui/ClockPicker";
 import { from24Hour, pad2, to24Hour } from "../../../lib/cronClock";
 
 const loadRoleOptions = async (query: string): Promise<MultiSelectOption[]> =>
-  (await api.searchRoleTitles(query)).map(title => ({ value: title, label: title }));
+  (await api.searchRoleTitles(query)).map(({ title, soc_code, priority_tier }) => ({
+    value: title, label: title,
+    description: `${soc_code} · ${["Canonical title", "Reported title", "Alternate title"][priority_tier - 1]}`,
+  }));
 const companySelectionOptions: MultiSelectOption[] = companyOptions.map(({ company, source, domain, template }) => ({
   value: company.name, label: company.name,
   searchText: `${company.name} ${source.extractor.kind} ${domain} ${template.readiness}`,

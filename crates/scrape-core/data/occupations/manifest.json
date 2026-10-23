@@ -23,7 +23,7 @@
   "generated_resource": {
     "file": "seed_role_titles.tsv",
     "unique_title_rows": 45716,
-    "sha256": "8ae4fe4f2109ec781a8caedd5090b78a5d80459f542159247d254fc5fa49135a"
+    "sha256": "4a1632abdc43b0fad642d4ac4b869523b3b3ff53aa0d68f063b2b42d21d9bee0"
   },
   "attribution": "Includes information from the O*NET 31.0 Database by USDOL/ETA, used under CC BY 4.0. Scrape selected and reorganized these titles; USDOL/ETA has not approved, endorsed, or tested these modifications."
 }

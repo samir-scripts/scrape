@@ -48,7 +48,9 @@ async fn role_title_seed_search_is_indexed_idempotent_and_atomic() {
     let matches = role_titles::search_role_titles(&pool, "software dev")
         .await
         .unwrap();
-    assert!(matches.iter().any(|title| title == "Software Developers"));
+    assert!(matches
+        .iter()
+        .any(|role| role.title == "Software Developers"));
     assert!(matches.len() <= 50);
     let engineer_matches = role_titles::search_role_titles(&pool, "software engineer")
         .await
@@ -56,7 +58,7 @@ async fn role_title_seed_search_is_indexed_idempotent_and_atomic() {
     assert!(
         engineer_matches
             .iter()
-            .any(|title| title.to_lowercase().contains("software engineer")),
+            .any(|role| role.title.to_lowercase().contains("software engineer")),
         "full title-term lookup must suggest software engineer variants"
     );
     assert_eq!(
@@ -65,6 +67,20 @@ async fn role_title_seed_search_is_indexed_idempotent_and_atomic() {
             .unwrap()
             .len(),
         50
+    );
+    let exact = role_titles::search_role_titles(&pool, "Software Developers")
+        .await
+        .unwrap();
+    assert_eq!(exact[0].title, "Software Developers");
+    assert_eq!(exact[0].soc_code, "15-1252");
+    assert_eq!(exact[0].priority_tier, 1);
+    assert!(role_titles::search_role_titles(&pool, &"x".repeat(257))
+        .await
+        .is_err());
+    assert!(
+        role_titles::search_role_titles(&pool, "a b c d e f g h i j k l m n o p q")
+            .await
+            .is_err()
     );
     let query_plan: Vec<(i64, i64, i64, String)> = sqlx::query_as(
         "EXPLAIN QUERY PLAN SELECT role_title_id FROM role_title_terms WHERE term GLOB 'soft*'",
@@ -78,6 +94,31 @@ async fn role_title_seed_search_is_indexed_idempotent_and_atomic() {
             .any(|line| line.3.contains("INDEX sqlite_autoindex_role_title_terms")),
         "prefix lookup must use its token index: {query_plan:?}",
     );
+    for query in ["Software Developers", "software dev", "engineer", "ware"] {
+        let started = Instant::now();
+        let suggestions = role_titles::search_role_titles(&pool, query).await.unwrap();
+        println!(
+            "role-title query {query:?}: {} us",
+            started.elapsed().as_micros()
+        );
+        if query == "software dev" {
+            let first_nonprefix = suggestions
+                .iter()
+                .position(|role| !role.title.to_lowercase().starts_with(query))
+                .unwrap_or(suggestions.len());
+            assert!(suggestions[first_nonprefix..]
+                .iter()
+                .all(|role| !role.title.to_lowercase().starts_with(query)));
+        }
+        if query == "ware" {
+            assert!(
+                !suggestions
+                    .iter()
+                    .any(|role| role.title == "Software Developers"),
+                "infix-only matches are not token-prefix suggestions"
+            );
+        }
+    }
 
     sqlx::query("UPDATE role_titles SET priority_tier = 3 WHERE title = 'Software Developers'")
         .execute(&pool)
@@ -321,4 +362,183 @@ async fn migration_30_preserves_v29_user_data_and_recovers_after_failure() {
         backups
     );
     restarted.close().await;
+}
+
+#[tokio::test]
+async fn migration_31_repairs_known_role_history_without_relabeling_or_data_loss() {
+    for legacy in [false, true] {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("known30.db");
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(&path)
+                    .create_if_missing(true),
+            )
+            .await
+            .unwrap();
+        let mut prefix = sqlx::migrate!("./migrations");
+        prefix.migrations = prefix
+            .iter()
+            .filter(|m| m.version <= 30)
+            .map(|m| {
+                if legacy && m.version == 30 {
+                    sqlx::migrate::Migration::new(
+                        30,
+                        m.description.clone(),
+                        m.migration_type,
+                        include_str!("../../historical-migrations/0030_role_titles.sql").into(),
+                        false,
+                    )
+                } else {
+                    m.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .into();
+        prefix.run(&pool).await.unwrap();
+        role_titles::seed_role_titles(&pool).await.unwrap();
+        sqlx::query("INSERT INTO jobs(id, dedupe_key, title, company, url, date_added, last_seen_at, status, status_changed_at, notes, favorited) VALUES ('kept', 'kept', 'Engineer', 'Fixture', 'https://fixture.invalid/kept', '2026-01-01', '2026-01-02', 'applied', '2026-01-02', 'protected note', 1)")
+            .execute(&pool).await.unwrap();
+        let history: Vec<history::Applied> = sqlx::query_as(
+            "SELECT version, checksum, success FROM _sqlx_migrations ORDER BY version",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        let terms: Vec<(String, i64)> = sqlx::query_as(
+            "SELECT term, role_title_id FROM role_title_terms ORDER BY term, role_title_id",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        let mut failing = history::manifest(&history);
+        failing.migrations = failing
+            .iter()
+            .map(|m| {
+                if m.version == 31 {
+                    sqlx::migrate::Migration::new(
+                        31,
+                        m.description.clone(),
+                        m.migration_type,
+                        format!("{}\nSELECT * FROM injected_missing_table;", m.sql).into(),
+                        false,
+                    )
+                } else {
+                    m.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .into();
+        assert!(failing.run(&pool).await.is_err());
+        let after_failure: Vec<history::Applied> = sqlx::query_as(
+            "SELECT version, checksum, success FROM _sqlx_migrations ORDER BY version",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(after_failure, history);
+        assert_eq!(
+            sqlx::query_as::<_, (String, i64)>(
+                "SELECT term, role_title_id FROM role_title_terms ORDER BY term, role_title_id"
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap(),
+            terms
+        );
+        pool.close().await;
+        let repaired = init_db(&path).await.unwrap();
+        let after: Vec<history::Applied> = sqlx::query_as("SELECT version, checksum, success FROM _sqlx_migrations WHERE version <= 30 ORDER BY version").fetch_all(&repaired).await.unwrap();
+        assert_eq!(
+            after, history,
+            "all historical checksums must remain immutable"
+        );
+        assert_eq!(
+            sqlx::query_as::<_, (String, i64)>(
+                "SELECT term, role_title_id FROM role_title_terms ORDER BY term, role_title_id"
+            )
+            .fetch_all(&repaired)
+            .await
+            .unwrap(),
+            terms
+        );
+        assert_eq!(
+            sqlx::query_as::<_, (String, String, i64)>(
+                "SELECT status, notes, favorited FROM jobs WHERE id = 'kept'"
+            )
+            .fetch_one(&repaired)
+            .await
+            .unwrap(),
+            ("applied".into(), "protected note".into(), 1)
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("PRAGMA integrity_check")
+                .fetch_one(&repaired)
+                .await
+                .unwrap(),
+            "ok"
+        );
+        assert!(sqlx::query("PRAGMA foreign_key_check")
+            .fetch_all(&repaired)
+            .await
+            .unwrap()
+            .is_empty());
+        repaired.close().await;
+        let backups = || {
+            std::fs::read_dir(directory.path())
+                .unwrap()
+                .map(|entry| entry.unwrap().path())
+                .filter(|path| path.to_string_lossy().contains("pre-migration"))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(backups().len(), 1);
+        let backup = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(&backups()[0])
+                    .read_only(true),
+            )
+            .await
+            .unwrap();
+        let backup_history: Vec<history::Applied> = sqlx::query_as(
+            "SELECT version, checksum, success FROM _sqlx_migrations ORDER BY version",
+        )
+        .fetch_all(&backup)
+        .await
+        .unwrap();
+        assert_eq!(backup_history, history);
+        backup.close().await;
+        init_db(&path).await.unwrap().close().await;
+        assert_eq!(
+            backups().len(),
+            1,
+            "restart must not repeat the repair/backup"
+        );
+    }
+}
+
+#[tokio::test]
+async fn migration_30_unknown_history_is_rejected_without_mutating_database() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("unknown.db");
+    let pool = pool_with_schema(&path).await;
+    sqlx::query("UPDATE _sqlx_migrations SET checksum = X'12345678' WHERE version = 30")
+        .execute(&pool)
+        .await
+        .unwrap();
+    pool.close().await;
+    let before = std::fs::read(&path).unwrap();
+    let error = init_db(&path).await.unwrap_err().to_string();
+    assert!(error.contains("mismatch at version 30"), "{error}");
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    assert!(!std::fs::read_dir(directory.path())
+        .unwrap()
+        .any(|entry| entry
+            .unwrap()
+            .path()
+            .to_string_lossy()
+            .contains("pre-migration")));
 }

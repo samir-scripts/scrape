@@ -44,9 +44,11 @@ protocol failures, timeouts and the external opener without normal app startup
 side effects. Playwright browser checks live in `e2e/`.
 
 `test-native-startup.mjs` runs the actual configured Tauri development pipeline
-with isolated ports and temporary database fixtures. It verifies native readiness
-on fresh and both migration-12 histories, and controlled nonzero refusal of an
-unknown checksum without a panic or database mutation. Run `npm run test:native-startup`.
+with isolated ports and temporary database fixtures. It verifies native readiness,
+indexed role-search IPC and recognized migration histories, with controlled
+nonzero refusal of unknown checksums without a panic or database mutation.
+Migration-30 recovery: `SCRAPE_STARTUP_MODES=legacy30,current30,unknown30 npm run test:native-startup`.
+Run all startup fixtures with `npm run test:native-startup`.
 
 ### Isolated native startup and appearance
 

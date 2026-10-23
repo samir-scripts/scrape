@@ -69,3 +69,45 @@
 **Native limit:** `SCRAPE_STARTUP_MODES=fresh SCRAPE_NATIVE_WORKFLOW=1 npm run test:native-startup` failed before the WKWebView emitted its first workflow log (`NATIVE_SMOKE_WINDOW ... focused=false`). The native role picker, preview, save and run journey did not execute. The Plan 14 Section 9 gate remains open until isolated native acceptance succeeds.
 
 **Unrelated check blockers:** `cargo fmt --all --check` and workspace Clippy are blocked by formatting and `clippy::iter_overeager_cloned` in the already-modified `src-tauri/tests/worker_repository.rs`; that user-owned file was left untouched. Changed Rust files pass targeted rustfmt checking. No live or user database was opened.
+
+## Approved step 5 continuation — title ranking and migration-30 startup repair
+
+Implemented the remaining audited step-5 gaps: Unicode-casefold title ordering,
+same-tier SOC tie-break tests, rejection of malformed CSV/empty titles with source
+diagnostics, bounded search (256 UTF-8 bytes / 16 unique words / 50 results),
+exact → full-title prefix → other token-prefix ranking, and generated
+`RoleTitleSuggestion` title/SOC/tier metadata. The picker now preserves backend
+ranking/tokenization rather than alphabetically re-filtering remote results.
+Selected workflow values remain literal strings. The reordered seed still
+contains 45,716 titles; its current hash is in the source manifest.
+
+The reported startup screenshot is a version-30 history mismatch. A prior SQL
+revision removed `WITHOUT ROWID` after the earlier version could have been
+applied. Preserved that earlier SQL as a recognized immutable manifest and added
+forward migration 31. Startup requires the exact recognized checksum, complete
+successful history and matching reconstructed schema; it backs up before repair.
+No checksum rewrite, database deletion or user-data reset is performed.
+
+Checks from this continuation:
+
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.test_role_title_seed` — 5 passed; full pinned CSV regeneration and `--check` passed.
+- `cargo test -p scrape --lib role_title -- --nocapture` — 7 passed, including both migration-30 variants, injected migration failure/rollback/retry, unchanged historical checksums, protected job state, backup and restart, and unknown-checksum refusal without database mutation.
+- `cargo test -p scrape --lib` — 215 passed.
+- Initial concurrent release role tests measured 347ms cold seeding; this missed the target. Sorting/deduplicating term links in primary-key order removes random index writes. The subsequent isolated `cargo test -p scrape --lib --release db::role_title_tests::role_title_seed_search_is_indexed_idempotent_and_atomic -- --nocapture` passed: cold seed **221ms**, populated skip **0ms rounded**, 45,716 rows, on Apple M4/macOS 15.6, optimized build. These are seed-only measurements, not total schema-plus-startup latency. Warm startup returns before parsing or inserting.
+- Same isolated run: exact `Software Developers` 69µs; prefix `software dev` 146µs; broad token `engineer` 885µs; `ware` 214µs. Token-prefix search uses the term-first index; arbitrary within-word substring search is intentionally not offered. The earlier concurrent broad-token measurement was 1,154µs; sub-millisecond lookup is not a universal guarantee.
+- `npx tsc --noEmit`; focused workflow-editor/combobox Vitest run — 2 files, 14 tests passed; `npm run build` and `node scripts/check-style.mjs` passed. Existing production chunk advisory remains.
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/workflow-selection.pw.ts e2e/workflows.pw.ts --workers=1` — 4 passed after updating the retired static-catalog dependency to an explicit browser suggestion fixture. This proves browser presentation/selection only; it does not claim native SQLite coverage.
+- `npm run gen:types`, targeted changed-file rustfmt checks, and `git diff --check` passed.
+- `cargo build -p scrape && SCRAPE_STARTUP_MODES=fresh npm run test:native-startup` — real Tauri search IPC returned canonical title/SOC/tier; artifacts `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-h4jZsU`.
+- After adding migration 31, `cargo build -p scrape && SCRAPE_STARTUP_MODES=legacy30,current30,unknown30 npm run test:native-startup` — all three passed. Artifacts respectively `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-qWZx7B`, `.../scrape-native-smoke-aA2Svr`, and `.../scrape-native-smoke-qrzKNo`. The native launcher rebuilt the sidecar.
+
+Limits: the complete native workflow journey was attempted again with the changed
+role-search boundary. It reached the first role-picker navigation logs but the
+window became hidden/unfocused while waiting for Add workflow; it did not
+complete role selection/preview/save. Artifacts:
+`/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-ZMrEdh`.
+An additional managed-browser visual capture attempt timed out; no new reviewed
+screenshot is claimed. Native startup/IPC recovery is proven on isolated
+fixtures, not the user's installation. No live database was opened or modified;
+the screenshot alone does not reveal the installation's exact checksum. Step 5's
+full native editor acceptance remains open; no subsequent section was started.

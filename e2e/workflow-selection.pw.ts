@@ -2,6 +2,14 @@ import { test, expect } from "./fixtures";
 
 test("workflow role and company selectors preserve literal criteria and keep preview/save explicit", async ({ page }) => {
   await page.goto("/?demo=1&fixtures=1");
+  // Chromium has no native SQLite/IPC. This explicit suggestion fixture covers
+  // presentation/selection; native startup and Rust tests cover the real query.
+  await page.evaluate(async (modulePath) => {
+    const { api } = await import(/* @vite-ignore */ modulePath);
+    api.searchRoleTitles = async (query: string) => query.toLowerCase().startsWith("software")
+      ? [{ title: "Software Engineer", soc_code: "15-1252", priority_tier: 2 }]
+      : [];
+  }, "/src/lib/api.ts");
   await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
   await page.getByRole("button", { name: "Add workflow", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Create workflow" });

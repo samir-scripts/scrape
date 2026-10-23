@@ -7,6 +7,14 @@ const ROLE_TITLE_SEED: &str =
 const ROLE_BATCH_SIZE: usize = 500;
 const TERM_BATCH_SIZE: usize = 1_000;
 
+#[derive(Debug, serde::Serialize, serde::Deserialize, sqlx::FromRow, ts_rs::TS)]
+#[ts(export)]
+pub struct RoleTitleSuggestion {
+    pub title: String,
+    pub soc_code: String,
+    pub priority_tier: i32,
+}
+
 #[derive(Debug)]
 struct SeedTitle<'a> {
     soc_code: &'a str,
@@ -109,9 +117,11 @@ pub async fn seed_role_titles(pool: &SqlitePool) -> Result<()> {
     let mut terms = Vec::new();
     for (index, title) in rows.iter().enumerate() {
         let id = (index + 1) as i64;
-        let unique: HashSet<_> = title_terms(title.title).collect();
-        terms.extend(unique.into_iter().map(|term| (id, term)));
+        terms.extend(title_terms(title.title).map(|term| (id, term)));
     }
+    // Follow the term-first primary key to avoid random B-tree page writes.
+    terms.sort_unstable_by(|left, right| left.1.cmp(&right.1).then(left.0.cmp(&right.0)));
+    terms.dedup();
     for batch in terms.chunks(TERM_BATCH_SIZE) {
         let mut query =
             QueryBuilder::<Sqlite>::new("INSERT INTO role_title_terms (role_title_id, term) ");
@@ -124,7 +134,16 @@ pub async fn seed_role_titles(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
-pub async fn search_role_titles(pool: &SqlitePool, query: &str) -> Result<Vec<String>> {
+pub async fn search_role_titles(
+    pool: &SqlitePool,
+    query: &str,
+) -> Result<Vec<RoleTitleSuggestion>> {
+    let query = query.trim();
+    if query.len() > 256 {
+        return Err(AppError::Internal(
+            "Role-title search must be at most 256 UTF-8 bytes".into(),
+        ));
+    }
     let mut terms: Vec<String> = query
         .split(|character: char| !character.is_alphanumeric())
         .filter(|term| !term.is_empty())
@@ -133,16 +152,22 @@ pub async fn search_role_titles(pool: &SqlitePool, query: &str) -> Result<Vec<St
     let mut seen = HashSet::new();
     terms.retain(|term| seen.insert(term.clone()));
 
+    if terms.len() > 16 {
+        return Err(AppError::Internal(
+            "Role-title search must contain at most 16 words".into(),
+        ));
+    }
     if terms.is_empty() {
-        return Ok(sqlx::query_scalar(
-            "SELECT title FROM role_titles ORDER BY priority_tier, title COLLATE NOCASE, title LIMIT 50",
+        return Ok(sqlx::query_as(
+            "SELECT title, soc_code, priority_tier FROM role_titles ORDER BY priority_tier, title COLLATE NOCASE, title LIMIT 50",
         )
         .fetch_all(pool)
         .await?);
     }
 
-    let mut query_builder =
-        QueryBuilder::<Sqlite>::new("SELECT title FROM role_titles WHERE id IN (");
+    let mut query_builder = QueryBuilder::<Sqlite>::new(
+        "SELECT title, soc_code, priority_tier FROM role_titles WHERE id IN (",
+    );
     for (index, term) in terms.iter().enumerate() {
         if index > 0 {
             query_builder.push(" INTERSECT ");
@@ -151,8 +176,15 @@ pub async fn search_role_titles(pool: &SqlitePool, query: &str) -> Result<Vec<St
             .push("SELECT role_title_id FROM role_title_terms WHERE term GLOB ")
             .push_bind(format!("{term}*"));
     }
-    query_builder.push(") ORDER BY priority_tier, title COLLATE NOCASE, title LIMIT 50");
-    Ok(query_builder.build_query_scalar().fetch_all(pool).await?)
+    query_builder
+        .push(") ORDER BY CASE WHEN title = ")
+        .push_bind(query)
+        .push(" COLLATE NOCASE THEN 0 WHEN substr(title, 1, length(")
+        .push_bind(query)
+        .push(")) = ")
+        .push_bind(query)
+        .push(" COLLATE NOCASE THEN 1 ELSE 2 END, priority_tier, title COLLATE NOCASE, title LIMIT 50");
+    Ok(query_builder.build_query_as().fetch_all(pool).await?)
 }
 
 #[cfg(test)]

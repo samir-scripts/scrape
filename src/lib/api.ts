@@ -1,3 +1,4 @@
+import type { RoleTitleSuggestion } from "../bindings/RoleTitleSuggestion";
 import type { FilterCompatibilityRestriction } from "../bindings/FilterCompatibilityRestriction";
 import type { WorkflowFilters } from "../bindings/WorkflowFilters";
 import type { SeedWorkflowReport } from "../bindings/SeedWorkflowReport";
@@ -1371,9 +1372,9 @@ const apiImplementation = {
     if (!isTauri()) return Promise.resolve({ countries: [], regions: [] });
     return invoke<LocationOptions>("list_location_options");
   },
-  searchRoleTitles: (query: string): Promise<string[]> => {
+  searchRoleTitles: (query: string): Promise<RoleTitleSuggestion[]> => {
     if (!isTauri()) return Promise.resolve([]);
-    return invoke<string[]>("search_role_titles", { query });
+    return invoke<RoleTitleSuggestion[]>("search_role_titles", { query });
   },
 
   getScrapeRun: (runId: string): Promise<ScrapeRun> => {
