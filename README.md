@@ -13,11 +13,13 @@ custom titles remain selectable. Company suggestions combine supported career
 boards with employer names from locally saved postings; unlisted companies remain
 selectable as literal filters and never infer a board URL. This is not a complete
 company directory. Selecting a supported company attaches its available career
-board; removing a filter never deletes a separately configured source. New workflows
-default to The Muse public cross-employer listings without a company URL; direct ATS
-boards remain optional sources. Arbeitnow is an explicit Germany-focused
-alternative with unknown original dates. Coverage is bounded, not every employer
-or posting. Preview is read-only; Save never runs a scrape.
+board; removing a filter never deletes a separately configured source.
+New workflows enable both built-in public cross-employer feeds without requiring
+source selection: The Muse (bounded worldwide listings) and Arbeitnow (Germany-focused;
+original publication dates may be unknown). Saved/imported source lists are never
+changed implicitly. Neither feed covers every employer, and government sources
+including USAJOBS are unsupported.
+Preview is read-only; Save never runs a scrape.
 Current contracts: WorkflowSpec **8**, worker protocol **9**, migration **32**.
 See the [workflow contract](plans/workflow-v3.md), the [selection implementation evidence](plans/13-implementation-evidence.md), the [Plan 14 section evidence](plans/14-implementation-evidence.md), and the [full workflow evidence](plans/11-implementation-evidence.md).
 The screenshot-reported workflow editor usability work is laid out in

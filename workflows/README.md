@@ -14,12 +14,12 @@ npm run gen:types
 
 Google/Apple static extraction and Netflix/Amazon script examples are **disabled** and labelled Needs review / Setup required. They do not establish verified full-site coverage: URL resolution, site selectors and pagination remain Plan 12 Section 6 work. All matching restrictions are shown in Review, with exact YAML available.
 
-New role-first workflows use public Search (The Muse by default), independently
-of these company-board examples. Roles/optional Companies narrow observed feed
-postings locally; direct boards may be attached without replacing matching.
-`past_week` is the new-draft default; Today/rolling presets resolve at each run.
-Arbeitnow is explicitly Germany-focused and does not establish publication dates.
-Neither public feed guarantees every employer. See the
+New role-first workflows enable both built-in public search feeds without requiring
+source selection: The Muse (bounded worldwide listings) and Arbeitnow (Germany-focused,
+with unknown original dates). Roles/optional Companies narrow observed feed postings
+locally; selected supported companies may add verified direct boards without replacing
+matching. Saved/imported sources are unchanged. Neither feed guarantees every employer;
+government listings, including USAJOBS, are not supported. See the
 [v8 contract](../plans/workflow-v3.md) for provider schemas and bounds.
 
 ## Script setup

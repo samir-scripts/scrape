@@ -129,3 +129,50 @@ and its scoped gate was exercised; Section 10 limits are recorded below.
 **Limits:** browser interaction used `?demo=1&fixtures=1`; no live provider or external directory is used. Native IPC exercised a temporary fixture database, not a native company-picker workflow selection/save journey. There is no new screenshot. The autocomplete suggests only supported templates and employers present in local job records; unknown typed terms remain selectable.
 
 **Startup mismatch correction:** a read-only online SQLite backup and checksum/schema inspection identified the user's exact role-term migration-30 variant. The explicit reviewed database-repair helper advanced the user's database from v30 to v31 without rewriting checksums or changing role/user data; an immediate second run was idempotent. Integrity and foreign-key checks passed. The pre-repair snapshot and adjacent v31 repair backup remain preserved. The app's next startup applies additive migration 32. Recovery details are in [`database-recovery.md`](database-recovery.md).
+
+## Section 6 — Default feeds and government-source research
+
+**Implemented:** new workflows enable both safe built-in public search feeds:
+The Muse and Arbeitnow. They are separate, enabled source records; a new user
+does not have to choose a provider. The Sources hint states their limited
+coverage and explicitly says government listings, including USAJOBS, are not
+supported. Existing/imported workflows are unchanged; tests preserve their
+source records and only new drafts receive these defaults. Selected, supported
+company boards remain additional sources.
+
+**Government-source decision:** no government adapter was added. USAJOBS
+requires an application API key for search and uses the registered email in the
+`User-Agent` header ([authentication](https://developer.usajobs.gov/guides/authentication),
+[quick start](https://developer.usajobs.gov/General/Quick-Start)). Its guidance
+allows up to 500 results per page and 10,000 per query but publishes no fixed
+request-per-minute quota ([rate limits](https://developer.usajobs.gov/guides/rate-limiting)).
+The official search contract supplies announcement and application URIs, but
+data freshness/completeness and service availability are not guaranteed
+([search API](https://developer.usajobs.gov/api-reference/get-api-search),
+[terms](https://developer.usajobs.gov/guides/terms-of-service)). This app has no
+per-user OS credential-store integration, and workflow source configuration
+rejects credentials. Storing the key/email in workflow YAML, SQLite source
+configuration, or shared defaults would expose secrets, so USAJOBS cannot be
+implemented safely within this section.
+
+The reviewed NYC DCAS [Jobs NYC Postings dataset](https://data.cityofnewyork.us/api/views/kpav-sd4t)
+is public and geographically narrow. Its data dictionary separates External
+and Internal postings and provides job identifiers and descriptive fields, but
+no per-posting application URI. Anonymous Socrata access shares a throttled IP
+pool ([API token guidance](https://dev.socrata.com/docs/app-tokens.html)); the
+dataset metadata does not establish a dataset-specific reuse license or an
+official ID-to-application-URL mapping. It is not added until attribution,
+reuse and authentic posting navigation can be verified. No source URL is
+constructed from an identifier.
+
+**Checks run:**
+
+- `npx vitest run src/test/workflow_editor_interaction.test.tsx src/test/company_picker_interaction.test.tsx --maxWorkers=1` — 2 files, 19 tests passed. New drafts save two enabled search providers; company board attachment remains additional; imported source lists remain unchanged.
+- `cargo test -p scrape-worker --test coordinator_tests default_public_search_feeds_are_both_examined_on_an_explicit_run -- --nocapture` — 1 loopback-HTTP sidecar process test passed; both feeds returned one accepted posting and successful scan outcomes.
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/workflow-selection.pw.ts --workers=1` — 1 browser journey passed; both built-in feeds appeared in the new workflow, remained saved alongside selected direct boards, and were present on reopen. Browser used explicit fixture/demo mode.
+- `npx tsc --noEmit` and `node scripts/check-style.mjs` — passed.
+- `rustfmt --edition 2021 --check crates/scrape-worker/tests/coordinator_tests.rs` and `git diff --check` — passed.
+
+**Limits:** no government source is supported; no live USAJOBS/NYC requests,
+native workflow journey, or physical-device QA was performed. Feed verification
+uses local fixtures, not live-provider coverage.

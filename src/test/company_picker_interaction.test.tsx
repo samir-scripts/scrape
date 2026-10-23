@@ -103,14 +103,14 @@ describe("company board attachment editing", () => {
     const draft = readDraft();
     expect(draft.filters?.matching?.target_roles).toEqual(["Software Engineer"]);
     expect(draft.filters?.matching?.companies).toEqual(["Cloudflare", "Linear"]);
-    expect(draft.sources.map(source => source.id)).toHaveLength(3);
-    expect(draft.sources.slice(1).map(source => source.employer_hint)).toEqual(["Cloudflare", "Linear"]);
-    expect(draft.sources[1].enabled).toBe(true);
+    expect(draft.sources.map(source => source.id)).toHaveLength(4);
+    expect(draft.sources.slice(2).map(source => source.employer_hint)).toEqual(["Cloudflare", "Linear"]);
     expect(draft.sources[2].enabled).toBe(true);
+    expect(draft.sources[3].enabled).toBe(true);
     const remove = screen.getByRole("button", { name: "Remove Cloudflare from Companies (Optional)" });
     await user.click(remove);
     expect(readDraft().filters?.matching?.companies).toEqual(["Linear"]);
-    expect(readDraft().sources).toHaveLength(3);
+    expect(readDraft().sources).toHaveLength(4);
   });
   it("deduplicates a customized existing board without overwriting source identity or configuration", async () => {
     const cloudflare = companyOptions.find(option => option.company.id === "cloudflare")!;
@@ -141,15 +141,15 @@ describe("company board attachment editing", () => {
     await user.type(companies, "Cloud");
     await screen.findByRole("option", { name: "Use “Cloud”" });
     await user.click(screen.getByRole("option", { name: "Use “Cloud”" }));
-    expect(readDraft().sources).toHaveLength(1);
+    expect(readDraft().sources).toHaveLength(2);
     await user.type(companies, "Google");
     await screen.findByRole("option", { name: /Google/ });
     await user.keyboard("{ArrowDown}{Enter}");
     const draft = readDraft();
     expect(draft.filters?.matching?.companies).toEqual(["Cloud", "Google"]);
-    expect(draft.sources).toHaveLength(2);
-    expect(draft.sources[1].enabled).toBe(false);
-    expect(draft.sources[0].extractor.kind).toBe("search");
+    expect(draft.sources).toHaveLength(3);
+    expect(draft.sources[1].extractor.kind).toBe("search");
+    expect(draft.sources[2].enabled).toBe(false);
   });
   it("preserves imported company filters without implicit attachment and offers explicit reattachment", async () => {
     const cloudflare = companyOptions.find(option => option.company.id === "cloudflare")!;
@@ -185,7 +185,7 @@ describe("company board attachment editing", () => {
     await user.click(exact);
     expect(search).toHaveBeenCalledWith("Dollar General");
     expect(readDraft().filters?.matching?.companies).toEqual(["Dollar General"]);
-    expect(readDraft().sources).toHaveLength(1);
+    expect(readDraft().sources).toHaveLength(2);
   });
   it("reveals bounded company results in pages beyond the first 50", async () => {
     vi.spyOn(api, "searchCompanies").mockResolvedValue(

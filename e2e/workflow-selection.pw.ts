@@ -35,8 +35,10 @@ test("workflow role and company selectors preserve literal criteria and keep pre
 
   await dialog.getByRole("button", { name: "Continue to Criteria" }).click();
   await dialog.getByRole("button", { name: "Continue to Sources" }).click();
-  await expect(dialog.getByText("Sources (3)", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Sources (4)", { exact: true })).toBeVisible();
+  await expect(dialog.getByText(/New workflows enable The Muse .*Government listings, including USAJOBS, are not supported/)).toBeVisible();
   await expect(dialog.getByText("✓ Cross-Company Search", { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("checkbox", { name: "Enable Arbeitnow — Germany-focused listings", exact: true })).toBeChecked();
   await dialog.getByRole("button", { name: "Continue to Schedule" }).click();
   await dialog.getByRole("button", { name: "Continue to Review" }).click();
   await expect(dialog.getByRole("button", { name: "Preview matches" })).toBeVisible();
@@ -73,6 +75,6 @@ test("workflow role and company selectors preserve literal criteria and keep pre
   await expect(edit.getByRole("button", { name: /Remove .* from Companies \(Optional\)/ })).toHaveCount(0);
   await edit.getByRole("button", { name: "Continue to Criteria" }).click();
   await edit.getByRole("button", { name: "Continue to Sources" }).click();
-  await expect(edit.getByText("Sources (3)", { exact: true })).toBeVisible();
+  await expect(edit.getByText("Sources (4)", { exact: true })).toBeVisible();
   await edit.getByRole("button", { name: "Cancel", exact: true }).click();
 });

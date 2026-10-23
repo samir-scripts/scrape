@@ -233,6 +233,9 @@ export function WorkflowSections({
               onClick={() => attachCompanyBoard(match.company.id)}>Attach career board</Button>
           </div>;
         })}
+        <p className="text-xs text-[var(--color-text-muted)] max-w-prose">
+          New workflows enable The Muse (bounded worldwide listings) and Arbeitnow (Germany-focused; original dates may be unknown). Preview and Run check every enabled source; coverage is not every employer. Government listings, including USAJOBS, are not supported.
+        </p>
         <div className="flex items-center justify-between gap-2 pt-2 border-t border-[var(--color-border)]">
           <h4 className="font-bold text-sm">
             Sources ({draft.sources?.length ?? 0})

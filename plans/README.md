@@ -14,7 +14,7 @@ Prior revision: [Reliable ingestion, multi-source workflows, and UI repair](11-r
 
 Plan 11 remains a completed prior revision. Its eight implementation sections, evidence and unresolved original-report reproduction status are retained in [the Plan 11 ledger](11-implementation-evidence.md).
 
-Plan 14 is the active, one-section-at-a-time workflow usability repair. Sections 1 and 4 are implemented; criteria/time refinements are recorded. Section 9 role-title implementation is complete but native selection/preview/save acceptance remains open. Section 10 company autocomplete is implemented and evidence-recorded. Sections 2, 3, 6, 7, 8, 11 and 12 remain open; see the [evidence ledger](14-implementation-evidence.md). The legacy static role catalog/XLSX pipeline is superseded by Section 9.
+Plan 14 is the active, one-section-at-a-time workflow usability repair. Sections 1, 4, 6, 9 and 10 are implemented and evidence-recorded; Section 9 native selection/preview/save acceptance remains open. Section 6 enables both existing safe public feeds for new workflows and records why USAJOBS and the reviewed NYC dataset are not supported. Sections 2, 3, 7, 8, 11 and 12 remain open; see the [evidence ledger](14-implementation-evidence.md). The legacy static role catalog/XLSX pipeline is superseded by Section 9.
 
 Current UI refinement and independent workflow configuration is specified in
 [plan 10](10-ui-workflow-refinement.md). It supersedes conflicting global

@@ -717,6 +717,60 @@ fn search_arbeitnow_admits_later_page_employers_without_inventing_publication_da
 }
 
 #[test]
+fn default_public_search_feeds_are_both_examined_on_an_explicit_run() {
+    let server = Server::new(|path| {
+        match path {
+        "/www.themuse.com/api/public/jobs?page=0" => json!({
+            "page": 0, "page_count": 1,
+            "results": [muse_job(1, "Software Engineer", "Muse Fixture", json!("2026-10-15T18:00:00Z"))]
+        })
+        .to_string(),
+        "/www.arbeitnow.com/api/job-board-api" => json!({
+            "data": [arbeitnow_job("arbeitnow-1", "Software Engineer", "Arbeitnow Fixture")],
+            "links": {"next": null}
+        })
+        .to_string(),
+        _ => panic!("unexpected request {path}"),
+    }
+    });
+    let mut muse = search_source("themuse", json!({}));
+    muse["id"] = json!("muse");
+    let mut arbeitnow = search_source("arbeitnow", json!({}));
+    arbeitnow["id"] = json!("arbeitnow");
+    let events = run_worker_config(
+        &server,
+        vec![muse, arbeitnow],
+        json!({"matching": {"target_roles": ["Software Engineer"], "companies": []}}),
+        20,
+        0,
+        false,
+        worker_limits(),
+    );
+    let sources = scans(&events);
+    assert_eq!(sources.len(), 2);
+    assert_eq!(
+        sources
+            .iter()
+            .map(|source| source.source_id.as_str())
+            .collect::<Vec<_>>(),
+        ["muse", "arbeitnow"]
+    );
+    assert!(sources
+        .iter()
+        .all(|source| source.examined == 1 && source.accepted == 1));
+    assert!(sources
+        .iter()
+        .all(|source| source.outcome == Some(scrape_core::protocol::ScanOutcome::Success)));
+    assert_eq!(
+        feed_requests(&server),
+        [
+            "/www.themuse.com/api/public/jobs?page=0",
+            "/www.arbeitnow.com/api/job-board-api",
+        ]
+    );
+}
+
+#[test]
 fn search_default_muse_evaluates_later_page_roles_companies_and_publication_window() {
     let server = Server::new(|path| match path {
         "/www.themuse.com/api/public/jobs?page=0" => json!({

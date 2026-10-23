@@ -30,7 +30,10 @@ const appendCompanyBoards = (sources: WorkflowSourceSpec[], companyIds: readonly
 };
 const newDraft = (): WorkflowSpec => ({
   version: 8, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true },
-  sources: [{ id: "source-1", label: "Cross-Company Search", enabled: true, extractor: { kind: "search", url: "" } }],
+  sources: [
+    { id: "source-1", label: "Cross-Company Search", enabled: true, extractor: { kind: "search", url: "themuse" } },
+    { id: "source-2", label: "Arbeitnow — Germany-focused listings", enabled: true, extractor: { kind: "search", url: "arbeitnow" } },
+  ],
   schedule: { cadence: "daily", time: "09:00", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, run_on_startup: false },
   filters: { matching: { ...emptyRules(), posting_date: { preset: "past_week", last_hours: null, from: null, through: null, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, include_unknown: false } } }, retention: { days: 30, policy: "untracked_only" },
 });

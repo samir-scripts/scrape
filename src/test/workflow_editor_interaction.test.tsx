@@ -51,8 +51,10 @@ describe("role-first workflow boundaries", () => {
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     const spec = save.mock.calls[0][0];
     expect(spec.version).toBe(8);
-    expect(spec.sources).toHaveLength(companies ? companies.split(",").length + 1 : 1);
-    expect(spec.sources.filter(source => source.extractor.kind === "search")).toHaveLength(1);
+    expect(spec.sources).toHaveLength((companies ? companies.split(",").length : 0) + 2);
+    expect(spec.sources.filter(source => source.extractor.kind === "search")).toHaveLength(2);
+    expect(spec.sources.filter(source => source.extractor.kind === "search").map(source => source.extractor.url)).toEqual(["themuse", "arbeitnow"]);
+    expect(spec.sources.every(source => source.enabled)).toBe(true);
     expect(spec.filters?.matching?.target_roles).toEqual(roles.split(","));
     expect(spec.filters?.matching?.companies).toEqual(companies ? companies.split(",") : []);
     expect(spec.filters?.matching?.posting_date).toMatchObject({ preset, last_hours: null, from: null, through: null, include_unknown: false });
