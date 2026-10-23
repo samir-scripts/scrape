@@ -100,31 +100,40 @@ pub(super) fn manifest(applied: &[Applied]) -> Migrator {
             .collect::<Vec<_>>()
             .into();
     }
-    let original = manifest
+    let role_variants = [
+        include_str!("../../historical-migrations/0030_role_titles.sql"),
+        include_str!("../../historical-migrations/0030_role_titles_role_first.sql"),
+    ];
+    let originals = manifest
         .iter()
         .find(|migration| migration.version == 30)
         .unwrap();
-    let early_role_titles = Migration::new(
-        30,
-        original.description.clone(),
-        original.migration_type,
-        include_str!("../../historical-migrations/0030_role_titles.sql").into(),
-        false,
-    );
-    if applied.iter().any(|(version, checksum, _)| {
-        *version == 30 && checksum.as_slice() == early_role_titles.checksum.as_ref()
-    }) {
-        manifest.migrations = manifest
+    let role_migrations = role_variants.map(|sql| {
+        Migration::new(
+            30,
+            originals.description.clone(),
+            originals.migration_type,
+            sql.into(),
+            false,
+        )
+    });
+    if let Some((_, checksum, _)) = applied.iter().find(|entry| entry.0 == 30) {
+        if let Some(variant) = role_migrations
             .iter()
-            .map(|migration| {
-                if migration.version == 30 {
-                    early_role_titles.clone()
-                } else {
-                    migration.clone()
-                }
-            })
-            .collect::<Vec<_>>()
-            .into();
+            .find(|migration| migration.checksum.as_ref() == checksum.as_slice())
+        {
+            manifest.migrations = manifest
+                .iter()
+                .map(|migration| {
+                    if migration.version == 30 {
+                        variant.clone()
+                    } else {
+                        migration.clone()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .into();
+        }
     }
     // The caller validates the entire history and independently reconstructed
     // schema against this manifest before permitting writes.

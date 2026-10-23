@@ -1,13 +1,21 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { useWorkflowDraft } from "../hooks/useWorkflowDraft";
 import { WorkflowSections, emptyRules } from "../components/views/settings/WorkflowSections";
 import { companyOptions, selectedCompanyId } from "../components/views/settings/CompanyPicker";
+import { api } from "../lib/api";
 import type { WorkflowSpec } from "../bindings/WorkflowSpec";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+beforeEach(() => {
+  vi.spyOn(api, "searchRoleTitles").mockImplementation(async query =>
+    query.toLowerCase().includes("software")
+      ? [{ title: "Software Engineer", soc_code: "15-1252", priority_tier: 1 }]
+      : [],
+  );
+});
 function Editor({ initialSpec }: { initialSpec?: WorkflowSpec }) {
   const model = useWorkflowDraft({ isOpen: true, initialSpec, onSourceSaved: () => {} });
   return <><WorkflowSections draft={model.draft} change={model.change} advanced={false} section="Roles" setTargetCompanies={model.setTargetCompanies} attachCompanyBoard={model.attachCompanyBoard} />
@@ -83,11 +91,14 @@ describe("company board attachment editing", () => {
     const user = userEvent.setup(); render(<Editor />);
     const roles = screen.getByRole("combobox", { name: "Target roles" });
     await user.type(roles, "software eng");
+    await screen.findByRole("option", { name: /Software Engineer/ });
     await user.keyboard("{ArrowDown}{Enter}");
     const companies = screen.getByRole("combobox", { name: "Companies (Optional)" });
     await user.type(companies, "Cloudflare");
+    await screen.findByRole("option", { name: /Cloudflare/ });
     await user.keyboard("{ArrowDown}{Enter}");
     await user.type(companies, "Linear");
+    await screen.findByRole("option", { name: /Linear/ });
     await user.keyboard("{ArrowDown}{Enter}");
     const draft = readDraft();
     expect(draft.filters?.matching?.target_roles).toEqual(["Software Engineer"]);
@@ -112,12 +123,14 @@ describe("company board attachment editing", () => {
     const user = userEvent.setup(); render(<Editor initialSpec={spec} />);
     const companies = screen.getByRole("combobox", { name: "Companies (Optional)" });
     await user.type(companies, "Cloudflare");
+    await screen.findByRole("option", { name: /Cloudflare/ });
     await user.keyboard("{ArrowDown}{Enter}");
     expect(readDraft().filters?.matching?.companies).toEqual(["Cloudflare"]);
     expect(readDraft().sources).toEqual(spec.sources);
     await user.click(screen.getByRole("button", { name: "Remove Cloudflare from Companies (Optional)" }));
     expect(readDraft().sources).toEqual(spec.sources);
     await user.type(companies, "Cloudflare");
+    await screen.findByRole("option", { name: /Cloudflare/ });
     await user.keyboard("{ArrowDown}{Enter}");
     expect(readDraft().filters?.matching?.companies).toEqual(["Cloudflare"]);
     expect(readDraft().sources).toEqual(spec.sources);
@@ -126,9 +139,11 @@ describe("company board attachment editing", () => {
     const user = userEvent.setup(); render(<Editor />);
     const companies = screen.getByRole("combobox", { name: "Companies (Optional)" });
     await user.type(companies, "Cloud");
+    await screen.findByRole("option", { name: "Use “Cloud”" });
     await user.click(screen.getByRole("option", { name: "Use “Cloud”" }));
     expect(readDraft().sources).toHaveLength(1);
     await user.type(companies, "Google");
+    await screen.findByRole("option", { name: /Google/ });
     await user.keyboard("{ArrowDown}{Enter}");
     const draft = readDraft();
     expect(draft.filters?.matching?.companies).toEqual(["Cloud", "Google"]);
@@ -155,5 +170,38 @@ describe("company board attachment editing", () => {
     expect(draft.sources[1].enabled).toBe(true);
     expect(screen.queryByRole("button", { name: "Attach career board for Cloudflare" })).toBeNull();
     expect(readDraft().sources).toHaveLength(2);
+  });
+  it("selects a locally indexed employer as a literal filter without attaching an unsupported board", async () => {
+    const search = vi.spyOn(api, "searchCompanies").mockResolvedValue([
+      { name: "Dollar General", catalog_company_id: null, jobs_seen: 8 },
+      { name: "Dollar General Logistics", catalog_company_id: null, jobs_seen: 2 },
+    ]);
+    const user = userEvent.setup();
+    render(<Editor />);
+    const companies = screen.getByRole("combobox", { name: "Companies (Optional)" });
+    await user.type(companies, "Dollar General");
+    const exact = await screen.findByRole("option", { name: /Dollar General.*8 saved postings/ });
+    expect(exact.textContent).toContain("employer filter only; no verified career source");
+    await user.click(exact);
+    expect(search).toHaveBeenCalledWith("Dollar General");
+    expect(readDraft().filters?.matching?.companies).toEqual(["Dollar General"]);
+    expect(readDraft().sources).toHaveLength(1);
+  });
+  it("reveals bounded company results in pages beyond the first 50", async () => {
+    vi.spyOn(api, "searchCompanies").mockResolvedValue(
+      Array.from({ length: 75 }, (_, index) => ({
+        name: `LocalCo ${String(index).padStart(3, "0")}`,
+        catalog_company_id: null,
+        jobs_seen: 1,
+      })),
+    );
+    const user = userEvent.setup();
+    render(<Editor />);
+    await user.type(screen.getByRole("combobox", { name: "Companies (Optional)" }), "LocalCo");
+    await screen.findByRole("option", { name: /LocalCo 000/ });
+    expect(screen.getAllByRole("option")).toHaveLength(51);
+    await user.click(screen.getByRole("button", { name: "Show more results" }));
+    await screen.findByRole("option", { name: /LocalCo 074/ });
+    expect(screen.getAllByRole("option")).toHaveLength(76);
   });
 });

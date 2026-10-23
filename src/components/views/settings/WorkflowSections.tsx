@@ -35,6 +35,33 @@ const companySelectionOptions: MultiSelectOption[] = companyOptions.map(({ compa
   description: `${source.extractor.kind} · ${template.readiness.replaceAll("_", " ")}`,
 }));
 
+const loadCompanyOptions = async (query: string): Promise<MultiSelectOption[]> => {
+  const suggestions = await api.searchCompanies(query);
+  if (suggestions.length) {
+    return suggestions.map(suggestion => {
+      const preset = companyOptions.find(option => option.company.id === suggestion.catalog_company_id);
+      const seen = suggestion.jobs_seen
+        ? `${suggestion.jobs_seen} saved posting${suggestion.jobs_seen === 1 ? "" : "s"}`
+        : "";
+      return {
+        value: suggestion.name,
+        label: suggestion.name,
+        searchText: preset
+          ? `${suggestion.name} ${preset.source.extractor.kind} ${preset.domain} ${preset.template.readiness}`
+          : suggestion.name,
+        description: preset
+          ? `${preset.source.extractor.kind} · ${preset.template.readiness.replaceAll("_", " ")}${seen ? ` · ${seen}` : ""}`
+          : `${seen} · employer filter only; no verified career source`,
+      };
+    });
+  }
+  const tokens = query.toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  return companySelectionOptions.filter(option => {
+    const words = (option.searchText ?? option.label).toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u);
+    return tokens.every(token => words.some(word => word.startsWith(token)));
+  });
+};
+
 export const emptyRules = (): PostingRules => ({
   target_roles: [],
   companies: [],
@@ -155,7 +182,7 @@ export function WorkflowSections({
         <section aria-label="Target companies" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
           <h4 className="font-bold text-sm">Target Companies (Optional)</h4>
           <MultiSelectCombobox label="Companies (Optional)" value={rules.companies || []}
-            options={companySelectionOptions} allowCustom describedBy="company-coverage-help" onChange={setTargetCompanies} />
+            options={[]} loadOptions={loadCompanyOptions} allowCustom describedBy="company-coverage-help" onChange={setTargetCompanies} />
           <p id="company-coverage-help" className="text-xs text-[var(--color-ink-mute)]">
             Available career boards attach automatically when selected. Removing a company filter leaves its sources in Sources. Custom company filters restrict matching; public-feed coverage is not guaranteed.
           </p>

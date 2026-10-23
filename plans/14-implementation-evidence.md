@@ -93,7 +93,7 @@ No checksum rewrite, database deletion or user-data reset is performed.
 Checks from this continuation:
 
 - `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.test_role_title_seed` — 5 passed; full pinned CSV regeneration and `--check` passed.
-- `cargo test -p scrape --lib role_title -- --nocapture` — 7 passed, including both migration-30 variants, injected migration failure/rollback/retry, unchanged historical checksums, protected job state, backup and restart, and unknown-checksum refusal without database mutation.
+- `cargo test -p scrape --lib role_title -- --nocapture` — 7 passed, including all three migration-30 variants, injected migration failure/rollback/retry, unchanged historical checksums, protected job state, backup and restart, and unknown-checksum refusal without database mutation.
 - `cargo test -p scrape --lib` — 215 passed.
 - Initial concurrent release role tests measured 347ms cold seeding; this missed the target. Sorting/deduplicating term links in primary-key order removes random index writes. The subsequent isolated `cargo test -p scrape --lib --release db::role_title_tests::role_title_seed_search_is_indexed_idempotent_and_atomic -- --nocapture` passed: cold seed **221ms**, populated skip **0ms rounded**, 45,716 rows, on Apple M4/macOS 15.6, optimized build. These are seed-only measurements, not total schema-plus-startup latency. Warm startup returns before parsing or inserting.
 - Same isolated run: exact `Software Developers` 69µs; prefix `software dev` 146µs; broad token `engineer` 885µs; `ware` 214µs. Token-prefix search uses the term-first index; arbitrary within-word substring search is intentionally not offered. The earlier concurrent broad-token measurement was 1,154µs; sub-millisecond lookup is not a universal guarantee.
@@ -110,6 +110,22 @@ complete role selection/preview/save. Artifacts:
 `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-ZMrEdh`.
 An additional managed-browser visual capture attempt timed out; no new reviewed
 screenshot is claimed. Native startup/IPC recovery is proven on isolated
-fixtures, not the user's installation. No live database was opened or modified;
-the screenshot alone does not reveal the installation's exact checksum. Step 5's
-full native editor acceptance remains open; no subsequent section was started.
+fixtures. Section 9's full native editor selection/preview/save acceptance remains
+open. After the user resumed and requested the next step, Section 10 was implemented
+and its scoped gate was exercised; Section 10 limits are recorded below.
+
+## Section 10 — Bounded company autocomplete
+
+**Implemented:** native company suggestions now merge exact verified template companies with case-insensitive prefix matches from local job-employer names. Migration 32 adds `idx_jobs_company_nocase`; bounded results rank exact then prefix matches, with local posting counts as tie-breakers. The picker shows local counts without implying a verified career board, keeps any unmatched company as a literal employer filter, and never invents a source URL. More than 50 results are disclosed through the existing “Show more results” control. This is not a complete Fortune/local-company directory.
+
+**Checks run:**
+
+- `cargo test -p scrape --lib company_search -- --nocapture` — 2 tests passed, including populated v31→v32 migration preservation, wildcard escaping, 250-result bound, index query plan, saved-state preservation, exact local employer ranking and template coverage.
+- `npx tsc --noEmit` — passed.
+- `npx vitest run src/test/company_picker_interaction.test.tsx src/test/workflow_editor_interaction.test.tsx src/test/multi_select_combobox_interaction.test.tsx --maxWorkers=1` — 3 files, 23 tests passed, including custom Dollar General, known board attachment, duplicate behavior, keyboard selection and paging beyond 50 suggestions.
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/workflow-selection.pw.ts` — 1 browser journey passed; typed company values persisted through the workflow preview/save/reopen UI in explicit fixture mode.
+- `SCRAPE_STARTUP_MODES=observed30 npm run test:native-startup` — actual isolated Tauri startup applied migrations 31 and 32; native `search_companies` IPC returned the indexed `Fixture Co` posting. Artifacts: `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-7E3Kpl`.
+
+**Limits:** browser interaction used `?demo=1&fixtures=1`; no live provider or external directory is used. Native IPC exercised a temporary fixture database, not a native company-picker workflow selection/save journey. There is no new screenshot. The autocomplete suggests only supported templates and employers present in local job records; unknown typed terms remain selectable.
+
+**Startup mismatch correction:** a read-only online SQLite backup and checksum/schema inspection identified the user's exact role-term migration-30 variant. The explicit reviewed database-repair helper advanced the user's database from v30 to v31 without rewriting checksums or changing role/user data; an immediate second run was idempotent. Integrity and foreign-key checks passed. The pre-repair snapshot and adjacent v31 repair backup remain preserved. The app's next startup applies additive migration 32. Recovery details are in [`database-recovery.md`](database-recovery.md).

@@ -54,16 +54,16 @@ Additional forward migrations:
 | 0027 | Scope source endpoint uniqueness to workflow ownership, preserving job/run links through table replacement. |
 | 0028 | Admit Workday sources while preserving existing source columns, constraints, indexes and foreign-key links. |
 | 0029 | Admit cross-employer `search` sources; populated v28 upgrade tests cover complete historical projections, consistent backup, injected rollback, retry and idempotent restart. |
-| 0030 | Creates indexed `role_titles` and token-prefix lookup tables; the embedded O*NET TSV is seeded after migrations only when the title table is empty. |
-| 0031 | Converges the recognized rowid and earlier `WITHOUT ROWID` role-term tables without changing migration-30 checksums or role/job data; startup validates the exact history/schema and backs up before repair. |
-
+| 0030 | Creates indexed `role_titles` and token-prefix lookup tables; the embedded O*NET TSV is seeded only into an empty table. The committed SQL plus two exactly verified historical variants remain immutable; migration 0031 converges all three. |
+| 0031 | Converges the three recognized role-term table histories with a transactional copy while preserving role IDs and links; no migration-30 checksum is rewritten. |
+| 0032 | Adds a case-insensitive company-name index for bounded local-employer search. |
 The Rust backfills preserve source identities, uncertain legacy salary values and
 unresolved suppression keys. Populated upgrade tests preserve all tracked states,
 notes, favorites, status events, workflow rules, custom settings and tombstones.
 See [database recovery](../../plans/database-recovery.md); a Git revert does not
 reverse database schema changes. Never update `_sqlx_migrations` to bypass errors.
 
-`../historical-migrations/` contains verified immutable migration-12/18, migration-19/20, migration-23/25, and migration-30 variants. The runner accepts only matching histories and independently rebuilt schemas, then preserves their stored checksums. See the recovery documentation.
+`../historical-migrations/` contains verified immutable migration-12/18, migration-19/20, migration-23/25, and two migration-30 variants. The runner accepts only matching histories and independently rebuilt schemas, then preserves their stored checksums. See the recovery documentation.
 
 Migration 27 scopes `(kind, identifier)` uniqueness to `workflow_id`, allowing two
 workflows to reference the same board. It recreates `sources` with all existing

@@ -1,6 +1,6 @@
 # Workflow editor usability and selection repair
 
-Status: Sections 1 and 4 are implemented and evidence-recorded; criteria/time refinements are in place. Section 9 role-title search is in progress. Sections 2, 3 and 7 retain open gates. Execute **one section per implementation pass**. Do not start the next section until the active section's gate and evidence are complete. Keep each section's changes reviewable and update this plan/evidence before proceeding.
+Status: Sections 1 and 4 are implemented and evidence-recorded; criteria/time refinements are in place. Section 9 role-title implementation is complete, but its native selection/preview/save gate remains open. Section 10 company autocomplete is implemented and evidence-recorded. Sections 2, 3, 6, 7, 8, 11 and 12 remain open. Execute **one section per implementation pass**; do not start another section until the active section's gate and evidence are complete.
 
 ## Contract and boundaries
 

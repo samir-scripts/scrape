@@ -22,7 +22,8 @@ The `src-tauri/src/db` directory encapsulates all data access logic, repository 
 | [`metrics.rs`](metrics.rs) | `jobs`, `job_status_events` | `MetricsRepo`: Aggregation queries calculating stage totals, conversion rates, role distributions, salary distribution buckets, streaks, and daily velocity. |
 | [`settings.rs`](settings.rs) | `settings` | `SettingsRepo`: Serializes and retrieves user preferences, appearance settings, and automatic-scraping pause state. |
 | [`role_titles.rs`](role_titles.rs) | `role_titles`, `role_title_terms` | Embeds and validates the normalized TSV; performs idempotent transactional batch seeding and indexed token-prefix search for workflow title suggestions. |
-| [`role_title_tests.rs`](role_title_tests.rs) | Temporary SQLite databases | Verifies seed/search/index behavior, warm skip, failed-seed rollback/retry, and populated v29→v30 upgrade recovery. |
+| [`companies.rs`](companies.rs) | `jobs`, generated company catalog | Bounded, case-insensitive employer-prefix suggestions merged with verified catalog presets; saved-posting counts and custom literals remain separate from board attachment. |
+| [`company_search_tests.rs`](company_search_tests.rs) | Temporary SQLite databases | Verifies local/template suggestion merging, ranking, wildcard escaping, result bounds, indexed lookup, and populated v31→v32 preservation. |
 | [`notifications.rs`](notifications.rs) | `notifications` | `NotificationsRepo`: Manages the in-app notification ledger for crawl completions, warnings/errors, and alerts. |
 
 Role search returns at most 50 suggestions with title, SOC code and tier. Exact
@@ -31,6 +32,13 @@ tier/title tie-breaks. Queries are limited to 256 UTF-8 bytes and 16 unique word
 Empty/punctuation-only input returns a bounded tier-ordered set. Token lookups use
 the term-first SQLite index; arbitrary within-word substring search is not offered
 and no leading-wildcard scan is claimed. The async picker preserves server ranking.
+
+Company suggestions combine verified career-board templates with prefix matches
+from locally saved job-employer names. Results are bounded to 250, returned in
+50-item UI pages, ranked exact/prefix then by local usage. The SQLite lookup uses
+a case-insensitive index. Unlisted company terms remain selectable as literal
+filters and never imply a career-board URL. This is not a complete employer
+directory.
 
 Migration startup now refuses checksum mismatches instead of rewriting history;
 pending disk upgrades receive a consistent SQLite snapshot. See

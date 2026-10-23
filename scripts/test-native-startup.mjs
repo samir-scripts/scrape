@@ -27,6 +27,7 @@ for migration in sorted((root/'src-tauri/migrations').glob('*.sql')):
  if version==20 and mode=='legacy23':sql=(root/'src-tauri/historical-migrations/0020_finalize_structured_descriptions.sql').read_bytes()
  if version==23 and mode in ('legacy23','unknown23'):sql=(root/'src-tauri/historical-migrations/0023_employer_branding.sql').read_bytes()
  if version==30 and mode=='legacy30':sql=(root/'src-tauri/historical-migrations/0030_role_titles.sql').read_bytes()
+ if version==30 and mode=='observed30':sql=(root/'src-tauri/historical-migrations/0030_role_titles_role_first.sql').read_bytes()
  c.executescript(sql.decode())
  checksum=hashlib.sha384(sql).digest() if not((version==12 and mode=='unknown') or (version==19 and mode=='unknown19') or (version==23 and mode=='unknown23') or (version==30 and mode=='unknown30')) else bytes.fromhex('12345678')
  c.execute('INSERT INTO _sqlx_migrations(version,description,success,checksum,execution_time) VALUES (?,?,1,?,0)',(version,migration.stem.split('_',1)[1].replace('_',' '),checksum))
@@ -42,7 +43,7 @@ c.commit();c.close()
 `;
 
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
-const supportedModes = ["fresh", "legacy", "current", "unknown", "legacy19", "current19", "unknown19", "legacy23", "current23", "unknown23", "legacy30", "current30", "unknown30"];
+const supportedModes = ["fresh", "legacy", "current", "unknown", "legacy19", "current19", "unknown19", "legacy23", "current23", "unknown23", "legacy30", "observed30", "current30", "unknown30"];
 const modes = process.env.SCRAPE_STARTUP_MODES?.split(",") ?? supportedModes;
 if (modes.some(mode => !supportedModes.includes(mode))) throw new Error("Unsupported startup fixture mode");
 let workflowServer;
@@ -97,6 +98,7 @@ for (const mode of modes) {
       const roleTitles = await invoke("search_role_titles", {query:"Software Developers"});
       if (roleTitles[0]?.title !== "Software Developers" || roleTitles[0]?.soc_code !== "15-1252" || roleTitles[0]?.priority_tier !== 1)
         throw new Error("Native indexed role search did not return the canonical title and provenance");
+      ${mode === "fresh" ? "" : "const companies = await invoke('search_companies', {query:'Fixture'}); if (!companies.some(company => company.name === 'Fixture Co' && company.jobs_seen === 1)) throw new Error('Native company search did not return the indexed fixture employer');"}
       ${mode === "fresh" ? "" : "const saved = await invoke('get_job', {id:'saved'}); if (saved.notes !== 'Fixture saved note' || !saved.favorited || saved.status !== (sessionStorage.getItem('kanban-reloaded') ? 'offer' : 'applied')) throw new Error('Saved state changed');"}
       const schedule = ${process.env.SCRAPE_NATIVE_SCHEDULE === "1" ? `await (${checkNativeSchedule.toString()})()` : "null"};
       const appearance = ${process.env.SCRAPE_NATIVE_APPEARANCE === "1" ? `await (${checkNativeAppearance.toString()})()` : "null"};

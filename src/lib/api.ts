@@ -1,4 +1,5 @@
 import type { RoleTitleSuggestion } from "../bindings/RoleTitleSuggestion";
+import type { CompanySuggestion } from "../bindings/CompanySuggestion";
 import type { FilterCompatibilityRestriction } from "../bindings/FilterCompatibilityRestriction";
 import type { WorkflowFilters } from "../bindings/WorkflowFilters";
 import type { SeedWorkflowReport } from "../bindings/SeedWorkflowReport";
@@ -1375,6 +1376,11 @@ const apiImplementation = {
   searchRoleTitles: (query: string): Promise<RoleTitleSuggestion[]> => {
     if (!isTauri()) return Promise.resolve([]);
     return invoke<RoleTitleSuggestion[]>("search_role_titles", { query });
+  },
+
+  searchCompanies: (query: string): Promise<CompanySuggestion[]> => {
+    if (!isTauri()) return Promise.resolve([]);
+    return invoke<CompanySuggestion[]>("search_companies", { query });
   },
 
   getScrapeRun: (runId: string): Promise<ScrapeRun> => {

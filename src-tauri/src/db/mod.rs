@@ -8,6 +8,9 @@ pub mod branding;
 #[cfg(test)]
 mod browser_upgrade_tests;
 pub mod cleanup;
+pub mod companies;
+#[cfg(test)]
+mod company_search_tests;
 pub mod compensation;
 mod history;
 pub mod jobs;

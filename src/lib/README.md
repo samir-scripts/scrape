@@ -10,7 +10,7 @@ The `src/lib` directory contains the Tauri IPC client, Zustand UI state store, l
 
 | File | Purpose & Key Exports |
 |---|---|
-| [`api.ts`](api.ts) | **Tauri IPC Client**: Strongly-typed wrappers for backend commands, including native indexed role-title search (`searchRoleTitles`); browser demonstration mode remains explicit and does not claim a populated native role database. |
+| [`api.ts`](api.ts) | **Tauri IPC Client**: Strongly-typed wrappers for backend commands, including native indexed role-title search (`searchRoleTitles`) and bounded company suggestions (`searchCompanies`); browser demonstration mode does not claim either native SQLite index is populated. |
 | [`companyLogoCache.ts`](companyLogoCache.ts) | **Local Logo Asset Cache**: Content-addressed in-memory cache (`loadCompanyLogoAsset`, `clearCompanyLogoCache`) that reads verified PNG artwork once per reference over local IPC (`get_company_logo_asset`). |
 | [`constants.ts`](constants.ts) | **Application Constants**: Status display metadata (`STATUS_CONFIG`), tracked pipeline stages (`TRACKED_STAGES`), role metadata (`ROLE_CONFIG`), navigation tabs (`NAV_TABS`), and default filter initializers. |
 | [`cronClock.ts`](cronClock.ts) | **Cron & Clock Math**: Utilities converting 24-hour clock face coordinates into cron expressions and `HH:MM` time strings. |
@@ -47,6 +47,11 @@ Workflow file/YAML import uses the desktop `import_workflow` quarantine command.
 The single draft preserves import origin through Save, so an imported executable
 configuration cannot inherit previously stored trust. Browser demonstrations
 reject browser/script extraction and cannot grant script trust.
+
+Company autocomplete queries verified career-board templates and prefix-matched
+employer names from locally saved postings through `searchCompanies`. Unknown
+employers remain literal filter values; no company URL is inferred, and the
+suggestions are not an exhaustive directory.
 
 Plan 12 section 2 adds generated `SeedWorkflowReport` IPC results. The seed UI
 reports created, retained and needs-review workflows. Script review uses the

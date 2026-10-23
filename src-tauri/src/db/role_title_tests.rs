@@ -366,7 +366,15 @@ async fn migration_30_preserves_v29_user_data_and_recovers_after_failure() {
 
 #[tokio::test]
 async fn migration_31_repairs_known_role_history_without_relabeling_or_data_loss() {
-    for legacy in [false, true] {
+    for historical_sql in [
+        None,
+        Some(include_str!(
+            "../../historical-migrations/0030_role_titles.sql"
+        )),
+        Some(include_str!(
+            "../../historical-migrations/0030_role_titles_role_first.sql"
+        )),
+    ] {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("known30.db");
         let pool = SqlitePoolOptions::new()
@@ -383,12 +391,12 @@ async fn migration_31_repairs_known_role_history_without_relabeling_or_data_loss
             .iter()
             .filter(|m| m.version <= 30)
             .map(|m| {
-                if legacy && m.version == 30 {
+                if let Some(sql) = historical_sql.filter(|_| m.version == 30) {
                     sqlx::migrate::Migration::new(
                         30,
                         m.description.clone(),
                         m.migration_type,
-                        include_str!("../../historical-migrations/0030_role_titles.sql").into(),
+                        sql.into(),
                         false,
                     )
                 } else {

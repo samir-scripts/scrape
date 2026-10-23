@@ -9,23 +9,23 @@ The Simple/Advanced selector sits above the same draft and preserves hidden sett
 when switched. The workflow editor is wider with a scrollable body and persistent
 actions. Searchable multi-selects accept literal job-title and company filters.
 The native role picker searches an O*NET 31.0 catalog seeded into local SQLite;
-custom titles remain selectable. Selecting a supported company attaches its
-available career board; removing a filter never deletes a separately configured
-source. New workflows
+custom titles remain selectable. Company suggestions combine supported career
+boards with employer names from locally saved postings; unlisted companies remain
+selectable as literal filters and never infer a board URL. This is not a complete
+company directory. Selecting a supported company attaches its available career
+board; removing a filter never deletes a separately configured source. New workflows
 default to The Muse public cross-employer listings without a company URL; direct ATS
 boards remain optional sources. Arbeitnow is an explicit Germany-focused
 alternative with unknown original dates. Coverage is bounded, not every employer
 or posting. Preview is read-only; Save never runs a scrape.
-Current contracts: WorkflowSpec **8**, worker protocol **9**, migration **30**.
-See the [workflow contract](plans/workflow-v3.md),
-the [selection implementation evidence](plans/13-implementation-evidence.md),
-the [Plan 14 section evidence](plans/14-implementation-evidence.md), and
-the [full workflow evidence](plans/11-implementation-evidence.md).
-
+Current contracts: WorkflowSpec **8**, worker protocol **9**, migration **32**.
+See the [workflow contract](plans/workflow-v3.md), the [selection implementation evidence](plans/13-implementation-evidence.md), the [Plan 14 section evidence](plans/14-implementation-evidence.md), and the [full workflow evidence](plans/11-implementation-evidence.md).
 The screenshot-reported workflow editor usability work is laid out in
 [Plan 14](plans/14-workflow-editor-usability.md). Its sections are intentionally
-gated one at a time; Section 9 now provides the full O*NET role-title dataset as
-an embedded TSV and seeds an indexed local SQLite search table without an XLSX.
+gated one at a time. Section 9 bundles and seeds O*NET role-title search; Section 10
+adds indexed local-employer suggestions and keeps unlisted employers selectable as
+literal filters without claiming an exhaustive company directory. Neither change
+ships an XLSX or infers unsupported career-board URLs.
 
 
 Workflow ingestion repair is tracked in [Plan 12](plans/12-workflow-ingestion-repair.md) and fully implemented across Sections 1–8.
@@ -103,7 +103,7 @@ Each directory in this repository contains its own dedicated `README.md` documen
   - [`src-tauri/gen/`](src-tauri/gen/README.md) — Auto-generated configuration schemas.
     - [`src-tauri/gen/schemas/`](src-tauri/gen/schemas/README.md) — JSON schemas for capabilities and desktop configuration.
   - [`src-tauri/icons/`](src-tauri/icons/README.md) — Multi-platform application and system tray icons.
-  - [`src-tauri/migrations/`](src-tauri/migrations/README.md) — Immutable forward-only SQLite migrations (0001–0031), paired with historical manifests and populated upgrade/recovery verification.
+  - [`src-tauri/migrations/`](src-tauri/migrations/README.md) — Immutable forward-only SQLite migrations (0001–0032), paired with historical manifests and populated upgrade/recovery verification.
   - [`src-tauri/src/`](src-tauri/src/README.md) — Application initialization, state management, and error handling.
     - [`src-tauri/src/commands/`](src-tauri/src/commands/README.md) — Tauri IPC command endpoints exposed to the frontend.
     - [`src-tauri/src/db/`](src-tauri/src/db/README.md) — SQLite database repositories and query implementations (`jobs`, `postings`, `sources`, `runs`, `branding`, `cleanup`, `history`, `settings`, `metrics`, `notifications`).
