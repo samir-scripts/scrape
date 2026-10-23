@@ -72,6 +72,8 @@
 
 ## Approved step 5 continuation — title ranking and migration-30 startup repair
 
+**Commit:** `3ba9e73` (`fix: finish indexed role search and repair migration 30 startup`).
+
 Implemented the remaining audited step-5 gaps: Unicode-casefold title ordering,
 same-tier SOC tie-break tests, rejection of malformed CSV/empty titles with source
 diagnostics, bounded search (256 UTF-8 bytes / 16 unique words / 50 results),
