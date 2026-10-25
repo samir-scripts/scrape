@@ -168,6 +168,25 @@ pub fn limits(config: &Value) -> Result<crate::WorkerLimits, String> {
             .and_then(|n| u32::try_from(n).ok())
             .ok_or("max_pages: expected a whole number from 1 to 100")?;
     }
+    if let Some(value) = config.get("per_host_delay_ms") {
+        limits.per_host_delay_ms = value
+            .as_u64()
+            .ok_or("per_host_delay_ms: expected whole milliseconds")?;
+    }
+    if let Some(value) = config.get("jitter_ms") {
+        limits.jitter_ms = Some(
+            value
+                .as_u64()
+                .ok_or("jitter_ms: expected whole milliseconds from 0 to 10000")?,
+        );
+    }
+    if let Some(value) = config.get("ignore_robots") {
+        limits.ignore_robots = Some(
+            value
+                .as_bool()
+                .ok_or("ignore_robots: expected boolean")?,
+        );
+    }
     limits.validate()?;
     Ok(limits)
 }

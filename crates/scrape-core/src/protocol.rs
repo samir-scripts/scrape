@@ -6,7 +6,7 @@ use crate::{RoleType, SourceKind, TriState, WorkplaceType};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 9;
+pub const PROTOCOL_VERSION: u32 = 11;
 pub const DEFAULT_NAVIGATION_TIMEOUT_S: u64 = 30;
 pub const MAX_PAGES_PER_SOURCE: u32 = 100;
 pub const DEFAULT_SOURCE_DURATION_S: u64 = 180;
@@ -106,12 +106,100 @@ fn default_concurrency() -> usize {
     1
 }
 
-fn default_per_host_delay_ms() -> u64 {
+pub fn default_per_host_delay_ms() -> u64 {
     750
 }
 
 fn default_request_timeout_s() -> u64 {
     20
+}
+
+/// Execution-only network configuration. Never store in workflow or run snapshots.
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct HttpProxyConfig {
+    pub server: String,
+    pub username: Option<String>,
+    pub password: Option<String>,
+}
+
+impl std::fmt::Debug for HttpProxyConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HttpProxyConfig")
+            .field("server", &"[redacted]")
+            .field("authenticated", &self.username.is_some())
+            .finish()
+    }
+}
+
+impl HttpProxyConfig {
+    pub fn validate(mut self) -> Result<Self, String> {
+        let invalid = || {
+            "Proxy server must be an HTTP(S) scheme, host and port only; enter credentials separately."
+                .to_string()
+        };
+        let mut url = url::Url::parse(self.server.trim()).map_err(|_| invalid())?;
+        if !matches!(url.scheme(), "http" | "https")
+            || url.host_str().is_none()
+            || url.port_or_known_default().is_none()
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+            || url.path() != "/"
+        {
+            return Err(invalid());
+        }
+        let port = url.port_or_known_default().ok_or_else(invalid)?;
+        url.set_port(Some(port)).map_err(|_| invalid())?;
+        self.server = url.as_str().trim_end_matches('/').to_owned();
+        self.username = self.username.map(|value| value.trim().to_owned());
+        match (&self.username, &self.password) {
+            (None, None) => {}
+            (Some(username), Some(password)) if !username.is_empty() && !password.is_empty() => {}
+            _ => {
+                return Err(
+                    "Proxy username and password must both be provided or both omitted.".into(),
+                )
+            }
+        }
+        Ok(self)
+    }
+
+    pub fn validate_with_socks(mut self) -> Result<Self, String> {
+        let invalid = || {
+            "Proxy server must be an HTTP(S) or SOCKS5 scheme, host and port only; enter credentials separately."
+                .to_string()
+        };
+        let mut url = url::Url::parse(self.server.trim()).map_err(|_| invalid())?;
+        let port = url
+            .port_or_known_default()
+            .or_else(|| matches!(url.scheme(), "socks5" | "socks5h").then_some(1080));
+        if !matches!(url.scheme(), "http" | "https" | "socks5" | "socks5h")
+            || url.host_str().is_none()
+            || port.is_none()
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+            || !matches!(url.path(), "" | "/")
+        {
+            return Err(invalid());
+        }
+        url.set_port(port).map_err(|_| invalid())?;
+        self.server = url.as_str().trim_end_matches('/').to_owned();
+        self.username = self.username.map(|value| value.trim().to_owned());
+        match (&self.username, &self.password) {
+            (None, None) => {}
+            (Some(username), Some(password)) if !username.is_empty() && !password.is_empty() => {}
+            _ => {
+                return Err(
+                    "Proxy username and password must both be provided or both omitted.".into(),
+                )
+            }
+        }
+        Ok(self)
+    }
 }
 
 /// Configuration payload passed from Tauri host to scrape-worker via stdin JSON.
@@ -139,6 +227,9 @@ pub struct WorkerConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub starting_source_index: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(skip)]
+    pub http_proxy: Option<HttpProxyConfig>,
 }
 
 impl Default for WorkerConfig {
@@ -153,6 +244,7 @@ impl Default for WorkerConfig {
             blocked_postings: vec![],
             max_jobs_per_run: None,
             starting_source_index: None,
+            http_proxy: None,
         }
     }
 }
@@ -247,11 +339,29 @@ impl WorkerFilters {
             (!self.role_types.is_empty(), "role_types", "A legacy role type AND a structured role type must both match when both groups are present. The groups are not combined."),
             (self.query.as_ref().is_some_and(|q| !q.trim().is_empty()), "query", "This expert query applies with AND, including queries from old examples. It is never removed by recognizing its text."),
             (self.policy.as_ref().is_some_and(|p| !p.is_null()), "policy", "This expert policy applies with AND alongside every other restriction."),
-            (self.compensation.is_some(), "compensation", "Legacy compensation and structured compensation must both match when both are present."),
         ] {
             if active {
                 restrictions.push(FilterCompatibilityRestriction { field: field.into(), explanation: explanation.into() });
             }
+        }
+        if let Some(pay) = &self.compensation {
+            restrictions.push(FilterCompatibilityRestriction {
+                field: "compensation".into(),
+                explanation: format!(
+                    "Legacy compensation and structured compensation must both match when both are present. {}",
+                    pay.explanation()
+                ),
+            });
+        }
+        if let Some(pay) = self
+            .matching
+            .as_ref()
+            .and_then(|rules| rules.compensation.as_ref())
+        {
+            restrictions.push(FilterCompatibilityRestriction {
+                field: "matching.compensation".into(),
+                explanation: pay.explanation().into(),
+            });
         }
         restrictions
     }
@@ -410,6 +520,12 @@ pub struct WorkerLimits {
     pub max_source_duration_s: u64,
     #[ts(type = "number")]
     pub max_workflow_duration_s: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable, type = "number")]
+    pub jitter_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub ignore_robots: Option<bool>,
 }
 
 impl Default for WorkerLimits {
@@ -425,6 +541,8 @@ impl Default for WorkerLimits {
             concurrency: default_concurrency(),
             per_host_delay_ms: default_per_host_delay_ms(),
             request_timeout_s: default_request_timeout_s(),
+            jitter_ms: None,
+            ignore_robots: None,
         }
     }
 }
@@ -460,6 +578,9 @@ impl WorkerLimits {
                     "limits.{name}: outside the supported extraction bound"
                 ));
             }
+        }
+        if self.jitter_ms.is_some_and(|jitter| jitter > 10_000) {
+            return Err("limits.jitter_ms: outside the supported extraction bound".into());
         }
         if let Some(enrichment) = &self.enrichment {
             enrichment.validate()?;
@@ -904,5 +1025,73 @@ mod tests {
         assert!(done_str.contains(r#""type":"done""#));
         let done_deserialized: WorkerEvent = serde_json::from_str(&done_str).unwrap();
         assert_eq!(done_deserialized, done);
+    }
+    #[test]
+    fn proxy_validation_normalizes_endpoint_and_never_formats_credentials() {
+        let config = HttpProxyConfig {
+            server: " https://proxy.example ".into(),
+            username: Some(" fixture-user ".into()),
+            password: Some("fixture-password".into()),
+        }
+        .validate()
+        .unwrap();
+        assert_eq!(config.server, "https://proxy.example");
+        assert_eq!(config.username.as_deref(), Some("fixture-user"));
+        assert_eq!(config.password.as_deref(), Some("fixture-password"));
+        let debug = format!("{config:?}");
+        assert!(!debug.contains("fixture-user"));
+        assert!(!debug.contains("fixture-password"));
+        for (server, username, password) in [
+            ("socks5://proxy.example:8080", None, None),
+            ("http://user:pass@proxy.example:8080", None, None),
+            ("http://proxy.example:8080/path", None, None),
+            ("http://proxy.example:8080?key=x", None, None),
+            ("http://proxy.example:8080", Some("user"), None),
+            ("http://proxy.example:8080", None, Some("password")),
+            ("http://proxy.example:8080", Some(" "), Some("password")),
+        ] {
+            assert!(HttpProxyConfig {
+                server: server.into(),
+                username: username.map(str::to_owned),
+                password: password.map(str::to_owned),
+            }
+            .validate()
+            .is_err());
+        }
+    }
+
+    #[test]
+    fn socks5_proxy_and_jitter_limits_validate_cleanly() {
+        let socks = HttpProxyConfig {
+            server: " socks5://127.0.0.1:1080 ".into(),
+            username: None,
+            password: None,
+        }
+        .validate_with_socks()
+        .unwrap();
+        assert_eq!(socks.server, "socks5://127.0.0.1:1080");
+        let socks5h = HttpProxyConfig {
+            server: "socks5h://proxy.example:1080".into(),
+            username: Some("user".into()),
+            password: Some("pass".into()),
+        }
+        .validate_with_socks()
+        .unwrap();
+        assert_eq!(socks5h.server, "socks5h://proxy.example:1080");
+        assert!(HttpProxyConfig {
+            server: "ftp://proxy.example:21".into(),
+            username: None,
+            password: None,
+        }
+        .validate_with_socks()
+        .is_err());
+        let mut limits = WorkerLimits {
+            jitter_ms: Some(500),
+            ignore_robots: Some(true),
+            ..Default::default()
+        };
+        assert!(limits.validate().is_ok());
+        limits.jitter_ms = Some(10_001);
+        assert!(limits.validate().is_err());
     }
 }
