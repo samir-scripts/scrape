@@ -39,9 +39,15 @@ struct Cli {
     /// Auto-detect ATS or JSON-LD configuration for a given URL
     #[arg(long)]
     detect: Option<String>,
+    /// Read an optional HttpProxyConfig JSON line from stdin for --detect.
+    #[arg(long, requires = "detect")]
+    detect_proxy_stdin: bool,
     /// On-demand employer branding lookup for <company> and optional <url>
     #[arg(long, num_args = 1..=2)]
     branding: Option<Vec<String>>,
+    /// Read an optional HttpProxyConfig JSON line from stdin for --branding.
+    #[arg(long, requires = "branding")]
+    branding_proxy_stdin: bool,
 }
 
 #[tokio::main]
@@ -62,7 +68,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if let Some(url) = args.detect {
-        let client = HttpClient::new(10, 500);
+        let proxy = if args.detect_proxy_stdin {
+            let mut line = String::new();
+            io::stdin().read_line(&mut line)?;
+            serde_json::from_str::<Option<scrape_core::protocol::HttpProxyConfig>>(&line)?
+        } else {
+            None
+        };
+        let client = HttpClient::new(10, 500).with_proxy(proxy.as_ref())?;
         let result = detect::detect_source(&client, &url).await;
         println!("{}", serde_json::to_string(&result)?);
         return Ok(());
@@ -70,7 +83,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(parts) = args.branding {
         let company = parts.first().cloned().unwrap_or_default();
         let page_url = parts.get(1).cloned().unwrap_or_default();
-        let client = HttpClient::new(5, 500);
+        let proxy = if args.branding_proxy_stdin {
+            let mut line = String::new();
+            io::stdin().read_line(&mut line)?;
+            serde_json::from_str::<Option<scrape_core::protocol::HttpProxyConfig>>(&line)?
+        } else {
+            None
+        };
+        let client = HttpClient::new(5, 500).with_proxy(proxy.as_ref())?;
         let source = WorkerSource {
             id: "on_demand".into(),
             kind: SourceKind::Selector,
@@ -203,6 +223,7 @@ async fn run_single_source(
         blocked_postings: vec![],
         max_jobs_per_run,
         starting_source_index: Some(0),
+        http_proxy: None,
     };
 
     execute_worker(config, dry_run, replay_origin).await
@@ -222,7 +243,10 @@ async fn execute_worker(
     let mut client = HttpClient::new(
         config.limits.request_timeout_s,
         config.limits.per_host_delay_ms,
-    );
+    )
+    .with_jitter_ms(config.limits.jitter_ms)
+    .with_respect_robots(!config.limits.ignore_robots.unwrap_or(false))
+    .with_proxy(config.http_proxy.as_ref())?;
     // Validate every effective rule before contacting any source.
     FilterMatcher::new(&config.filters).map_err(|e| format!("Invalid workflow filters: {e}"))?;
     for filters in config.filters_by_source.values() {

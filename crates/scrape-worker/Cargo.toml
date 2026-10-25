@@ -16,7 +16,7 @@ path = "src/main.rs"
 [dependencies]
 scrape-core = { path = "../scrape-core" }
 clap = { version = "4", features = ["derive"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip", "socks"] }
 scraper = "0.27"
 tokio = { workspace = true, features = ["full"] }
 futures = "0.3"
@@ -31,3 +31,4 @@ tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 base64 = "0.22.1"
 tempfile = "3"
+sha2 = "0.10"
