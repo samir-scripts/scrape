@@ -268,6 +268,62 @@ fn test_selector_fixture() {
 }
 
 #[test]
+fn test_heuristic_public_html_extraction() {
+    let html = r#"<!DOCTYPE html>
+<html>
+<head><title>Acme Careers</title></head>
+<body>
+  <header><nav><a href="/">Home</a><a href="/about">About</a></nav></header>
+  <main>
+    <h1>Open Roles at Acme</h1>
+    <div class="openings">
+      <div class="career-card">
+        <a href="/careers/senior-systems-engineer">Senior Systems Engineer</a>
+        <span class="loc">Remote</span>
+      </div>
+      <div class="career-card">
+        <a href="/jobs/platform-architect?dept=infra">Staff Platform Architect</a>
+        <span class="loc">New York, NY</span>
+      </div>
+      <div class="nav-links">
+        <a href="/careers/apply">Apply</a>
+        <a href="/privacy">Privacy Policy</a>
+      </div>
+    </div>
+  </main>
+</body>
+</html>"#;
+
+    let source = WorkerSource {
+        id: "src-acme-heuristic".to_string(),
+        kind: SourceKind::Selector,
+        name: "Acme Careers".to_string(),
+        identifier: "https://acme.example.com/careers".to_string(),
+        config: serde_json::json!({}),
+    };
+
+    let base_url = Url::parse("https://acme.example.com/careers").unwrap();
+    let events = extract_jobs_with_selectors(html, &base_url, &source).unwrap();
+    assert_eq!(events.len(), 2);
+
+    match &events[0] {
+        WorkerEvent::Job { title, url, .. } => {
+            assert_eq!(title, "Senior Systems Engineer");
+            assert_eq!(url, "https://acme.example.com/careers/senior-systems-engineer");
+        }
+        other => panic!("Expected Job event, got: {other:?}"),
+    }
+
+    match &events[1] {
+        WorkerEvent::Job { title, url, .. } => {
+            assert_eq!(title, "Staff Platform Architect");
+            assert_eq!(url, "https://acme.example.com/jobs/platform-architect?dept=infra");
+        }
+        other => panic!("Expected Job event, got: {other:?}"),
+    }
+}
+
+#[test]
 fn test_detect_fixtures() {
     let gh_path = fixtures_dir().join("detect_greenhouse.html");
     let gh_html = fs::read_to_string(gh_path).expect("Failed to read detect_greenhouse fixture");

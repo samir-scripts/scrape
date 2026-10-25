@@ -13,7 +13,7 @@ use scrape_core::{
 };
 use scraper::Html;
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     sync::Arc,
     time::Duration,
 };
@@ -33,6 +33,13 @@ pub(crate) struct SelectorSession {
     config: StaticSourceConfig,
     page: SelectorPage,
     visited: HashSet<String>,
+    crawl_origin: Option<Url>,
+    frontier: VecDeque<(Url, u32)>,
+    queued: HashSet<String>,
+    crawl_bound_reached: bool,
+    crawl_depth: u32,
+    // Retained only when explicit detail enrichment needs already-fetched pages.
+    crawl_cache: HashMap<String, (String, String)>,
     seen: HashSet<String>,
     pages_visited: u32,
     page_limit_reached: bool,
@@ -59,7 +66,13 @@ impl SelectorSession {
         let config = StaticSourceConfig::parse(&source.config, limits)
             .map_err(ClientError::Configuration)?;
         // Compile all posting locators/mappings before any source request.
-        if scrape_core::hydration::HydrationConfig::parse(&source.config)
+        if !config.crawl.as_ref().is_some_and(|crawl| {
+            matches!(
+                crawl.extraction,
+                scrape_core::static_source::CrawlExtraction::Jsonld
+                    | scrape_core::static_source::CrawlExtraction::PublicHtml
+            )
+        }) && scrape_core::hydration::HydrationConfig::parse(&source.config)
             .map_err(ClientError::Configuration)?
             .is_none()
         {
@@ -89,52 +102,82 @@ impl SelectorSession {
         let navigation_timeout = Duration::from_secs(config.navigation_timeout_s);
         let url = page_url(&Url::parse(&source.identifier)?, &source.identifier)?;
 
-        let (html, actual, pages_visited, page_limit_reached, session_cookies) =
-            if mode == ExtractionMode::Browser {
-                let cookies = resolve_source_session_cookies(&source.config, &url)?;
-                let pool = browser.as_ref().ok_or_else(|| {
-                    ClientError::Configuration("Browser pool was not initialized".into())
-                })?;
-                let rendered = pool
-                    .fetch_rendered_page(
-                        client,
-                        &url,
-                        source,
-                        &config,
-                        &cookies,
-                        config.max_pages,
-                        navigation_timeout,
-                        source_deadline,
-                    )
-                    .await?;
-                (
-                    rendered.html,
-                    rendered.actual_url,
-                    rendered.pages_consumed,
-                    rendered.page_limit_reached,
-                    cookies,
+        let (html, actual, pages_visited, page_limit_reached, session_cookies) = if mode
+            == ExtractionMode::Browser
+        {
+            let cookies = resolve_source_session_cookies(&source.config, &url)?;
+            let pool = browser.as_ref().ok_or_else(|| {
+                ClientError::Configuration("Browser pool was not initialized".into())
+            })?;
+            let rendered = pool
+                .fetch_rendered_page(
+                    client,
+                    &url,
+                    source,
+                    &config,
+                    &cookies,
+                    config.max_pages,
+                    navigation_timeout,
+                    source_deadline,
                 )
-            } else {
-                let (html, actual) = timeout_at(
+                .await?;
+            (
+                rendered.html,
+                rendered.actual_url,
+                rendered.pages_consumed,
+                rendered.page_limit_reached,
+                cookies,
+            )
+        } else {
+            let fetch = async {
+                let scoped_client = client.for_static_source(&config);
+                if config.crawl.is_some() {
+                    scoped_client
+                        .fetch_text_same_origin_at(url.as_str(), &url, true)
+                        .await
+                } else {
+                    scoped_client.fetch_text_at(url.as_str(), true).await
+                }
+            };
+            let (html, actual) = timeout_at(
                     source_deadline.min(Instant::now() + navigation_timeout),
-                    client.fetch_text_at(url.as_str(), true),
+                    fetch,
                 )
                 .await
                 .map_err(|_| {
                     ClientError::TimeLimit(
                         "Static source initial navigation reached its time limit".into(),
                     )
-                })??;
-                (html, actual, 1, false, Vec::new())
-            };
+                })?
+                .map_err(|error| match error {
+                    ClientError::HttpStatus(status, _) if config.crawl.is_some() && matches!(status.as_u16(), 401 | 403) =>
+                        ClientError::NeedsLogin(format!("Website crawl requires login or permission (HTTP {status}); only public HTML is supported")),
+                    error => error,
+                })?;
+            (html, actual, 1, false, Vec::new())
+        };
 
         let actual = page_url(&url, &actual)?;
         let page = extract_page(&html, &actual, source, &config)?;
+        if config.crawl.is_some()
+            && scrape_core::browser::is_login_wall(
+                &url,
+                actual.as_str(),
+                "",
+                false,
+                !page.candidates.is_empty(),
+            )
+        {
+            return Err(ClientError::NeedsLogin(
+                "Website crawl redirected to a login page; only public HTML is supported".into(),
+            ));
+        }
         let mut visited = HashSet::new();
         visited.insert(url.to_string());
         visited.insert(actual.to_string());
         // Redirect aliases must also prevent loops, without counting as another page.
-        let session = Self {
+        let crawl_origin = config.crawl.as_ref().map(|_| url.clone());
+        let mut session = Self {
             source: source.clone(),
             mode,
             browser,
@@ -142,6 +185,12 @@ impl SelectorSession {
             config,
             page,
             visited,
+            crawl_origin,
+            frontier: VecDeque::new(),
+            queued: HashSet::new(),
+            crawl_bound_reached: false,
+            crawl_depth: 0,
+            crawl_cache: HashMap::new(),
             seen: HashSet::new(),
             pages_visited,
             page_limit_reached,
@@ -154,6 +203,12 @@ impl SelectorSession {
             exhausted: false,
             pending: VecDeque::new(),
         };
+        session.enqueue_links(&html, &actual, 0);
+        if session.config.crawl.is_some() && session.config.has_details() {
+            session
+                .crawl_cache
+                .insert(url.to_string(), (html, actual.to_string()));
+        }
         Ok(session)
     }
     pub async fn next(
@@ -175,6 +230,9 @@ impl SelectorSession {
         let candidate = if let Some(candidate) = self.page.candidates.pop_front() {
             candidate
         } else {
+            if self.config.crawl.is_some() {
+                return self.advance_crawl(client).await;
+            }
             if self.page_limit_reached {
                 self.page_limit_reached = false;
                 return Ok(self.stop(
@@ -298,6 +356,9 @@ impl SelectorSession {
         };
         let mut posting = match candidate {
             SelectorCandidate::Posting(posting) => *posting,
+            SelectorCandidate::Extracted(event) => {
+                return Ok(SelectorStep::Event(Box::new((*event, None))))
+            }
             SelectorCandidate::Invalid(error) => {
                 return Ok(SelectorStep::Event(Box::new((*error, None))))
             }
@@ -322,18 +383,40 @@ impl SelectorSession {
         let mut detail_received = false;
         let bound = if Instant::now() >= self.detail_deadline {
             Some(CoverageTermination::TimeLimit)
+        } else if self.config.crawl.as_ref().is_some_and(|crawl| {
+            self.pages_visited >= self.config.max_pages || self.crawl_depth >= crawl.max_depth
+        }) {
+            Some(CoverageTermination::PageLimit)
         } else if self.detail_requests >= self.detail_limit {
             Some(CoverageTermination::RequestLimit)
         } else {
             None
         };
-        if let Some(bound) = bound {
+        let cached_detail = posting.detail_url.as_ref().and_then(|url| {
+            self.crawl_cache
+                .get(url)
+                .or_else(|| self.crawl_cache.values().find(|(_, actual)| actual == url))
+        });
+        if let Some((html, actual)) = cached_detail {
+            match merge_detail(&mut posting, html, actual, &self.config, &self.source) {
+                Ok(()) => detail_received = true,
+                Err(error) => {
+                    warning = Some((
+                        format!("Cached website detail could not be extracted: {error}"),
+                        Some(CoverageTermination::Failed),
+                    ))
+                }
+            }
+        } else if let Some(bound) = bound {
             if !self.detail_bound_reported {
-                warning = Some(("Static detail enrichment reached its request/time bound; missing evidence remains unknown".to_string(),Some(bound)));
+                warning = Some(("Static detail enrichment reached its page/depth/request/time bound; missing evidence remains unknown".to_string(),Some(bound)));
                 self.detail_bound_reported = true;
             }
         } else if let Some(url) = posting.detail_url.clone() {
             self.detail_requests += 1;
+            if self.config.crawl.is_some() {
+                self.pages_visited += 1;
+            }
             let detail_fetch = async {
                 if self.mode == ExtractionMode::Browser {
                     let pool = self.browser.as_ref().ok_or_else(|| {
@@ -358,7 +441,11 @@ impl SelectorSession {
                         .await?;
                     Ok::<(String, String), ClientError>((rendered.html, rendered.actual_url))
                 } else {
-                    client.fetch_text_at(&url, true).await
+                    if let Some(origin) = &self.crawl_origin {
+                        client.fetch_text_same_origin_at(&url, origin, true).await
+                    } else {
+                        client.fetch_text_at(&url, true).await
+                    }
                 }
             };
             match timeout_at(
@@ -379,12 +466,33 @@ impl SelectorSession {
                             ))
                         }
                     }
+                    if self.config.crawl.is_some() {
+                        self.crawl_cache.insert(url, (html, actual));
+                    }
                 }
                 Ok(Err(e)) => {
-                    warning = Some((format!("Static detail {url} unavailable: {e}"), None))
+                    let termination = if self.config.crawl.is_some() {
+                        self.visited.insert(url.clone());
+                        Some(match &e {
+                            ClientError::NeedsLogin(_) => CoverageTermination::NeedsLogin,
+                            ClientError::HttpStatus(status, _)
+                                if matches!(status.as_u16(), 401 | 403) =>
+                            {
+                                CoverageTermination::NeedsLogin
+                            }
+                            ClientError::TimeLimit(_) => CoverageTermination::TimeLimit,
+                            _ => CoverageTermination::Failed,
+                        })
+                    } else {
+                        None
+                    };
+                    warning = Some((format!("Static detail {url} unavailable: {e}"), termination))
                 }
                 Err(_) => {
                     self.detail_bound_reported = true;
+                    if self.config.crawl.is_some() {
+                        self.visited.insert(url.clone());
+                    }
                     warning=Some((format!("Static detail {url} reached its time limit; missing evidence remains unknown"),Some(CoverageTermination::TimeLimit)));
                 }
             }
@@ -408,7 +516,8 @@ impl SelectorSession {
                 WorkerEvent::Warning {
                     source_id: self.source.id.clone(),
                     message,
-                    eligibility_incomplete: incomplete,
+                    eligibility_incomplete: incomplete
+                        || (self.config.crawl.is_some() && termination.is_some()),
                     termination,
                 },
                 None,
@@ -428,7 +537,146 @@ impl SelectorSession {
                 && self.page.candidates.is_empty()
                 && self.page.next_page.is_none()
                 && self.page.next_page_error.is_none()
+                && self.frontier.is_empty()
+                && !self.crawl_bound_reached
                 && !self.page_limit_reached)
+    }
+    fn enqueue_links(&mut self, html: &str, actual: &Url, depth: u32) {
+        let Some(crawl) = self.config.crawl.as_ref() else {
+            return;
+        };
+        let origin = self.crawl_origin.as_ref().unwrap();
+        let document = Html::parse_document(html);
+        let base = super::selector::resolve_document_base(&document, actual);
+        let anchors = scraper::Selector::parse("a[href]").expect("constant anchor selector");
+        for anchor in document.select(&anchors) {
+            let Some(raw) = anchor.value().attr("href") else {
+                continue;
+            };
+            let Ok(url) = page_url(&base, raw) else {
+                continue;
+            };
+            if url.origin() != origin.origin()
+                || self.visited.contains(url.as_str())
+                || self.queued.contains(url.as_str())
+            {
+                continue;
+            }
+            if depth >= crawl.max_depth {
+                self.crawl_bound_reached = true;
+                continue;
+            }
+            // Only one extra destination is needed to prove incomplete coverage.
+            if self.frontier.len() as u32 > self.config.max_pages.saturating_sub(self.pages_visited)
+            {
+                self.crawl_bound_reached = true;
+                continue;
+            }
+            self.queued.insert(url.to_string());
+            self.frontier.push_back((url, depth + 1));
+        }
+    }
+
+    async fn advance_crawl(&mut self, client: &HttpClient) -> Result<SelectorStep, ClientError> {
+        let Some((url, depth)) = self.frontier.pop_front() else {
+            if self.crawl_bound_reached {
+                return Ok(self.stop("Website crawl page/depth limit reached; remaining same-origin pages were not visited", CoverageTermination::PageLimit));
+            }
+            self.exhausted = true;
+            return Ok(SelectorStep::Exhausted);
+        };
+        if self.visited.contains(url.as_str()) {
+            return Ok(SelectorStep::Yield);
+        }
+        let cached = self.crawl_cache.remove(url.as_str());
+        if cached.is_none() && self.pages_visited >= self.config.max_pages {
+            return Ok(self.stop(
+                "Website crawl page limit reached; remaining same-origin pages were not visited",
+                CoverageTermination::PageLimit,
+            ));
+        }
+        // Count attempted page navigations, not cached extraction or robots requests.
+        if cached.is_none() {
+            self.pages_visited += 1;
+        }
+        self.visited.insert(url.to_string());
+        let result = if let Some(page) = cached {
+            Ok(Ok(page))
+        } else {
+            timeout_at(
+                self.source_deadline
+                    .min(Instant::now() + self.navigation_timeout),
+                client.fetch_text_same_origin_at(
+                    url.as_str(),
+                    self.crawl_origin.as_ref().unwrap(),
+                    true,
+                ),
+            )
+            .await
+        };
+        let (html, actual) = match result {
+            Ok(Ok(page)) => page,
+            Ok(Err(ClientError::TimeLimit(message))) => {
+                return Ok(self.stop(&message, CoverageTermination::TimeLimit))
+            }
+            Ok(Err(ClientError::NeedsLogin(message))) => {
+                return Ok(self.stop(&message, CoverageTermination::NeedsLogin))
+            }
+            Ok(Err(ClientError::HttpStatus(status, message)))
+                if matches!(status.as_u16(), 401 | 403) =>
+            {
+                return Ok(self.stop(&format!("Website crawl access requires login or permission (HTTP {status}): {message}"), CoverageTermination::NeedsLogin));
+            }
+            Ok(Err(error)) => {
+                return Ok(self.stop(
+                    &format!("Website crawl page {url} unavailable: {error}"),
+                    CoverageTermination::Failed,
+                ))
+            }
+            Err(_) => {
+                return Ok(self.stop(
+                    "Website crawl navigation reached its time limit",
+                    CoverageTermination::TimeLimit,
+                ))
+            }
+        };
+        let actual = page_url(&url, &actual)?;
+        if actual != url && self.visited.contains(actual.as_str()) {
+            return Ok(SelectorStep::Yield);
+        }
+        self.visited.insert(actual.to_string());
+        self.page = match extract_page(&html, &actual, &self.source, &self.config) {
+            Ok(page) => page,
+            Err(ClientError::NeedsLogin(message)) => {
+                return Ok(self.stop(&message, CoverageTermination::NeedsLogin))
+            }
+            Err(error) => {
+                return Ok(self.stop(
+                    &format!("Website crawl page extraction failed: {error}"),
+                    CoverageTermination::Failed,
+                ))
+            }
+        };
+        if scrape_core::browser::is_login_wall(
+            &url,
+            actual.as_str(),
+            "",
+            false,
+            !self.page.candidates.is_empty(),
+        ) {
+            return Ok(self.stop(
+                "Website crawl redirected to a login page; only public HTML is supported",
+                CoverageTermination::NeedsLogin,
+            ));
+        }
+        self.enqueue_links(&html, &actual, depth);
+        self.crawl_depth = depth;
+        if self.config.has_details() {
+            self.crawl_cache
+                .insert(url.to_string(), (html, actual.to_string()));
+        }
+        // Yield at every page boundary to preserve coordinator fairness.
+        Ok(SelectorStep::Yield)
     }
     fn stop(&mut self, message: &str, termination: CoverageTermination) -> SelectorStep {
         self.exhausted = true;
@@ -584,6 +832,12 @@ mod tests {
             config,
             page,
             visited: HashSet::new(),
+            crawl_origin: None,
+            frontier: VecDeque::new(),
+            queued: HashSet::new(),
+            crawl_bound_reached: false,
+            crawl_depth: 0,
+            crawl_cache: HashMap::new(),
             seen: HashSet::new(),
             pages_visited: 1,
             page_limit_reached: false,

@@ -113,14 +113,29 @@ pub fn extract_jobs_with_selectors_with(
     )
     .map_err(ClientError::Configuration)?;
     let doc_base = resolve_document_base(&document, base_url);
+    let mut any = false;
     extract_candidates(
         &document,
         &doc_base,
         base_url.as_str(),
         source,
         &config,
-        &mut |candidate| sink(candidate.event(source)),
-    )
+        &mut |candidate| {
+            any = true;
+            sink(candidate.event(source))
+        },
+    )?;
+    if !any && source.config.get("item").is_none() {
+        extract_heuristic_candidates(
+            &document,
+            &doc_base,
+            base_url.as_str(),
+            source,
+            &config,
+            &mut |candidate| sink(candidate.event(source)),
+        )?;
+    }
+    Ok(())
 }
 
 pub struct SelectorPage {
@@ -132,6 +147,7 @@ pub struct SelectorPage {
 #[derive(Debug, Clone)]
 pub enum SelectorCandidate {
     Posting(Box<SelectorPosting>),
+    Extracted(Box<WorkerEvent>),
     Invalid(Box<WorkerEvent>),
 }
 
@@ -139,6 +155,7 @@ impl SelectorCandidate {
     pub fn event(self, source: &WorkerSource) -> WorkerEvent {
         match self {
             Self::Posting(posting) => posting.event(source),
+            Self::Extracted(event) => *event,
             Self::Invalid(error) => *error,
         }
     }
@@ -187,17 +204,84 @@ pub fn extract_page(
     }
     let doc_base = resolve_document_base(&document, base);
     let mut candidates = std::collections::VecDeque::new();
-    extract_candidates(
-        &document,
-        &doc_base,
-        base.as_str(),
-        source,
-        config,
-        &mut |candidate| {
-            candidates.push_back(candidate);
+    if config.crawl.as_ref().is_some_and(|crawl| {
+        crawl.extraction == scrape_core::static_source::CrawlExtraction::Jsonld
+    }) {
+        super::jsonld::extract_job_postings_with(html, base.as_str(), source, &mut |event| {
+            candidates.push_back(SelectorCandidate::Extracted(Box::new(event)));
             true
-        },
-    )?;
+        });
+    } else if config.crawl.as_ref().is_some_and(|crawl| {
+        crawl.extraction == scrape_core::static_source::CrawlExtraction::PublicHtml
+    }) {
+        extract_heuristic_candidates(
+            &document,
+            &doc_base,
+            base.as_str(),
+            source,
+            config,
+            &mut |candidate| {
+                candidates.push_back(candidate);
+                true
+            },
+        )?;
+    } else {
+        extract_candidates(
+            &document,
+            &doc_base,
+            base.as_str(),
+            source,
+            config,
+            &mut |candidate| {
+                candidates.push_back(candidate);
+                true
+            },
+        )?;
+        if candidates.is_empty() && source.config.get("item").is_none() {
+            extract_heuristic_candidates(
+                &document,
+                &doc_base,
+                base.as_str(),
+                source,
+                config,
+                &mut |candidate| {
+                    candidates.push_back(candidate);
+                    true
+                },
+            )?;
+        }
+    }
+    if config.crawl.is_some() && candidates.is_empty() {
+        let title_query = scraper::Selector::parse("title").expect("constant title selector");
+        let title = document
+            .select(&title_query)
+            .next()
+            .map(|node| node.text().collect::<String>())
+            .unwrap_or_default();
+        let password_query =
+            scraper::Selector::parse("input[type=password]").expect("constant password selector");
+        if scrape_core::browser::is_login_wall(
+            base,
+            base.as_str(),
+            &title,
+            document.select(&password_query).next().is_some(),
+            false,
+        ) {
+            return Err(ClientError::NeedsLogin(
+                "Website crawl encountered a login wall; only public HTML pages are supported"
+                    .into(),
+            ));
+        }
+        if matches!(
+            title.trim().to_ascii_lowercase().as_str(),
+            "just a moment..."
+                | "attention required! | cloudflare"
+                | "verify you are human"
+                | "access denied"
+        ) {
+            return Err(ClientError::Extraction("Website crawl encountered an access challenge; no proxy/browser bypass is attempted".into()));
+        }
+    }
     let navigation = config
         .next_page
         .as_ref()
@@ -439,6 +523,109 @@ fn extract_candidates(
                 None => config.follow_detail.then(|| job_url.clone()),
             },
         }))) {
+            break;
+        }
+    }
+
+    Ok(())
+}
+
+pub(crate) fn extract_heuristic_candidates(
+    document: &Html,
+    base_url: &Url,
+    evidence_page_url: &str,
+    source: &WorkerSource,
+    config: &scrape_core::static_source::StaticSourceConfig,
+    sink: &mut dyn FnMut(SelectorCandidate) -> bool,
+) -> Result<(), ClientError> {
+    let mut jsonld_found = false;
+    super::jsonld::extract_job_postings_with(&document.html(), base_url.as_str(), source, &mut |event| {
+        jsonld_found = true;
+        sink(SelectorCandidate::Extracted(Box::new(event)))
+    });
+    if jsonld_found {
+        return Ok(());
+    }
+
+    let patterns = UrlPatterns::parse(&source.config)?;
+    let company_logo = super::branding::resolve_document_with_base(
+        document,
+        evidence_page_url,
+        base_url.as_str(),
+        &super::branding::employer_name(source),
+        source.config.get("employer_logo").and_then(|v| v.as_str()),
+    );
+
+    let anchor_sel = match scraper::Selector::parse("a[href]") {
+        Ok(s) => s,
+        Err(_) => return Ok(()),
+    };
+
+    let mut seen_urls = std::collections::HashSet::new();
+
+    for anchor in document.select(&anchor_sel) {
+        let Some(href) = anchor.value().attr("href") else { continue; };
+        let href_lower = href.to_ascii_lowercase();
+        let is_job_link = href_lower.contains("/job/")
+            || href_lower.contains("/jobs/")
+            || href_lower.contains("/career/")
+            || href_lower.contains("/careers/")
+            || href_lower.contains("/position/")
+            || href_lower.contains("/positions/")
+            || href_lower.contains("/opening/")
+            || href_lower.contains("/openings/")
+            || href_lower.contains("/vacancy/")
+            || href_lower.contains("/vacancies/")
+            || href_lower.contains("/roles/")
+            || href_lower.contains("gh_jid=")
+            || href_lower.contains("lever-");
+
+        if !is_job_link {
+            continue;
+        }
+
+        let Ok(mut job_url) = base_url.join(href) else { continue; };
+        if !matches!(job_url.scheme(), "http" | "https") {
+            continue;
+        }
+        job_url.set_fragment(None);
+        let job_url_str = job_url.to_string();
+
+        if !seen_urls.insert(job_url_str.clone()) {
+            continue;
+        }
+        if !patterns.matches(&job_url_str) {
+            continue;
+        }
+
+        let raw_title = anchor.text().collect::<Vec<_>>().join(" ").trim().to_string();
+        if raw_title.is_empty() || raw_title.len() < 3 || raw_title.len() > 120 {
+            continue;
+        }
+
+        let title_lower = raw_title.to_ascii_lowercase();
+        if matches!(title_lower.as_str(),
+            "apply" | "apply now" | "read more" | "view job" | "view details" | "details"
+            | "learn more" | "more" | "careers" | "jobs" | "search jobs" | "sign in" | "log in"
+            | "all jobs" | "back" | "home" | "privacy policy" | "terms of service"
+        ) {
+            continue;
+        }
+
+        let posting = SelectorCandidate::Posting(Box::new(SelectorPosting {
+            title: raw_title,
+            url: job_url_str.clone(),
+            external_id: job_url_str.clone(),
+            location: String::new(),
+            salary_text: None,
+            description_source: None,
+            description_format: Some(DescriptionFormat::PlainText),
+            date_posted: None,
+            company_logo: company_logo.clone(),
+            detail_url: (config.follow_detail || config.has_details()).then_some(job_url_str),
+        }));
+
+        if !sink(posting) {
             break;
         }
     }
