@@ -2102,16 +2102,13 @@ fn provider_acceptance_rejects_wrong_destination_missing_pagination_evidence_and
 #[tokio::test]
 async fn canonical_provider_preflight_rejects_missing_owned_child_before_launch() {
     use scrape_lib::db::runs::{RunsRepo, TriggerType};
-    use scrape_lib::services::{execution_diagnostics, sample_workflows, workflow};
+    use scrape_lib::services::{execution_diagnostics, provider_verification_profiles, workflow};
     let directory = tempfile::tempdir().unwrap();
     let pool = scrape_lib::db::init_db(&directory.path().join("missing-child.db"))
         .await
         .unwrap();
-    let parent = sample_workflows::seed_all(&pool)
+    let parent = provider_verification_profiles::save(&pool, "bigtech-static-swe")
         .await
-        .unwrap()
-        .into_iter()
-        .find(|s| s.name.starts_with("Google & Apple"))
         .unwrap();
     let mut spec = workflow::validate(parent.config["__workflow_spec"].clone(), "UTC").unwrap();
     spec.metadata.enabled = Some(true);
@@ -2149,7 +2146,7 @@ async fn canonical_provider_preflight_rejects_missing_owned_child_before_launch(
 #[tokio::test]
 async fn seeded_workflow_rules_explain_zero_results_through_discovered_query() {
     use scrape_lib::db::runs::{RunCounts, RunsRepo, TriggerType};
-    use scrape_lib::services::{execution_diagnostics, sample_workflows};
+    use scrape_lib::services::{execution_diagnostics, provider_verification_profiles, workflow};
     use std::sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
@@ -2231,36 +2228,27 @@ async fn seeded_workflow_rules_explain_zero_results_through_discovered_query() {
                     .unwrap(),
                 1
             );
-            let seeded = sample_workflows::seed_all(&pool).await.unwrap();
-            let mut source = seeded
-                .iter()
-                .find(|s| s.identifier == board)
-                .unwrap()
-                .clone();
-            if variant == 2 {
-                // Labelled restrictive control is saved through the same service;
-                // variant 3 executes the new title-only seeded default unchanged.
-                let catalog = scrape_lib::services::template_catalog::catalog().unwrap();
-                let strict = catalog
-                    .templates
-                    .iter()
-                    .find(|t| t.legacy_identifier == board && t.id.ends_with("-restrictive"))
-                    .unwrap();
-                let mut spec = scrape_lib::services::workflow::validate(
-                    source.config["__workflow_spec"].clone(),
-                    "UTC",
-                )
-                .unwrap();
-                spec.filters = strict.spec.filters.clone();
-                source = scrape_lib::services::workflow::persist(
-                    &pool,
-                    spec,
-                    Some(source.id.clone()),
-                    false,
-                    "UTC",
-                )
+            let profile_id = match board {
+                "cloudflare" => "cloudflare-systems-network",
+                "bitwarden" => "bitwarden-remote-security",
+                "sep" => "sep-midwest-consulting",
+                "linear" => "linear-product-engineering",
+                _ => unreachable!("fixture board has a verification profile"),
+            };
+            let mut source = provider_verification_profiles::save(&pool, profile_id)
                 .await
                 .unwrap();
+            if variant == 2 {
+                // Keep the exact restrictive matching profile separate from production seeds.
+                let strict =
+                    provider_verification_profiles::profile(&format!("{profile_id}-restrictive"))
+                        .unwrap();
+                let mut spec =
+                    workflow::validate(source.config["__workflow_spec"].clone(), "UTC").unwrap();
+                spec.filters = strict.filters.clone();
+                source = workflow::persist(&pool, spec, Some(source.id.clone()), false, "UTC")
+                    .await
+                    .unwrap();
             }
             let run =
                 RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&source.id))
@@ -2418,7 +2406,7 @@ async fn seeded_workflow_rules_explain_zero_results_through_discovered_query() {
 async fn seeded_multi_source_selector_jobs_persist_with_parent_attribution() {
     use scrape_lib::{
         db::runs::{RunCounts, RunsRepo, TriggerType},
-        services::{execution_diagnostics, sample_workflows},
+        services::{execution_diagnostics, provider_verification_profiles},
     };
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
@@ -2464,11 +2452,8 @@ async fn seeded_multi_source_selector_jobs_persist_with_parent_attribution() {
     let pool = scrape_lib::db::init_db(&dir.path().join("multi.db"))
         .await
         .unwrap();
-    let parent = sample_workflows::seed_all(&pool)
+    let parent = provider_verification_profiles::save(&pool, "bigtech-static-swe")
         .await
-        .unwrap()
-        .into_iter()
-        .find(|s| s.name.starts_with("Google & Apple"))
         .unwrap();
     let mut spec =
         scrape_lib::services::workflow::validate(parent.config["__workflow_spec"].clone(), "UTC")
@@ -2914,7 +2899,9 @@ fn fixture_node_path() -> String {
 /// up explicitly, saved/reviewed/enabled, then run outside the repository cwd.
 #[tokio::test]
 async fn seeded_bundled_scripts_run_after_explicit_setup_from_non_repository_directory() {
-    use scrape_lib::services::{execution_diagnostics, sample_workflows, script_trust, workflow};
+    use scrape_lib::services::{
+        execution_diagnostics, provider_verification_profiles, script_trust, workflow,
+    };
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap();
@@ -2922,10 +2909,8 @@ async fn seeded_bundled_scripts_run_after_explicit_setup_from_non_repository_dir
     let pool = scrape_lib::db::init_db(&directory.path().join("script-setup.db"))
         .await
         .unwrap();
-    let parent = sample_workflows::seed_all(&pool)
+    let parent = provider_verification_profiles::save(&pool, "streaming-cloud-script")
         .await
-        .unwrap()
-        .pop()
         .unwrap();
     assert!(!parent.enabled && parent.needs_review);
     let mut spec = workflow::validate(parent.config["__workflow_spec"].clone(), "UTC").unwrap();
@@ -3096,7 +3081,7 @@ async fn seeded_bundled_scripts_run_after_explicit_setup_from_non_repository_dir
 async fn seeded_google_apple_pagination_and_document_base_destination_persist_to_sqlite() {
     use scrape_lib::{
         db::runs::{RunCounts, RunsRepo, TriggerType},
-        services::{execution_diagnostics, sample_workflows, workflow},
+        services::{execution_diagnostics, provider_verification_profiles, workflow},
     };
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
@@ -3169,13 +3154,9 @@ async fn seeded_google_apple_pagination_and_document_base_destination_persist_to
     let pool = scrape_lib::db::init_db(&dir.path().join("pagination.db"))
         .await
         .unwrap();
-    let parent = sample_workflows::seed_all(&pool)
+    let parent = provider_verification_profiles::save(&pool, "bigtech-static-swe")
         .await
-        .unwrap()
-        .into_iter()
-        .find(|s| s.name.starts_with("Google & Apple"))
         .unwrap();
-
     let mut spec = workflow::validate(parent.config["__workflow_spec"].clone(), "UTC").unwrap();
     spec.metadata.enabled = Some(true);
     for entry in &mut spec.sources {
@@ -4244,4 +4225,615 @@ async fn role_first_search_survives_canonical_save_worker_discovered_refresh_and
         original_filters
     );
     reopened.close().await;
+}
+
+/// Screenshot-equivalent criteria, with authored (not live-provider) responses:
+/// default Muse endpoint, all employers, software/data/IT literal roles, a
+/// twelve-hour window including unknown dates, and no experience restriction.
+#[tokio::test]
+async fn screenshot_search_filters_survive_preview_save_run_and_discovered() {
+    use scrape_core::{
+        matching::RejectionReason,
+        protocol::{CoverageTermination, ScanOutcome},
+        JobStatus, SourceCadence,
+    };
+    use scrape_lib::{
+        db::runs::{RunCounts, RunStatus, RunsRepo, TriggerType},
+        services::{execution_diagnostics, workflow},
+    };
+    use serde_json::json;
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    };
+
+    const STARTED: &str = "2026-10-22T13:00:00Z";
+    const RECENT: &str = "2026-10-22T12:00:00Z";
+    const BOUNDARY: &str = "2026-10-22T01:00:00Z";
+    let roles = [
+        "Software Engineer",
+        "Data Scientist",
+        "Data Engineer",
+        "IT Support",
+    ];
+    let fixtures = [
+        (
+            1,
+            "Software Engineer",
+            "Local Software Co",
+            Some(RECENT),
+            "<p>8 years of professional experience required.</p>",
+        ),
+        (
+            2,
+            "Data Scientist",
+            "Research Employer",
+            Some(BOUNDARY),
+            "<p>Build statistical models.</p>",
+        ),
+        (
+            3,
+            "IT Support Specialist",
+            "Neighborhood Employer",
+            None,
+            "<p>Support our users.</p>",
+        ),
+        (
+            4,
+            "Software Engineer",
+            "Older Employer",
+            Some("2026-10-22T00:59:59Z"),
+            "<p>Build systems.</p>",
+        ),
+        (
+            5,
+            "Product Manager",
+            "Other Employer",
+            Some(RECENT),
+            "<p>Manage products.</p>",
+        ),
+        (
+            6,
+            "Senior Data Engineer",
+            "Another Employer",
+            Some(RECENT),
+            "<p>12 years of professional experience required.</p>",
+        ),
+        (
+            7,
+            "Software Engineer II",
+            "Unknown Date Employer",
+            None,
+            "<p>Build services.</p>",
+        ),
+    ];
+    let results: Vec<_> = fixtures
+        .iter()
+        .map(|(id, title, company, published, description)| {
+            json!({
+                "id":id,"name":title,"company":{"name":company},
+                "publication_date":published,"contents":description,
+                "locations":[{"name":"Remote"}],
+                "refs":{"landing_page":format!("https://screenshot.fixture.test/jobs/{id}")}
+            })
+        })
+        .collect();
+    // The last two matches are deliberately on the next provider page.
+    let pages = [
+        json!({"page":0,"page_count":2,"results":&results[..5]}).to_string(),
+        json!({"page":1,"page_count":2,"results":&results[5..]}).to_string(),
+    ];
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    listener.set_nonblocking(true).unwrap();
+    let stopped = Arc::new(AtomicBool::new(false));
+    let stop_server = Arc::clone(&stopped);
+    let requests = Arc::new(Mutex::new(Vec::<String>::new()));
+    let server_requests = Arc::clone(&requests);
+    let server = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(45);
+        while !stop_server.load(Ordering::SeqCst) && Instant::now() < deadline {
+            let Ok((mut stream, _)) = listener.accept() else {
+                std::thread::sleep(Duration::from_millis(5));
+                continue;
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut bytes = [0; 8192];
+            let n = stream.read(&mut bytes).unwrap();
+            let request = String::from_utf8_lossy(&bytes[..n]);
+            let path = request.split_whitespace().nth(1).unwrap().to_string();
+            let body = match path.as_str() {
+                "/www.themuse.com/api/public/jobs?page=0" => &pages[0],
+                "/www.themuse.com/api/public/jobs?page=1" => &pages[1],
+                _ => panic!("Unexpected default-provider request: {path}"),
+            };
+            server_requests.lock().unwrap().push(path);
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            ).unwrap();
+        }
+    });
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("screenshot-search.db");
+    let pool = scrape_lib::db::init_db(&database).await.unwrap();
+    let spec = workflow::validate(json!({
+        "version":workflow::WORKFLOW_SPEC_VERSION,
+        "metadata":{"name":"Software, data and IT — all employers","enabled":true},
+        "sources":[{"id":"broad-search","label":"Cross-Company Search","enabled":true,
+            "extractor":{"kind":"search","url":""}}],
+        "max_jobs_per_run":20,
+        "schedule":{"cadence":"daily","time":"09:00","timezone":"America/New_York"},
+        "filters":{"matching":{
+            "target_roles":roles,"companies":[],
+            "posting_date":{"preset":"past_12h","timezone":"America/New_York","include_unknown":true}
+        }}
+    }), "America/New_York").unwrap();
+    let original_filters = serde_json::to_value(&spec.filters).unwrap();
+    let saved = workflow::persist(&pool, spec, None, false, "America/New_York")
+        .await
+        .unwrap();
+    let source = SourcesRepo::get(&pool, &saved.id).await.unwrap();
+    assert_eq!(source.kind, SourceKind::Search);
+    assert_eq!(source.identifier, "themuse");
+    assert_eq!(source.cadence, SourceCadence::Daily);
+    assert_eq!(source.config["__schedule"]["time"], "09:00");
+    assert_eq!(source.config["__schedule"]["timezone"], "America/New_York");
+    assert_eq!(
+        source.config["__workflow_spec"]["filters"],
+        original_filters
+    );
+    assert!(
+        requests.lock().unwrap().is_empty(),
+        "Save must not launch a provider"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM scrape_runs")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0,
+        "Save must not open a run"
+    );
+    // Deliberately pass a different device timezone: stored workflow criteria and
+    // calendar timezone must remain authoritative.
+    let mut config = execution_diagnostics::prepare(&source, "UTC", STARTED).unwrap();
+    config.limits.per_host_delay_ms = 0;
+    config.limits.request_timeout_s = 3;
+    assert_eq!(config.version, PROTOCOL_VERSION);
+    assert_eq!(config.run_started_at.as_deref(), Some(STARTED));
+    assert_eq!(config.max_jobs_per_run, Some(20));
+    assert_eq!(config.sources.len(), 1);
+    assert_eq!(config.sources[0].id, source.id);
+    assert_eq!(config.sources[0].identifier, "themuse");
+    assert!(config.sources[0].config.get("endpoint").is_none());
+    assert_eq!(config.sources[0].config["target_roles"], json!(roles));
+    assert_eq!(config.sources[0].config["companies"], json!([]));
+    assert_eq!(config.sources[0].config["max_days_old"], 1);
+    let rules = config.filters.matching.as_ref().unwrap();
+    assert_eq!(rules.target_roles, roles);
+    assert!(rules.companies.is_empty());
+    assert_eq!(rules.experience_min, None);
+    assert_eq!(rules.experience_max, None);
+    let date = rules.posting_date.as_ref().unwrap();
+    assert_eq!(date.preset.as_deref(), Some("past_12h"));
+    assert!(date.include_unknown);
+    assert_eq!(date.timezone, "America/New_York");
+    assert_eq!(
+        serde_json::to_value(rules).unwrap(),
+        source.filters["matching"],
+        "Canonical execution must preserve every structured criterion"
+    );
+    assert_eq!(config.filters.locations, Vec::<String>::new());
+
+    for preview in [true, false] {
+        let run = if preview {
+            None
+        } else {
+            let run =
+                RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&source.id))
+                    .await
+                    .unwrap();
+            execution_diagnostics::preflight(&pool, &run.id, &source.id, &config)
+                .await
+                .unwrap();
+            Some(run)
+        };
+        let events = invoke_replay(&config, preview, Some(&origin));
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, WorkerEvent::Error { .. })),
+            "{events:?}"
+        );
+        let WorkerEvent::Done { stats } = events.last().unwrap() else {
+            panic!("Missing worker completion")
+        };
+        assert_eq!(
+            (stats.sources_ok, stats.sources_failed, stats.jobs_emitted),
+            (1, 0, 5)
+        );
+        assert_eq!(stats.sources.len(), 1);
+        let scan = &stats.sources[0];
+        scan.validate().unwrap();
+        assert_eq!(scan.source_id, source.id);
+        assert_eq!(scan.limit, if preview { 10 } else { 20 });
+        assert_eq!(
+            (scan.examined, scan.accepted, scan.rejected, scan.unresolved),
+            (7, 5, 2, 0)
+        );
+        assert_eq!((scan.invalid, scan.duplicates, scan.blocked), (0, 0, 0));
+        assert!(!scan.limit_reached);
+        assert_eq!(scan.termination, CoverageTermination::Exhausted);
+        assert_eq!(scan.outcome, Some(ScanOutcome::Success));
+        assert_eq!(scan.rejections.len(), 2);
+        for reason in [RejectionReason::RoleType, RejectionReason::PostingDate] {
+            assert_eq!(
+                scan.rejections
+                    .iter()
+                    .find(|entry| entry.reason == reason)
+                    .unwrap()
+                    .count,
+                1
+            );
+        }
+        let batch: Vec<_> = events
+            .iter()
+            .filter(|event| matches!(event, WorkerEvent::Job { .. }))
+            .cloned()
+            .map(|event| scraped_job_from_event(event).unwrap())
+            .collect();
+        let mut ids: Vec<_> = batch
+            .iter()
+            .map(|job| job.external_id.as_deref().unwrap())
+            .collect();
+        ids.sort();
+        assert_eq!(ids, vec!["1", "2", "3", "6", "7"]);
+        for row in &batch {
+            assert_eq!(row.source_id.as_deref(), Some(source.id.as_str()));
+            let expected = fixtures
+                .iter()
+                .find(|(id, ..)| id.to_string() == row.external_id.as_deref().unwrap())
+                .unwrap();
+            assert_eq!(row.title, expected.1);
+            assert_eq!(row.company, expected.2);
+            assert_eq!(row.date_posted.as_deref(), expected.3);
+            assert_eq!(row.description_source.as_deref(), Some(expected.4));
+        }
+        if let Some(run) = run {
+            let mut counts = RunCounts {
+                fetched: scan.examined as i64,
+                rejected: scan.rejected as i64,
+                sources: Some(stats.sources.clone()),
+                ..Default::default()
+            };
+            let persisted =
+                execution_diagnostics::persist_batch(&pool, &run.id, &batch, &mut counts)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                (persisted.inserted, persisted.updated, persisted.blocked),
+                (5, 0, 0)
+            );
+            let finished = RunsRepo::finish(&pool, &run.id, RunStatus::Success, 5, 5, None)
+                .await
+                .unwrap();
+            assert_eq!(finished.status, RunStatus::Success);
+            assert_eq!((finished.jobs_found, finished.jobs_new), (5, 5));
+            assert_eq!(finished.counts.as_ref(), Some(&counts));
+            assert_eq!(
+                finished.effective_config.as_ref().unwrap().filters,
+                config.filters
+            );
+        } else {
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM scrape_runs")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap(),
+                0,
+                "Preview must not create durable run accounting"
+            );
+            let unchanged = SourcesRepo::get(&pool, &source.id).await.unwrap();
+            assert_eq!(unchanged.next_run_at, source.next_run_at);
+            assert_eq!(unchanged.config, source.config);
+        }
+        let discovered = JobsRepo::list(
+            &pool,
+            JobFilter {
+                source_id: Some(source.id.clone()),
+                statuses: Some(vec![JobStatus::Scraped, JobStatus::Viewed]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(discovered.total, if preview { 0 } else { 5 });
+    }
+    stopped.store(true, Ordering::SeqCst);
+    server.join().unwrap();
+    assert_eq!(
+        *requests.lock().unwrap(),
+        vec![
+            "/www.themuse.com/api/public/jobs?page=0",
+            "/www.themuse.com/api/public/jobs?page=1",
+            "/www.themuse.com/api/public/jobs?page=0",
+            "/www.themuse.com/api/public/jobs?page=1",
+        ]
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM scrape_runs")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+    pool.close().await;
+    let reopened = scrape_lib::db::init_db(&database).await.unwrap();
+    let source = SourcesRepo::get(&reopened, &saved.id).await.unwrap();
+    assert_eq!(
+        source.config["__workflow_spec"]["filters"],
+        original_filters
+    );
+    assert_eq!(source.config["__schedule"]["time"], "09:00");
+    assert_eq!(source.config["__schedule"]["timezone"], "America/New_York");
+    let discovered = JobsRepo::list(
+        &reopened,
+        JobFilter {
+            source_id: Some(saved.id.clone()),
+            statuses: Some(vec![JobStatus::Scraped, JobStatus::Viewed]),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(discovered.total, 5);
+    let mut ids: Vec<_> = discovered
+        .items
+        .iter()
+        .map(|job| job.external_id.as_deref().unwrap())
+        .collect();
+    ids.sort();
+    assert_eq!(ids, vec!["1", "2", "3", "6", "7"]);
+    for job in &discovered.items {
+        let expected = fixtures
+            .iter()
+            .find(|(id, ..)| id.to_string() == job.external_id.as_deref().unwrap())
+            .unwrap();
+        assert_eq!(job.title, expected.1);
+        assert_eq!(job.company, expected.2);
+        assert_eq!(job.date_posted.as_deref(), expected.3);
+        assert_eq!(job.source_id.as_deref(), Some(saved.id.as_str()));
+        assert_eq!(
+            job.url,
+            format!("https://screenshot.fixture.test/jobs/{}", expected.0)
+        );
+        assert_eq!(
+            job.posting_identity.as_deref(),
+            Some(serde_json::to_string(&("url", &job.url)).unwrap().as_str())
+        );
+    }
+    reopened.close().await;
+}
+
+#[tokio::test]
+async fn modified_software_engineering_workflow_scrapes_public_html_and_ats_with_sleep_and_job_limit() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let request_times = std::sync::Arc::new(std::sync::Mutex::new(Vec::<(String, Instant)>::new()));
+    let times = request_times.clone();
+    let _server = std::thread::spawn(move || {
+        let mut count = 0;
+        while count < 20 {
+            let (mut stream, _) = match listener.accept() {
+                Ok(s) => s,
+                Err(_) => break,
+            };
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut buf = [0; 4096];
+            let n = match stream.read(&mut buf) {
+                Ok(n) if n > 0 => n,
+                _ => break,
+            };
+            let req = String::from_utf8_lossy(&buf[..n]);
+            let path = req.split_whitespace().nth(1).unwrap_or("");
+            times.lock().unwrap().push((path.to_string(), Instant::now()));
+            count += 1;
+            let (status, body) = match path {
+                p if p.ends_with("/robots.txt") => ("200 OK", "User-agent: *\nAllow: /\n".to_string()),
+                p if p.ends_with("/html-careers") => (
+                    "200 OK",
+                    r#"<!DOCTYPE html>
+<html>
+<head><title>Custom Tech Careers</title></head>
+<body>
+  <h1>Engineering Openings</h1>
+  <div class="career-cards">
+    <div class="job-card">
+      <a href="/careers/senior-backend-engineer">Senior Backend Engineer</a>
+      <span class="location">Remote</span>
+    </div>
+    <div class="job-card">
+      <a href="/careers/platform-engineer">Platform Engineer</a>
+      <span class="location">New York, NY</span>
+    </div>
+  </div>
+</body>
+</html>"#
+                        .to_string(),
+                ),
+                p if p.ends_with("/careers/senior-backend-engineer") => (
+                    "200 OK",
+                    r#"<!DOCTYPE html>
+<html>
+<head><title>Senior Backend Engineer - Custom Tech</title></head>
+<body>
+  <h1>Senior Backend Engineer</h1>
+  <p class="salary">$180,000 - $220,000 per year</p>
+  <div class="description">Build distributed database ingestion engines.</div>
+</body>
+</html>"#
+                        .to_string(),
+                ),
+                p if p.ends_with("/careers/platform-engineer") => (
+                    "200 OK",
+                    r#"<!DOCTYPE html>
+<html>
+<head><title>Platform Engineer - Custom Tech</title></head>
+<body>
+  <h1>Platform Engineer</h1>
+  <p class="salary">$160,000 - $190,000 per year</p>
+  <div class="description">Scale Kubernetes clusters and deployment workflows.</div>
+</body>
+</html>"#
+                        .to_string(),
+                ),
+                p if p.contains("/cloudflare/jobs") => (
+                    "200 OK",
+                    serde_json::json!({
+                        "jobs": [
+                            {
+                                "id": 101,
+                                "title": "Software Engineer",
+                                "absolute_url": format!("http://{address}/jobs/101"),
+                                "location": {"name": "San Francisco, CA"},
+                                "content": "<p>Build high-performance edge compute platforms.</p>"
+                            }
+                        ]
+                    })
+                    .to_string(),
+                ),
+                _ => ("404 Not Found", "Not Found".to_string()),
+            };
+            let response = format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = stream.write_all(response.as_bytes());
+        }
+    });
+
+    let directory = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&directory.path().join("test_se.db"))
+        .await
+        .unwrap();
+
+    let html_source = SourcesRepo::create(
+        &pool,
+        CreateSourceInput {
+            kind: SourceKind::Selector,
+            name: "Custom Tech Careers".into(),
+            identifier: format!("http://{address}/html-careers"),
+            config: Some(serde_json::json!({
+                "crawl": {
+                    "max_pages": 5,
+                    "max_depth": 2,
+                    "extraction": "public_html"
+                },
+                "per_host_delay_ms": 20,
+                "jitter_ms": 15,
+                "ignore_robots": true,
+            })),
+            enabled: Some(true),
+            cadence: Some(scrape_core::SourceCadence::Manual),
+            cadence_cron: None,
+            retention_days: Some(30),
+            retention_policy: Some("untracked_only".into()),
+            filters: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let gh_source = SourcesRepo::create(
+        &pool,
+        CreateSourceInput {
+            kind: SourceKind::Greenhouse,
+            name: "Cloudflare".into(),
+            identifier: "cloudflare".into(),
+            config: Some(serde_json::json!({})),
+            enabled: Some(true),
+            cadence: Some(scrape_core::SourceCadence::Manual),
+            cadence_cron: None,
+            retention_days: Some(30),
+            retention_policy: Some("untracked_only".into()),
+            filters: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // 1. Run with max_jobs_per_run: Some(2) — verifies job limit cap is enforced by coordinator
+    let config_capped = WorkerConfig {
+        version: PROTOCOL_VERSION,
+        sources: vec![
+            WorkerSource {
+                id: html_source.id.clone(),
+                kind: html_source.kind,
+                name: html_source.name.clone(),
+                identifier: html_source.identifier.clone(),
+                config: html_source.config.clone(),
+            },
+            WorkerSource {
+                id: gh_source.id.clone(),
+                kind: gh_source.kind,
+                name: gh_source.name.clone(),
+                identifier: gh_source.identifier.clone(),
+                config: gh_source.config.clone(),
+            },
+        ],
+        filters: WorkerFilters {
+            include_keywords: vec!["Engineer".into()],
+            ..Default::default()
+        },
+        limits: WorkerLimits {
+            request_timeout_s: 5,
+            per_host_delay_ms: 20,
+            jitter_ms: Some(15),
+            ignore_robots: Some(true),
+            ..Default::default()
+        },
+        max_jobs_per_run: Some(2),
+        ..Default::default()
+    };
+
+    let events = invoke_replay(&config_capped, false, Some(&format!("http://{address}")));
+    let mut jobs = Vec::new();
+    for event in events {
+        if let WorkerEvent::Job { title, company, url, .. } = &event {
+            assert!(!title.is_empty(), "Job title must not be empty");
+            assert!(!company.is_empty(), "Company must not be empty");
+            assert!(url.starts_with("http"), "URL must be valid HTTP");
+            let input = scraped_job_from_event(event).unwrap();
+            jobs.push(input);
+        }
+    }
+
+    JobsRepo::upsert_scraped(&pool, &jobs).await.unwrap();
+
+    // Exactly 2 jobs are scraped and saved, matching max_jobs_per_run cap!
+    assert_eq!(jobs.len(), 2, "Expected exactly 2 jobs due to max_jobs_per_run cap");
+
+    let discovered = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+    assert_eq!(discovered.total, 2, "SQLite must hold exactly 2 jobs from the capped run");
+
+    // 2. Verify built-in sleep pacing: requests to the public HTML host are paced
+    let recorded = request_times.lock().unwrap().clone();
+    assert!(recorded.len() >= 2, "Server must have received multiple requests");
+    let html_requests: Vec<_> = recorded
+        .into_iter()
+        .filter(|(p, _)| p.contains("html-careers") || p.contains("careers"))
+        .collect();
+    if html_requests.len() >= 2 {
+        let total_span = html_requests.last().unwrap().1.duration_since(html_requests[0].1);
+        assert!(total_span >= Duration::from_millis(15), "Requests must be paced with built-in sleep");
+    }
+
+    pool.close().await;
 }
