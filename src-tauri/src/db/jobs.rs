@@ -582,6 +582,7 @@ impl JobsRepo {
                 .filter(|c| !c.is_empty() && c != "ALL"),
             interval: filter.salary_interval,
             include_unknown: filter.salary_include_unknown.unwrap_or(false),
+            match_mode: scrape_core::enrich::CompensationMatchMode::RangeOverlap,
         };
         pay.validate().map_err(AppError::Validation)?;
 

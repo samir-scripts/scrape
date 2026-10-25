@@ -5,7 +5,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SalaryRangeFilter, type SalaryRangeFilterProps } from "../components/filters/SalaryRangeFilter";
 import { matchesJob } from "../lib/filter";
-import { generateScrapedJobsForSource, SAMPLE_SWE_SOURCE } from "../lib/api";
+import { generateScrapedJobsForSource, SAMPLE_ENGINEERING_SOURCE } from "../lib/api";
 
 beforeAll(() => {
   const values = new Map<string, string>();
@@ -22,7 +22,8 @@ function Harness() {
   const [state, setState] = useState<Parameters<SalaryRangeFilterProps["onChange"]>[0]>(() => {
     const saved = window.localStorage.getItem("test-native-pay"); return saved ? JSON.parse(saved) : initial;
   });
-  const fixture = generateScrapedJobsForSource(SAMPLE_SWE_SOURCE)[0];
+  const original = generateScrapedJobsForSource(SAMPLE_ENGINEERING_SOURCE, false)[0];
+  const fixture = { ...original, compensation: [{ ...original.compensation![0], min_minor: 5025, max_minor: 6075, interval: "hour" as const }], salary_interval: "hour" as const };
   return <><SalaryRangeFilter {...state} onChange={(values) => { setState(values); window.localStorage.setItem("test-native-pay", JSON.stringify(values)); }} />
     <output aria-label="Native filter">{JSON.stringify(state)}</output>
     <output aria-label="Fixture matches">{String(matchesJob(fixture, { salary_min: state.salaryMin, salary_max: state.salaryMax, salary_currency: state.currency, salary_interval: state.interval }))}</output></>;

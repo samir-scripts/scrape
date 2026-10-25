@@ -15,7 +15,7 @@ pub use html::{
     DescriptionFormat, DescriptionInline, JobDescription,
 };
 pub use location::ParsedLocation;
-pub use salary::{CompensationFilter, CompensationRange, Salary};
+pub use salary::{CompensationFilter, CompensationMatchMode, CompensationRange, Salary};
 pub use workplace::classify_workplace;
 
 /// Current version of the enrichment extraction engine. Bump this when heuristics or classifiers change.

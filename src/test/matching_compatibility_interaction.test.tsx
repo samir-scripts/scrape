@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import userEvent from "@testing-library/user-event";
 import type { UserEvent } from "@testing-library/user-event";
 import { AddSourceModal } from "../components/views/settings/AddSourceModal";
-import { api, SAMPLE_SWE_SOURCE } from "../lib/api";
+import { api, SAMPLE_ENGINEERING_SOURCE } from "../lib/api";
 import { emptyRules } from "../components/views/settings/WorkflowSections";
 import { sourceToWorkflowSpec, validateWorkflowYaml, workflowSpecToYaml } from "../lib/yamlWorkflow";
 import type { WorkflowSpec } from "../bindings/WorkflowSpec";
@@ -28,7 +28,7 @@ async function previewFromSchedule(user: UserEvent) {
 const filters: WorkflowFilters = {
   include_keywords: ["Software"], exclude_keywords: ["Staff"], locations: ["Remote", "Austin"], role_types: ["internship"],
   query: "title LIKE '%Engineer%' OR title LIKE '%Developer%' OR title LIKE '%Intern%'",
-  policy: { company: "%Fixture%" }, compensation: { min_minor: 5000, max_minor: null, interval: "hour", currency: "USD", include_unknown: true },
+  policy: { company: "%Fixture%" }, compensation: { min_minor: 5000, max_minor: null, interval: "hour", currency: "USD", include_unknown: true, match_mode: "range_overlap" },
   matching: { ...emptyRules(), experience_match_mode: "advertised_range_overlap", role_types: ["full_time"], keywords: { any: ["Engineer"], all: ["Software"], exclude: ["Senior"], fields: ["description"] } },
 };
 function setup() {
@@ -39,8 +39,8 @@ function setup() {
   ]);
   vi.spyOn(api, "validateWorkflow").mockImplementation(async spec => spec as WorkflowSpec);
   const preview = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => ({ spec, branding: [], jobs: [], fetched: 0, matched: 0, rejected: 0, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: null }));
-  const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_SWE_SOURCE);
-  const initial = { ...SAMPLE_SWE_SOURCE, filters };
+  const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_ENGINEERING_SOURCE);
+  const initial = { ...SAMPLE_ENGINEERING_SOURCE, filters };
   render(<AddSourceModal isOpen initialSource={initial} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
   return { preview, save };
 }
@@ -62,7 +62,7 @@ it("keeps every compatibility restriction visible and intact through Preview, YA
   await user.click(screen.getByRole("button", { name: "Save workflow" }));
   await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
   expect(save.mock.calls[0][0].filters).toEqual(filters);
-  expect(sourceToWorkflowSpec({ ...SAMPLE_SWE_SOURCE, filters }).filters).toEqual(filters);
+  expect(sourceToWorkflowSpec({ ...SAMPLE_ENGINEERING_SOURCE, filters }).filters).toEqual(filters);
 });
 it("explicit edits invalidate Preview, retain the other groups, and commit multiple unfinished compatibility inputs", async () => {
   const user = userEvent.setup(); const { preview } = setup();
@@ -84,7 +84,7 @@ it("allows ordinary typing in new expert fields and forwards malformed policy dr
   vi.spyOn(api, "describeWorkflowFilters").mockResolvedValue([]);
   vi.spyOn(api, "validateWorkflow").mockImplementation(async spec => spec as WorkflowSpec);
   const preview = vi.spyOn(api, "previewWorkflow").mockRejectedValue(new Error("workflow.filters.policy: invalid policy expression"));
-  render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+  render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_ENGINEERING_SOURCE, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
   await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
   await user.click(screen.getByRole("button", { name: "Advanced" }));
   const query = screen.getByRole("textbox", { name: "Expert query" });

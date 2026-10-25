@@ -81,20 +81,34 @@ mod tests {
                 .bind(id).bind(serde_json::to_string(&ranges).unwrap()).execute(&pool).await.unwrap();
             vectors.push((id, ranges));
         }
-        for (min, max, currency, interval) in [
+        for (min, max, currency, interval, expected) in [
             (
                 Some(50.0),
                 Some(60.0),
                 Some("USD"),
                 Some(SalaryInterval::Hour),
+                vec!["lower", "overlap", "upper"],
             ),
-            (Some(55.75), None, Some("USD"), Some(SalaryInterval::Hour)),
-            (None, Some(45.25), Some("USD"), Some(SalaryInterval::Hour)),
+            (
+                Some(55.75),
+                None,
+                Some("USD"),
+                Some(SalaryInterval::Hour),
+                vec!["lower", "overlap"],
+            ),
+            (
+                None,
+                Some(45.25),
+                Some("USD"),
+                Some(SalaryInterval::Hour),
+                vec!["low", "overlap", "upper"],
+            ),
             (
                 Some(120000.0),
                 Some(160000.0),
                 Some("USD"),
                 Some(SalaryInterval::Year),
+                vec!["annual"],
             ),
         ] {
             let worker = CompensationFilter {
@@ -103,13 +117,15 @@ mod tests {
                 currency: currency.map(str::to_string),
                 interval,
                 include_unknown: false,
+                match_mode: scrape_core::enrich::CompensationMatchMode::RangeOverlap,
             };
-            let mut expected: Vec<_> = vectors
+            let mut worker_ids: Vec<_> = vectors
                 .iter()
                 .filter(|(_, ranges)| worker.matches(ranges))
-                .map(|(id, _)| id.to_string())
+                .map(|(id, _)| *id)
                 .collect();
-            expected.sort();
+            worker_ids.sort_unstable();
+            assert_eq!(worker_ids, expected);
             let page = JobsRepo::list(
                 &pool,
                 JobFilter {
@@ -168,6 +184,259 @@ mod rule_parity_tests {
         posting_date::PostingDateFilter,
         WorkerEvent,
     };
+    #[tokio::test]
+    async fn advertised_annual_usd_remote_pay_has_literal_worker_and_sql_identities() {
+        use scrape_core::enrich::{CompensationFilter, CompensationMatchMode, Salary};
+        use scrape_core::{SalaryInterval, WorkplaceType};
+
+        let pool = init_memory_db().await.unwrap();
+        let clock = DateTime::parse_from_rfc3339("2026-10-23T16:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let rules = PostingRules {
+            workplaces: vec![WorkplaceType::Remote],
+            compensation: Some(CompensationFilter {
+                min_minor: Some(6000001),
+                max_minor: None,
+                currency: Some("USD".into()),
+                interval: Some(SalaryInterval::Year),
+                include_unknown: false,
+                match_mode: CompensationMatchMode::AdvertisedAmount,
+            }),
+            ..Default::default()
+        };
+        let expected = ["cent_above", "lower_high", "range", "upper_high"];
+        let mut events = Vec::new();
+        for (id, min, max, currency, interval, workplace) in [
+            (
+                "range",
+                Some(50000.0),
+                Some(80000.0),
+                Some("USD"),
+                Some("year"),
+                "remote",
+            ),
+            (
+                "cent_above",
+                Some(60000.01),
+                Some(60000.01),
+                Some("USD"),
+                Some("year"),
+                "remote",
+            ),
+            (
+                "upper_high",
+                None,
+                Some(80000.0),
+                Some("USD"),
+                Some("year"),
+                "remote",
+            ),
+            (
+                "lower_high",
+                Some(70000.0),
+                None,
+                Some("USD"),
+                Some("year"),
+                "remote",
+            ),
+            (
+                "exact",
+                Some(60000.0),
+                Some(60000.0),
+                Some("USD"),
+                Some("year"),
+                "remote",
+            ),
+            (
+                "below",
+                Some(40000.0),
+                Some(60000.0),
+                Some("USD"),
+                Some("year"),
+                "remote",
+            ),
+            (
+                "lower_low",
+                Some(50000.0),
+                None,
+                Some("USD"),
+                Some("year"),
+                "remote",
+            ),
+            (
+                "lower_exact",
+                Some(60000.0),
+                None,
+                Some("USD"),
+                Some("year"),
+                "remote",
+            ),
+            (
+                "unknown_amount",
+                None,
+                None,
+                Some("USD"),
+                Some("year"),
+                "remote",
+            ),
+            (
+                "unknown_currency",
+                Some(100000.0),
+                None,
+                None,
+                Some("year"),
+                "remote",
+            ),
+            (
+                "unknown_interval",
+                Some(100000.0),
+                None,
+                Some("USD"),
+                None,
+                "remote",
+            ),
+            (
+                "hour",
+                Some(100000.0),
+                None,
+                Some("USD"),
+                Some("hour"),
+                "remote",
+            ),
+            (
+                "month",
+                Some(100000.0),
+                None,
+                Some("USD"),
+                Some("month"),
+                "remote",
+            ),
+            (
+                "eur",
+                Some(100000.0),
+                None,
+                Some("EUR"),
+                Some("year"),
+                "remote",
+            ),
+            (
+                "hybrid",
+                Some(100000.0),
+                None,
+                Some("USD"),
+                Some("year"),
+                "hybrid",
+            ),
+            (
+                "onsite",
+                Some(100000.0),
+                None,
+                Some("USD"),
+                Some("year"),
+                "onsite",
+            ),
+            (
+                "unknown_workplace",
+                Some(100000.0),
+                None,
+                Some("USD"),
+                Some("year"),
+                "unknown",
+            ),
+            (
+                "multiple_ranges",
+                Some(40000.0),
+                Some(50000.0),
+                Some("USD"),
+                Some("year"),
+                "remote",
+            ),
+            ("no_salary", None, None, None, None, "remote"),
+        ] {
+            let mut salary = Salary::from_structured(min, max, currency, interval, None);
+            if id == "multiple_ranges" {
+                let pay = salary.as_mut().unwrap();
+                pay.ranges.extend(
+                    Salary::from_text(
+                        "Salary: EUR 80,000–90,000 per year; USD 80,000–90,000 per month.",
+                    )
+                    .unwrap()
+                    .ranges,
+                );
+            }
+            let ranges = salary.as_ref().map(|s| s.ranges.as_slice()).unwrap_or(&[]);
+            sqlx::query("INSERT INTO jobs(id,dedupe_key,title,company,url,date_added,last_seen_at,status_changed_at,workplace_type,compensation_json,compensation_migrated) VALUES (?1,?1,'Engineer','Co',?2,'2026-10-23','2026-10-23','2026-10-23',?3,?4,1)")
+                .bind(id)
+                .bind(format!("https://fixture.test/{id}"))
+                .bind(workplace)
+                .bind(serde_json::to_string(ranges).unwrap())
+                .execute(&pool).await.unwrap();
+            let event: WorkerEvent = serde_json::from_value(serde_json::json!({
+                "type":"job", "source_id":"fixture", "external_id":id,
+                "title":"Engineer", "company":"Co", "url":format!("https://fixture.test/{id}"),
+                "location":"", "role_type":"unknown", "workplace_type":workplace,
+                "salary":salary
+            }))
+            .unwrap();
+            events.push((id, event));
+        }
+        for (min_minor, max_minor, include_unknown, expected) in [
+            (Some(6000001), None, false, expected.as_slice()),
+            (Some(6000001), None, true, expected.as_slice()),
+            (
+                None,
+                Some(6000000),
+                false,
+                &[
+                    "below",
+                    "exact",
+                    "lower_exact",
+                    "lower_low",
+                    "multiple_ranges",
+                    "range",
+                ][..],
+            ),
+            (
+                Some(6000001),
+                Some(7000000),
+                false,
+                &["cent_above", "lower_high", "range"][..],
+            ),
+        ] {
+            let mut rules = rules.clone();
+            rules.compensation.as_mut().unwrap().include_unknown = include_unknown;
+            rules.compensation.as_mut().unwrap().min_minor = min_minor;
+            rules.compensation.as_mut().unwrap().max_minor = max_minor;
+            let filters = scrape_core::WorkerFilters {
+                matching: Some(rules.clone()),
+                ..Default::default()
+            };
+            let evaluator = scrape_core::matching::MatchingEvaluator::new(&filters).unwrap();
+            let mut worker_ids: Vec<_> = events
+                .iter()
+                .filter(|(_, event)| evaluator.rejection_reasons(event, clock).is_empty())
+                .map(|(id, _)| *id)
+                .collect();
+            worker_ids.sort_unstable();
+            assert_eq!(worker_ids, expected);
+            let page = JobsRepo::list_at(
+                &pool,
+                JobFilter {
+                    matching: Some(rules),
+                    ..Default::default()
+                },
+                clock,
+            )
+            .await
+            .unwrap();
+            let mut repository_ids: Vec<_> = page.items.iter().map(|job| job.id.as_str()).collect();
+            repository_ids.sort_unstable();
+            assert_eq!(repository_ids, expected);
+            assert_eq!(page.total as usize, expected.len());
+        }
+    }
+
     #[tokio::test]
     async fn enriched_worker_and_repository_rules_share_date_keywords_role_workplace_and_eligibility_semantics(
     ) {

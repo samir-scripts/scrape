@@ -292,6 +292,7 @@ mod tests {
             currency: Some("USD".into()),
             interval: Some(SalaryInterval::Hour),
             include_unknown: false,
+            match_mode: CompensationMatchMode::RangeOverlap,
         };
         assert!(!filter.matches(&pay.ranges));
         filter.include_unknown = true;
@@ -430,6 +431,16 @@ pub fn legacy_compensation(
     }
 }
 
+/// Native compensation matching; neither mode annualizes or converts currency.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum CompensationMatchMode {
+    #[default]
+    RangeOverlap,
+    AdvertisedAmount,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS, PartialEq)]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
@@ -442,8 +453,16 @@ pub struct CompensationFilter {
     pub interval: Option<SalaryInterval>,
     #[serde(default)]
     pub include_unknown: bool,
+    #[serde(default)]
+    pub match_mode: CompensationMatchMode,
 }
 impl CompensationFilter {
+    pub fn explanation(&self) -> &'static str {
+        match self.match_mode {
+            CompensationMatchMode::RangeOverlap => "Native compensation uses range_overlap: inclusive range overlap; absent endpoints are unbounded. Currency and pay interval are not converted.",
+            CompensationMatchMode::AdvertisedAmount => "Native compensation uses advertised_amount: an evidenced upper (or sole lower) amount must meet the minimum, and an evidenced lower (or sole upper) amount must meet the maximum, within one range. Unknown amounts are excluded; currency and pay interval are not converted.",
+        }
+    }
     pub fn validate(&self) -> Result<(), String> {
         if self.min_minor.is_some_and(|v| v < 0)
             || self.max_minor.is_some_and(|v| v < 0)
@@ -465,7 +484,10 @@ impl CompensationFilter {
             return true;
         }
         if ranges.is_empty() {
-            return self.include_unknown && self.interval.is_none() && self.currency.is_none();
+            return self.match_mode == CompensationMatchMode::RangeOverlap
+                && self.include_unknown
+                && self.interval.is_none()
+                && self.currency.is_none();
         }
         ranges.iter().any(|r| {
             if self.interval.is_some() && self.interval != r.interval {
@@ -480,13 +502,25 @@ impl CompensationFilter {
                 }
             }
             if r.min_minor.is_none() && r.max_minor.is_none() {
-                return self.include_unknown;
+                return self.match_mode == CompensationMatchMode::RangeOverlap
+                    && self.include_unknown;
             }
-            self.min_minor
-                .is_none_or(|lo| r.max_minor.is_none_or(|hi| hi >= lo))
-                && self
-                    .max_minor
-                    .is_none_or(|hi| r.min_minor.is_none_or(|lo| lo <= hi))
+            match self.match_mode {
+                CompensationMatchMode::RangeOverlap => {
+                    self.min_minor
+                        .is_none_or(|lo| r.max_minor.is_none_or(|hi| hi >= lo))
+                        && self
+                            .max_minor
+                            .is_none_or(|hi| r.min_minor.is_none_or(|lo| lo <= hi))
+                }
+                CompensationMatchMode::AdvertisedAmount => {
+                    self.min_minor
+                        .is_none_or(|lo| r.max_minor.or(r.min_minor).is_some_and(|hi| hi >= lo))
+                        && self
+                            .max_minor
+                            .is_none_or(|hi| r.min_minor.or(r.max_minor).is_some_and(|lo| lo <= hi))
+                }
+            }
         })
     }
 }
@@ -494,6 +528,211 @@ impl CompensationFilter {
 #[cfg(test)]
 mod native_tests {
     use super::*;
+    #[test]
+    fn advertised_amount_uses_only_evidenced_native_endpoints() {
+        let filter: CompensationFilter = serde_json::from_value(serde_json::json!({
+            "min_minor": 6000001, "currency": "USD", "interval": "year",
+            "match_mode": "advertised_amount", "include_unknown": false
+        }))
+        .unwrap();
+        for (id, min, max, currency, interval, expected) in [
+            (
+                "range",
+                Some(50000.0),
+                Some(80000.0),
+                Some("USD"),
+                Some("year"),
+                true,
+            ),
+            (
+                "cent_above",
+                Some(60000.01),
+                Some(60000.01),
+                Some("USD"),
+                Some("year"),
+                true,
+            ),
+            (
+                "upper",
+                None,
+                Some(80000.0),
+                Some("USD"),
+                Some("year"),
+                true,
+            ),
+            (
+                "lower",
+                Some(70000.0),
+                None,
+                Some("USD"),
+                Some("year"),
+                true,
+            ),
+            (
+                "exact",
+                Some(60000.0),
+                Some(60000.0),
+                Some("USD"),
+                Some("year"),
+                false,
+            ),
+            (
+                "below",
+                Some(40000.0),
+                Some(60000.0),
+                Some("USD"),
+                Some("year"),
+                false,
+            ),
+            (
+                "lower_low",
+                Some(50000.0),
+                None,
+                Some("USD"),
+                Some("year"),
+                false,
+            ),
+            (
+                "lower_exact",
+                Some(60000.0),
+                None,
+                Some("USD"),
+                Some("year"),
+                false,
+            ),
+            (
+                "unknown_amount",
+                None,
+                None,
+                Some("USD"),
+                Some("year"),
+                false,
+            ),
+            (
+                "unknown_currency",
+                Some(100000.0),
+                None,
+                None,
+                Some("year"),
+                false,
+            ),
+            (
+                "unknown_interval",
+                Some(100000.0),
+                None,
+                Some("USD"),
+                None,
+                false,
+            ),
+            (
+                "hour",
+                Some(100000.0),
+                None,
+                Some("USD"),
+                Some("hour"),
+                false,
+            ),
+            (
+                "month",
+                Some(100000.0),
+                None,
+                Some("USD"),
+                Some("month"),
+                false,
+            ),
+            (
+                "eur",
+                Some(100000.0),
+                None,
+                Some("EUR"),
+                Some("year"),
+                false,
+            ),
+        ] {
+            let ranges = Salary::from_structured(min, max, currency, interval, None)
+                .unwrap()
+                .ranges;
+            assert_eq!(filter.matches(&ranges), expected, "{id}");
+        }
+        assert!(!filter.matches(&[]));
+        let mixed = Salary::from_text(
+            "Salary: USD 40,000–50,000 per year; EUR 80,000–90,000 per year; USD 80,000–90,000 per month.",
+        )
+        .unwrap();
+        assert!(!filter.matches(&mixed.ranges));
+    }
+
+    #[test]
+    fn advertised_amount_maximum_uses_the_evidenced_lower_endpoint() {
+        let filter: CompensationFilter = serde_json::from_value(serde_json::json!({
+            "max_minor": 6000000, "currency": "USD", "interval": "year",
+            "match_mode": "advertised_amount"
+        }))
+        .unwrap();
+        for (min, max, expected) in [
+            (Some(50000.0), Some(80000.0), true),
+            (None, Some(60000.0), true),
+            (None, Some(60000.01), false),
+            (Some(60000.0), None, true),
+            (Some(60000.01), None, false),
+        ] {
+            let pay = Salary::from_structured(min, max, Some("USD"), Some("year"), None).unwrap();
+            assert_eq!(filter.matches(&pay.ranges), expected, "{min:?}–{max:?}");
+        }
+        let bounded: CompensationFilter = serde_json::from_value(serde_json::json!({
+            "min_minor": 6000001, "max_minor": 7000000,
+            "currency": "USD", "interval": "year", "match_mode": "advertised_amount"
+        }))
+        .unwrap();
+        let separated =
+            Salary::from_text("Salary: USD 40,000–50,000 per year; USD 80,000–90,000 per year.")
+                .unwrap();
+        assert!(!bounded.matches(&separated.ranges));
+    }
+
+    #[test]
+    fn omitted_mode_and_explicit_range_overlap_preserve_unbounded_ranges() {
+        let omitted: CompensationFilter = serde_json::from_value(serde_json::json!({
+            "min_minor": 6000001, "currency": "USD", "interval": "year"
+        }))
+        .unwrap();
+        let explicit: CompensationFilter = serde_json::from_value(serde_json::json!({
+            "min_minor": 6000001, "currency": "USD", "interval": "year",
+            "match_mode": "range_overlap"
+        }))
+        .unwrap();
+        assert_eq!(omitted, explicit);
+        let lower =
+            Salary::from_structured(Some(50000.0), None, Some("USD"), Some("year"), None).unwrap();
+        assert!(omitted.matches(&lower.ranges));
+        assert!(explicit.matches(&lower.ranges));
+    }
+    #[test]
+    fn explanations_name_the_native_matching_mode() {
+        let overlap = CompensationFilter::default();
+        assert!(overlap.explanation().contains("range_overlap"));
+        let advertised = CompensationFilter {
+            match_mode: CompensationMatchMode::AdvertisedAmount,
+            ..Default::default()
+        };
+        assert!(advertised.explanation().contains("advertised_amount"));
+        assert!(advertised.explanation().contains("not converted"));
+        let filters = crate::WorkerFilters {
+            compensation: Some(overlap),
+            matching: Some(crate::matching::PostingRules {
+                compensation: Some(advertised),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let descriptions = filters.compatibility_restrictions();
+        assert_eq!(descriptions.len(), 2);
+        assert_eq!(descriptions[0].field, "compensation");
+        assert!(descriptions[0].explanation.contains("range_overlap"));
+        assert_eq!(descriptions[1].field, "matching.compensation");
+        assert!(descriptions[1].explanation.contains("advertised_amount"));
+    }
+
     #[test]
     fn native_cents_and_explicit_interval_are_preserved() {
         let salary =
@@ -506,6 +745,7 @@ mod native_tests {
             currency: Some("USD".into()),
             interval: Some(SalaryInterval::Hour),
             include_unknown: false,
+            match_mode: CompensationMatchMode::RangeOverlap,
         };
         assert!(filter.matches(&salary.ranges));
         assert!(filter.matches(
@@ -577,11 +817,17 @@ impl CompensationFilter {
         let known = "(json_extract(pay.value, '$.min_minor') IS NOT NULL OR json_extract(pay.value, '$.max_minor') IS NOT NULL)";
         let mut overlap = Vec::new();
         if let Some(min) = self.min_minor {
-            overlap.push("(json_extract(pay.value, '$.max_minor') IS NULL OR json_extract(pay.value, '$.max_minor') >= ?)");
+            overlap.push(match self.match_mode {
+                CompensationMatchMode::RangeOverlap => "(json_extract(pay.value, '$.max_minor') IS NULL OR json_extract(pay.value, '$.max_minor') >= ?)",
+                CompensationMatchMode::AdvertisedAmount => "COALESCE(json_extract(pay.value, '$.max_minor'), json_extract(pay.value, '$.min_minor')) >= ?",
+            });
             values.push(CompensationSqlValue::Integer(min));
         }
         if let Some(max) = self.max_minor {
-            overlap.push("(json_extract(pay.value, '$.min_minor') IS NULL OR json_extract(pay.value, '$.min_minor') <= ?)");
+            overlap.push(match self.match_mode {
+                CompensationMatchMode::RangeOverlap => "(json_extract(pay.value, '$.min_minor') IS NULL OR json_extract(pay.value, '$.min_minor') <= ?)",
+                CompensationMatchMode::AdvertisedAmount => "COALESCE(json_extract(pay.value, '$.min_minor'), json_extract(pay.value, '$.max_minor')) <= ?",
+            });
             values.push(CompensationSqlValue::Integer(max));
         }
         let overlap = if overlap.is_empty() {
@@ -589,7 +835,9 @@ impl CompensationFilter {
         } else {
             overlap.join(" AND ")
         };
-        clauses.push(if self.include_unknown {
+        let include_unknown =
+            self.include_unknown && self.match_mode == CompensationMatchMode::RangeOverlap;
+        clauses.push(if include_unknown {
             format!("(NOT {known} OR ({overlap}))")
         } else {
             format!("({known} AND ({overlap}))")
@@ -598,7 +846,7 @@ impl CompensationFilter {
             "EXISTS (SELECT 1 FROM json_each(compensation_json) pay WHERE {})",
             clauses.join(" AND ")
         );
-        if self.include_unknown && self.interval.is_none() && self.currency.is_none() {
+        if include_unknown && self.interval.is_none() && self.currency.is_none() {
             (
                 format!("(json_array_length(compensation_json) = 0 OR {sql})"),
                 values,
