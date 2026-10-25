@@ -62,7 +62,7 @@ export function JobMetaPanel({
         <div className="flex justify-between items-center px-3 py-1.5 border-b border-[var(--color-ink)]">
           <span className="text-[var(--color-ink-mute)]">COMPANY</span>
           <div className="flex items-center gap-1.5 font-bold text-[var(--color-ink)]">
-            <CompanyLogo company={job.company} iconUrl={job.company_icon_url} logo={job.company_logo} size="lg" />
+            <CompanyLogo company={job.company} jobId={job.id} sourceId={job.source_id} logo={job.company_logo} size="lg" />
             <span className="truncate max-w-[140px]">{job.company}</span>
           </div>
         </div>

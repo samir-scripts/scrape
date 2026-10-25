@@ -1,10 +1,11 @@
-import { loadCompanyLogoAsset } from "../../lib/companyLogoCache";
+import { ensureVisibleCompanyLogo, loadCompanyLogoAsset } from "../../lib/companyLogoCache";
 import { useEffect, useState } from "react";
 import type { CompanyLogo as LogoReport } from "../../bindings/CompanyLogo";
 
 export interface CompanyLogoProps {
   company: string;
-  iconUrl?: string | null;
+  jobId?: string;
+  sourceId?: string | null;
   logo?: LogoReport | null;
   size?: "sm" | "md" | "lg";
   className?: string;
@@ -12,7 +13,8 @@ export interface CompanyLogoProps {
 
 export function CompanyLogo({
   company,
-  iconUrl,
+  jobId,
+  sourceId,
   logo,
   size = "md",
   className = "",
@@ -20,6 +22,11 @@ export function CompanyLogo({
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const [cacheFailure, setCacheFailure] = useState<string | null>(null);
   const [cached, setCached] = useState<{reference: string; url: string} | null>(null);
+  const [resolved, setResolved] = useState<{key: string; logo: LogoReport} | null>(null);
+  const lookupKey = jobId && sourceId
+    ? `${sourceId}\u0000${company.trim().toLowerCase()}\u0000${logo?.checked_at || "none"}`
+    : "";
+
   useEffect(() => {
     let active=true;
     const reference=logo?.cached_asset_reference;
@@ -27,13 +34,24 @@ export function CompanyLogo({
     return ()=>{active=false;};
   },[logo?.cached_asset_reference,logo?.checked_at]);
 
+  useEffect(() => {
+    let active = true;
+    if (!jobId || !sourceId || (logo && logo.status !== "missing_metadata")) {
+      return () => { active = false; };
+    }
+    void ensureVisibleCompanyLogo(jobId, sourceId, company, logo?.checked_at)
+      .then(value => { if (active && value) setResolved({ key: lookupKey, logo: value }); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [jobId, sourceId, company, logo?.status, logo?.checked_at, lookupKey]);
+
+  const activeLogo = resolved?.key === lookupKey ? resolved.logo : logo;
   const sizeClasses = {
     sm: "w-[24px] h-[24px] text-xs",
     md: "w-[24px] h-[24px] text-xs",
     lg: "w-[32px] h-[32px] text-[13px]",
   }[size];
 
-  // Helper to extract 1-2 initials
   const getInitials = (name: string): string => {
     if (!name) return "?";
     const clean = name.replace(/[^a-zA-Z0-9\s]/g, "").trim();
@@ -44,11 +62,10 @@ export function CompanyLogo({
     return (clean.slice(0, 2) || "?").toUpperCase();
   };
 
-  // Only source-provided metadata identifies an actual company logo.
-  const derivedUrl = logo?.asset || (cached?.reference === logo?.cached_asset_reference ? cached?.url : null) || (logo ? null : iconUrl);
-  const attemptKey = `${company}:${derivedUrl}:${logo?.checked_at || "legacy"}`;
-  const cacheUnavailable = !!logo?.cached_asset_reference && cacheFailure === logo.cached_asset_reference;
-  const diagnostic = (cacheUnavailable ? "Cached employer logo could not be loaded; retry after refreshing." : logo?.diagnostic) || (logo?.status === "missing_metadata" ? "No employer logo metadata" : logo?.status === "download_failed" ? "Employer logo download failed" : logo?.status === "decode_failed" ? "Employer logo decoding failed" : "");
+  const derivedUrl = activeLogo?.asset || (cached?.reference === activeLogo?.cached_asset_reference ? cached?.url : null);
+  const attemptKey = `${company}:${derivedUrl}:${activeLogo?.checked_at || "legacy"}`;
+  const cacheUnavailable = !!activeLogo?.cached_asset_reference && cacheFailure === activeLogo.cached_asset_reference;
+  const diagnostic = (cacheUnavailable ? "Cached employer logo could not be loaded; retry after refreshing." : activeLogo?.diagnostic) || (activeLogo?.status === "missing_metadata" ? "No employer logo metadata" : activeLogo?.status === "download_failed" ? "Employer logo download failed" : activeLogo?.status === "decode_failed" ? "Employer logo decoding failed" : "");
 
   if (derivedUrl && failedUrl !== attemptKey) {
     return (
@@ -58,7 +75,7 @@ export function CompanyLogo({
       >
         <img
           src={derivedUrl}
-          data-logo-status={logo?.status || "unverified"}
+          data-logo-status={activeLogo?.status || "verified"}
           referrerPolicy="no-referrer"
           alt={company}
           onError={() => setFailedUrl(attemptKey)}
@@ -74,7 +91,7 @@ export function CompanyLogo({
       className={`inline-flex items-center justify-center border border-[var(--color-ink)] bg-[var(--color-paper-2)] text-[var(--color-ink)] font-mono font-bold tracking-tighter shrink-0 select-none ${sizeClasses} ${className}`}
       title={diagnostic ? `${company}: ${diagnostic}` : company}
       aria-label={`${company} initials`}
-      data-logo-status={cacheUnavailable ? "cache_unavailable" : failedUrl === attemptKey ? "display_failed" : logo?.status || "missing_metadata"}
+      data-logo-status={cacheUnavailable ? "cache_unavailable" : failedUrl === attemptKey ? "display_failed" : activeLogo?.status || "missing_metadata"}
     >
       {getInitials(company)}
     </span>

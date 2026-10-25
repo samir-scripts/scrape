@@ -10,11 +10,10 @@ import { Button } from "../../ui/Button";
 
 const catalog = catalogData as unknown as WorkflowTemplateCatalog;
 export const companyOptions = catalog.companies.map(company => {
-  const template = catalog.templates.find(template => template.id === company.template_id)!;
-  const source = template.spec.sources.find(source => source.id === company.source_id)!;
+  const source = company.source;
   let domain = source.extractor.url;
   try { domain = new URL(source.extractor.url).hostname; } catch { /* Board identifiers remain visible. */ }
-  return { company, template, source, domain };
+  return { company, source, domain };
 });
 export function selectedCompanyId(source: WorkflowSourceSpec): string | null {
   const endpoint = normalizedEndpoint(source.extractor.kind, source.extractor.url);
@@ -34,15 +33,15 @@ export function CompanyPicker({ value, onChange, onCustom, disabled, logo }: {
     </div>
     <SearchCombobox aria-label="Search companies" value={value ?? ""} query={query}
       placeholder="Search company, provider or board domain" disabled={disabled}
-      options={companyOptions.map(({company, source, domain, template}) => ({ value: company.id, label: company.name,
-        searchText: `${company.name} ${source.extractor.kind} ${domain} ${template.readiness}` }))}
+      options={companyOptions.map(({company, source, domain}) => ({ value: company.id, label: company.name,
+        searchText: `${company.name} ${source.extractor.kind} ${domain} ${company.readiness}` }))}
       onQueryChange={setQuery} onBlur={restore} onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); restore(); } }}
       onChange={id => { if (id) { onChange(id); setQuery(companyOptions.find(option => option.company.id === id)?.company.name ?? ""); } }}
       renderOption={option => {
         const item = companyOptions.find(item => item.company.id === option.value)!;
         return <span className="flex min-w-0 items-center gap-2 normal-case font-sans">
           <CompanyLogo company={item.company.name} logo={item.company.logo} size="sm" />
-          <span className="min-w-0 break-words"><span className="font-semibold">{item.company.name}</span><span className="block text-[var(--color-ink-mute)]">{item.source.extractor.kind} · {item.template.readiness.replaceAll("_", " ")}</span></span>
+          <span className="min-w-0 break-words"><span className="font-semibold">{item.company.name}</span><span className="block text-[var(--color-ink-mute)]">{item.source.extractor.kind} · {item.company.readiness.replaceAll("_", " ")}</span></span>
         </span>;
       }} />
     {selected && <div className="flex min-w-0 items-start gap-3 border border-[var(--color-border)] p-3 bg-[var(--color-surface-raised)]" aria-label="Selected company details">
@@ -51,12 +50,12 @@ export function CompanyPicker({ value, onChange, onCustom, disabled, logo }: {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="font-bold text-sm">{selected.company.name}</p>
           <span className="px-1.5 py-0.5 border border-[var(--color-border)] text-[10px] font-semibold uppercase bg-[var(--color-surface)]">
-            {selected.source.extractor.kind} · {selected.template.readiness.replaceAll("_", " ")}
+            {selected.source.extractor.kind} · {selected.company.readiness.replaceAll("_", " ")}
           </span>
         </div>
         <p className="text-xs text-[var(--color-text-muted)] break-all">{selected.domain} · {selected.source.extractor.url}</p>
         {!selected.source.enabled && <p className="text-xs text-[var(--color-warning)] font-semibold">Source disabled until explicitly enabled</p>}
-        <p className="text-xs text-[var(--color-text-muted)]">{selected.template.description}</p>
+        <p className="text-xs text-[var(--color-text-muted)]">{selected.company.description}</p>
         <p className="text-[11px] text-[var(--color-text-muted)]">Logo: {(logo ?? selected.company.logo)?.diagnostic || (logo ?? selected.company.logo)?.status?.replaceAll("_", " ") || "Initials fallback until verified artwork"}</p>
       </div>
     </div>}

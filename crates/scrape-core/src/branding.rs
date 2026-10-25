@@ -59,6 +59,34 @@ pub fn http_url(raw: &str) -> bool {
             && u.password().is_none()
     })
 }
+
+/// Identifies the Ashby platform favicon previously misclassified as employer artwork.
+pub fn is_legacy_ashby_platform_favicon(evidence: &LogoEvidence) -> bool {
+    let Ok(page) = url::Url::parse(&evidence.page_url) else {
+        return false;
+    };
+    let Ok(asset) = url::Url::parse(&evidence.url) else {
+        return false;
+    };
+    if page.scheme() != "https"
+        || page.host_str() != Some("jobs.ashbyhq.com")
+        || asset.scheme() != "https"
+        || asset.host_str() != Some("cdn.ashbyprd.com")
+    {
+        return false;
+    }
+    let Some(path) = asset.path().strip_prefix("/cdn_assets/") else {
+        return false;
+    };
+    let Some((parent, filename)) = path.rsplit_once('/') else {
+        return false;
+    };
+    !parent.is_empty()
+        && filename
+            .get(..8)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("favicon."))
+        && filename.len() > 8
+}
 impl LogoEvidence {
     pub fn validate(&self) -> Result<(), String> {
         if !http_url(&self.url) || !http_url(&self.page_url) {
@@ -216,6 +244,54 @@ pub fn cache_asset(bytes: &[u8]) -> Result<String, String> {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn legacy_ashby_filter_matches_only_the_platform_favicon_relationship() {
+        let evidence = |page: &str, asset: &str| LogoEvidence {
+            url: asset.into(),
+            page_url: page.into(),
+            method: LogoMethod::EmployerLabel,
+        };
+        assert!(is_legacy_ashby_platform_favicon(&evidence(
+            "https://jobs.ashbyhq.com/linear/123",
+            "https://cdn.ashbyprd.com/cdn_assets/x/favicon.png"
+        )));
+        assert!(is_legacy_ashby_platform_favicon(&evidence(
+            "https://jobs.ashbyhq.com/linear/123",
+            "https://cdn.ashbyprd.com/cdn_assets/x/y/favicon.webp?v=2"
+        )));
+        for (page, asset) in [
+            (
+                "https://jobs.ashbyhq.com.evil.test/linear/123",
+                "https://cdn.ashbyprd.com/cdn_assets/x/favicon.png",
+            ),
+            (
+                "https://jobs.ashbyhq.com/linear/123",
+                "https://cdn.ashbyprd.com.evil.test/cdn_assets/x/favicon.png",
+            ),
+            (
+                "http://jobs.ashbyhq.com/linear/123",
+                "https://cdn.ashbyprd.com/cdn_assets/x/favicon.png",
+            ),
+            (
+                "https://jobs.ashbyhq.com/linear/123",
+                "https://cdn.ashbyprd.com/cdn_assets/favicon.png",
+            ),
+            (
+                "https://jobs.ashbyhq.com/linear/123",
+                "https://cdn.ashbyprd.com/cdn_assets/x/logo.png",
+            ),
+            (
+                "https://jobs.ashbyhq.com/linear/123",
+                "https://cdn.ashbyprd.com/other/favicon.png",
+            ),
+            (
+                "https://linear.app/careers",
+                "https://cdn.ashbyprd.com/cdn_assets/x/favicon.png",
+            ),
+        ] {
+            assert!(!is_legacy_ashby_platform_favicon(&evidence(page, asset)));
+        }
+    }
     use super::*;
     fn report(asset: String) -> CompanyLogo {
         CompanyLogo {

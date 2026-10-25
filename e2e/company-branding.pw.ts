@@ -34,7 +34,7 @@ for(const theme of ["paper","obsidian"]){
   expect(Math.abs(result.naturalWidth/result.naturalHeight-1200/628)).toBeLessThan(0.03);
   if(format==="new WebP")expect(Math.max(result.naturalWidth,result.naturalHeight)).toBeLessThanOrEqual(128);
   const wide=page.getByRole("img",{name:"Wide transparent fixture"});await expect.poll(()=>wide.evaluate(img=>(img as HTMLImageElement).naturalWidth)).toBe(128);expect(await wide.evaluate(img=>getComputedStyle(img).objectFit)).toBe("contain");
-  await expect(page.getByLabel("Broken fixture initials")).toHaveAttribute("data-logo-status","display_failed");await expect(page.getByLabel("Missing fixture initials")).toHaveAttribute("title",/No employer logo metadata/);
+  await expect(page.getByLabel("Broken fixture initials")).toHaveAttribute("data-logo-status","missing_metadata");await expect(page.getByRole("img",{name:"Broken fixture"})).toHaveCount(0);await expect(page.getByLabel("Missing fixture initials")).toHaveAttribute("title",/No employer logo metadata/);
   await page.getByRole("button",{name:"View Branding fixture 0 at Cloudflare",exact:true}).click();
   await expect.poll(()=>page.getByRole("img",{name:"Cloudflare"}).evaluateAll(images=>images.map(img=>Math.round(img.parentElement!.getBoundingClientRect().width)))).toContain(32);
   expect(external).toBe(0);expect(await contrastFailures(page)).toEqual([]);

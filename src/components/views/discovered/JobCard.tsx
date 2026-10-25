@@ -103,11 +103,7 @@ export function JobCard({
       {/* Second Line: Company + Location on Left, Date on Right */}
       <div className="flex flex-wrap gap-2 items-center justify-between text-xs font-mono text-[var(--color-ink-mute)]">
         <div className="flex items-center gap-2 min-w-0">
-          <CompanyLogo
-            company={job.company}
-            iconUrl={job.company_icon_url} logo={job.company_logo}
-            size="sm"
-          />
+          <CompanyLogo company={job.company} jobId={job.id} sourceId={job.source_id} logo={job.company_logo} size="sm" />
           <span className="font-semibold text-[var(--color-ink)] truncate max-w-[200px]">
             {job.company}
           </span>

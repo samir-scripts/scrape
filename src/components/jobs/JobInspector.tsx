@@ -22,9 +22,6 @@ import { Select } from "../ui/Select";
 import { ActionMenu } from "../ui/ActionMenu";
 import { formatJobLocation } from "../../lib/jobLocationLabel";
 
-import { useContext } from "react";
-import { QueryClientContext } from "@tanstack/react-query";
-import { notifySuccess, notifyInfo, notifyError } from "../../lib/toast";
 export interface JobInspectorProps {
   job: Job | null;
   onClose?: () => void;
@@ -54,27 +51,6 @@ export function JobInspectorContent({
   onDelete,
   onResetPane,
 }: JobInspectorProps & { job: Job }) {
-  const queryClient = useContext(QueryClientContext);
-  const [isFetchingLogo, setIsFetchingLogo] = useState(false);
-
-  const handleFetchLogo = async () => {
-    if (!job) return;
-    setIsFetchingLogo(true);
-    try {
-      const fetched = await api.fetchCompanyLogo(job.company, job.url);
-      if (fetched && fetched.status === "verified") {
-        notifySuccess(`Fetched and verified logo for ${job.company}`, "LOGO UPDATED");
-        void queryClient?.invalidateQueries({ queryKey: ["jobs"] });
-        void queryClient?.invalidateQueries({ queryKey: ["job", job.id] });
-      } else {
-        notifyInfo(`No public logo found for ${job.company}. Initials retained.`, "LOGO LOOKUP");
-      }
-    } catch (err) {
-      notifyError(String(err), "LOGO FETCH FAILED");
-    } finally {
-      setIsFetchingLogo(false);
-    }
-  };
   const [notes, setNotes] = useState(job.notes || "");
   const [noteState, setNoteState] = useState("Saved");
   const [events, setEvents] = useState<JobStatusEvent[]>([]);
@@ -152,18 +128,8 @@ export function JobInspectorContent({
               {job.title}
             </h2>
             <p className="flex items-center gap-2 mt-1 text-sm text-[var(--color-ink-mute)]">
-              <CompanyLogo company={job.company} iconUrl={job.company_icon_url} logo={job.company_logo} size="lg" />
+              <CompanyLogo company={job.company} jobId={job.id} sourceId={job.source_id} logo={job.company_logo} size="lg" />
               <span>{job.company}</span>
-              {(!job.company_logo || job.company_logo.status !== "verified") && (
-                <button
-                  type="button"
-                  onClick={handleFetchLogo}
-                  disabled={isFetchingLogo}
-                  className="text-xs text-[var(--color-signal)] underline hover:opacity-80"
-                >
-                  {isFetchingLogo ? "Fetching logo…" : "Fetch logo"}
-                </button>
-              )}
             </p>
           </div>
           <div className="flex items-center gap-1 shrink-0">

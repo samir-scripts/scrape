@@ -65,24 +65,14 @@ pub async fn search_companies(pool: &SqlitePool, query: &str) -> Result<Vec<Comp
     let catalog = template_catalog()?;
     let mut suggestions: Vec<CompanySuggestion> = Vec::new();
     for preset in &catalog.companies {
-        let template = catalog
-            .templates
-            .iter()
-            .find(|template| template.id == preset.template_id)
-            .ok_or_else(|| AppError::Internal("Company preset has no template".into()))?;
-        let source = template
-            .spec
-            .sources
-            .iter()
-            .find(|source| source.id == preset.source_id)
-            .ok_or_else(|| AppError::Internal("Company preset has no source".into()))?;
+        let source = &preset.source;
         let searchable = format!(
             "{} {} {:?} {} {:?}",
             preset.name,
-            template.name,
+            preset.description,
             source.extractor.kind,
             source.extractor.url,
-            template.readiness
+            preset.readiness
         )
         .to_lowercase();
         if !search_terms.iter().all(|term| {

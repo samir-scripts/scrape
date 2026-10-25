@@ -158,11 +158,7 @@ export function DiscoveredTable({
                 </TableCell>
                 <TableCell className="font-bold uppercase whitespace-nowrap">
                   <div className="flex items-center gap-2">
-                    <CompanyLogo
-                      company={job.company}
-                      iconUrl={job.company_icon_url} logo={job.company_logo}
-                      size="sm"
-                    />
+                    <CompanyLogo company={job.company} jobId={job.id} sourceId={job.source_id} logo={job.company_logo} size="sm" />
                     <span>{job.company}</span>
                   </div>
                 </TableCell>

@@ -230,7 +230,7 @@ export function TrackedList({
                       >
                         {job.title}
                       </button>
-                      <div className="flex items-center gap-2 text-sm mt-1 text-[var(--color-ink-mute)]"><CompanyLogo company={job.company} iconUrl={job.company_icon_url} logo={job.company_logo} /><span>{job.company}</span></div>
+                      <div className="flex items-center gap-2 text-sm mt-1 text-[var(--color-ink-mute)]"><CompanyLogo company={job.company} jobId={job.id} sourceId={job.source_id} logo={job.company_logo} /><span>{job.company}</span></div>
                       <p className="tracked-mobile-meta mt-1 text-xs">
                         {formatJobLocation(job.location, job.workplace_type, job.locations)} ·{" "}
                         {formatSalary(job)}

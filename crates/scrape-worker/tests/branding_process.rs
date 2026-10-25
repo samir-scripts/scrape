@@ -29,6 +29,7 @@ fn run(kind: &str, mode: &str) -> (Vec<WorkerEvent>, Vec<String>) {
     let stopping = stop.clone();
     let kind = kind.to_string();
     let mode = mode.to_string();
+    let server_mode = mode.clone();
     let k = kind.clone();
     let server = thread::spawn(move || {
         while !stopping.load(Ordering::SeqCst) {
@@ -46,7 +47,7 @@ fn run(kind: &str, mode: &str) -> (Vec<WorkerEvent>, Vec<String>) {
                 let body = if path.ends_with("robots.txt") {
                     b"User-agent: *\nAllow: /".to_vec()
                 } else if path.ends_with("/logo.png") {
-                    match mode.as_str() {
+                    match server_mode.as_str() {
                         "broken" => {
                             status = "404 Not Found";
                             Vec::new()
@@ -70,9 +71,33 @@ fn run(kind: &str, mode: &str) -> (Vec<WorkerEvent>, Vec<String>) {
                 } else if path.starts_with("/api.lever.co/") {
                     json!((0..2).map(|i|json!({"id":i.to_string(),"text":"Engineer","hostedUrl":format!("https://fixture.test/jobs/{i}")})).collect::<Vec<_>>()).to_string().into_bytes()
                 } else if path.starts_with("/api.ashbyhq.com/") {
-                    json!({"jobs":(0..2).map(|i|json!({"id":i.to_string(),"title":"Engineer","jobUrl":format!("https://fixture.test/jobs/{i}")})).collect::<Vec<_>>()} ).to_string().into_bytes()
+                    json!({"jobs":(0..2).map(|i|json!({"id":i.to_string(),"title":"Engineer","jobUrl":if server_mode.starts_with("ashby-theme") {format!("https://jobs.ashbyhq.com/fixture/{i}")} else {format!("https://fixture.test/jobs/{i}")}})).collect::<Vec<_>>()} ).to_string().into_bytes()
+                } else if path.starts_with("/jobs.ashbyhq.com/") {
+                    let organization = if server_mode == "ashby-theme-mismatch" {
+                        "Another Employer"
+                    } else {
+                        "Cloudflare"
+                    };
+                    let data = if server_mode == "ashby-theme-favicon-only" {
+                        String::new()
+                    } else {
+                        format!(
+                            "<script>window.__appData = {};</script>",
+                            json!({
+                                "organization": {
+                                    "name": organization,
+                                    "organizationId": "org-id",
+                                    "theme": {
+                                        "logoSquareImageUrl": "https://app.ashbyhq.com/api/images/org-theme-logo/org-id/theme-id/logo.png",
+                                        "logoWordmarkImageUrl": null
+                                    }
+                                }
+                            })
+                        )
+                    };
+                    format!("<link rel='icon' href='https://cdn.ashbyprd.com/cdn_assets/x/favicon.png'>{data}").into_bytes()
                 } else if path.starts_with("/fixture.test/jobs/") || path == "/fixture.test/board" {
-                    if mode == "board" && path != "/fixture.test/board" {
+                    if server_mode == "board" && path != "/fixture.test/board" {
                         b"<html>No logo on posting</html>".to_vec()
                     } else {
                         b"<img alt='Greenhouse Logo' src='/platform.png'><img alt='Cloudflare Logo' src='/logo.png'>".to_vec()
@@ -80,7 +105,7 @@ fn run(kind: &str, mode: &str) -> (Vec<WorkerEvent>, Vec<String>) {
                 } else if kind == "selector" {
                     b"<img class='employer' src='/logo.png'><div class='job'><a href='/jobs/1'>Engineer</a></div><div class='job'><a href='/jobs/2'>Engineer</a></div>".to_vec()
                 } else {
-                    let jobs:Vec<Value>=(0..2).map(|i|json!({"@type":"JobPosting","identifier":i.to_string(),"title":"Engineer","url":format!("/jobs/{i}"),"hiringOrganization":if matches!(mode.as_str(),"empty-employer"|"empty-no-hint") {json!({"name":"","logo":"/logo.png"})}else if mode=="missing" {json!({"name":"Cloudflare"})}else{json!({"name":"Cloudflare","logo":"/logo.png"})}})).collect();
+                    let jobs:Vec<Value>=(0..2).map(|i|json!({"@type":"JobPosting","identifier":i.to_string(),"title":"Engineer","url":format!("/jobs/{i}"),"hiringOrganization":if matches!(server_mode.as_str(),"empty-employer"|"empty-no-hint") {json!({"name":"","logo":"/logo.png"})}else if server_mode=="missing" {json!({"name":"Cloudflare"})}else{json!({"name":"Cloudflare","logo":"/logo.png"})}})).collect();
                     format!("<img alt='Greenhouse Logo' src='/platform.png'><script type='application/ld+json'>{}</script>",json!(jobs)).into_bytes()
                 };
                 let _=write!(socket,"HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: application/octet-stream\r\nConnection: close\r\n\r\n",body.len());
@@ -96,6 +121,9 @@ fn run(kind: &str, mode: &str) -> (Vec<WorkerEvent>, Vec<String>) {
             .as_object_mut()
             .unwrap()
             .remove("__company");
+    }
+    if mode.starts_with("ashby-theme") {
+        config["sources"][0]["config"]["url"] = json!("https://jobs.ashbyhq.com/fixture/0");
     }
     let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
         .args(["--stdin", "--replay-origin", &origin])
@@ -180,6 +208,94 @@ fn all_extraction_paths_validate_one_shared_asset_and_ignore_workflow_display_na
                 LogoMethod::ConfiguredSelector
             );
         }
+    }
+}
+
+#[test]
+fn ashby_theme_downloads_one_employer_asset_for_two_jobs_without_platform_artwork() {
+    for mode in [
+        "ashby-theme",
+        "ashby-theme-mismatch",
+        "ashby-theme-favicon-only",
+    ] {
+        let (events, paths) = run("ashby", mode);
+        let jobs: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                WorkerEvent::Job {
+                    company,
+                    title,
+                    url,
+                    ..
+                } => Some((company.as_str(), title.as_str(), url.as_str())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(jobs.len(), 2, "{mode}");
+        for (index, (company, title, url)) in jobs.iter().enumerate() {
+            assert_eq!(*company, "Cloudflare", "{mode}");
+            assert_eq!(*title, "Engineer", "{mode}");
+            assert_eq!(*url, format!("https://jobs.ashbyhq.com/fixture/{index}"));
+        }
+        let reports: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                WorkerEvent::Branding {
+                    source_id,
+                    company,
+                    logo,
+                } => {
+                    assert_eq!(source_id, "source");
+                    assert_eq!(company, "Cloudflare");
+                    Some(logo)
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(reports.len(), 1, "{mode}");
+        let report = reports[0];
+        report.validate().unwrap();
+        let expected_asset_requests = usize::from(mode == "ashby-theme");
+        if mode == "ashby-theme" {
+            assert_eq!(report.status, LogoStatus::Verified);
+            let evidence = report.evidence.as_ref().unwrap();
+            assert_eq!(evidence.method, LogoMethod::Provider);
+            assert_eq!(evidence.page_url, "https://jobs.ashbyhq.com/fixture/0");
+            assert_eq!(
+                evidence.url,
+                "https://app.ashbyhq.com/api/images/org-theme-logo/org-id/theme-id/logo.png"
+            );
+            assert_eq!(
+                report.asset.as_deref(),
+                Some(
+                    scrape_core::branding::cache_asset(include_bytes!(
+                        "fixtures/cloudflare-logo.jpg"
+                    ))
+                    .unwrap()
+                    .as_str()
+                )
+            );
+        } else {
+            assert_eq!(report.status, LogoStatus::MissingMetadata, "{mode}");
+            assert!(report.asset.is_none());
+            assert!(report.evidence.is_none());
+        }
+        let mut non_robots: Vec<_> = paths
+            .iter()
+            .filter(|path| !path.ends_with("/robots.txt"))
+            .map(String::as_str)
+            .collect();
+        non_robots.sort_unstable();
+        let mut expected = vec![
+            "/api.ashbyhq.com/posting-api/job-board/fixture?includeCompensation=true",
+            "/jobs.ashbyhq.com/fixture/0",
+        ];
+        if expected_asset_requests == 1 {
+            expected.push("/app.ashbyhq.com/api/images/org-theme-logo/org-id/theme-id/logo.png");
+        }
+        expected.sort_unstable();
+        assert_eq!(non_robots, expected, "{mode}: {paths:?}");
+        assert!(!paths.iter().any(|path| path.contains("favicon")));
     }
 }
 #[test]

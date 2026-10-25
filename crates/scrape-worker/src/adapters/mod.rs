@@ -4,6 +4,7 @@ pub mod greenhouse;
 pub mod jsonld;
 pub mod lever;
 pub mod search;
+pub(crate) mod search_cache;
 pub mod selector;
 pub(crate) mod selector_session;
 pub mod workday;

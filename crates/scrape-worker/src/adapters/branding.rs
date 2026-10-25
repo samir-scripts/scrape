@@ -189,6 +189,97 @@ fn page_employer(html: &str) -> Option<String> {
                 .and_then(|v| name(&v))
         })
 }
+/// Read only a JSON object literal, never JavaScript expressions or executable code.
+fn ashby_app_data(script: &str) -> Option<Value> {
+    let (_, assignment) = script.split_once("window.__appData")?;
+    let json = assignment.trim_start().strip_prefix('=')?.trim_start();
+    if !json.starts_with('{') {
+        return None;
+    }
+    let mut depth = 0usize;
+    let mut quoted = false;
+    let mut escaped = false;
+    for (index, byte) in json.bytes().enumerate() {
+        if quoted {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                quoted = false;
+            }
+        } else {
+            match byte {
+                b'"' => quoted = true,
+                b'{' => depth += 1,
+                b'}' => {
+                    depth = depth.checked_sub(1)?;
+                    if depth == 0 {
+                        return serde_json::from_str(&json[..=index]).ok();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    None
+}
+
+fn ashby_theme_logo(document: &Html, page_url: &str, company: &str) -> Option<LogoEvidence> {
+    if Url::parse(page_url).ok()?.host_str() != Some("jobs.ashbyhq.com") {
+        return None;
+    }
+    // Match the HTTP page cap even for callers that supply a pre-parsed document.
+    let mut remaining: usize = 2 * 1024 * 1024;
+    for script in document.select(&Selector::parse("script").unwrap()) {
+        for text in script.text() {
+            remaining = remaining.checked_sub(text.len())?;
+            let Some(data) = ashby_app_data(text) else {
+                continue;
+            };
+            let organization = data.get("organization")?;
+            let name = organization.get("name")?.as_str()?;
+            if !name.trim().eq_ignore_ascii_case(company.trim()) {
+                return None;
+            }
+            let organization_id = organization.get("organizationId")?.as_str()?;
+            if organization_id.is_empty() {
+                return None;
+            }
+            let theme = organization.get("theme")?;
+            for field in ["logoSquareImageUrl", "logoWordmarkImageUrl"] {
+                let Some(raw) = theme.get(field).and_then(Value::as_str) else {
+                    continue;
+                };
+                let Ok(url) = Url::parse(raw) else {
+                    continue;
+                };
+                if url.scheme() != "https"
+                    || url.host_str() != Some("app.ashbyhq.com")
+                    || !scrape_core::branding::http_url(raw)
+                {
+                    continue;
+                }
+                let path = url.path();
+                let asset = path
+                    .strip_prefix("/api/images/org-theme-logo/")
+                    .or_else(|| path.strip_prefix("/api/images/org-theme-wordmark/"));
+                if asset
+                    .and_then(|path| path.split_once('/'))
+                    .is_some_and(|(id, rest)| id == organization_id && !rest.is_empty())
+                {
+                    return Some(LogoEvidence {
+                        url: url.into(),
+                        page_url: page_url.into(),
+                        method: LogoMethod::Provider,
+                    });
+                }
+            }
+        }
+    }
+    None
+}
+
 pub fn resolve_page(
     html: &str,
     page_url: &str,
@@ -211,6 +302,9 @@ pub fn resolve_document_with_base(
         || platform(company)
     {
         return None;
+    }
+    if let Some(logo) = ashby_theme_logo(document, page_url, company) {
+        return Some(logo);
     }
     for script in document.select(&Selector::parse("script[type='application/ld+json']").unwrap()) {
         if let Ok(value) = serde_json::from_str::<Value>(&script.inner_html()) {
@@ -257,26 +351,6 @@ pub fn resolve_document_with_base(
         {
             if let Some(img) = anchor.select(&Selector::parse("img").unwrap()).next() {
                 if let Some(url) = image_url(img, base_url) {
-                    return Some(LogoEvidence {
-                        url,
-                        page_url: page_url.into(),
-                        method: LogoMethod::EmployerLabel,
-                    });
-                }
-            }
-        }
-    }
-    for link in document.select(&Selector::parse("link[rel*='icon']").unwrap()) {
-        let rel = link.value().attr("rel").unwrap_or_default().to_lowercase();
-        if rel.contains("apple-touch-icon")
-            || (rel.contains("icon")
-                && link
-                    .value()
-                    .attr("type")
-                    .is_some_and(|t| t.contains("png") || t.contains("webp")))
-        {
-            if let Some(href) = link.value().attr("href") {
-                if let Some(url) = logo_url(&Value::String(href.into()), base_url) {
                     return Some(LogoEvidence {
                         url,
                         page_url: page_url.into(),
@@ -409,6 +483,155 @@ mod tests {
             "Acme"
         )
         .is_none());
+    }
+
+    fn ashby_theme_page(name: &str, id: &str, square: Value, wordmark: Value) -> String {
+        let data = serde_json::json!({
+            "organization": {
+                "name": name,
+                "organizationId": id,
+                "theme": {
+                    "logoSquareImageUrl": square,
+                    "logoWordmarkImageUrl": wordmark
+                }
+            },
+            "other": "Quoted braces } { and an escaped quote \" and backslash \\"
+        });
+        format!(
+            "<link rel='icon' type='image/png' href='https://cdn.ashbyprd.com/cdn_assets/favicon.png'><script>window.__appData = {data}; window.after = true;</script>"
+        )
+    }
+
+    #[test]
+    fn ashby_theme_prefers_matching_employer_square_over_wordmark_and_favicon() {
+        let square = "https://app.ashbyhq.com/api/images/org-theme-logo/org-123/theme/square.png";
+        let wordmark =
+            "https://app.ashbyhq.com/api/images/org-theme-wordmark/org-123/theme/wordmark.png";
+        let page = "https://jobs.ashbyhq.com/acme/job-123";
+        let html = ashby_theme_page("  aCmE  ", "org-123", square.into(), wordmark.into());
+        let logo = resolve_page(&html, page, "Acme", None).unwrap();
+        assert_eq!(logo.url, square);
+        assert_eq!(logo.page_url, page);
+        assert_eq!(logo.method, LogoMethod::Provider);
+    }
+
+    #[test]
+    fn ashby_theme_uses_wordmark_when_square_is_absent_or_untrusted() {
+        let wordmark =
+            "https://app.ashbyhq.com/api/images/org-theme-wordmark/org-123/theme/wordmark.png";
+        for square in [
+            Value::Null,
+            Value::String("https://evil.test/square.png".into()),
+        ] {
+            let html = ashby_theme_page("Acme", "org-123", square, wordmark.into());
+            let logo = resolve_page(&html, "https://jobs.ashbyhq.com/acme", "Acme", None).unwrap();
+            assert_eq!(logo.url, wordmark);
+            assert_eq!(logo.method, LogoMethod::Provider);
+        }
+    }
+
+    #[test]
+    fn ashby_theme_rejects_wrong_employer_or_unscoped_assets() {
+        let square = "https://app.ashbyhq.com/api/images/org-theme-logo/org-123/theme/square.png";
+        let page = "https://jobs.ashbyhq.com/acme";
+        let wrong_employer =
+            ashby_theme_page("Other employer", "org-123", square.into(), Value::Null);
+        assert!(resolve_page(&wrong_employer, page, "Acme", None).is_none());
+        for asset in [
+            "https://app.ashbyhq.com/api/images/org-theme-logo/other-org/theme/logo.png",
+            "https://app.ashbyhq.com/api/images/org-theme-logo/org-123-extra/theme/logo.png",
+            "https://app.ashbyhq.com/api/images/org-theme-logo/org-123",
+            "https://app.ashbyhq.com/api/images/org-theme-logo/org-123/",
+            "https://app.ashbyhq.com/api/images/other/org-123/logo.png",
+            "https://evil.test/api/images/org-theme-logo/org-123/theme/logo.png",
+            "https://app.ashbyhq.com.evil.test/api/images/org-theme-logo/org-123/theme/logo.png",
+            "http://app.ashbyhq.com/api/images/org-theme-logo/org-123/theme/logo.png",
+            "https://user@app.ashbyhq.com/api/images/org-theme-logo/org-123/theme/logo.png",
+            "//app.ashbyhq.com/api/images/org-theme-logo/org-123/theme/logo.png",
+            "javascript:alert(1)",
+        ] {
+            let html = ashby_theme_page("Acme", "org-123", asset.into(), Value::Null);
+            assert!(resolve_page(&html, page, "Acme", None).is_none(), "{asset}");
+        }
+        let html = ashby_theme_page("Acme", "org-123", square.into(), Value::Null);
+        for wrong_page in [
+            "https://example.test/acme",
+            "https://jobs.ashbyhq.com.evil.test/acme",
+            "https://app.ashbyhq.com/acme",
+        ] {
+            assert!(resolve_page(&html, wrong_page, "Acme", None).is_none());
+        }
+    }
+
+    #[test]
+    fn ashby_payload_requires_bounded_valid_json_not_javascript() {
+        for script in [
+            "window.__appData = {",
+            "window.__appData = {\"organization\":",
+            "window.__appData = {'organization': {}};",
+            "window.__appData = JSON.parse('{}');",
+            "window.__appData = (() => ({organization: {}}))();",
+            "window.__appData = null;",
+            "window.__appData = {};",
+            "window.__appData = {\"organization\":{\"name\":\"Acme\"}};",
+        ] {
+            let html = format!("<script>{script}</script>");
+            assert!(resolve_page(&html, "https://jobs.ashbyhq.com/acme", "Acme", None).is_none());
+        }
+        let square = "https://app.ashbyhq.com/api/images/org-theme-logo/org-123/theme/logo.png";
+        let html = format!(
+            "<script>{}</script>{}",
+            " ".repeat(2 * 1024 * 1024),
+            ashby_theme_page("Acme", "org-123", square.into(), Value::Null)
+        );
+        assert!(resolve_page(&html, "https://jobs.ashbyhq.com/acme", "Acme", None).is_none());
+    }
+
+    #[test]
+    fn generic_favicons_and_social_images_are_never_employer_evidence() {
+        for markup in [
+            "<link rel='icon' type='image/png' href='/favicon.png'>",
+            "<link rel='shortcut icon' type='image/webp' href='/favicon.webp'>",
+            "<link rel='apple-touch-icon' href='/apple-touch-icon.png'>",
+            "<link rel='icon' href='/favicon.ico'>",
+            "<meta property='og:image' content='/social.png'>",
+        ] {
+            for page in [
+                "https://jobs.ashbyhq.com/acme",
+                "https://example.test/jobs/1",
+            ] {
+                assert!(
+                    resolve_page(markup, page, "Acme", None).is_none(),
+                    "{markup}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ordinary_employer_evidence_remains_available_without_provider_metadata() {
+        let page = "https://jobs.ashbyhq.com/acme/job";
+        for (html, configured, method) in [
+            (
+                "<a aria-label='Acme careers'><img src='/employer.png'></a>",
+                None,
+                LogoMethod::EmployerLabel,
+            ),
+            (
+                "<img class='configured-logo' src='/employer.png'>",
+                Some(".configured-logo"),
+                LogoMethod::ConfiguredSelector,
+            ),
+            (
+                r#"<script type="application/ld+json">{"@type":"JobPosting","hiringOrganization":{"name":"Acme","logo":"/employer.png"}}</script>"#,
+                None,
+                LogoMethod::JobPosting,
+            ),
+        ] {
+            let logo = resolve_page(html, page, "Acme", configured).unwrap();
+            assert_eq!(logo.url, "https://jobs.ashbyhq.com/employer.png");
+            assert_eq!(logo.method, method);
+        }
     }
 }
 

@@ -2,6 +2,18 @@ use crate::error::{AppError, Result};
 use scrape_core::branding::{relationship_key, CompanyLogo, LogoStatus};
 use sqlx::{SqliteConnection, SqlitePool};
 
+pub async fn job_identity(
+    pool: &SqlitePool,
+    job_id: &str,
+) -> Result<Option<(Option<String>, String, String)>> {
+    Ok(
+        sqlx::query_as("SELECT source_id,company,url FROM jobs WHERE id=? AND removed_at IS NULL")
+            .bind(job_id)
+            .fetch_optional(pool)
+            .await?,
+    )
+}
+
 pub async fn record(
     pool: &SqlitePool,
     source_id: &str,
@@ -90,6 +102,21 @@ pub fn from_storage(logo: Option<String>, attempt: Option<String>) -> Result<Opt
     let mut logo = logo
         .map(|json| serde_json::from_str::<CompanyLogo>(&json))
         .transpose()?;
+    if let Some(cached) = &mut logo {
+        if cached
+            .evidence
+            .as_ref()
+            .is_some_and(scrape_core::branding::is_legacy_ashby_platform_favicon)
+        {
+            cached.asset = None;
+            cached.cached_asset_reference = None;
+            cached.status = LogoStatus::MissingMetadata;
+            cached.diagnostic = Some(
+                "Filtered a cached Ashby platform favicon; no employer logo is verified.".into(),
+            );
+        }
+        cached.asset = None;
+    }
     if let (Some(cached), Some(attempt)) = (&mut logo, attempt) {
         let attempt: CompanyLogo = serde_json::from_str(&attempt)?;
         if cached.status == LogoStatus::Verified && attempt.status != LogoStatus::Verified {
@@ -99,9 +126,6 @@ pub fn from_storage(logo: Option<String>, attempt: Option<String>) -> Result<Opt
                 attempt.diagnostic.as_deref().unwrap_or_default()
             ));
         }
-    }
-    if let Some(logo) = &mut logo {
-        logo.asset = None;
     }
     Ok(logo)
 }
@@ -676,6 +700,96 @@ mod tests {
             labs.asset_reference()
         );
     }
+    #[tokio::test]
+    async fn job_identity_excludes_removed_rows_and_preserves_source_and_posting_url() {
+        let pool = crate::db::init_memory_db().await.unwrap();
+        sqlx::query("INSERT INTO sources(id,kind,name,identifier,created_at) VALUES ('source','ashby','Acme','acme','2026-01-01')")
+            .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO jobs(id,dedupe_key,source_id,title,company,url,date_added,last_seen_at,status_changed_at) VALUES ('active','active','source','Engineer','Acme','https://jobs.ashbyhq.com/acme/1','2026-01-01','2026-01-01','2026-01-01')")
+            .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO jobs(id,dedupe_key,source_id,title,company,url,date_added,last_seen_at,status_changed_at,removed_at) VALUES ('removed','removed','source','Engineer','Acme','https://jobs.ashbyhq.com/acme/2','2026-01-01','2026-01-01','2026-01-01','2026-01-02')")
+            .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO jobs(id,dedupe_key,title,company,url,date_added,last_seen_at,status_changed_at) VALUES ('source-less','source-less','Engineer','Acme','https://jobs.ashbyhq.com/acme/3','2026-01-01','2026-01-01','2026-01-01')")
+            .execute(&pool).await.unwrap();
+
+        assert_eq!(
+            job_identity(&pool, "active").await.unwrap(),
+            Some((
+                Some("source".into()),
+                "Acme".into(),
+                "https://jobs.ashbyhq.com/acme/1".into(),
+            ))
+        );
+        assert_eq!(job_identity(&pool, "removed").await.unwrap(), None);
+        assert_eq!(
+            job_identity(&pool, "source-less").await.unwrap(),
+            Some((
+                None,
+                "Acme".into(),
+                "https://jobs.ashbyhq.com/acme/3".into(),
+            ))
+        );
+        assert_eq!(job_identity(&pool, "missing").await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn stale_ashby_favicon_is_hidden_from_reads_without_rewriting_any_stored_asset() {
+        let pool = crate::db::init_memory_db().await.unwrap();
+        sqlx::query("INSERT INTO sources(id,kind,name,identifier,created_at) VALUES ('ashby','ashby','Ashby board','linear','2026-01-01')")
+            .execute(&pool).await.unwrap();
+        for (id, company) in [("stale", "Linear"), ("unrelated", "Local employer")] {
+            sqlx::query("INSERT INTO jobs(id,dedupe_key,source_id,title,company,url,date_added,last_seen_at,status_changed_at) VALUES (?1,?1,'ashby','Engineer',?2,'https://jobs.ashbyhq.com/linear/1','2026-01-01','2026-01-01','2026-01-01')")
+                .bind(id).bind(company).execute(&pool).await.unwrap();
+        }
+
+        let mut stale = authored_logo("#08f", "linear");
+        let evidence = stale.evidence.as_mut().unwrap();
+        evidence.page_url = "https://jobs.ashbyhq.com/linear/123".into();
+        evidence.url = "https://cdn.ashbyprd.com/cdn_assets/theme/favicon.png".into();
+        record(&pool, "ashby", "Linear", &stale).await.unwrap();
+        let stored_before = sqlx::query_as::<_, (String, Option<String>, Option<String>)>(
+            "SELECT logo_json,asset_reference,asset_data FROM employer_branding WHERE source_id='ashby' AND company='Linear'",
+        ).fetch_one(&pool).await.unwrap();
+
+        let mut unrelated = authored_logo("#0a5", "local");
+        unrelated.evidence.as_mut().unwrap().page_url =
+            "https://careers.local-employer.test/jobs".into();
+        record(&pool, "ashby", "Local employer", &unrelated)
+            .await
+            .unwrap();
+
+        let hidden = JobsRepo::get(&pool, "stale")
+            .await
+            .unwrap()
+            .company_logo
+            .unwrap();
+        assert_eq!(hidden.status, LogoStatus::MissingMetadata);
+        assert!(hidden.asset.is_none());
+        assert!(hidden.cached_asset_reference.is_none());
+        assert!(hidden
+            .diagnostic
+            .as_deref()
+            .is_some_and(|text| text.contains("Ashby platform favicon")));
+        let visible = JobsRepo::get(&pool, "unrelated")
+            .await
+            .unwrap()
+            .company_logo
+            .unwrap();
+        assert_eq!(visible.status, LogoStatus::Verified);
+        assert_eq!(visible.cached_asset_reference, unrelated.asset_reference());
+
+        let stored_after = sqlx::query_as::<_, (String, Option<String>, Option<String>)>(
+            "SELECT logo_json,asset_reference,asset_data FROM employer_branding WHERE source_id='ashby' AND company='Linear'",
+        ).fetch_one(&pool).await.unwrap();
+        assert_eq!(stored_after, stored_before);
+        assert!(serde_json::from_str::<CompanyLogo>(&stored_after.0)
+            .unwrap()
+            .asset
+            .is_none());
+        assert!(stored_after.1.is_some());
+        assert!(stored_after.2.is_some());
+    }
+
     #[tokio::test]
     async fn all_curated_logos_resolve_validate_and_serve_via_asset_lookup() {
         let pool = crate::db::init_memory_db().await.unwrap();
