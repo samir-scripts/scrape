@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `src/lib` directory contains the Tauri IPC client, Zustand UI state store, local company logo cache, formatting utilities, YAML workflow bridges, and explicit browser demonstration (`?demo=1`) helpers. In desktop execution, SQLite (`src-tauri/src/db/jobs.rs`) is authoritative for job filtering, sorting, counting, and pagination.
+The `src/lib` directory contains the Tauri IPC client, Zustand UI state store, local company-logo asset cache and bounded visible-job lookup cache, formatting utilities, YAML workflow bridges, and explicit browser demonstration (`?demo=1`) helpers. In desktop execution, SQLite (`src-tauri/src/db/jobs.rs`) is authoritative for job filtering, sorting, counting, and pagination.
 
 ---
 
@@ -11,7 +11,7 @@ The `src/lib` directory contains the Tauri IPC client, Zustand UI state store, l
 | File | Purpose & Key Exports |
 |---|---|
 | [`api.ts`](api.ts) | **Tauri IPC Client**: Strongly-typed wrappers for backend commands, including native indexed role-title search (`searchRoleTitles`) and bounded company suggestions (`searchCompanies`); browser demonstration mode does not claim either native SQLite index is populated. |
-| [`companyLogoCache.ts`](companyLogoCache.ts) | **Local Logo Asset Cache**: Content-addressed in-memory cache (`loadCompanyLogoAsset`, `clearCompanyLogoCache`) that reads verified PNG artwork once per reference over local IPC (`get_company_logo_asset`). |
+| [`companyLogoCache.ts`](companyLogoCache.ts) | **Local Logo Asset and Lookup Cache**: Coalesces local image reads, visible persisted-job lookups and recent negative lookup results by source/employer; demonstration mode never initiates lookup. |
 | [`constants.ts`](constants.ts) | **Application Constants**: Status display metadata (`STATUS_CONFIG`), tracked pipeline stages (`TRACKED_STAGES`), role metadata (`ROLE_CONFIG`), navigation tabs (`NAV_TABS`), and default filter initializers. |
 | [`cronClock.ts`](cronClock.ts) | **Cron & Clock Math**: Utilities converting 24-hour clock face coordinates into cron expressions and `HH:MM` time strings. |
 | [`dataCleanup.ts`](dataCleanup.ts) | **Data Cleanup State Sync**: Shared `applyDataCleanup` and `applyAutomaticRetention` handlers that clear stale selections/Undo, reset pagination and React Query caches, and clear `scrape:` preferences and logo cache on full reset. |
@@ -35,7 +35,7 @@ The `src/lib` directory contains the Tauri IPC client, Zustand UI state store, l
 | [`toast.ts`](toast.ts) | **Toast Dispatch Store**: Imperative and reactive notification store (`useToastStore`) supporting action buttons (e.g. soft-removal Undo). |
 | [`workflowImport.ts`](workflowImport.ts) | **Shared YAML Import Pipeline**: Parses uploaded or edited YAML documents and validates them through the canonical Rust `validate_workflow` command without mutating the active draft on failure. |
 | [`yamlJob.ts`](yamlJob.ts) | **Legacy v1 YAML Bridge**: Deprecated v1 compatibility serializer retained for historical migration/compatibility tests. |
-| [`yamlWorkflow.ts`](yamlWorkflow.ts) | **WorkflowSpec v4 YAML Serializer**: Converts between `Source` records, `WorkflowSpec` v4 drafts, and declarative YAML representations. |
+| [`yamlWorkflow.ts`](yamlWorkflow.ts) | **WorkflowSpec v9 YAML Bridge**: Converts between `Source` records, Rust-generated v9 drafts, and declarative YAML; validates provider/private-field and compensation-mode contracts. |
 
 App list queries use view/filter/sort/page keys and SQLite repository pages rather than
 fetching a capped set for client filtering. Changing filters or sort resets to the first
@@ -53,10 +53,13 @@ employer names from locally saved postings through `searchCompanies`. Unknown
 employers remain literal filter values; no company URL is inferred, and the
 suggestions are not an exhaustive directory.
 
-Plan 12 section 2 adds generated `SeedWorkflowReport` IPC results. The seed UI
-reports created, retained and needs-review workflows. Script review uses the
-owned child's saved configuration/fingerprint; aggregate parent review retains
-the validated multi-source draft. Existing raw/invalid originals remain guarded.
+The generated catalog now contains exactly three manual search profiles:
+engineering roles from the past 12 hours, fast-food roles in Cherry Hill over the
+past 30 days, and remote-only advertised annual USD pay over $60,000. Older shipped
+examples are recognition data only. Replacing saved examples requires a reviewed,
+fingerprinted preview and recoverable backup; custom workflows and saved-job state
+remain preserved. Browser fixture execution uses labeled fictional postings and
+does not contact providers or claim live coverage.
 
 Workflow compatibility is resolved by Rust. `yamlWorkflow.ts` serializes/parses
 supported configuration without migrating legacy matching into structured rules.
@@ -64,4 +67,5 @@ supported configuration without migrating legacy matching into structured rules.
 entries from desktop IPC; browser demonstrations preserve restrictions and report
 that authoritative explanations require desktop, rather than implementing a copy.
 
-Plan 12 Section 5 removes independent TypeScript template definitions from `yamlWorkflow.ts`: it consumes `src/generated/workflowTemplates.json` under generated Rust contracts. Run `npm run gen:templates` to refresh picker/YAML/extractor projections. Disabled workflows may contain no enabled source during review; execution still requires one. Historical demo filter/extraction settings come from the explicitly restrictive catalog example and stay visibly labelled.
+Run `npm run gen:templates` to refresh the picker/YAML/extractor projections. Company
+presets remain separate from built-in search profiles, with review/setup gates intact.

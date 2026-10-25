@@ -10,8 +10,8 @@
 
 1. **Native Window & Tray Shell**: Initializes the application window with custom brutalist styling, preserves window state, and hosts the persistent system tray menu (`src-tauri/src/services/tray.rs`).
 2. **Local-First SQLite Database**: Runs embedded migrations and exposes a high-performance SQLite connection pool via `sqlx` (`src-tauri/src/db/`).
-3. **IPC Bridge**: Exposes strongly-typed Tauri commands (`src-tauri/src/commands/`) invoked from the React frontend via Tauri's IPC protocol.
-4. **Worker Orchestration**: Spawns and manages the `scrape-worker` sidecar process, validating NDJSON protocol v7 output, persisting jobs/branding/outcomes into SQLite, and broadcasting progress to the webview (`src-tauri/src/services/runner.rs`).
+3. **IPC Bridge**: Exposes strongly-typed Tauri commands (`src-tauri/src/commands/`) invoked from the React frontend via Tauri IPC; persisted-job logo lookups derive employer, source and posting URL from the database job ID and save against that exact relationship.
+4. **Worker Orchestration**: Spawns and manages the `scrape-worker` sidecar process, validating NDJSON protocol v11 output, persisting jobs/branding/outcomes into SQLite, and broadcasting progress to the webview (`src-tauri/src/services/runner.rs`).
 5. **Background Scheduler & Retention**: Evaluates per-workflow IANA calendar schedules (`src-tauri/src/services/scheduler.rs`, `calendar.rs`) under the global automatic-scraping pause, and runs automatic 24-hour safe data retention (`src-tauri/src/services/retention.rs`).
 
 ```

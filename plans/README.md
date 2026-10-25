@@ -16,6 +16,12 @@ Plan 11 remains a completed prior revision. Its eight implementation sections, e
 
 Plan 14 is the active, one-section-at-a-time workflow usability repair. Sections 1, 4, 6, 9 and 10 are implemented and evidence-recorded; Section 9 native selection/preview/save acceptance remains open. Section 6 enables both existing safe public feeds for new workflows and records why USAJOBS and the reviewed NYC dataset are not supported. Sections 2, 3, 7, 8, 11 and 12 remain open; see the [evidence ledger](14-implementation-evidence.md). The legacy static role catalog/XLSX pipeline is superseded by Section 9.
 
+Custom sources can crawl explicitly supplied public HTML with same-origin traversal,
+robots checks and bounded pacing/pages. Optional user-supplied HTTP(S) proxies
+cover worker and Chromium traffic; credentials stay out of saved workflows and
+are injected only into execution copies. The isolated native smoke is
+`npm run test:native-web-scraping`.
+
 Current UI refinement and independent workflow configuration is specified in
 [plan 10](10-ui-workflow-refinement.md). It supersedes conflicting global
 workflow settings and Scraper Settings decisions in plans 06–08, while

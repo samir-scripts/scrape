@@ -1219,3 +1219,46 @@ and reject desktop-only role/company/date evaluation instead of silently
 broadening matches. Physical pointer/IME, native file-chooser gestures and native
 visual/200% zoom acceptance from earlier plans remain unperformed. These checks do
 not close Plan 08 Section 8 or claim the original 438/436/2 report was reproduced.
+
+## Follow-up — automatic employer logos and Ashby branding
+
+Removed the manual Fetch logo action and now resolve artwork when a persisted job
+is visible. The host derives employer, source and URL from the active job row,
+coalesces worker requests at two concurrent lookups, and records reports under
+the exact source/employer relationship. The UI coalesces by that relationship,
+uses a ten-minute negative cache and never renders an unverified company icon.
+Ashby theme logo extraction is non-executing and requires matching organization
+identity and approved app.ashbyhq.com image paths. A narrowly identified legacy
+Ashby favicon is filtered from read models without rewriting the persisted row.
+No migration was required.
+
+### Checks run
+
+- `cargo test -p scrape-worker adapters::branding -- --nocapture`: 10 passed.
+- `cargo test -p scrape-worker --test branding_process -- --nocapture`: 8 passed,
+  including matching employer-theme art, mismatch/favicon-only rejection, and
+  exact loopback request counts.
+- `cargo test -p scrape-core branding::tests -- --nocapture`: 7 passed.
+- `cargo test -p scrape --lib db::branding -- --nocapture`: 7 passed, including
+  exact legacy filter, unchanged stored asset and unrelated-logo retention, plus
+  active/removed/source-less job identity.
+- Targeted Vitest logo and persisted-job consumer suites: 9 files, 50 tests passed.
+- `npx tsc --noEmit`: passed.
+- `node scripts/native-branding.mjs`: passed in isolated native WKWebView with one
+  automatic worker asset download, exact source/employer persistence, visible
+  24px and 32px artwork, reopen/offline refresh, protected state and source
+  deletion. Artifact: `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-k2ilW7`.
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/company-branding.pw.ts --workers=1`:
+  4 passed across Paper and Obsidian. Captures under `/tmp/scrape-branding-*`;
+  rendered verified artwork and truthful initials fallback were reviewed.
+- `node scripts/check-style.mjs`: passed. `rustfmt --edition 2021 --check` on
+  the five task-owned Rust files: passed. `cargo clippy -p scrape-core -p
+  scrape-worker --all-targets -- -D warnings` and `cargo clippy -p scrape --lib
+  --bins -- -D warnings`: passed.
+
+The full `cargo fmt --all --check` and workspace Clippy commands include the
+pre-existing modified `src-tauri/tests/worker_repository.rs`. Formatting reports
+changes there and workspace Clippy reports `clippy::iter_overeager_cloned` at
+line 4439. That user-owned file was left untouched; task-owned Rust files pass
+rustfmt and the applicable crate/host Clippy checks. No live provider requests
+or user database were used.

@@ -4,7 +4,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { UserEvent } from "@testing-library/user-event";
 import { AddSourceModal } from "../components/views/settings/AddSourceModal";
-import { api, SAMPLE_SWE_SOURCE } from "../lib/api";
+import { api, SAMPLE_ENGINEERING_SOURCE } from "../lib/api";
 
 beforeAll(() => {
   HTMLDialogElement.prototype.showModal = function () {
@@ -30,7 +30,7 @@ async function openSources(user: UserEvent) {
 describe("Sources Editor (Section 5)", () => {
   it("supports adding, reordering, and removing sources with at-least-one-source protection", async () => {
     const user = userEvent.setup({ delay: null });
-    render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, kind: "jsonld", identifier: "", name: "", config: {}, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_ENGINEERING_SOURCE, kind: "jsonld", identifier: "", name: "", config: {}, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
     await openSources(user);
 
     expect(screen.getByText("Sources (1)")).toBeTruthy();
@@ -76,7 +76,7 @@ describe("Sources Editor (Section 5)", () => {
 
   it("detects and rejects duplicate normalized endpoints across sources", async () => {
     const user = userEvent.setup({ delay: null });
-    render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, kind: "jsonld", identifier: "", name: "", config: {}, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_ENGINEERING_SOURCE, kind: "jsonld", identifier: "", name: "", config: {}, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
     await openSources(user);
 
     // Source 1: stripe full greenhouse URL
@@ -107,7 +107,7 @@ describe("Sources Editor (Section 5)", () => {
       name: "Stripe",
     });
 
-    render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, kind: "jsonld", identifier: "", name: "", config: {}, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_ENGINEERING_SOURCE, kind: "jsonld", identifier: "", name: "", config: {}, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
     await openSources(user);
     const source1Url = screen.getByRole("textbox", { name: "Source URL or board identifier" });
     await user.type(source1Url, "https://boards.greenhouse.io/stripe");
@@ -124,7 +124,7 @@ describe("Sources Editor (Section 5)", () => {
 
   it("warns when all sources in the workflow are disabled", async () => {
     const user = userEvent.setup();
-    render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, kind: "jsonld", identifier: "", name: "", config: {}, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_ENGINEERING_SOURCE, kind: "jsonld", identifier: "", name: "", config: {}, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
     await openSources(user);
 
     const enableCheckbox = screen.getByRole("checkbox", { name: /Enable/ });

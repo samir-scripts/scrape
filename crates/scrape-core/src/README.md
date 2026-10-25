@@ -33,7 +33,7 @@ The `crates/scrape-core/src` directory contains the core source modules that def
 - **Behavior**: CSS and a documented XPath 1.0 location-path subset operate on the same `scraper::Html` tree. Supports relative/absolute paths, child/self/parent/following-sibling steps, descendant shorthand, attribute/text tests, positional predicates, field attributes and named regex captures. Unsupported syntax fails explicitly. XPath is bounded to 4096 bytes, 64 steps and 32 predicates per step; this is not a full XPath implementation.
 
 ### [`protocol.rs`](protocol.rs)
-- **Role**: Versioned IPC message contracts (`PROTOCOL_VERSION = 9`) exchanged between the Tauri host and isolated worker.
+- **Role**: Versioned IPC message contracts (`PROTOCOL_VERSION = 11`) exchanged between the Tauri host and isolated worker. Optional proxy credentials are execution-only and excluded from TypeScript bindings.
 - **Key Types**:
   - `WorkerConfig`: JSON payload sent via `stdin` to configure a scrape run (protocol version, sources, limits, filters, suppression keys).
   - `WorkerLimits` & `EnrichmentLimits`: Concurrency caps, per-host request delays, global timeouts, and bounded detail enrichment limits (`max_requests` 0–100, `timeout_ms` 1–45,000).
@@ -56,8 +56,10 @@ The `crates/scrape-core/src` directory contains the core source modules that def
   - `RejectionReason`, `RejectionCount`, & `RejectionExample`: Assigns one deterministic primary rejection category per rejected candidate while recording all overlapping failure categories in bounded representative examples.
 
 ### [`search_source.rs`](search_source.rs)
-- **Role**: Shared provider identity, credential-free endpoint and bounded configuration validation. Blank search identifiers resolve to The Muse; Arbeitnow is explicit. Host and worker use the same rules.
-- **Matching/date additions**: `target_roles` and `companies` are literal ASCII-insensitive OR lists, ANDed with other groups. Date presets resolve at each run's start in the configured timezone; Today is never frozen at save time. SQLite and worker predicates share these semantics.
+`search_source.rs` owns the shared identity, fixed HTTPS collections, credential-free
+endpoint rules, and bounded configuration for The Muse, Arbeitnow, Adzuna and Jobicy.
+Blank identifiers retain The Muse; provider-specific discovery hints never replace
+the canonical local filters.
 
 ### [`filter.rs`](filter.rs)
 - **Role**: SQL-like query evaluation and SQLite query compiler.
@@ -84,8 +86,8 @@ The `crates/scrape-core/src` directory contains the core source modules that def
 ### [`branding.rs`](branding.rs)
 - **Role**: Employer identity and logo asset validation.
 - **Key Types & Functions**:
-  - `LogoEvidence`, `LogoMethod`, `LogoStatus`: Prioritizes explicit provider/JobPosting organization metadata over employer-labelled artwork and custom selectors while rejecting platform favicons, social previews, and mismatched organizations.
-  - Decodes PNG/JPEG/WebP/SVG within strict byte (512 KiB), dimension (2048px), and memory (32 MiB) bounds, rasterizing standalone SVGs and re-encoding verified artwork into portable PNGs.
+  - `LogoEvidence`, `LogoMethod`, `LogoStatus`: Prioritizes explicit provider/JobPosting organization metadata over employer-labelled artwork and custom selectors while rejecting platform favicons, social previews, and mismatched organizations. `is_legacy_ashby_platform_favicon` matches only the old exact Ashby board/CDN favicon evidence pair for read-time filtering.
+  - Decodes PNG/JPEG/WebP/SVG within strict byte (512 KiB), dimension (2048px), and memory (32 MiB) bounds, rasterizing standalone SVGs and re-encoding verified artwork into portable cached assets.
 
 ### [`role.rs`](role.rs)
 - **Role**: Rule-based role categorization engine.
@@ -124,9 +126,13 @@ pretending description/date/pay evidence exists. `ParsedLocation::validate` and
 cities, preserving raw labels and ambiguous uncontextualized IN/CA as unknown.
 Geographic worker/SQLite predicates share tuple, city exact/raw-literal-substring,
 ASCII case and Unicode-whitespace semantics; aggregate location text is never borrowed.
-Custom script frames are version 2; the worker event/config protocol is 9.
+Custom script frames are version 2; the worker event/config protocol is 11.
 Numeric experience rules expose `ExperienceMatchMode`: omitted domain/filter modes
 retain `advertised_range_overlap`, while workflow v7+ omissions resolve to
 `required_minimum`. Workflow versions 1–6 explicitly retain overlap on upgrade.
 Required-minimum rules compare inclusive bounds against `experience_min`;
 maximum-only evidence follows the unknown policy after detail opportunities end.
+Native compensation exposes `CompensationMatchMode`: omitted modes retain inclusive
+`range_overlap`, while explicit `advertised_amount` compares only evidenced native
+endpoints. Rust and SQLite share the same per-range comparisons without unit or
+currency conversion.

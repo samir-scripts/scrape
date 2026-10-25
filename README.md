@@ -14,14 +14,28 @@ boards with employer names from locally saved postings; unlisted companies remai
 selectable as literal filters and never infer a board URL. This is not a complete
 company directory. Selecting a supported company attaches its available career
 board; removing a filter never deletes a separately configured source.
-New workflows enable both built-in public cross-employer feeds without requiring
-source selection: The Muse (bounded worldwide listings) and Arbeitnow (Germany-focused;
-original publication dates may be unknown). Saved/imported source lists are never
-changed implicitly. Neither feed covers every employer, and government sources
-including USAJOBS are unsupported.
-Preview is read-only; Save never runs a scrape.
-Current contracts: WorkflowSpec **8**, worker protocol **9**, migration **32**.
-See the [workflow contract](plans/workflow-v3.md), the [selection implementation evidence](plans/13-implementation-evidence.md), the [Plan 14 section evidence](plans/14-implementation-evidence.md), and the [full workflow evidence](plans/11-implementation-evidence.md).
+The Rust-owned built-in catalog contains exactly three manual searches: software
+engineering and related roles posted in the past 12 hours; fast-food roles posted
+within 30 days in Cherry Hill, NJ; and remote-only jobs with advertised annual USD
+pay exceeding $60,000. The engineering/remote profiles use The Muse, Arbeitnow,
+Jobicy, Adzuna and five direct boards; fast-food uses Adzuna and The Muse.
+Adzuna requires personal credentials stored in the operating-system keychain and
+explicit source enablement. Jobicy is remote-only, delayed three hours, limited to
+seven publication days and cached hourly. Coverage is bounded, not exhaustive;
+unknown publication dates do not satisfy recency filters. Preview is read-only;
+Save never runs a scrape.
+Older saved examples can be replaced only through the reviewed, fingerprinted
+workflow-replacement dialog. Its database backup precedes one atomic transaction;
+custom workflows and saved-job state remain preserved.
+Current contracts: WorkflowSpec **9**, worker protocol **11**, migration **32**.
+Custom workflows can also crawl explicitly supplied public HTML sites. The static
+crawler uses same-origin link traversal, `robots.txt`, a default 750 ms per-host
+delay, page/depth caps, and ordinary HTTP semantics; it does not search the web
+or bypass access controls. An optional user-configured HTTP(S) proxy routes HTTP and Chromium
+requests. Proxy credentials stay outside workflows/exports and are stored locally.
+See [workflow setup](workflows/README.md) and the isolated
+[native crawl/proxy smoke](scripts/native-web-scraping.mjs).
+See the [workflow contract](plans/workflow-v3.md), [workflow templates and setup](workflows/README.md), the [selection implementation evidence](plans/13-implementation-evidence.md), the [Plan 14 section evidence](plans/14-implementation-evidence.md), and the [full workflow evidence](plans/11-implementation-evidence.md).
 The screenshot-reported workflow editor usability work is laid out in
 [Plan 14](plans/14-workflow-editor-usability.md). Its sections are intentionally
 gated one at a time. Section 9 bundles and seeds O*NET role-title search; Section 10
@@ -88,7 +102,7 @@ Each directory in this repository contains its own dedicated `README.md` documen
 
 ### 1. Rust Workspace Crates (`crates/`)
 - [`crates/`](crates/README.md) — Rust workspace overview and sidecar architecture.
-  - [`crates/scrape-core/`](crates/scrape-core/README.md) — Shared matching/filtering, search-provider configuration, identity/geography/branding rules, IPC wire protocol 9, and generated TypeScript boundary contracts.
+  - [`crates/scrape-core/`](crates/scrape-core/README.md) — Shared matching/filtering, search-provider configuration, identity/geography/branding rules, IPC wire protocol 11, and generated TypeScript boundary contracts.
     - [`crates/scrape-core/data/`](crates/scrape-core/data/README.md) — Pinned ISO regions and the O*NET role-title TSV seed with source provenance.
     - [`crates/scrape-core/src/`](crates/scrape-core/src/README.md) — Core enums, categorized matching and rejection diagnostics, SQL filter compiler, canonical posting identity, geography, posting dates, and employer branding evidence.
     - [`crates/scrape-core/src/enrich/`](crates/scrape-core/src/enrich/README.md) — Information extraction heuristics (salary, location, workplace arrangement, eligibility, experience, HTML/description normalization).
@@ -109,7 +123,7 @@ Each directory in this repository contains its own dedicated `README.md` documen
   - [`src-tauri/src/`](src-tauri/src/README.md) — Application initialization, state management, and error handling.
     - [`src-tauri/src/commands/`](src-tauri/src/commands/README.md) — Tauri IPC command endpoints exposed to the frontend.
     - [`src-tauri/src/db/`](src-tauri/src/db/README.md) — SQLite database repositories and query implementations (`jobs`, `postings`, `sources`, `runs`, `branding`, `cleanup`, `history`, `settings`, `metrics`, `notifications`).
-    - [`src-tauri/src/services/`](src-tauri/src/services/README.md) — Authoritative WorkflowSpec v8 validation, execution preparation, runner, ingestion, scheduler, retention and process/startup services.
+    - [`src-tauri/src/services/`](src-tauri/src/services/README.md) — Authoritative WorkflowSpec v9 validation, credential-safe execution preparation, runner, ingestion, scheduler, retention and process/startup services.
 
 ### 3. Specifications, Plans, Fixtures & Automation
 - [`plans/`](plans/README.md) — System specifications, architectural designs, phased blueprints, and implementation evidence ledgers.
@@ -210,9 +224,11 @@ keep phrases together. Imported mixed Any/All groups remain visible. Preview and
 run details explain rejection categories, unresolved evidence, examined counts and
 separate provider totals. Optional enrichment failures are warnings; incomplete
 required evidence produces a partial outcome. Cancellation retains confirmed
-saved records and has its own outcome. Employer logos retain source evidence and
-a local image cache; failed refreshes retain verified artwork. Workflow display
-names are separate from employer identity.
+saved records and has its own outcome. Persisted jobs automatically resolve
+employer artwork while visible through a source/employer-scoped lookup; results
+are cached locally, and failed refreshes retain the last verified logo. Ashby
+theme artwork is accepted only for the matching organization; platform favicons
+are never employer logos. Workflow display names remain separate from employer identity.
 Advanced and YAML editing share one validated v5 draft, with native compensation,
 posting dates, selected weekdays and timezone. Matching, schedule, limit and
 retention belong to each workflow. System settings controls the application-wide

@@ -3,11 +3,11 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DiscoveredTable } from "../components/views/discovered/DiscoveredTable";
-import { generateScrapedJobsForSource, SAMPLE_SWE_SOURCE } from "../lib/api";
+import { generateScrapedJobsForSource, SAMPLE_ENGINEERING_SOURCE } from "../lib/api";
 
 afterEach(cleanup);
 it("sorts named SVG and text headers by keyboard and announces the direction", async () => {
-  const sample = generateScrapedJobsForSource(SAMPLE_SWE_SOURCE)[0];
+  const sample = generateScrapedJobsForSource(SAMPLE_ENGINEERING_SOURCE)[0];
   render(<DiscoveredTable jobs={[
     { ...sample, id: "b", title: "B engineer", favorited: true },
     { ...sample, id: "a", title: "A engineer", favorited: false },

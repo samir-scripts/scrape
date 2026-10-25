@@ -4,7 +4,7 @@ import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/re
 import userEvent from "@testing-library/user-event";
 import type { UserEvent } from "@testing-library/user-event";
 import { AddSourceModal } from "../components/views/settings/AddSourceModal";
-import { api, SAMPLE_SWE_SOURCE } from "../lib/api";
+import { api, SAMPLE_ENGINEERING_SOURCE } from "../lib/api";
 import { workflowSpecToYaml, validateWorkflowYaml, sourceToWorkflowSpec } from "../lib/yamlWorkflow";
 import { emptyRules } from "../components/views/settings/WorkflowSections";
 beforeAll(() => {
@@ -27,7 +27,7 @@ async function backToRoles(user: UserEvent) {
 }
 it("commits a typed comma and preserves the next keyword", async () => {
   const user = userEvent.setup();
-  render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+  render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_ENGINEERING_SOURCE, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
   ;
   const input = screen.getByRole("combobox", { name: "Any keywords" });
   await user.type(input, "Engineer,Developer{Enter}");
@@ -37,7 +37,7 @@ it("commits a typed comma and preserves the next keyword", async () => {
 
 it("pastes phrases, deduplicates without changing first spelling, and requires focus before Backspace deletion", async () => {
   const user = userEvent.setup();
-  render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+  render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_ENGINEERING_SOURCE, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
   ;
   const input = screen.getByRole("combobox", { name: "Any keywords" }) as HTMLInputElement;
   await user.click(input);
@@ -59,7 +59,7 @@ it("pastes phrases, deduplicates without changing first spelling, and requires f
 
 it("keeps IME composition intact before committing the completed phrase", async () => {
   const user = userEvent.setup();
-  render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+  render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_ENGINEERING_SOURCE, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
   ;
   const input = screen.getByRole("combobox", { name: "Any keywords" });
   fireEvent.compositionStart(input);
@@ -76,8 +76,8 @@ it("keeps IME composition intact before committing the completed phrase", async 
 it("flushes unfinished keyword drafts on navigation without committing role/company search text", async () => {
   const user = userEvent.setup();
   const extraction = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => ({ spec, branding: [], jobs: [], fetched: 0, matched: 0, rejected: 0, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: null }));
-  const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_SWE_SOURCE);
-  render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+  const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_ENGINEERING_SOURCE);
+  render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_ENGINEERING_SOURCE, filters: {} }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
   const roles = screen.getByRole("combobox", { name: "Target roles" });
   fireEvent.change(roles, { target: { value: "Data Engineer" } });
   const companies = screen.getByRole("combobox", { name: "Companies (Optional)" });
@@ -108,7 +108,7 @@ it("flushes unfinished keyword drafts on navigation without committing role/comp
 
 it("shows mixed imported groups and search fields without opening Advanced, preserving both groups", async () => {
   const user = userEvent.setup();
-  const spec = sourceToWorkflowSpec({ ...SAMPLE_SWE_SOURCE, filters: {} });
+  const spec = sourceToWorkflowSpec({ ...SAMPLE_ENGINEERING_SOURCE, filters: {} });
   spec.filters = { matching: { ...emptyRules(), keywords: { any: ["Engineer", "Developer"], all: ["Machine Learning"], exclude: ["Senior"], fields: ["description"] } } };
   const extraction = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => ({ spec, branding: [], jobs: [], fetched: 0, matched: 0, rejected: 0, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: null }));
   render(<AddSourceModal isOpen initialSpec={spec} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
@@ -131,7 +131,7 @@ it("shows mixed imported groups and search fields without opening Advanced, pres
 it("commits unfinished text before opening YAML and clears old drafts when replacing a workflow", async () => {
   const user = userEvent.setup();
   const props = { isOpen: true, onClose: vi.fn(), onSourceSaved: vi.fn() };
-  const view = render(<AddSourceModal {...props} initialSource={{ ...SAMPLE_SWE_SOURCE, filters: {} }} />);
+  const view = render(<AddSourceModal {...props} initialSource={{ ...SAMPLE_ENGINEERING_SOURCE, filters: {} }} />);
   ;
   await user.type(screen.getByRole("combobox", { name: "Any keywords" }), "Machine Learning");
   await user.click(screen.getByRole("button", { name: "Advanced" }));
@@ -140,7 +140,7 @@ it("commits unfinished text before opening YAML and clears old drafts when repla
   await user.click(screen.getByRole("button", { name: "Apply YAML to form" }));
   await screen.findByRole("combobox", { name: "Any keywords" });
   await user.type(screen.getByRole("combobox", { name: "Any keywords" }), "Unfinished old draft");
-  view.rerender(<AddSourceModal {...props} initialSource={{ ...SAMPLE_SWE_SOURCE, id: "replacement", filters: {} }} />);
+  view.rerender(<AddSourceModal {...props} initialSource={{ ...SAMPLE_ENGINEERING_SOURCE, id: "replacement", filters: {} }} />);
   ;
   await waitFor(() => expect((screen.getByRole("combobox", { name: "Any keywords" }) as HTMLInputElement).value).toBe(""));
   expect(screen.queryByRole("button", { name: /^Remove .* from Any keywords$/ })).toBeNull();
@@ -148,7 +148,7 @@ it("commits unfinished text before opening YAML and clears old drafts when repla
 
 it("retains imported All mode after removing its last term", async () => {
   const user = userEvent.setup();
-  const spec = sourceToWorkflowSpec({ ...SAMPLE_SWE_SOURCE, filters: {} });
+  const spec = sourceToWorkflowSpec({ ...SAMPLE_ENGINEERING_SOURCE, filters: {} });
   spec.filters = { matching: { ...emptyRules(), keywords: { any: [], all: ["Engineer"], exclude: [], fields: ["title"] } } };
   render(<AddSourceModal isOpen initialSpec={spec} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
   ;
@@ -160,7 +160,7 @@ it("retains imported All mode after removing its last term", async () => {
 
 it("preserves the exact effective spelling of imported terms during navigation and preview", async () => {
   const user = userEvent.setup();
-  const spec = sourceToWorkflowSpec({ ...SAMPLE_SWE_SOURCE, filters: {} });
+  const spec = sourceToWorkflowSpec({ ...SAMPLE_ENGINEERING_SOURCE, filters: {} });
   spec.filters = { matching: { ...emptyRules(), keywords: { any: [" Engineer "], all: [], exclude: [], fields: ["title"] } } };
   const preview = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => ({ spec, branding: [], jobs: [], fetched: 0, matched: 0, rejected: 0, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: null }));
   render(<AddSourceModal isOpen initialSpec={spec} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
@@ -173,7 +173,7 @@ it("preserves the exact effective spelling of imported terms during navigation a
 });
 it("completes contextual keyword suggestions without changing role filters or adding the typed prefix", async () => {
   const user = userEvent.setup();
-  const spec = sourceToWorkflowSpec({ ...SAMPLE_SWE_SOURCE, filters: {} });
+  const spec = sourceToWorkflowSpec({ ...SAMPLE_ENGINEERING_SOURCE, filters: {} });
   spec.filters = { matching: { ...emptyRules(), target_roles: ["Software Engineer"], keywords: { any: ["Machine Learning"], all: [], exclude: [], fields: ["title"] } } };
   const preview = vi.spyOn(api, "previewWorkflow").mockImplementation(async input => ({ spec: input, branding: [], jobs: [], fetched: 0, matched: 0, rejected: 0, invalid: 0, blocked: 0, sampled: false, errors: [], next_run_at: null }));
   render(<AddSourceModal isOpen initialSpec={spec} onClose={vi.fn()} onSourceSaved={vi.fn()} />);

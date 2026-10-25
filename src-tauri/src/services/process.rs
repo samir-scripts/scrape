@@ -30,7 +30,8 @@ pub fn worker_command(
     app: &tauri::AppHandle,
 ) -> crate::error::Result<tauri_plugin_shell::process::Command> {
     use tauri_plugin_shell::ShellExt;
-    let cmd = if let Some(directory) = super::native_smoke::directory() {
+    let smoke_directory = super::native_smoke::directory();
+    let mut cmd = if let Some(directory) = &smoke_directory {
         let fixture = directory.join("worker-fixture");
         if fixture.is_file() {
             app.shell().command(fixture)
@@ -44,6 +45,36 @@ pub fn worker_command(
             crate::error::AppError::Internal(format!("Failed to find sidecar: {error}"))
         })?
     };
+    if let Some(directory) = smoke_directory {
+        let replay_file = directory.join("replay-origin");
+        if replay_file.is_file() {
+            let origin = std::fs::read_to_string(&replay_file).map_err(|error| {
+                crate::error::AppError::Validation(format!(
+                    "Cannot read native smoke replay origin: {error}"
+                ))
+            })?;
+            let origin = origin.trim();
+            let parsed = url::Url::parse(origin).map_err(|_| {
+                crate::error::AppError::Validation(
+                    "Native smoke replay origin must be a plain loopback HTTP origin".into(),
+                )
+            })?;
+            if parsed.scheme() != "http"
+                || !matches!(parsed.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"))
+                || !parsed.username().is_empty()
+                || parsed.password().is_some()
+                || parsed.query().is_some()
+                || parsed.fragment().is_some()
+                || parsed.path() != "/"
+                || parsed.port().is_none()
+            {
+                return Err(crate::error::AppError::Validation(
+                    "Native smoke replay origin must be a plain loopback HTTP origin".into(),
+                ));
+            }
+            cmd = cmd.args(["--replay-origin", origin]);
+        }
+    }
     if std::env::var_os("SCRAPE_SESSION_DIR").is_none() {
         if let Ok(session_dir) = super::browser_session::session_dir_for_app(app) {
             return Ok(cmd.env("SCRAPE_SESSION_DIR", session_dir));

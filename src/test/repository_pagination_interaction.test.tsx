@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "../App";
-import { api, DEFAULT_SETTINGS, generateScrapedJobsForSource, SAMPLE_SWE_SOURCE } from "../lib/api";
+import { api, DEFAULT_SETTINGS, generateScrapedJobsForSource, SAMPLE_ENGINEERING_SOURCE } from "../lib/api";
 import { useToastStore } from "../lib/toast";
 import { useUIStore } from "../lib/store";
 import type { Page } from "../bindings/Page";
@@ -14,7 +14,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); useToastStore.getState().clea
 describe("repository pages and response ordering", () => {
   it("resets the page on a new search and prevents an older response from replacing newer results", async () => {
     useUIStore.getState().setView("discovered"); useUIStore.getState().resetFilterSpec();
-    const fixture = { ...generateScrapedJobsForSource(SAMPLE_SWE_SOURCE)[0], status: "viewed" as const };
+    const fixture = { ...generateScrapedJobsForSource(SAMPLE_ENGINEERING_SOURCE)[0], status: "viewed" as const };
     vi.spyOn(api, "getSettings").mockResolvedValue({ ...DEFAULT_SETTINGS, app_auto_update: false });
     let resolveOld: ((page: Page<Job>) => void) | undefined;
     const listing = vi.spyOn(api, "listJobs").mockImplementation(async (filter) => {
@@ -41,7 +41,7 @@ describe("repository pages and response ordering", () => {
   });
   it("jumps rapidly across pages, ignores an older page response, and never revives an old page on filter reset", async () => {
     useUIStore.setState({ view: "discovered", selectedJobId: null, drawerJobId: null }); useUIStore.getState().resetFilterSpec();
-    const fixture = { ...generateScrapedJobsForSource(SAMPLE_SWE_SOURCE)[0], status: "viewed" as const };
+    const fixture = { ...generateScrapedJobsForSource(SAMPLE_ENGINEERING_SOURCE)[0], status: "viewed" as const };
     vi.spyOn(api, "getSettings").mockResolvedValue({ ...DEFAULT_SETTINGS, app_auto_update: false });
     let old: ((value: Page<Job>) => void) | undefined;
     const listing = vi.spyOn(api, "listJobs").mockImplementation(async filter => {
@@ -69,7 +69,7 @@ describe("repository pages and response ordering", () => {
   });
   it("hands a pending note to its original job on page change, and offers retry after persistence failure", async () => {
     useUIStore.setState({ view: "discovered", selectedJobId: null, drawerJobId: null }); useUIStore.getState().resetFilterSpec();
-    const fixture = { ...generateScrapedJobsForSource(SAMPLE_SWE_SOURCE)[0], status: "viewed" as const };
+    const fixture = { ...generateScrapedJobsForSource(SAMPLE_ENGINEERING_SOURCE)[0], status: "viewed" as const };
     vi.spyOn(api, "getSettings").mockResolvedValue({ ...DEFAULT_SETTINGS, app_auto_update: false });
     vi.spyOn(api, "listJobs").mockImplementation(async filter => ({ items: filter?.limit === 1 ? [] : [{ ...fixture, id: `job-${filter?.offset || 0}` }], total: 51n, limit: BigInt(filter?.limit || 50), offset: BigInt(filter?.offset || 0) }));
     const notes = vi.spyOn(api, "updateJobNotes").mockRejectedValueOnce(new Error("disk full")).mockResolvedValue(fixture);
@@ -86,7 +86,7 @@ describe("repository pages and response ordering", () => {
   });
   it("clamps the last page when a stage change reduces the total", async () => {
     useUIStore.setState({ view: "discovered", selectedJobId: null, drawerJobId: null }); useUIStore.getState().resetFilterSpec();
-    const fixture = { ...generateScrapedJobsForSource(SAMPLE_SWE_SOURCE)[0], status: "viewed" as const };
+    const fixture = { ...generateScrapedJobsForSource(SAMPLE_ENGINEERING_SOURCE)[0], status: "viewed" as const };
     let total = 51n;
     vi.spyOn(api, "getSettings").mockResolvedValue({ ...DEFAULT_SETTINGS, app_auto_update: false });
     const listing = vi.spyOn(api, "listJobs").mockImplementation(async filter => ({ items: filter?.limit === 1 || (total === 50n && filter?.offset === 50) ? [] : [fixture], total, limit: BigInt(filter?.limit || 50), offset: BigInt(filter?.offset || 0) }));

@@ -324,6 +324,8 @@ mod tests {
                     .await
                     .unwrap();
             let req = request(&pool, mode).await;
+            let saved_sources = count(&pool, "sources").await;
+            let saved_workflows = count(&pool, "workflows").await;
             assert_eq!(req.preview.preserved_records, kept);
             let backup = dir.path().join("backup.db");
             let result = execute(&pool, &req, &backup).await.unwrap();
@@ -353,11 +355,16 @@ mod tests {
                 "deleted_jobs",
                 "posting_date_cache",
             ] {
-                assert_eq!(
-                    count(&pool, table).await,
-                    if mode == CleanupMode::ResetAll { 0 } else { 1 },
-                    "{mode:?} {table}"
-                );
+                let expected = if mode == CleanupMode::ResetAll {
+                    0
+                } else {
+                    match table {
+                        "sources" => saved_sources,
+                        "workflows" => saved_workflows,
+                        _ => 1,
+                    }
+                };
+                assert_eq!(count(&pool, table).await, expected, "{mode:?} {table}");
             }
             let after: Vec<(i64, Vec<u8>)> =
                 sqlx::query_as("SELECT version,checksum FROM _sqlx_migrations ORDER BY version")

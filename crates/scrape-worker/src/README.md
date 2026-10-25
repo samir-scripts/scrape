@@ -11,11 +11,11 @@ The `crates/scrape-worker/src` directory contains the source code for the scrape
 ### [`main.rs`](main.rs)
 - **Role**: CLI binary entry point.
 - **Responsibilities**:
-  - Parses command-line arguments using `clap` (`--detect <URL>`, `--filter-sql <QUERY>`, `--source-id <ID>`).
+  - Parses command-line arguments using `clap` (`--detect <URL>`, `--filter-sql <QUERY>`, `--source-id <ID>`, and proxy-aware `--branding`).
   - Initializes tracing subscriber to output diagnostics on `stderr`.
-  - Reads `WorkerConfig` from standard input (`stdin`).
-  - Spawns parallel or throttled asynchronous tasks across configured sources.
+  - Reads `WorkerConfig` from standard input (`stdin`), including execution-only HTTP proxy settings.
   - Streams newline-delimited JSON (`WorkerEvent` NDJSON) to `stdout` in real-time.
+  - Reads a proxy configuration JSON line from stdin only for host-launched lazy branding lookups.
   - Handles graceful cancellation upon termination signals.
 
 ### [`lib.rs`](lib.rs)
@@ -28,8 +28,9 @@ The `crates/scrape-worker/src` directory contains the source code for the scrape
 - **Key Structs & Methods**:
   - `HttpClient`: Thread-safe HTTP wrapper around `reqwest::Client`.
   - `fetch_text(url, check_robots)`: Fetches raw HTML/JSON with timeout enforcement and optional `robots.txt` compliance checking using `texting_robots`.
-  - `fetch_json<T>(url)`: Fetches and deserializes structured JSON responses.
-  - Rate Limiting: Manages per-host request spacing to prevent IP bans and respect web server capacities.
+  - `fetch_text_same_origin_at`: Traverses static public HTML with checked same-origin redirects and per-hop robots/pacing checks.
+  - `with_proxy`: Applies an explicit user-supplied HTTP(S) proxy with Basic credentials; no direct fallback. WebSocket-driven Chromium uses the same proxy with CDP challenge handling.
+  - Rate limiting: Manages per-host request spacing; the default is 750 ms.
 
 ### [`detect.rs`](detect.rs)
 - **Role**: Career page ATS auto-detection engine.
@@ -61,5 +62,5 @@ The `crates/scrape-worker/src` directory contains the source code for the scrape
 Static sources now use `adapters/selector_session.rs` for resumable CSS/XPath or
 hydration discovery, bounded next pages and lazy detail enrichment. Coordinator
 turns retain one eligible unique acceptance and yield during bounded discovery.
-Protocol v9 includes role/company criteria, dynamic date presets and the search source kind; page/login termination and extraction bounds remain shared.
+Protocol v11 adds execution-only user proxy configuration and static same-origin HTML crawl support while preserving the versioned worker event/config contract; per-host pacing and robots checks remain authoritative.
 `--protocol-version` reports the Rust-owned contract version for external harnesses.

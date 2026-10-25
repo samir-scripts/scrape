@@ -13,6 +13,7 @@ The `scripts/` directory contains Node.js automation scripts used during develop
 | [`generate-template-catalog.mjs`](generate-template-catalog.mjs) | Node.js + Rust | Runs the Rust catalog exporter and writes the picker JSON/YAML projections. `--check` fails on drift; does not touch any database or execute scraping. |
 | [`prepare-role-title-seed.py`](prepare-role-title-seed.py) | Python 3 standard library | Normalizes official O*NET 31.0 Occupation Data, Sample of Reported Titles, and Job Titles CSVs into the one bundled TSV; `--check` validates deterministic output. Tests: `python3 -m unittest scripts.test_role_title_seed`. |
 | [`test-app-startup.mjs`](test-app-startup.mjs) | Node.js (ESM) | Automated smoke test for CI and local verification. Boots the Vite development server, performs an HTTP GET request against `http://localhost:1420/index.html`, verifies module bundling and HTML transformation without runtime panics, and cleanly terminates the process. |
+| [`native-web-scraping.mjs`](native-web-scraping.mjs) | Node.js + Tauri | Uses an isolated real host/sidecar, temporary SQLite, public-HTML fixture and authenticated HTTP proxy to prove bounded crawling, robots checks and persistence. |
 
 ---
 
@@ -42,6 +43,13 @@ HTTP fixture, packaged sidecar and controlled failing processes. Build the sidec
 and debug host first. It verifies cancellation, persistence, block/restore,
 protocol failures, timeouts and the external opener without normal app startup
 side effects. Playwright browser checks live in `e2e/`.
+
+`npm run test:native-web-scraping` launches a real isolated Tauri host and packaged
+worker, configures fictional write-only proxy credentials in the temporary native
+credential store, previews a two-page same-origin public-HTML crawl, explicitly
+runs it, and verifies the robots/seed/listing requests, persisted identities and
+credential redaction. The local proxy fixture refuses unauthenticated or
+out-of-origin requests; no live provider or user database is involved.
 
 `test-native-startup.mjs` runs the actual configured Tauri development pipeline
 with isolated ports and temporary database fixtures. It verifies native readiness,

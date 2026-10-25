@@ -6,14 +6,14 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { DeleteJobModal } from "../components/ui/DeleteJobModal";
 import { RemovedJobsSettings } from "../components/views/settings/RemovedJobsSettings";
-import { api, __resetDevData, __seedDevJobs, generateScrapedJobsForSource, SAMPLE_SWE_SOURCE } from "../lib/api";
+import { api, __resetDevData, __seedDevJobs, generateScrapedJobsForSource, SAMPLE_ENGINEERING_SOURCE } from "../lib/api";
 
 beforeAll(() => {
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
 });
 afterEach(() => { cleanup(); __resetDevData(); });
-const job = generateScrapedJobsForSource(SAMPLE_SWE_SOURCE)[0];
+const job = generateScrapedJobsForSource(SAMPLE_ENGINEERING_SOURCE)[0];
 
 describe("reversible removal controls", () => {
   it("starts with blocking unchecked, keeps cancellation independent, and restores focus", async () => {

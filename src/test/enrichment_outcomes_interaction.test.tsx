@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AddSourceModal } from "../components/views/settings/AddSourceModal";
 import { SourcesSettings } from "../components/views/settings/SourcesSettings";
-import { api, DEFAULT_SETTINGS, SAMPLE_SWE_SOURCE } from "../lib/api";
+import { api, DEFAULT_SETTINGS, SAMPLE_ENGINEERING_SOURCE } from "../lib/api";
 import type { WorkflowPreview } from "../bindings/WorkflowPreview";
 import { runRequiresAttention } from "../lib/status";
 beforeAll(() => {
@@ -17,8 +17,8 @@ it("allows saving a preview with optional warnings and blocks incomplete require
   const user=userEvent.setup();
   let required=false;
   vi.spyOn(api,"previewWorkflow").mockImplementation(async spec => ({spec,branding:[],jobs:[],fetched:1,matched:0,rejected:0,invalid:0,blocked:0,sampled:false,next_run_at:null,errors:required?["Required publication date unavailable; retry the source."]:[],warnings:required?[]:["Optional publication date enrichment unavailable."]} as WorkflowPreview));
-  const save=vi.spyOn(api,"saveWorkflow").mockResolvedValue(SAMPLE_SWE_SOURCE);
-  render(<AddSourceModal isOpen initialSource={SAMPLE_SWE_SOURCE} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+  const save=vi.spyOn(api,"saveWorkflow").mockResolvedValue(SAMPLE_ENGINEERING_SOURCE);
+  render(<AddSourceModal isOpen initialSource={SAMPLE_ENGINEERING_SOURCE} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
   await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
   await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
   await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
@@ -34,9 +34,9 @@ it("allows saving a preview with optional warnings and blocks incomplete require
 });
 it("shows warning, partial and cancelled workflow outcomes without counting cancellation as an error", async () => {
   const sources=[
-    {...SAMPLE_SWE_SOURCE,id:"warning",name:"Warning fixture",last_status:"success",last_outcome:"success_with_warnings" as const},
-    {...SAMPLE_SWE_SOURCE,id:"partial",name:"Partial fixture",last_status:"error",last_outcome:"partial" as const},
-    {...SAMPLE_SWE_SOURCE,id:"cancel",name:"Cancelled fixture",last_status:"error",last_outcome:"cancelled" as const},
+    {...SAMPLE_ENGINEERING_SOURCE,id:"warning",name:"Warning fixture",last_status:"success",last_outcome:"success_with_warnings" as const},
+    {...SAMPLE_ENGINEERING_SOURCE,id:"partial",name:"Partial fixture",last_status:"error",last_outcome:"partial" as const},
+    {...SAMPLE_ENGINEERING_SOURCE,id:"cancel",name:"Cancelled fixture",last_status:"error",last_outcome:"cancelled" as const},
   ];
   vi.spyOn(api,"listSources").mockResolvedValue(sources);
   render(<QueryClientProvider client={new QueryClient()}><SourcesSettings settings={DEFAULT_SETTINGS} /></QueryClientProvider>);

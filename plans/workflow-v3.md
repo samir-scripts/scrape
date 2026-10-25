@@ -1,7 +1,7 @@
-# Workflow specification compatibility and current v8 contract
+# Workflow specification compatibility and current v9 contract
 
-Current canonical exports use **v8**, worker protocol **9**, and migration **29**.
-Rust accepts versions 1–7 through the same compatibility resolver. Older contract
+Current canonical exports use **v9**, worker protocol **11**, and migration **32**.
+Rust accepts versions 1–8 through the same compatibility resolver. Older contract
 descriptions below record their original behavior; saved rules are not broadened.
 
 The desktop validator is authoritative for create, edit, import and preview. Rust contracts generate the TypeScript representations in `src/bindings`. Versions 1 and 2 migrate explicitly to version 3; unknown fields and unsupported versions are errors with paths.
@@ -10,11 +10,13 @@ The editor holds one draft across **Roles → Criteria → Sources → Schedule 
 
 New editor workflows default to daily 09:00 in the device IANA timezone. Calendar scheduling uses that stored timezone. Manual workflows have no automatic next run. Global pause stops automatic dispatch; manual execution remains available.
 
-Only legacy versions 1–3 resolve omitted keyword/location/role properties from global defaults at import or historical upgrade; explicit empty arrays remove inherited restrictions. Versions 4–8 and every saved execution are independent of global matching defaults. `filters.matching` supports `target_roles`, `companies`, Any/All/Exclude keywords with explicit fields, native compensation, employment/workplace, experience, eligibility, geography and posting dates. Role-title failures share the RoleType category; Company has a separate rejection category. Worker predicates and parameterized SQLite compilation agree, including literal `%`, `_` and backslash.
+Only legacy versions 1–3 resolve omitted keyword/location/role properties from global defaults at import or historical upgrade; explicit empty arrays remove inherited restrictions. Versions 4–9 and every saved execution are independent of global matching defaults. `filters.matching` supports `target_roles`, `companies`, Any/All/Exclude keywords with explicit fields, native compensation, employment/workplace, experience, eligibility, geography and posting dates. Role-title failures share the RoleType category; Company has a separate rejection category. Worker predicates and parameterized SQLite compilation agree, including literal `%`, `_` and backslash.
+
+Native compensation defaults to `match_mode: range_overlap`, preserving inclusive overlap and unbounded missing endpoints for all saved versions. `advertised_amount` requires an evidenced endpoint in one native currency/interval range: compare `max_minor.or(min_minor)` to the inclusive minimum and `min_minor.or(max_minor)` to the inclusive maximum. Missing amounts never qualify in this mode, including when `include_unknown` is true. No annualization or currency conversion is performed. Thus USD/year `min_minor: 6000001` accepts an advertised $50,000–$80,000 range or sole $70,000 lower endpoint, but not a sole $50,000 lower endpoint or exactly $60,000. The Rust matcher and SQLite `COALESCE` predicates use the same comparisons.
 
 Posting-date presets are `past_12h`, `today`, `past_24h`, `past_week` (168 hours), `past_month` (720 hours), and `any`. New drafts use `past_week`, excluding unknown dates. A preset cannot coexist with `last_hours`, `from` or `through`. Today resolves local midnight anew at each run in the filter's IANA timezone, not when saved; rolling windows share the captured run start. Custom absolute dates retain inclusive final-day semantics. Existing arbitrary-hour and absolute filters survive unchanged until edited. UI Any time removes the date filter; unknown-date inclusion is explicit whenever a date rule remains active.
 
-`extractor.kind: search` accepts a blank URL or provider identifier `themuse` (default) / `arbeitnow`; no company URL or API key is required. [The Muse](https://www.themuse.com/developers/api/v2) provides public cross-employer, multi-industry listings with `publication_date` and a documented 500-request/hour unauthenticated limit. [Arbeitnow](https://documenter.getpostman.com/view/18545278/UVJbJdKh) is a Germany-focused alternative: its `created_at` does not establish original publication, so publication stays unknown. Neither provider guarantees every employer, a particular company, or every matching posting. Coverage is bounded, not a global exhaustive search.
+`extractor.kind: search` accepts provider identifiers `themuse` (default), `arbeitnow`, `jobicy` and `adzuna`. The Muse is a bounded public feed; Arbeitnow is Germany-focused and does not establish original publication dates. Jobicy is remote-only, delayed three hours, limited to seven days and synchronized at most hourly. Adzuna US discovery requires personal credentials stored in the OS keystore, explicit source enablement and safe credential-only requests. Provider-specific availability, rate limits and publication windows bound coverage; no provider guarantees every employer or matching posting.
 
 Sources may attach explicit company ATS boards without replacing workflow matching. Catalog attachments retain disabled/review/script-trust requirements. Search uses canonical matching context (roles, keywords, companies, location and run-relative age) but does not invent provider API query support: authoritative filtering stays in Rust. Search sessions yield between pages/candidates under the shared round-robin cap, stop further requests at acceptance caps, and report page/time bounds and unresolved evidence as partial. Default search pages are five, at most 100; existing workflow/source duration bounds apply. Optional `source_config.endpoint` must be a credential-free HTTP(S) URL returning that provider's schema. Pagination stays on the same origin/collection with sequential page numbers; malformed envelopes fail explicitly and invalid individual postings remain isolated.
 
@@ -297,4 +299,38 @@ All unresolved candidates remain counted even after the example bound is reached
 
 Catalog v1 is Rust-owned in `services/template_catalog.rs`; `npm run gen:templates` projects validated WorkflowSpec v6 JSON, picker data and YAML. Provider smoke adapters use its execution-only extractor projections. Six seed entries include four broad ATS title-keyword templates and two disabled unverified extraction examples. Five restrictive examples are picker-only. Reseeding recognizes legacy aliases/endpoints and preserves saved rules, schedules and IDs. No migration rewrites existing filters. The internship YAML is an explicitly restrictive v6 example, not the default.
 
-Bundled script code travels inline; no repository-relative path is needed. Node.js 18+ must be selected by absolute executable path before desktop execution. Missing/relative file paths cannot grant trust; absolute imported scripts and embedded code use existing fingerprints/quarantine. Runtime/interpreter edits require a new local trust decision. Worker protocol remains 7, WorkflowSpec remains 6, and custom-script protocol remains 2. Unknown employment/workplace values can be selected alongside known values; empty groups are unconstrained. Full site and native verification remain open.
+Bundled script code travels inline; no repository-relative path is needed. Node.js 18+ must be selected by absolute executable path before desktop execution. Missing/relative file paths cannot grant trust; absolute imported scripts and embedded code use existing fingerprints/quarantine. Runtime/interpreter edits require a new local trust decision. Worker protocol is **11**, WorkflowSpec is **9**, and custom-script protocol remains **2**. Unknown employment/workplace values can be selected alongside known values; empty groups are unconstrained. Full site and native verification remain open.
+
+## Bounded public HTML crawl and proxy routing
+
+An Advanced selector source may enable a static `crawl` object:
+
+```yaml
+crawl:
+  max_pages: 20
+  max_depth: 2
+  extraction: jsonld # or selectors
+```
+
+The seed URL is depth zero. `max_pages` accepts 1–100 attempted pages and
+`max_depth` accepts 0–5. The crawler follows only HTTP(S) links on the seed
+origin; fragments are removed for duplicate detection and queries are retained.
+Pages are extracted before their links are queued. JSON-LD mode uses supported
+`JobPosting` records; selector mode requires the source's configured item, title
+and link fields. `next_page` cannot be combined with crawl. Browser/script modes,
+unknown crawl keys and unsafe seed URLs fail validation before navigation.
+Robots decisions, shared per-host request pacing, cancellation and the worker's
+source/workflow limits remain in force. A cap or a later page failure retains
+confirmed earlier postings and reports partial coverage. This is public career
+and job-board HTML extraction, not internet-wide role/location search; role and
+location rules apply locally after extraction. Existing ATS adapters and feeds
+remain available.
+
+The optional static HTTP(S) proxy is user-supplied and stored with credentials
+in the OS secure store. Its configuration is execution-only; workflow and run
+diagnostic snapshots contain no proxy secret. Proxy routing does not change
+robots, origin checks or pacing. An unavailable configured proxy fails closed.
+Application-launched Chromium uses the same endpoint and handles proxy
+authentication without placing credentials in command arguments. Custom scripts
+and externally managed CDP browsers cannot be guaranteed to use that route and
+are rejected while a proxy is configured.

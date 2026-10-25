@@ -4,7 +4,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "../App";
-import { api, DEFAULT_SETTINGS, generateScrapedJobsForSource, SAMPLE_SWE_SOURCE } from "../lib/api";
+import { api, DEFAULT_SETTINGS, generateScrapedJobsForSource, SAMPLE_ENGINEERING_SOURCE } from "../lib/api";
 import { countActiveFilters } from "../lib/filter";
 import { useUIStore } from "../lib/store";
 
@@ -13,7 +13,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); useUIStore.getState().resetFi
 it("sorts inside Filters & sort, resets pagination, and keeps sort when filters clear", async () => {
  useUIStore.setState({ view: "discovered", selectedJobId: null, drawerJobId: null });
  useUIStore.getState().resetFilterSpec(); useUIStore.getState().setFilterSpec({ search: "fixture", sort: null });
- const fixture = { ...generateScrapedJobsForSource(SAMPLE_SWE_SOURCE)[0], status: "viewed" as const };
+ const fixture = { ...generateScrapedJobsForSource(SAMPLE_ENGINEERING_SOURCE)[0], status: "viewed" as const };
  vi.spyOn(api, "getSettings").mockResolvedValue({ ...DEFAULT_SETTINGS, app_auto_update: false });
  const listing = vi.spyOn(api, "listJobs").mockImplementation(async filter => {
   if (filter?.limit === 1) return { items: [], total: 120n, limit: 1n, offset: 0n };

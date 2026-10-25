@@ -4,14 +4,14 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useHotkeys, useGlobalHotkeys } from "../hooks/useHotkeys";
 import { JobCard } from "../components/views/discovered/JobCard";
-import { generateScrapedJobsForSource, SAMPLE_SWE_SOURCE } from "../lib/api";
+import { generateScrapedJobsForSource, SAMPLE_ENGINEERING_SOURCE } from "../lib/api";
 
 afterEach(cleanup);
 
 describe("independent card keyboard controls", () => {
   it("keeps posting navigation in details; delete/favorite remain independent", async () => {
     const job = {
-      ...generateScrapedJobsForSource(SAMPLE_SWE_SOURCE)[0],
+      ...generateScrapedJobsForSource(SAMPLE_ENGINEERING_SOURCE)[0],
       location: "Remote",
       workplace_type: "remote" as const,
       locations: [
@@ -52,7 +52,7 @@ describe("independent card keyboard controls", () => {
   });
 
   it("renders an unread pip for newly scraped jobs, clears it when viewed, and avoids noisy header badges", () => {
-    const baseJob = generateScrapedJobsForSource(SAMPLE_SWE_SOURCE)[0];
+    const baseJob = generateScrapedJobsForSource(SAMPLE_ENGINEERING_SOURCE)[0];
     const { rerender } = render(<JobCard job={{ ...baseJob, status: "scraped" }} />);
     const unread = screen.getByTitle("New discovery");
     expect(unread.querySelector('svg circle')?.getAttribute('r')).toBe('3');

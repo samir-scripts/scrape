@@ -104,18 +104,17 @@ describe("Deduplication Idempotency (Workflow Re-Runs)", () => {
 });
 
 describe("Company Logo & Monogram Fallback Component", () => {
-  it("renders an img tag when an iconUrl is provided", () => {
+  it("does not render an unverified company favicon as employer artwork", () => {
     const html = renderToStaticMarkup(
       React.createElement(CompanyLogo, {
         company: "Stripe",
-        iconUrl: "https://stripe.com/favicon.ico",
         size: "md",
       })
     );
 
-    expect(html).toContain("<img");
-    expect(html).toContain('src="https://stripe.com/favicon.ico"');
-    expect(html).toContain('alt="Stripe"');
+    expect(html).not.toContain("<img");
+    expect(html).toContain('aria-label="Stripe initials"');
+    expect(html).toContain("ST");
   });
 
   it("uses a neutral monogram when a known company has no provider logo", () => {

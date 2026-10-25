@@ -11,18 +11,23 @@ The `src-tauri/src/services` directory contains long-running background tasks, p
 | File | Service Domain | Core Responsibilities & Implementation |
 |---|---|---|
 | [`mod.rs`](mod.rs) | Service Root | Consolidates service modules and exports public service constructs. |
-| [`template_catalog.rs`](template_catalog.rs) | Built-in Templates | Versioned Rust-validated catalog; title-only seed defaults, separately labelled restrictive examples, embedded protocol-2 scripts and generated picker/YAML/extractor projections. |
-| [`sample_workflows.rs`](sample_workflows.rs) | Built-in Seeding | Shared callable service behind both seed commands; canonical atomic saves and created/already-present/needs-review reports. |
+| [`template_catalog.rs`](template_catalog.rs) | Built-in Templates | Catalog v3: exactly three manual engineering/date, Cherry Hill fast-food/date and remote advertised-pay profiles; generated picker/YAML/extractor projections and visible coverage limits. |
+| [`provider_presets.rs`](provider_presets.rs) | Company Sources | Independent company-owned source/readiness/description choices, retaining review/setup/script gates without hidden workflow aliases. |
+| [`legacy_sample_workflows.rs`](legacy_sample_workflows.rs) | Shipped Recognition Data | Frozen actual legacy sample specs for exact normalized replacement recognition, never exported to the production picker. |
+| [`provider_verification_profiles.rs`](provider_verification_profiles.rs) | Recorded Provider Controls | Revisioned frozen verification descriptors persisted directly through canonical workflow storage, independent of production seeding/catalog changes. |
+| [`sample_workflows.rs`](sample_workflows.rs) | Built-in Seeding & Replacement | Seeds the three origin-marked profiles on genuinely empty databases and implements fingerprint-reviewed, recoverable atomic replacement while preserving all unselected workflows. |
 | [`execution_diagnostics.rs`](execution_diagnostics.rs) | Run Preparation & Diagnostics | Shared workflow-to-worker preparation, redacted context/config snapshots before preflight, and durable batch-persistence failure evidence. |
 | [`workflow_store.rs`](workflow_store.rs) | Atomic Workflow Ownership | Validates and saves parent/child records in one transaction, canonicalizes IDs, preserves owned identities/trust, retires removed sources, and performs explicit backed-up ownership repair. |
-| [`workflow.rs`](workflow.rs) | Authoritative Workflow Specification | Validates WorkflowSpec v8; converts v1–v7 without broadening stored filters; prepares public search and direct-board inputs through the same resolver. |
+| [`workflow.rs`](workflow.rs) | Authoritative Workflow Specification | Validates WorkflowSpec v9; converts v1–v8 without broadening stored filters; prepares public search and direct-board inputs through the same resolver. |
 | [`script_trust.rs`](script_trust.rs) | Local Script Trust | Quarantines imports, hashes executable inputs/file bytes, persists explicit confirmation, rechecks trust before previews/runs and reconciles workflow review state. Trust never enables execution automatically. |
-| [`runner.rs`](runner.rs) | Worker Process Orchestration | Spawns worker protocol 9, revalidates NDJSON, enforces write coordination and broadcasts scrape events. |
+| [`runner.rs`](runner.rs) | Worker Process Orchestration | Spawns worker protocol 11, revalidates NDJSON, enforces write coordination and broadcasts scrape events. |
 | [`ingestion.rs`](ingestion.rs) | Ingestion & Revalidation | Validates worker-emitted job records, source scan summaries, and employer branding reports before persisting them to SQLite. |
 | [`scheduler.rs`](scheduler.rs) | Automated Crawl Dispatcher | `SchedulerService`: Unified background dispatcher that evaluates per-workflow schedules and startup triggers, coalesces due runs, respects the global automatic-scraping pause, and coordinates with manual runs. |
 | [`calendar.rs`](calendar.rs) | IANA Calendar Scheduling | Computes next-run UTC instants for `CalendarSchedule` (local `HH:MM`, ISO weekdays, and IANA timezone), handling DST gaps and overlaps deterministically. |
 | [`retention.rs`](retention.rs) | Automatic Data Retention | `RetentionService`: Runs after startup and every 24 elapsed hours, independent of scraping pause and workflow enablement. Shares the fixed-clock, protected-record predicate with post-run and explicit retention routes; defers without cancelling work when the shared writer is busy and records the last result. |
 | [`process.rs`](process.rs) | Subprocess Lifecycle & Reaping | Structured argument handling, bounded/redacted `stderr` capture, cancellation, and process-tree termination/reaping for sidecar workers. |
+| [`provider_credentials.rs`](provider_credentials.rs) | Provider Credentials | Stores Adzuna credentials in the OS keychain, exposes write-only status/set/clear, hydrates only execution copies after diagnostics, and gives Jobicy an isolated one-hour response cache directory. No plaintext production fallback. |
+| [`http_proxy.rs`](http_proxy.rs) | Optional User-Supplied Proxy | Serialized OS-keyring storage (`scrape.network` / `http-proxy`), credential-free status/set/clear IPC, debug-native isolated storage, and execution-only hydration after diagnostic snapshots. Rejects script and externally managed browser routes when a proxy is configured; no direct fallback or bundled endpoint. |
 | [`startup.rs`](startup.rs) | Safe Database Startup | Coordinates pre-migration read-only history checks, `VACUUM INTO` backups, and migration execution during host initialization. |
 | [`tray.rs`](tray.rs) | System Tray Integration | Manages the native OS menu bar / taskbar tray icon, context menus, and window visibility toggling. |
 | [`system.rs`](system.rs) | OS Interop & Notifications | Manages desktop system notifications via `tauri-plugin-notification` and coordinates external URL navigation via `tauri-plugin-opener`. |
@@ -41,7 +46,7 @@ Application Boot (lib.rs)
         │         ▼
         │    ScrapeRunner
         │         │
-        │         ├──► Spawns scrape-worker Sidecar (Protocol v9)
+        │         ├──► Spawns scrape-worker Sidecar (Protocol 11; optional proxy only in execution copies)
         │         ├──► Revalidates NDJSON Events (ingestion.rs)
         │         ├──► Upserts Jobs, Branding & Outcomes into SQLite
         │         └──► Emits Tauri Window Events
@@ -49,17 +54,19 @@ Application Boot (lib.rs)
         └──► TrayService::init() (Maintains background presence)
 ```
 
-Each workflow owns an explicit WorkflowSpec v8 (sources, role/company/keyword criteria, dates, calendar schedule, job cap and retention) without global inheritance. Legacy v1–v7 imports resolve through `workflow.rs`; invalid stored originals remain preserved and marked Needs review. Empty collections are unrestricted.
+Each workflow owns an explicit WorkflowSpec v9 (sources, role/company/keyword criteria, dates, calendar schedule, job cap and retention) without global inheritance. Legacy v1–v8 imports resolve through `workflow.rs`; invalid stored originals remain preserved and marked Needs review. Empty collections are unrestricted.
 
 Calendar scheduling (`calendar.rs`) computes next runs from local time, ISO weekdays, and IANA timezone across creation, edits, and post-run updates. DST gaps run at the first valid instant; overlaps use their first occurrence once. One dispatcher queue in `scheduler.rs` coalesces due workflows and waits through manual-run overlap; missed occurrences become one catch-up run before the next future date. All automatic paths share the persisted global pause flag, while explicit manual runs remain available.
 
-`PostingRules` is shared by worker evaluation and repository SQL compilation, including literal target-role/company substrings and dynamic publication-date presets. One run-start instant anchors relative windows; Today resolves the date filter's local midnight each run. Missing publication dates are never replaced with discovery/provider edit time. Protocol 9 enforces host/sidecar compatibility. `execution_diagnostics::prepare_search_sources` derives the same canonical context for preview/manual/scheduled/Run all execution; providers are not assumed to support arbitrary query fields.
+`PostingRules` is shared by worker evaluation and repository SQL compilation, including literal target-role/company substrings, native compensation matching modes and dynamic publication-date presets. One run-start instant anchors relative windows; Today resolves the date filter's local midnight each run. Missing publication dates are never replaced with discovery/provider edit time. Protocol 11 enforces host/sidecar compatibility. `execution_diagnostics::prepare_search_sources` derives the same canonical context for preview/manual/scheduled/Run all execution; providers are not assumed to support arbitrary query fields.
 
-## Seeded-workflow diagnostics (Plan 12 section 1)
+## Built-in workflow replacement
 
-`sample_workflows.rs` is the service used by both seed IPC commands and isolated
-regressions. It uses canonical atomic workflow persistence for each template and reports
-created/already-present/review states without overwriting existing workflows.
+`sample_workflows.rs` seeds the three origin-marked catalog profiles only when the
+database is genuinely empty. Older examples are never removed automatically.
+`preview_test_workflow_replacement` and `replace_test_workflows` expose a reviewed,
+fingerprinted replacement with a consistent recovery backup and one transaction;
+unselected workflows and all job/tracking history remain intact.
 
 `execution_diagnostics.rs` shares workflow-to-worker preparation between manual,
 scheduled and Run all execution. Before trust/runtime validation, each attempted
@@ -117,7 +124,13 @@ checks independent acceptance expectations and import/save/reopen/global isolati
 
 Ingestion revalidates the core location tuple bounds and country/subdivision
 consistency before persistence. Script protocol 2 supplies employment/workplace/
-location evidence through existing WorkerEvent fields; worker protocol stays 7.
+location evidence through existing WorkerEvent fields; worker protocol is 11.
 Existing script fingerprints/trust checks remain authoritative.
 
 JavaScript runtime preflight requires an explicit absolute Node.js 18+ executable; missing setup never falls back to a developer shell. File scripts require absolute readable paths before trust/execution; embedded scripts need no repository checkout. See [template setup](../../../workflows/README.md).
+
+`http_proxy.rs` stores one user-supplied HTTP(S) proxy in the operating-system
+secure store. Credentials are hydrated only into preview/run execution copies,
+omitted from saved diagnostic snapshots and routed through worker HTTP clients and
+application-launched Chromium. If the configured proxy cannot be used, execution
+fails without direct fallback.

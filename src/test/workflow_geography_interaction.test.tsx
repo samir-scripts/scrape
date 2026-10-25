@@ -8,7 +8,7 @@ import { GeographyMatching } from "../components/views/settings/GeographyMatchin
 import { emptyRules } from "../components/views/settings/WorkflowSections";
 import type { PostingRules } from "../bindings/PostingRules";
 import { sourceToWorkflowSpec, workflowSpecToYaml, workflowSpecToCreateInput } from "../lib/yamlWorkflow";
-import { SAMPLE_SWE_SOURCE } from "../lib/api";
+import { SAMPLE_ENGINEERING_SOURCE } from "../lib/api";
 
 afterEach(cleanup);
 function Harness({ initial, invalidate }: { initial?: Partial<PostingRules>; invalidate: () => void }) {
@@ -78,13 +78,13 @@ describe("workflow geography and workplace", () => {
     expect(rules().cities).toEqual(["Seattle", "Springfield"]);
   });
   it("round trips canonical geography through YAML and source editing", async () => {
-    const spec=sourceToWorkflowSpec(SAMPLE_SWE_SOURCE);
+    const spec=sourceToWorkflowSpec(SAMPLE_ENGINEERING_SOURCE);
     spec.filters={matching:{...emptyRules(),countries:["US"],regions:["US-CA"],workplaces:["remote","hybrid"],location_include_unknown:true}};
     const yaml=workflowSpecToYaml(spec);
     expect(yaml).toContain("US-CA");
     const validated=await importWorkflowYaml(yaml);
     const input=workflowSpecToCreateInput(validated);
-    const reopened=sourceToWorkflowSpec({...SAMPLE_SWE_SOURCE,config:input.config ?? null,filters:input.filters ?? null});
+    const reopened=sourceToWorkflowSpec({...SAMPLE_ENGINEERING_SOURCE,config:input.config ?? null,filters:input.filters ?? null});
     expect(reopened.filters?.matching).toEqual(spec.filters.matching);
     expect(validated.filters?.matching).toEqual(spec.filters.matching);
   });

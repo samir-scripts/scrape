@@ -4,7 +4,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { UserEvent } from "@testing-library/user-event";
 import { AddSourceModal } from "../components/views/settings/AddSourceModal";
-import { api, SAMPLE_SWE_SOURCE } from "../lib/api";
+import { api, SAMPLE_ENGINEERING_SOURCE } from "../lib/api";
 import type { ExtractorTestResult } from "../bindings/ExtractorTestResult";
 import type { BrowserRuntimeStatus } from "../bindings/BrowserRuntimeStatus";
 import type { BrowserSessionSummary } from "../bindings/BrowserSessionSummary";
@@ -76,7 +76,7 @@ const sampleScriptWorkflow: WorkflowSpec = {
 };
 
 const sampleScriptSource: Source = {
-  ...SAMPLE_SWE_SOURCE,
+  ...SAMPLE_ENGINEERING_SOURCE,
   id: "src-script-1",
   name: "Script Source",
   kind: "selector",

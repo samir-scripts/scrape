@@ -93,8 +93,47 @@ JSON-LD relative destinations resolve against their extraction page; missing or
 unsafe destinations emit errors rather than borrowing the listing URL. Worker
 HTTP fixtures and process tests are deterministic and do not verify live providers.
 
-Worker protocol version 5 added enrichment warnings, unresolved candidates, provider totals, and explicit source outcomes to the rejection/coverage summaries introduced in version 4. Older protocol configurations fail explicitly. Rebuild the packaged sidecar with `npm run build:sidecar` after updating host/worker code. The authoritative workflow parameter is `max_jobs_per_run` (default 20, range 1–10,000); Preview/Test accepts at most 10. Each workflow stops after its own eligible budget, including refreshed records. Rejected/invalid/duplicate/blocked postings do not consume that budget. Summary counts cover examined records only and identify limit-reached coverage. The shared Rust constants also generate frontend defaults and bounds during binding export.
+Worker protocol version 11 is current; version 5 introduced enrichment warnings,
+unresolved candidates, provider totals, and explicit source outcomes, building on
+coverage summaries from version 4. Older protocol configurations fail explicitly.
+Rebuild the packaged sidecar with `npm run build:sidecar` after updating host/worker
+code. The authoritative workflow parameter is `max_jobs_per_run` (default 20,
+range 1–10,000); Preview/Test accepts at most 10. Each workflow stops after its own
+eligible budget, including refreshed records. Rejected/invalid/duplicate/blocked
+postings do not consume that budget. Summary counts cover examined records only
+and identify limit-reached coverage. Shared Rust constants generate frontend
+defaults and bounds during binding export.
 
+
+## Cross-employer search feeds
+
+The search adapter shares the coordinator's candidate turns, source deadlines,
+page limits and accepted-job cap with direct boards. The Muse and Arbeitnow keep
+their existing feed behavior; Arbeitnow's ingestion timestamp is not an original
+publication date.
+
+Adzuna uses only `https://api.adzuna.com/v1/api/jobs/us/search/{page}`, starting at
+page 1, with 50 results per page and date ordering. The host hydrates App ID/key
+only into execution copies. Its credential-sensitive transport rejects redirects
+and emits provider/status or transport-class errors, never request URLs or
+response bodies. `what_or`, `where` and whole-day `max_days_old` are discovery
+hints; canonical local rules remain authoritative. `created` is advertisement
+placement time; returned redirect URLs are preserved. Descriptions are truncated,
+not full-ad extraction. Predicted salary is excluded, and bare numeric salary
+fields do not prove an annual interval or explicit currency. See the
+[Adzuna search contract](https://developer.adzuna.com/docs/search).
+
+Jobicy uses its [public jobs feed](https://jobicy.com/jobs-rss-feed), not the paid
+commercial API. This remote feed covers seven days and is delayed three hours;
+`Anywhere` does not imply a country. Original `pubDate` and explicit native pay
+fields supply date/pay evidence. Requests use `count=100`; opaque cursors are
+encoded once and contradictory or repeated pagination metadata produces partial
+coverage without discarding valid candidates. Public JSON pages are cached for
+one hour beneath the host-provided application cache directory, keyed by the
+canonical credential-free URL and bounded to 64 atomic page entries. Missing,
+corrupt or expired entries miss; unavailable cache storage fails explicitly
+rather than bypassing hourly synchronization. Tests use isolated temporary
+caches and loopback replay; none of this establishes live provider availability.
 
 ## Bounded Greenhouse enrichment
 
@@ -137,10 +176,13 @@ a successful preview. Rebuild the sidecar after changing protocol or adapters.
 Every extraction path uses shared employer-logo evidence. `__company` is an explicit
 employer hint, separate from the workflow display name. Provider names and matching
 JobPosting organizations take precedence; missing identity stays Unknown company.
-Page lookup accepts matching JobPosting logos, employer-labelled images, then an
-explicit custom `employer_logo` selector. Relative assets resolve against the actual
-page after redirects. A configured board page can supply missing posting branding.
-Platform favicons/social previews and guessed employer domains are not substitutes.
+Page lookup accepts matching JobPosting logos, employer-labelled images and
+Ashby's organization-scoped theme artwork; explicit custom `employer_logo`
+selectors remain supported. Ashby theme metadata must match both employer name
+and organization ID, and resolves only `app.ashbyhq.com` theme-image paths.
+Relative assets resolve against the actual page after redirects. A configured
+board page can supply missing posting branding. Platform favicons/social previews
+and guessed employer domains are never substitutes.
 
 Protocol 6 adds logo evidence to candidate records and one `branding` report per
 accepted source/employer relationship. Older protocol requests fail explicitly.
@@ -156,10 +198,12 @@ emit optional enrichment warnings; they do not invalidate accepted jobs.
 The desktop host validates reports again and stores evidence URL/method, check
 time, content checksum and one local image per source/employer relationship. Job
 responses contain references, not duplicate image data. The shared UI reads each
-reference through local IPC once, and retains the last verified asset during a
-failed refresh. Source deletion preserves artwork for saved postings; full reset
-clears the registry and frontend cache. No logo is inferred for historical records
-without evidence. Refresh supplies new evidence without changing user annotations.
+reference through local IPC once. When a persisted job becomes visible, the host
+may perform a bounded lookup using identity loaded from that job row; concurrent
+lookups and frontend retries are coalesced. Failed refreshes retain the last
+verified asset. Source deletion preserves artwork for saved postings; full reset
+clears the registry and frontend cache. Legacy Ashby platform favicons are hidden
+from read models without rewriting stored rows.
 
 
 ## Multi-source round-robin coordination
@@ -176,7 +220,7 @@ ingestion across them using fair round-robin budgeting (`coordinator.rs`).
   sources are exhausted.
 - Deduplication is workflow-wide across all sources based on canonical posting identity.
 
-## Static pages and details (protocol 7)
+## Static pages and details (protocol 11)
 
 Custom sources use shared CSS/XPath locators or explicit JSON-pointer hydration
 mappings. Resumable pages/details use the same matching, identity, suppression
@@ -186,15 +230,27 @@ per-source overrides. Navigation is bounded to 30 seconds by default; details
 also retain the existing maximum-100-request/45-second enrichment allowance.
 Page limits, loops, readiness failures and required missing evidence remain
 visible outcomes; partial coverage retains confirmed jobs. Source and workflow
-limits apply to HTTP discovery; the browser pool is not implemented yet.
+limits apply across HTTP, browser and script candidates.
 
 See [configuration examples](../../plans/workflow-v3.md#static-pagination-and-details).
-Use `scrape-worker --protocol-version` to query the authoritative version rather
-than duplicating it in a harness. Protocol-v6 requests are rejected explicitly.
 
-Configured script mode fails explicitly before HTTP discovery while its runner is
-pending in Phase 6D. It never falls back to static scraping. Source navigation and
-workflow-duration overrides use the shared validated bounds.
+Advanced static selector sources can enable bounded public HTML crawling with
+`crawl: { max_pages: 20, max_depth: 2, extraction: "jsonld" }`. Seeds are depth
+zero; pages are counted as attempted and links are limited to the seed's HTTP(S)
+origin. JSON-LD reuses the existing `JobPosting` parser; `extraction: "selectors"`
+uses configured locators. Both modes use the shared robots and paced HTTP client,
+preserve valid earlier postings when later pages fail, and report page/time-limit
+coverage distinctly. This does not crawl search-engine results or discover the
+internet; user-provided public career/job URLs complement supported ATS and feeds.
+An optional secure-store HTTP(S) proxy routes shared HTTP transports and
+application-launched Chromium, without changing robots policy or enabling a
+direct-route fallback.
+Use `scrape-worker --protocol-version` to query the authoritative version rather
+than duplicating it in a harness. Protocol-v10 requests are rejected explicitly.
+
+Browser sources use the direct Rust CDP engine and isolated contexts described
+below. Script sources use the versioned NDJSON runner; setup, trust and execution
+errors are explicit and never fall back to static scraping.
 
 ## Direct Rust CDP browser engine and isolated sessions (Phase 6C)
 
@@ -214,15 +270,19 @@ detection (`CoverageTermination::NeedsLogin`) feed into the same authoritative
 
 ## Script evidence contract (Plan 12 Section 4)
 
-Custom scripts speak protocol **2**, distinct from host/worker protocol 7. Candidate
+Custom scripts speak protocol **2**, distinct from host/worker protocol 11. Candidate
 frames optionally provide employment_type, a snake-case workplace_type enum and
 validated locations tuples; Rust owns matching/acceptance. Unknown frame fields
 and version-1 frames fail explicitly. The supported pay text field is salary.
 See the [current contract](../../plans/workflow-v3.md#field-evidence-and-script-protocol-2-plan-12-section-4).
 Changed bundled/user scripts invalidate local trust and require review; no workflow
-is automatically rewritten or enabled. Bundled Netflix workplace mapping is based
-on recorded fields and does not establish live pagination/coverage support.
+is automatically rewritten or enabled. Bundled Netflix workplace mapping remains
+limited to recorded evidence; its fixture success is not live coverage proof.
 
 ## Bundled script examples (Plan 12 Section 5)
 
-Netflix/Amazon example code is embedded by the host template catalog and exported inline in YAML. Its dynamic `node:fs` import works in a temporary CommonJS `.js` file or the repository ES-module context. Desktop preflight requires an explicit absolute Node.js 18+ executable and local per-source trust. Recorded bounded pages do not prove provider pagination/exhaustion; that repair remains Section 6.
+Netflix/Amazon example code is embedded by the independent company presets and
+exported inline in YAML. Desktop preflight requires an explicit absolute Node.js
+18+ executable and local per-source trust. Recorded route replay verifies only
+the published captures and expected outcomes; it does not establish current live
+provider availability.

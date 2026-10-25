@@ -29,7 +29,7 @@ scrape-core/
     ├── locator.rs      # Unified CSS and XPath locator grammar, parsing, and attributes
     ├── matching.rs     # Authoritative keyword/geography/workplace/partial-evidence matcher & diagnostics
     ├── posting_date.rs # Publication timestamp normalization and timezone-aware date rules
-    ├── protocol.rs     # Subprocess IPC contracts (WorkerConfig, WorkerEvent, NDJSON v9)
+    ├── protocol.rs     # Subprocess IPC contracts (WorkerConfig, WorkerEvent, NDJSON v11)
     ├── role.rs         # Role category classification heuristics (SWE, Data, etc.)
     ├── search_source.rs # Shared public search provider identity, endpoint validation and bounds
     ├── static_source.rs # Bounded static selector source configuration and transforms
@@ -48,13 +48,13 @@ scrape-core/
 | [`examples/cache-logo-fixture.rs`](examples/cache-logo-fixture.rs) | CLI example that runs raw logo bytes through production `branding` validation to reproduce review PNGs. |
 | [`src/lib.rs`](src/README.md) | Crate root. Re-exports public submodules and shared utilities (`now_iso()`, `INGESTION_LIMITS`, `PROTOCOL_VERSION`). |
 | [`src/types.rs`](src/README.md#typesrs) | Canonical domain enumerations: `JobStatus`, `RoleType`, `TriState`, `SalaryInterval`, `SalarySource`, `SourceKind`, `SourceCadence`, `ClearanceLevel`, `WorkAuthRequirement`, and `WorkplaceType`. |
-| [`src/protocol.rs`](src/README.md#protocolrs) | IPC protocol v9: WorkerConfig/limits/filters/sources, NDJSON events and reconciled coverage/outcome statistics. Custom script protocol remains v2. |
+| [`src/protocol.rs`](src/README.md#protocolrs) | IPC protocol v11: WorkerConfig, limits, filters, sources, NDJSON events and reconciled coverage/outcome statistics. User-supplied proxy configuration is execution-only; custom script protocol remains v2. |
 | [`src/matching.rs`](src/README.md#matchingrs) | Single authoritative owner of `PostingRules` evaluation, `KeywordRules` (Any/All/Exclude/fields), partial-evidence decisions for bounded enrichment, primary `RejectionReason` categorization, and `RejectionExample` diagnostics. |
 | [`src/filter.rs`](src/README.md#filterrs) | SQL-style filter parser and evaluator plus parameterized SQLite `WHERE` clause compilation for saved-job queries and `PostingRules`. |
 | [`src/identity.rs`](src/README.md#identityrs) | Canonical `PostingIdentity` derivation across ATS providers, JSON-LD, and custom selectors so deduplication, rescraping, and suppression share one identity rule. |
 | [`src/geography.rs`](src/README.md#geographyrs) | ISO alpha-2 country and qualified subdivision (`US-CA`, `CA-ON`, etc.) catalog, alias resolution, and exported `CountryOption`/`RegionOption` bindings. |
-| [`src/posting_date.rs`](src/README.md#posting_daters) | Authoritative publication date parsing and calendar-day comparison in an explicit IANA timezone without conflating provider edit timestamps with publication dates. |
-| [`src/branding.rs`](src/README.md#brandingrs) | Employer identity precedence, `LogoEvidence`/`LogoStatus`/`LogoMethod`, bounded image decoding (PNG/JPEG/WebP/SVG), and canonical PNG re-encoding. |
+| [`src/search_source.rs`](src/README.md#search_sourcers) | Canonical public provider identities and fixed endpoint validation for The Muse, Arbeitnow, Adzuna and Jobicy; bounded provider hints never replace local matching. |
+| [`src/branding.rs`](src/README.md#brandingrs) | Employer identity precedence, `LogoEvidence`/`LogoStatus`/`LogoMethod`, bounded image decoding (PNG/JPEG/WebP/SVG), canonical asset caching, and the exact legacy Ashby-platform-favicon filter. |
 | [`src/role.rs`](src/README.md#rolers) | Role classification engine that analyzes job titles and external hints to categorize postings into `RoleType` (`swe`, `data`, `product`, `design`, `seasonal`, `other`). |
 | [`src/enrich/`](src/enrich/README.md) | Heuristic parsing engine for unstructured ATS fields: native compensation ranges, multi-location strings, security clearance, visa sponsorship, work authorization, experience/new-grad detection, workplace arrangement, and structured HTML normalization. |
 
@@ -69,13 +69,14 @@ npm run gen:types
 # or: cargo test --workspace export_bindings
 ```
 
-Compensation now includes separate native ranges in fixed-point hundredths of a
-currency's major unit, with interval, currency, source evidence, scope and derived
-status. `CompensationFilter` evaluates native ranges and compiles parameterized
-SQLite predicates. Hourly/annual filters require the original matching interval;
-annual equivalents remain compatibility analytics and have explicitly named
-`salary_annual_min`/`salary_annual_max` fields at the job boundary. Text without
-unit evidence retains an unknown interval. Multiple ranges are never blended.
+Compensation uses fixed-point native ranges in hundredths of a currency's major
+unit, retaining currency, interval, source evidence and derived status. Filters
+support `range_overlap` (the default for existing stored rules) and
+`advertised_amount`. Advertised mode compares only evidenced endpoints within the
+requested native currency and interval: a range with an upper endpoint above the
+threshold qualifies, while unknown units/currencies and derived annual values do
+not. Worker evaluation and SQLite compilation share the same per-range rule;
+hourly/monthly pay is never annualized for filtering.
 
 Phase 6B–6C exports browser-runtime, isolated session (`BrowserSessionStatus`,
 `BrowserSessionSummary`), and extractor-test contracts from `protocol.rs`, shared
