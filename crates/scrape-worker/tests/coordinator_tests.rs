@@ -21,6 +21,12 @@ struct Server {
 
 impl Server {
     fn new(handler: impl Fn(&str) -> String + Send + 'static) -> Self {
+        Self::new_response(move |path| (200, Vec::new(), handler(path)))
+    }
+
+    fn new_response(
+        handler: impl Fn(&str) -> (u16, Vec<(String, String)>, String) + Send + 'static,
+    ) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let origin = format!("http://{}", listener.local_addr().unwrap());
         listener.set_nonblocking(true).unwrap();
@@ -41,16 +47,19 @@ impl Server {
                         let request = String::from_utf8_lossy(&buf[..n]);
                         let path = request.split_whitespace().nth(1).unwrap().to_string();
                         seen.lock().unwrap().push(path.clone());
-                        let body = if path.ends_with("/robots.txt") {
-                            "User-agent: *\nAllow: /".into()
+                        let (status, headers, body) = if path.ends_with("/robots.txt") {
+                            (200, Vec::new(), "User-agent: *\nAllow: /".into())
                         } else {
                             handler(&path)
                         };
+                        let mut extra_headers = String::new();
+                        for (name, value) in headers {
+                            extra_headers.push_str(&format!("{name}: {value}\r\n"));
+                        }
                         let _ = write!(
                             stream,
-                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                            body.len(),
-                            body
+                            "HTTP/1.1 {status} Response\r\n{extra_headers}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+                            body.len(), body
                         );
                     }
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -1257,4 +1266,505 @@ fn search_unknown_provider_and_malformed_config_fail_before_requests() {
         }
         assert!(feed_requests(&server).is_empty());
     }
+}
+
+fn adzuna_config() -> Value {
+    json!({"__provider_credentials":{"app_id":"fictional-app-id","app_key":"fictional-app-key"}})
+}
+
+fn adzuna_job(id: &str) -> Value {
+    json!({"id":id,"title":"Crew Member","company":{"display_name":"Chipotle"},
+        "redirect_url":format!("https://www.adzuna.com/land/ad/{id}"),
+        "description":"Quick-service restaurant crew", "created":"2026-10-15T20:00:00Z",
+        "location":{"display_name":"Cherry Hill, New Jersey","area":["US","New Jersey","Camden County","Cherry Hill"]},
+        "salary_min":50000,"salary_max":80000,"salary_is_predicted":"0"})
+}
+
+fn jobicy_job(id: u64) -> Value {
+    json!({"id":id,"jobTitle":"Software Engineer","companyName":"Fixture",
+        "url":format!("https://jobicy.com/jobs/{id}"),"jobDescription":"<p>Build software</p>",
+        "pubDate":"2026-10-15 20:00:00","jobGeo":"Anywhere","jobType":["full-time"],
+        "salaryMin":50000,"salaryMax":80000,"salaryCurrency":"USD","salaryPeriod":"year"})
+}
+
+#[test]
+fn adzuna_uses_one_based_safe_requests_and_original_dates_without_invented_pay() {
+    let server = Server::new(|path| {
+        let url = url::Url::parse(&format!("http://fixture{path}")).unwrap();
+        let query: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+        assert_eq!(query.get("app_id").unwrap(), "fictional-app-id");
+        assert_eq!(query.get("app_key").unwrap(), "fictional-app-key");
+        assert_eq!(query.get("results_per_page").unwrap(), "50");
+        assert_eq!(query.get("sort_by").unwrap(), "date");
+        if url.path().ends_with("/1") {
+            let mut predicted = adzuna_job("predicted");
+            predicted["salary_is_predicted"] = json!(true);
+            predicted["description"] = json!("Salary: USD 70000 per year");
+            json!({"count":51,"results":[adzuna_job("first"),predicted,{"title":"broken"}]})
+                .to_string()
+        } else {
+            assert!(url.path().ends_with("/2"));
+            json!({"count":51,"results":[adzuna_job("last")]}).to_string()
+        }
+    });
+    let events = run_worker(
+        &server,
+        vec![search_source("adzuna", adzuna_config())],
+        20,
+        0,
+        false,
+    );
+    let ids: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            WorkerEvent::Job {
+                external_id,
+                date_posted,
+                salary,
+                locations,
+                ..
+            } => {
+                assert_eq!(date_posted.as_deref(), Some("2026-10-15T20:00:00Z"));
+                assert!(salary
+                    .as_ref()
+                    .is_none_or(|s| s.ranges.iter().all(|r| r.interval.is_none())));
+                assert!(locations
+                    .iter()
+                    .any(|loc| loc.city.as_deref() == Some("Cherry Hill")));
+                Some(external_id.as_str())
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ids, ["first", "predicted", "last"]);
+    assert_eq!(scans(&events)[0].invalid, 1);
+    assert_eq!(feed_requests(&server).len(), 2);
+    let encoded = serde_json::to_string(&events).unwrap();
+    assert!(!encoded.contains("fictional-app"));
+}
+
+#[test]
+fn jobicy_cursor_is_encoded_once_and_public_pages_reused_across_workers() {
+    let cache = tempfile::tempdir().unwrap();
+    let server = Server::new(|path| {
+        let url = url::Url::parse(&format!("http://fixture{path}")).unwrap();
+        let query: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+        assert_eq!(query.get("count").unwrap(), "100");
+        if let Some(cursor) = query.get("cursor") {
+            assert_eq!(cursor, "opaque+/= token");
+            json!({"jobs":[jobicy_job(2)],"hasMore":false,"nextCursor":null}).to_string()
+        } else {
+            json!({"jobs":[jobicy_job(1),{"jobTitle":"invalid"}],"hasMore":true,"nextCursor":"opaque+/= token"}).to_string()
+        }
+    });
+    for _ in 0..2 {
+        let events = run_worker(
+            &server,
+            vec![search_source(
+                "jobicy",
+                json!({
+                    "__provider_cache_dir":cache.path().to_str().unwrap()
+                }),
+            )],
+            20,
+            0,
+            false,
+        );
+        let ids: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                WorkerEvent::Job {
+                    external_id,
+                    workplace_type,
+                    salary,
+                    locations,
+                    ..
+                } => {
+                    assert_eq!(*workplace_type, scrape_core::WorkplaceType::Remote);
+                    assert!(locations.iter().all(|loc| loc.country_code.is_none()));
+                    assert_eq!(salary.as_ref().unwrap().ranges[0].max_minor, Some(8000000));
+                    Some(external_id.as_str())
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(ids, ["1", "2"]);
+        assert_eq!(scans(&events)[0].invalid, 1);
+    }
+    assert_eq!(feed_requests(&server).len(), 2);
+}
+
+#[test]
+fn adzuna_redirect_status_and_decode_errors_never_expose_credentials_or_bodies() {
+    for status in [302, 401, 200] {
+        let server = Server::new_response(move |_| {
+            (
+                status,
+                vec![(
+                    "Location".into(),
+                    "https://leak.test/?app_key=fictional-app-key".into(),
+                )],
+                "fictional-app-id fictional-app-key provider-private-response".into(),
+            )
+        });
+        let output = worker_output(
+            &server,
+            &json!({
+                "version":PROTOCOL_VERSION,"sources":[search_source("adzuna", adzuna_config())],
+                "filters":{},"limits":worker_limits(),"max_jobs_per_run":20
+            }),
+            false,
+        );
+        assert!(output.status.success());
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        for secret in [
+            "fictional-app-id",
+            "fictional-app-key",
+            "provider-private-response",
+            "https://leak.test",
+        ] {
+            assert!(!stdout.contains(secret), "{stdout}");
+            assert!(!stderr.contains(secret), "{stderr}");
+        }
+        assert!(stdout.contains("Adzuna"));
+        assert_eq!(
+            feed_requests(&server).len(),
+            1,
+            "redirects must not be followed"
+        );
+    }
+}
+
+#[test]
+fn provider_setup_and_custom_adzuna_endpoints_fail_without_network() {
+    for source in [
+        search_source("adzuna", json!({})),
+        search_source(
+            "adzuna",
+            json!({"endpoint":"https://leak.test/jobs",
+            "__provider_credentials":{"app_id":"fictional-app-id","app_key":"fictional-app-key"}}),
+        ),
+        search_source("jobicy", json!({})),
+        search_source("jobicy", json!({"__provider_cache_dir":"relative/path"})),
+    ] {
+        let server = Server::new(|path| panic!("unexpected request {path}"));
+        let events = run_worker(&server, vec![source], 20, 0, false);
+        assert!(events.iter().any(|event| matches!(
+            event,
+            WorkerEvent::Error {
+                invalid_posting: Some(false),
+                ..
+            }
+        )));
+        assert!(feed_requests(&server).is_empty());
+        assert!(!serde_json::to_string(&events)
+            .unwrap()
+            .contains("fictional-app"));
+    }
+}
+
+#[test]
+fn jobicy_invalid_pagination_retains_valid_candidates_as_partial_coverage() {
+    for metadata in [
+        json!({"hasMore":true,"nextCursor":null}),
+        json!({"hasMore":false,"nextCursor":"contradictory"}),
+        json!({"hasMore":"true","nextCursor":"cursor"}),
+        json!({}),
+    ] {
+        let cache = tempfile::tempdir().unwrap();
+        let server = Server::new(move |_| {
+            let mut value = metadata.clone();
+            value["jobs"] = json!([jobicy_job(1)]);
+            value.to_string()
+        });
+        let events = run_worker(
+            &server,
+            vec![search_source(
+                "jobicy",
+                json!({
+                    "__provider_cache_dir":cache.path().to_str().unwrap()
+                }),
+            )],
+            20,
+            0,
+            false,
+        );
+        assert_eq!(scans(&events)[0].accepted, 1);
+        assert_eq!(
+            scans(&events)[0].outcome,
+            Some(scrape_core::protocol::ScanOutcome::Partial)
+        );
+        assert!(events.iter().any(|event| matches!(event, WorkerEvent::Job {
+            external_id, .. } if external_id == "1")));
+        assert_eq!(feed_requests(&server).len(), 1);
+    }
+}
+
+#[test]
+fn jobicy_repeated_cursor_and_page_failure_preserve_prior_jobs() {
+    for fail_second in [false, true] {
+        let cache = tempfile::tempdir().unwrap();
+        let server = Server::new_response(move |path| {
+            let second = path.contains("cursor=");
+            if second && fail_second {
+                return (400, Vec::new(), "unavailable".into());
+            }
+            (
+                200,
+                Vec::new(),
+                json!({"jobs":[jobicy_job(if second {2} else {1})],
+                "hasMore":true,"nextCursor":"repeat"})
+                .to_string(),
+            )
+        });
+        let events = run_worker(
+            &server,
+            vec![search_source(
+                "jobicy",
+                json!({
+                    "__provider_cache_dir":cache.path().to_str().unwrap()
+                }),
+            )],
+            20,
+            0,
+            false,
+        );
+        assert_eq!(scans(&events)[0].accepted, if fail_second { 1 } else { 2 });
+        assert_eq!(
+            scans(&events)[0].outcome,
+            Some(scrape_core::protocol::ScanOutcome::Partial)
+        );
+        assert_eq!(feed_requests(&server).len(), 2);
+    }
+}
+
+#[test]
+fn new_search_provider_empty_collections_and_malformed_collections_are_distinct() {
+    for provider in ["adzuna", "jobicy"] {
+        for valid in [false, true] {
+            let cache = tempfile::tempdir().unwrap();
+            let server = Server::new(move |_| {
+                if !valid {
+                    return r#"{"error":"not a feed"}"#.into();
+                }
+                if provider == "adzuna" {
+                    json!({"count":0,"results":[]}).to_string()
+                } else {
+                    json!({"jobs":[],"hasMore":false,"nextCursor":null}).to_string()
+                }
+            });
+            let config = if provider == "adzuna" {
+                adzuna_config()
+            } else {
+                json!({"__provider_cache_dir":cache.path().to_str().unwrap()})
+            };
+            let events = run_worker(&server, vec![search_source(provider, config)], 20, 0, false);
+            assert_eq!(scans(&events)[0].accepted, 0);
+            assert_eq!(
+                scans(&events)[0].outcome,
+                Some(if valid {
+                    scrape_core::protocol::ScanOutcome::Success
+                } else {
+                    scrape_core::protocol::ScanOutcome::Failed
+                })
+            );
+            assert_eq!(feed_requests(&server).len(), 1);
+        }
+    }
+}
+
+#[test]
+fn new_search_providers_stop_requests_at_job_and_page_caps() {
+    for provider in ["adzuna", "jobicy"] {
+        for acceptance_cap in [false, true] {
+            let cache = tempfile::tempdir().unwrap();
+            let server = Server::new(move |_| {
+                if provider == "adzuna" {
+                    json!({"count":1000,"results":[adzuna_job("first"),adzuna_job("second")]})
+                        .to_string()
+                } else {
+                    json!({"jobs":[jobicy_job(1),jobicy_job(2)],"hasMore":true,"nextCursor":"next"})
+                        .to_string()
+                }
+            });
+            let mut config = if provider == "adzuna" {
+                adzuna_config()
+            } else {
+                json!({"__provider_cache_dir":cache.path().to_str().unwrap()})
+            };
+            config["max_pages"] = json!(1);
+            let events = run_worker(
+                &server,
+                vec![search_source(provider, config)],
+                if acceptance_cap { 1 } else { 20 },
+                0,
+                false,
+            );
+            assert_eq!(
+                scans(&events)[0].accepted,
+                if acceptance_cap { 1 } else { 2 }
+            );
+            assert_eq!(feed_requests(&server).len(), 1);
+            if !acceptance_cap {
+                assert_eq!(
+                    scans(&events)[0].outcome,
+                    Some(scrape_core::protocol::ScanOutcome::Partial)
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn adzuna_discovery_hints_are_or_terms_and_native_pay_requires_snippet_evidence() {
+    let server = Server::new(|path| {
+        let url = url::Url::parse(&format!("http://fixture{path}")).unwrap();
+        let query: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+        assert_eq!(
+            query.get("what_or").unwrap(),
+            "restaurant crew cashier cook fast food"
+        );
+        assert_eq!(query.get("where").unwrap(), "Cherry Hill, New Jersey");
+        assert_eq!(query.get("max_days_old").unwrap(), "30");
+        assert!(!query.contains_key("what"));
+        assert!(!query.contains_key("salary_min"));
+        let bare = adzuna_job("bare");
+        let mut advertised = adzuna_job("advertised");
+        advertised["description"] = json!("Remote work. Salary: USD 50000 - 80000 per year.");
+        let mut predicted = advertised.clone();
+        predicted["id"] = json!("predicted");
+        predicted["redirect_url"] = json!("https://www.adzuna.com/land/ad/predicted");
+        predicted["salary_is_predicted"] = json!(true);
+        json!({"count":3,"results":[bare,advertised,predicted]}).to_string()
+    });
+    let mut config = adzuna_config();
+    config["what_or"] = json!("restaurant crew cashier cook fast food");
+    config["where"] = json!("Cherry Hill, New Jersey");
+    config["max_days_old"] = json!(30);
+    let events = run_worker(&server, vec![search_source("adzuna", config)], 20, 0, false);
+    let pay: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            WorkerEvent::Job {
+                external_id,
+                salary,
+                ..
+            } => Some((
+                external_id.as_str(),
+                salary.as_ref().and_then(|salary| salary.ranges[0].interval),
+            )),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        pay,
+        [
+            ("bare", None),
+            ("advertised", Some(scrape_core::SalaryInterval::Year)),
+            ("predicted", None)
+        ]
+    );
+}
+
+#[test]
+fn jobicy_optional_pay_stays_native_and_canonical_remote_salary_rules_are_authoritative() {
+    let cache = tempfile::tempdir().unwrap();
+    let server = Server::new(|_| {
+        let mut exact = jobicy_job(2);
+        exact["salaryMin"] = json!(60000.01);
+        exact["salaryMax"] = Value::Null;
+        let mut lower = jobicy_job(3);
+        lower["salaryMin"] = json!(50000);
+        lower["salaryMax"] = Value::Null;
+        let mut hourly = jobicy_job(4);
+        hourly["salaryPeriod"] = json!("hour");
+        let mut eur = jobicy_job(5);
+        eur["salaryCurrency"] = json!("EUR");
+        let mut malformed = jobicy_job(6);
+        malformed["salaryMin"] = json!("not a number");
+        let mut unknown_interval = jobicy_job(7);
+        unknown_interval["salaryPeriod"] = Value::Null;
+        json!({"jobs":[jobicy_job(1),exact,lower,hourly,eur,malformed,unknown_interval],
+            "hasMore":false,"nextCursor":null})
+        .to_string()
+    });
+    let events = run_worker_config(
+        &server,
+        vec![search_source(
+            "jobicy",
+            json!({"__provider_cache_dir":cache.path().to_str().unwrap()}),
+        )],
+        json!({"matching":{"workplaces":["remote"],"compensation":{
+            "min_minor":6000001,"currency":"USD","interval":"year",
+            "include_unknown":false,"match_mode":"advertised_amount"
+        }}}),
+        20,
+        0,
+        false,
+        worker_limits(),
+    );
+    let ids: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            WorkerEvent::Job { external_id, .. } => Some(external_id.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ids, ["1", "2"]);
+    assert_eq!(scans(&events)[0].examined, 7);
+    assert_eq!(scans(&events)[0].accepted, 2);
+}
+
+#[test]
+fn adzuna_malformed_count_retains_valid_candidates_and_stops_pagination() {
+    for count in [Value::Null, json!(-1), json!("unknown"), json!(0)] {
+        let server = Server::new(move |_| {
+            json!({"count":count,"results":[adzuna_job("valid")]}).to_string()
+        });
+        let events = run_worker(
+            &server,
+            vec![search_source("adzuna", adzuna_config())],
+            20,
+            0,
+            false,
+        );
+        assert_eq!(scans(&events)[0].accepted, 1);
+        assert_eq!(
+            scans(&events)[0].outcome,
+            Some(scrape_core::protocol::ScanOutcome::Partial)
+        );
+        assert_eq!(feed_requests(&server).len(), 1);
+    }
+}
+
+#[test]
+fn jobicy_cached_json_is_schema_validated_again_before_reuse() {
+    let cache = tempfile::tempdir().unwrap();
+    let server = Server::new(|_| {
+        json!({"jobs":[jobicy_job(1)],
+        "hasMore":false,"nextCursor":null})
+        .to_string()
+    });
+    let source = search_source(
+        "jobicy",
+        json!({"__provider_cache_dir":cache.path().to_str().unwrap()}),
+    );
+    assert_eq!(
+        scans(&run_worker(&server, vec![source.clone()], 20, 0, false))[0].accepted,
+        1
+    );
+    let files: Vec<_> = std::fs::read_dir(cache.path().join("jobicy-pages-v1"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    assert_eq!(files.len(), 1);
+    let mut entry: Value = serde_json::from_slice(&std::fs::read(&files[0]).unwrap()).unwrap();
+    entry["response"] = json!({"jobs":null,"hasMore":false,"nextCursor":null});
+    std::fs::write(&files[0], serde_json::to_vec(&entry).unwrap()).unwrap();
+    assert_eq!(
+        scans(&run_worker(&server, vec![source], 20, 0, false))[0].accepted,
+        1
+    );
+    assert_eq!(feed_requests(&server).len(), 2);
 }

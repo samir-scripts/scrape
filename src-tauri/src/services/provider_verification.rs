@@ -2,7 +2,7 @@
 //! worker execution, host budgets, ingestion and the production Discovered query.
 //! This is not a Tauri/WebView runner: native/UI journeys are reported separately.
 use super::{
-    execution_diagnostics, ingestion, sample_workflows, script_trust, template_catalog, workflow,
+    execution_diagnostics, ingestion, provider_verification_profiles, script_trust, workflow,
 };
 use crate::db::{
     jobs::{JobFilter, JobsRepo, ScrapedJob},
@@ -514,25 +514,7 @@ async fn run_case(
     {
         return Err("SQLite foreign keys must remain enabled".into());
     }
-    let catalog = template_catalog::catalog()?;
-    let template = catalog
-        .templates
-        .iter()
-        .find(|t| t.id == case.template_id && t.seed)
-        .ok_or("Manifest selected a noncanonical seed template")?;
-    let seeded = sample_workflows::seed_all(&pool).await?;
-    if seeded.len() != 6 {
-        return Err("Load test workflows must create all six canonical workflows".into());
-    }
-    let parent = seeded
-        .iter()
-        .find(|s| {
-            s.identifier == template.legacy_identifier
-                || s.name == template.name
-                || s.name == template.spec.metadata.name
-        })
-        .ok_or_else(|| format!("Seeded workflow missing for {}", template.id))?
-        .clone();
+    let parent = provider_verification_profiles::save(&pool, &case.template_id).await?;
     let mut spec = workflow::validate(parent.config["__workflow_spec"].clone(), "UTC")?;
     let node = std::env::var("SCRAPE_VERIFY_NODE").ok();
     for entry in &mut spec.sources {
@@ -578,7 +560,7 @@ async fn run_case(
     let executable = spec.sources.iter().any(|s| s.extractor.script.is_some());
     spec.metadata.enabled = Some(!executable);
     // The same typed save/import boundary used by the editor, with canonical
-    // owned IDs allocated by the seed service. Executables are saved disabled.
+    // owned IDs allocated by persistence. Executables are saved disabled.
     let saved = workflow::persist(&pool, spec, Some(parent.id.clone()), true, "UTC").await?;
     let mut spec = workflow::validate(saved.config["__workflow_spec"].clone(), "UTC")?;
     let expected_filters = spec.filters.clone();
@@ -948,9 +930,10 @@ async fn verify_inner(root: &Path, live: bool, refresh_example: bool) -> VResult
     if manifest.extractors["worker_protocol"] != scrape_core::PROTOCOL_VERSION
         || manifest.extractors["script_protocol"]
             != scrape_core::extraction::SCRIPT_PROTOCOL_VERSION
-        || manifest.extractors["catalog_version"] != template_catalog::CATALOG_VERSION
+        || manifest.extractors["verification_profile_revision"]
+            != provider_verification_profiles::REVISION
     {
-        return Err("Manifest worker/script/catalog extraction version drift".into());
+        return Err("Manifest worker/script/verification-profile extraction version drift".into());
     }
     // Raw capture provenance is validated even when a case uses an authored control.
     for key in [

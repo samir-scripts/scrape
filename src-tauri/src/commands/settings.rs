@@ -7,6 +7,44 @@ use tauri::{AppHandle, Emitter, State};
 pub async fn get_settings(state: State<'_, AppState>) -> Result<Settings> {
     SettingsRepo::get_all(&state.db).await
 }
+#[tauri::command]
+pub async fn get_adzuna_credential_status(
+) -> Result<crate::services::provider_credentials::ProviderCredentialStatus> {
+    crate::services::provider_credentials::status().await
+}
+
+#[tauri::command]
+pub async fn set_adzuna_credentials(
+    app_id: String,
+    app_key: String,
+) -> Result<crate::services::provider_credentials::ProviderCredentialStatus> {
+    crate::services::provider_credentials::set(app_id, app_key).await
+}
+
+#[tauri::command]
+pub async fn clear_adzuna_credentials(
+) -> Result<crate::services::provider_credentials::ProviderCredentialStatus> {
+    crate::services::provider_credentials::clear().await
+}
+
+#[tauri::command]
+pub async fn get_http_proxy_status() -> Result<crate::services::http_proxy::HttpProxyStatus> {
+    crate::services::http_proxy::status().await
+}
+
+#[tauri::command]
+pub async fn set_http_proxy(
+    server: String,
+    username: Option<String>,
+    password: Option<String>,
+) -> Result<crate::services::http_proxy::HttpProxyStatus> {
+    crate::services::http_proxy::set(server, username, password).await
+}
+
+#[tauri::command]
+pub async fn clear_http_proxy() -> Result<crate::services::http_proxy::HttpProxyStatus> {
+    crate::services::http_proxy::clear().await
+}
 
 #[tauri::command]
 pub async fn update_setting(

@@ -3233,9 +3233,9 @@
     }
   ],
   "extractors": {
-    "worker_protocol": 9,
+    "worker_protocol": 11,
     "script_protocol": 2,
-    "catalog_version": 2,
+    "verification_profile_revision": 1,
     "netflix": {
       "file": "crates/scrape-worker/examples/extractors/netflix_extractor.js",
       "sha256": "62e7c0401f5317e138bf2cc09e0404f3efae44db2cea99a83297cabcb03a0b97",

@@ -90,7 +90,7 @@ impl SourcesRepo {
         Self::get(pool, id).await
     }
 
-    fn row_to_source(r: &sqlx::sqlite::SqliteRow) -> Result<Source> {
+    pub(crate) fn row_to_source(r: &sqlx::sqlite::SqliteRow) -> Result<Source> {
         use sqlx::Row;
         let kind_str: String = r.get("kind");
         let config_str: String = r.get("config");
@@ -172,6 +172,13 @@ impl SourcesRepo {
     }
 
     pub async fn get(pool: &SqlitePool, id: &str) -> Result<Source> {
+        Self::get_with(id, pool).await
+    }
+
+    pub(crate) async fn get_with<'e, E>(id: &str, executor: E) -> Result<Source>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    {
         let r = sqlx::query(
             r#"
             SELECT id, kind, name, identifier, config, enabled, last_run_at, last_status, last_outcome, last_error, created_at,
@@ -182,11 +189,17 @@ impl SourcesRepo {
             "#
         )
         .bind(id)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("Source {} not found", id)))?;
-
         Self::row_to_source(&r)
+    }
+
+    pub(crate) async fn get_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        id: &str,
+    ) -> Result<Source> {
+        Self::get_with(id, &mut **tx).await
     }
 
     async fn next_run_for_schedule(
@@ -580,37 +593,28 @@ impl SourcesRepo {
         Ok(sources)
     }
 
-    pub fn default_sample_workflow_input() -> CreateSourceInput {
-        crate::services::template_catalog::seed_inputs()
-            .expect("built-in templates must validate")
-            .remove(0)
-    }
-
     pub fn sample_workflows_suite() -> Vec<CreateSourceInput> {
         crate::services::template_catalog::seed_inputs().expect("built-in templates must validate")
     }
 
-    pub async fn seed_default_sample_if_empty(pool: &SqlitePool) -> Result<Option<Source>> {
+    pub async fn seed_default_sample_if_empty(pool: &SqlitePool) -> Result<Vec<Source>> {
         if crate::db::settings::SettingsRepo::get_value::<bool>(pool, "app.data_reset")
             .await?
             .unwrap_or(false)
         {
-            return Ok(None);
+            return Ok(vec![]);
         }
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM sources")
-            .fetch_one(pool)
-            .await?;
-
+        let count: (i64,) = sqlx::query_as(
+            "SELECT (SELECT COUNT(*) FROM sources) + (SELECT COUNT(*) FROM workflows)",
+        )
+        .fetch_one(pool)
+        .await?;
         if count.0 > 0 {
-            return Ok(None);
+            return Ok(vec![]);
         }
-
-        let source = crate::services::sample_workflows::seed_default(pool).await?;
-        tracing::info!(
-            "Seeded sample Software Engineering Internships workflow: {}",
-            source.id
-        );
-        Ok(Some(source))
+        let seeded = crate::services::sample_workflows::seed_all(pool).await?;
+        tracing::info!("Seeded {} built-in workflows", seeded.len());
+        Ok(seeded)
     }
 }
 
@@ -763,33 +767,53 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_seed_default_sample_workflow() {
+    async fn empty_startup_seeds_all_three_builtins_only_once() {
         let pool = init_memory_db().await.unwrap();
-
-        // 1. Initially empty: seeding should insert sample SWE workflow
+        crate::db::settings::SettingsRepo::set_value(
+            &pool,
+            "app.data_reset",
+            serde_json::json!(true),
+        )
+        .await
+        .unwrap();
+        assert!(SourcesRepo::seed_default_sample_if_empty(&pool)
+            .await
+            .unwrap()
+            .is_empty());
+        assert!(SourcesRepo::list(&pool).await.unwrap().is_empty());
+        crate::db::settings::SettingsRepo::set_value(
+            &pool,
+            "app.data_reset",
+            serde_json::json!(false),
+        )
+        .await
+        .unwrap();
         let seeded = SourcesRepo::seed_default_sample_if_empty(&pool)
             .await
             .unwrap();
-        assert!(seeded.is_some());
-        let sample = seeded.unwrap();
-        assert_eq!(sample.name, "Cloudflare — Engineering (title keywords)");
-        assert_eq!(sample.identifier, "cloudflare");
-        assert_eq!(sample.kind, SourceKind::Greenhouse);
-        assert_eq!(sample.cadence, SourceCadence::Daily);
-        assert_eq!(sample.retention_days, 45);
-        assert_eq!(sample.filters["role_types"], serde_json::json!([]));
+        assert_eq!(seeded.len(), 3);
+        let ids = seeded
+            .iter()
+            .map(|source| {
+                source.config["__builtin_workflow"]["template_id"]
+                    .as_str()
+                    .unwrap()
+            })
+            .collect::<std::collections::HashSet<_>>();
         assert_eq!(
-            sample.filters["matching"]["role_types"],
-            serde_json::json!([])
+            ids,
+            [
+                "software-engineering-last-12-hours",
+                "cherry-hill-fast-food-last-month",
+                "remote-usd-over-60000"
+            ]
+            .into_iter()
+            .collect()
         );
-
-        // 2. Second invocation should be a no-op since sources exist
         let second = SourcesRepo::seed_default_sample_if_empty(&pool)
             .await
             .unwrap();
-        assert!(second.is_none());
-
-        let all = SourcesRepo::list(&pool).await.unwrap();
-        assert_eq!(all.len(), 1);
+        assert!(second.is_empty());
+        assert_eq!(SourcesRepo::list(&pool).await.unwrap().len(), 3);
     }
 }

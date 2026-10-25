@@ -35,7 +35,7 @@ test("create a workflow through actual controls without an implicit scrape", asy
   await dialog.getByRole("button", { name: "Continue to Sources" }).click();
   await expect(dialog.getByRole("textbox", { name: /URL or board identifier/ })).toHaveCount(0);
   await dialog.getByRole("button", { name: "Add source", exact: true }).click();
-  await dialog.getByRole("textbox", { name: "Source 2 URL or board identifier", exact: true }).fill("https://boards.greenhouse.io/fixture-board");
+  await dialog.getByRole("textbox", { name: "Source 3 URL or board identifier", exact: true }).fill("https://boards.greenhouse.io/fixture-board");
   await dialog.getByRole("button", { name: "Remove source Cross-Company Search", exact: true }).click();
   await dialog.getByRole("button", { name: "Continue to Schedule" }).click();
   const minute = dialog.getByRole("textbox", { name: "Minute input" });
@@ -104,7 +104,7 @@ filters: {include_keywords: [], exclude_keywords: [], locations: []}
 test("workflow registry consolidates actions while keeping execution and import visible", async ({ page }) => {
   await page.goto("/?demo=1&fixtures=1");
   await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
-  const row = page.getByRole("row").filter({ hasText: "Cloudflare — Software Engineering Internships" });
+  const row = page.getByRole("row").filter({ hasText: "Software Engineering & Related — Past 12 Hours" });
   await expect(page.getByRole("button", { name: "Add workflow" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Run all" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Import workflow YAML" })).toBeVisible();

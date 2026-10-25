@@ -23,3 +23,7 @@
 `regressions/google-page1-authored.html` and `regressions/google-page2-authored.html` are authored multi-page HTML controls exercising document-base resolution and pagination across early non-matching to later matching postings.
 `regressions/apple-page1-authored.html` and `regressions/apple-page2-authored.html` are authored multi-page HTML controls exercising `link[rel="next"]` navigation and `div.job-title-location span:not(.a11y)` location extraction.
 `regressions/netflix-missing-total-authored.json` and `regressions/amazon-missing-total-authored.json` are authored script controls with omitted pagination totals exercising truthful bounded/partial termination rather than fabricated board exhaustion.
+
+## Verification profiles
+
+Recorded workflow cases select frozen descriptors from `src-tauri/src/services/provider_verification_profiles.rs` and persist only that profile through ordinary workflow storage. They do not seed the production catalog. `extractors.verification_profile_revision` records this control contract independently of the three user-facing catalog-v3 workflows; worker protocol 11 and script protocol 2 remain separately checked. Raw capture bytes/checksums, provider cases, embedded-script fingerprints and expected outcomes are unchanged by this separation. Provider verification is extraction evidence for these recorded routes, not evidence of current targeted-search vacancies.

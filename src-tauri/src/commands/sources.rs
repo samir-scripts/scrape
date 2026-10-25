@@ -1,7 +1,7 @@
 use crate::db::sources::{CreateSourceInput, Source, SourcesRepo, UpdateSourceInput};
 use crate::error::{AppError, Result};
 use crate::state::AppState;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 // Legacy single-source CRUD must not bypass atomic workflow ownership persistence.
 fn require_single_source_crud(config: Option<&serde_json::Value>) -> Result<()> {
@@ -60,22 +60,44 @@ pub async fn delete_source(app: AppHandle, state: State<'_, AppState>, id: Strin
 }
 
 #[tauri::command]
-pub async fn seed_sample_workflow(app: AppHandle, state: State<'_, AppState>) -> Result<Source> {
-    let _permit = state.runner.write_permit()?;
-    let source = crate::services::sample_workflows::seed_default(&state.db).await?;
-    let _ = app.emit("sources://changed", &source);
-    Ok(source)
+pub async fn preview_test_workflow_replacement(
+    state: State<'_, AppState>,
+) -> Result<crate::services::sample_workflows::WorkflowReplacementPreview> {
+    let timezone =
+        crate::db::settings::SettingsRepo::get_value::<String>(&state.db, "system.timezone")
+            .await?
+            .unwrap_or_else(|| "UTC".into());
+    crate::services::sample_workflows::replacement_preview(&state.db, &timezone).await
 }
 
 #[tauri::command]
-pub async fn seed_all_sample_workflows(
+pub async fn replace_test_workflows(
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<crate::services::sample_workflows::SeedWorkflowReport> {
+    selected: Vec<crate::services::sample_workflows::WorkflowReplacementSelection>,
+) -> Result<crate::services::sample_workflows::WorkflowReplacementReport> {
     let _permit = state.runner.write_permit()?;
-    let result = crate::services::sample_workflows::seed_all_report(&state.db).await;
-    // Also refresh after a partial batch failure: earlier creations may be saved.
-    let _ = app.emit("sources://changed", ());
+    let timezone =
+        crate::db::settings::SettingsRepo::get_value::<String>(&state.db, "system.timezone")
+            .await?
+            .unwrap_or_else(|| "UTC".into());
+    let database = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| {
+            AppError::Internal(format!("Unable to locate application database: {error}"))
+        })?
+        .join("scrape_data.db");
+    let backup = database.with_file_name(format!(
+        "{}.pre-workflow-replacement-{}.db",
+        database.file_name().unwrap_or_default().to_string_lossy(),
+        uuid::Uuid::new_v4()
+    ));
+    let result =
+        crate::services::sample_workflows::replace(&state.db, &selected, &backup, &timezone).await;
+    if result.is_ok() {
+        let _ = app.emit("sources://changed", ());
+    }
     result
 }
 

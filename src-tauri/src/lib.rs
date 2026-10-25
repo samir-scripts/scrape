@@ -173,7 +173,7 @@ pub fn run() {
             commands::jobs::list_jobs,
             commands::jobs::get_job,
             commands::jobs::get_company_logo_asset,
-            commands::jobs::fetch_company_logo,
+            commands::jobs::ensure_company_logo_for_job,
             commands::jobs::get_job_locations,
             commands::jobs::update_job_status,
             commands::jobs::bulk_update_job_status,
@@ -194,14 +194,20 @@ pub fn run() {
             commands::jobs::list_removed_postings,
             commands::jobs::posting_saved_copies,
             commands::settings::get_settings,
+            commands::settings::get_adzuna_credential_status,
+            commands::settings::set_adzuna_credentials,
+            commands::settings::clear_adzuna_credentials,
+            commands::settings::get_http_proxy_status,
+            commands::settings::set_http_proxy,
+            commands::settings::clear_http_proxy,
             commands::settings::update_setting,
             commands::sources::list_sources,
             commands::sources::get_source,
             commands::sources::create_source,
             commands::sources::update_source,
             commands::sources::delete_source,
-            commands::sources::seed_sample_workflow,
-            commands::sources::seed_all_sample_workflows,
+            commands::sources::preview_test_workflow_replacement,
+            commands::sources::replace_test_workflows,
             commands::scrape::run_scrape_now,
             commands::scrape::cancel_scrape,
             commands::scrape::run_source_now,
@@ -254,6 +260,7 @@ mod bindings_test {
 
     #[test]
     fn export_bindings() {
+        services::http_proxy::HttpProxyStatus::export().unwrap();
         scrape_core::RoleType::export().unwrap();
         scrape_core::JobStatus::export().unwrap();
         scrape_core::SourceKind::export().unwrap();

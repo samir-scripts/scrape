@@ -59,6 +59,23 @@ impl CoordinatorSession {
         workflow_cap: u32,
         workflow_deadline: Instant,
     ) -> Result<Self, ClientError> {
+        if source.config.get("crawl").is_some() {
+            if source.kind != SourceKind::Selector {
+                return Err(ClientError::Configuration(
+                    "crawl: requires a selector source".into(),
+                ));
+            }
+            scrape_core::static_source::StaticSourceConfig::parse(
+                &source.config,
+                extraction_limits,
+            )
+            .map_err(ClientError::Configuration)?;
+            if !scrape_core::branding::http_url(&source.identifier) {
+                return Err(ClientError::Configuration(
+                    "crawl: seed must be an HTTP(S) URL without credentials".into(),
+                ));
+            }
+        }
         match scrape_core::extraction::mode(&source.config).map_err(ClientError::Configuration)? {
             scrape_core::extraction::ExtractionMode::Static => {}
             scrape_core::extraction::ExtractionMode::Browser => {
@@ -758,9 +775,11 @@ impl SourceCoordinator {
             configured_cap
         };
 
-        let browser = Some(std::sync::Arc::new(crate::browser::BrowserPool::new(
-            limits.max_browser_contexts as usize,
-        )));
+        let browser = Some(std::sync::Arc::new(
+            crate::browser::BrowserPool::new(limits.max_browser_contexts as usize)
+                .with_proxy(config.http_proxy.as_ref())
+                .map_err(|error| error.to_string())?,
+        ));
 
         Ok(Self {
             client,
@@ -1242,8 +1261,10 @@ impl SourceCoordinator {
                 if session.stats.termination == CoverageTermination::Exhausted {
                     session.stats.termination = CoverageTermination::Failed;
                 }
-                if session.stats.termination == CoverageTermination::NeedsLogin
-                    && session.stats.examined == 0
+                if matches!(
+                    session.stats.termination,
+                    CoverageTermination::NeedsLogin | CoverageTermination::Failed
+                ) && session.stats.examined == 0
                 {
                     ScanOutcome::Failed
                 } else {

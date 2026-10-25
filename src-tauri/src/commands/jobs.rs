@@ -251,62 +251,113 @@ pub async fn get_company_logo_asset(
     crate::db::branding::asset(&state.db, &asset_reference).await
 }
 
+static BRANDING_LOOKUPS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
+
 #[tauri::command]
-pub async fn fetch_company_logo(
+pub async fn ensure_company_logo_for_job(
     app: AppHandle,
     state: State<'_, AppState>,
-    company: String,
-    website_url: Option<String>,
+    job_id: String,
 ) -> Result<Option<scrape_core::branding::CompanyLogo>> {
+    use sqlx::Row;
+
+    let Some((Some(source_id), company, url)) =
+        crate::db::branding::job_identity(&state.db, &job_id).await?
+    else {
+        return Ok(None);
+    };
+    let source_id = source_id.trim();
     let company = company.trim();
-    if company.is_empty() {
+    if source_id.is_empty() || company.is_empty() || !scrape_core::branding::http_url(&url) {
         return Ok(None);
     }
-    // 1. Check existing verified logo in employer_branding
-    if let Some(existing) = sqlx::query(
-        "SELECT logo_json, asset_data FROM employer_branding WHERE LOWER(TRIM(company)) = LOWER(TRIM(?)) AND asset_reference IS NOT NULL ORDER BY updated_at DESC LIMIT 1",
+    let relationship = scrape_core::branding::relationship_key(source_id, company);
+    if let Some(row) = sqlx::query(
+        "SELECT logo_json,asset_data FROM employer_branding WHERE key=? AND asset_reference IS NOT NULL",
     )
-    .bind(company)
+    .bind(&relationship)
     .fetch_optional(&state.db)
     .await?
     {
-        use sqlx::Row;
-        let mut logo: scrape_core::branding::CompanyLogo =
-            serde_json::from_str(&existing.get::<String, _>("logo_json"))?;
-        logo.asset = existing.get("asset_data");
-        if logo.validate().is_ok() {
-            return Ok(Some(logo));
+        let mut existing: scrape_core::branding::CompanyLogo =
+            serde_json::from_str(&row.get::<String, _>("logo_json"))?;
+        existing.asset = row.get("asset_data");
+        if existing.status == scrape_core::branding::LogoStatus::Verified
+            && !existing.evidence.as_ref().is_some_and(
+                scrape_core::branding::is_legacy_ashby_platform_favicon,
+            )
+            && existing.validate().is_ok()
+        {
+            return Ok(Some(existing));
         }
     }
-    // 2. Check curated assets
+
+    let expected_identity = (Some(source_id.to_owned()), company.to_owned(), url.clone());
+    if crate::db::branding::job_identity(&state.db, &job_id)
+        .await?
+        .as_ref()
+        != Some(&expected_identity)
+    {
+        return Ok(None);
+    }
     if let Some(curated) = crate::db::branding::resolve_curated_logo(company) {
-        crate::db::branding::record(&state.db, "curated", company, &curated).await?;
+        crate::db::branding::record(&state.db, source_id, company, &curated).await?;
         return Ok(Some(curated));
     }
-    // 3. If website_url provided, invoke worker --branding
-    if let Some(ref url) = website_url {
-        if scrape_core::branding::http_url(url) {
-            let output = crate::services::process::worker_command(&app)?
-                .args(["--branding", company, url])
-                .output()
-                .await
-                .map_err(|e| {
-                    AppError::Internal(format!("Failed to execute branding worker: {}", e))
-                })?;
-            if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                if let Ok(logo) =
-                    serde_json::from_str::<scrape_core::branding::CompanyLogo>(stdout.trim())
-                {
-                    if logo.status == scrape_core::branding::LogoStatus::Verified {
-                        crate::db::branding::record(&state.db, "on_demand", company, &logo).await?;
-                        use tauri::Emitter;
-                        let _ = app.emit("jobs://branding-updated", ());
-                        return Ok(Some(logo));
-                    }
+
+    use tauri_plugin_shell::process::CommandEvent;
+    let _permit = BRANDING_LOOKUPS
+        .acquire()
+        .await
+        .map_err(|_| AppError::Internal("Company logo lookup service is unavailable".into()))?;
+    let proxy = crate::services::http_proxy::configuration().await?;
+    let (mut receiver, child) = crate::services::process::worker_command(&app)?
+        .args(["--branding-proxy-stdin", "--branding", company, &url])
+        .spawn()
+        .map_err(|_| AppError::Internal("Failed to execute branding worker".into()))?;
+    let mut child = crate::services::process::ChildGuard::new(child);
+    let mut input = serde_json::to_vec(&proxy)?;
+    input.push(b'\n');
+    child.write(&input).map_err(|_| {
+        AppError::Internal("Failed to send branding transport configuration".into())
+    })?;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
+    let mut stdout = Vec::new();
+    let mut exit_code = None;
+    loop {
+        match tokio::time::timeout_at(deadline, receiver.recv()).await {
+            Ok(Some(CommandEvent::Stdout(bytes))) => {
+                if stdout.len().saturating_add(bytes.len()) > 2 * 1024 * 1024 {
+                    return Ok(None);
                 }
+                stdout.extend_from_slice(&bytes);
             }
+            Ok(Some(CommandEvent::Terminated(status))) => {
+                child.disarm();
+                exit_code = status.code;
+                break;
+            }
+            Ok(Some(_)) => {}
+            Ok(None) | Err(_) => break,
         }
     }
-    Ok(None)
+    if exit_code != Some(0) {
+        return Ok(None);
+    }
+    let Ok(logo) = serde_json::from_slice::<scrape_core::branding::CompanyLogo>(&stdout) else {
+        return Ok(None);
+    };
+    if logo.status != scrape_core::branding::LogoStatus::Verified || logo.validate().is_err() {
+        return Ok(None);
+    }
+    if crate::db::branding::job_identity(&state.db, &job_id)
+        .await?
+        .as_ref()
+        != Some(&expected_identity)
+    {
+        return Ok(None);
+    }
+    crate::db::branding::record(&state.db, source_id, company, &logo).await?;
+    let _ = app.emit("jobs://branding-updated", ());
+    Ok(Some(logo))
 }

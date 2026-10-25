@@ -1,5 +1,6 @@
 //! Public cross-employer feeds. Matching is local, not provider-side search.
 
+use super::search_cache::SearchCache;
 use crate::client::{ClientError, HttpClient};
 use scrape_core::enrich::{
     classify_clearance, classify_sponsorship, classify_work_auth, classify_workplace,
@@ -49,6 +50,8 @@ struct SearchItem {
 enum Provider {
     Arbeitnow,
     Muse,
+    Adzuna,
+    Jobicy,
 }
 
 #[derive(Deserialize)]
@@ -91,6 +94,9 @@ struct Posting {
     remote: Option<bool>,
     job_types: Vec<String>,
     date_posted: Option<String>,
+    salary: Option<Salary>,
+    salary_from_description: bool,
+    prefer_structured_salary: bool,
 }
 
 impl SearchItem {
@@ -108,6 +114,9 @@ impl SearchItem {
             remote: self.remote,
             job_types: self.job_types,
             date_posted: None,
+            salary: None,
+            salary_from_description: true,
+            prefer_structured_salary: false,
         }
     }
 }
@@ -146,10 +155,212 @@ impl MuseItem {
             remote: None,
             job_types: Vec::new(),
             date_posted,
+            salary: None,
+            salary_from_description: true,
+            prefer_structured_salary: false,
         })
     }
 }
 
+fn required_string(value: &Value, key: &str) -> Result<String, String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| format!("Search posting requires {key}"))
+}
+
+fn provider_id(value: &Value) -> Result<String, String> {
+    match value.get("id") {
+        Some(Value::String(id)) if !id.trim().is_empty() => Ok(id.clone()),
+        Some(Value::Number(id)) if id.as_u64().is_some() => Ok(id.to_string()),
+        _ => Err("Search posting requires a provider identity".into()),
+    }
+}
+
+fn optional_amount(value: &Value, key: &str) -> Option<f64> {
+    let value = value.get(key)?;
+    let amount = value
+        .as_f64()
+        .or_else(|| value.as_str()?.parse::<f64>().ok())?;
+    (amount.is_finite() && amount >= 0.0).then_some(amount)
+}
+
+fn jobicy_salary(value: &Value) -> Option<Salary> {
+    // A malformed optional amount invalidates that pay range, not the posting.
+    for key in ["salaryMin", "salaryMax"] {
+        if value.get(key).is_some_and(|value| !value.is_null())
+            && optional_amount(value, key).is_none()
+        {
+            return None;
+        }
+    }
+    Salary::from_structured(
+        optional_amount(value, "salaryMin"),
+        optional_amount(value, "salaryMax"),
+        value
+            .get("salaryCurrency")
+            .and_then(Value::as_str)
+            .filter(|currency| {
+                currency.len() == 3 && currency.bytes().all(|byte| byte.is_ascii_alphabetic())
+            }),
+        value.get("salaryPeriod").and_then(Value::as_str),
+        None,
+    )
+}
+
+fn valid_jobicy_envelope(value: &Value) -> bool {
+    let Some(jobs) = value.get("jobs").and_then(Value::as_array) else {
+        return false;
+    };
+    matches!(
+        (
+            value.get("hasMore").and_then(Value::as_bool),
+            value.get("nextCursor")
+        ),
+        (Some(false), Some(Value::Null))
+    ) || matches!((value.get("hasMore").and_then(Value::as_bool), value.get("nextCursor")),
+            (Some(true), Some(Value::String(cursor))) if !cursor.trim().is_empty() && cursor.len() <= MAX_URL_BYTES && !jobs.is_empty())
+}
+
+fn publication(raw: Option<&str>, jobicy: bool) -> Result<Option<String>, String> {
+    let Some(raw) = raw.filter(|raw| !raw.trim().is_empty()) else {
+        return Ok(None);
+    };
+    if let Ok(date) = chrono::DateTime::parse_from_rfc3339(raw) {
+        return Ok(Some(
+            date.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true),
+        ));
+    }
+    if jobicy {
+        // Jobicy's documented pubDate is UTC, without an offset.
+        if let Ok(date) = chrono::NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M:%S") {
+            return Ok(Some(
+                date.and_utc()
+                    .to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true),
+            ));
+        }
+    }
+    Err("Invalid provider original publication date".into())
+}
+
+fn adzuna_posting(value: Value) -> Result<Posting, String> {
+    let location = value
+        .get("location")
+        .ok_or("Adzuna posting requires location")?;
+    let display = location
+        .get("display_name")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned();
+    let mut locations = loc_enrich::parse(&display);
+    if let Some(area) = location.get("area").and_then(Value::as_array) {
+        // area is ordered country -> region -> county -> locality; use only
+        // actual response evidence, never the request's US collection or where.
+        if area.len() >= 3 {
+            if let (Some(country), Some(region), Some(city)) = (
+                area.first().and_then(Value::as_str),
+                area.get(1).and_then(Value::as_str),
+                area.last().and_then(Value::as_str),
+            ) {
+                if let Some(parsed) = loc_enrich::from_address(city, region, country) {
+                    locations.push(parsed);
+                }
+            }
+        }
+    }
+    let predicted = match value.get("salary_is_predicted") {
+        Some(Value::Bool(value)) => *value,
+        Some(Value::String(value)) => value != "0",
+        Some(Value::Number(value)) => value.as_u64() != Some(0),
+        // Missing prediction provenance is not evidence of advertised pay.
+        _ => true,
+    };
+    Ok(Posting {
+        external_id: Some(provider_id(&value)?),
+        title: required_string(&value, "title")?,
+        company: required_string(
+            value
+                .get("company")
+                .ok_or("Adzuna posting requires company")?,
+            "display_name",
+        )?,
+        url: required_string(&value, "redirect_url")?,
+        description: value
+            .get("description")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        location: display,
+        locations,
+        remote: None,
+        job_types: Vec::new(),
+        date_posted: publication(value.get("created").and_then(Value::as_str), false)?,
+        // Public numeric fields establish neither explicit currency nor native interval.
+        salary: if predicted {
+            None
+        } else {
+            Salary::from_structured(
+                optional_amount(&value, "salary_min"),
+                optional_amount(&value, "salary_max"),
+                None,
+                None,
+                None,
+            )
+        },
+        salary_from_description: !predicted,
+        prefer_structured_salary: false,
+    })
+}
+
+fn jobicy_posting(value: Value) -> Result<Posting, String> {
+    let location = value
+        .get("jobGeo")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned();
+    let job_types = match value.get("jobType") {
+        Some(Value::Array(types)) => types
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect(),
+        Some(Value::String(value)) => vec![value.clone()],
+        _ => Vec::new(),
+    };
+    Ok(Posting {
+        external_id: Some(provider_id(&value)?),
+        title: required_string(&value, "jobTitle")?,
+        company: required_string(&value, "companyName")?,
+        url: required_string(&value, "url")?,
+        description: value
+            .get("jobDescription")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        locations: loc_enrich::parse(&location),
+        location,
+        remote: Some(true),
+        job_types,
+        date_posted: publication(value.get("pubDate").and_then(Value::as_str), true)?,
+        salary: jobicy_salary(&value),
+        prefer_structured_salary: true,
+        salary_from_description: true,
+    })
+}
+
+fn replace_query(url: &Url, key: &str, value: &str) -> Url {
+    let pairs: Vec<_> = url
+        .query_pairs()
+        .filter(|(name, _)| name != key)
+        .map(|(name, value)| (name.into_owned(), value.into_owned()))
+        .collect();
+    let mut next = url.clone();
+    next.set_query(None);
+    next.query_pairs_mut()
+        .extend_pairs(pairs)
+        .append_pair(key, value);
+    next
+}
 fn http_url(raw: &str) -> Result<Url, String> {
     if raw.len() > MAX_URL_BYTES {
         return Err("Search URL exceeds 8192 bytes".into());
@@ -198,6 +409,8 @@ pub(crate) struct SearchSession {
     max_pages: u32,
     deadline: Instant,
     exhausted: bool,
+    cache: Option<SearchCache>,
+    pending_error: Option<String>,
 }
 
 impl SearchSession {
@@ -211,18 +424,57 @@ impl SearchSession {
         let provider = match identifier {
             "arbeitnow" => Provider::Arbeitnow,
             "themuse" => Provider::Muse,
+            "adzuna" => Provider::Adzuna,
+            "jobicy" => Provider::Jobicy,
             _ => return Err(ClientError::Configuration("Unknown search provider".into())),
         };
-        scrape_core::search_source::validate_config(&source.config)
+        scrape_core::search_source::validate_runtime_config(&source.config)
             .map_err(ClientError::Configuration)?;
         let endpoint = scrape_core::search_source::endpoint(identifier, &source.config)
             .map_err(ClientError::Configuration)?;
-        let endpoint = http_url(endpoint.as_str()).map_err(ClientError::Configuration)?;
+        let mut endpoint = http_url(endpoint.as_str()).map_err(ClientError::Configuration)?;
+        let cache = if matches!(provider, Provider::Jobicy) {
+            endpoint.query_pairs_mut().append_pair("count", "100");
+            let directory = source
+                .config
+                .get("__provider_cache_dir")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    ClientError::Configuration(
+                        "Jobicy setup required: application cache directory is missing".into(),
+                    )
+                })?;
+            Some(SearchCache::new(directory)?)
+        } else {
+            None
+        };
+        if matches!(provider, Provider::Adzuna) {
+            let credentials = source.config.get("__provider_credentials")
+                .ok_or_else(|| ClientError::Configuration("Adzuna setup required: configure App ID and App key in Settings > System > Job providers.".into()))?;
+            endpoint
+                .query_pairs_mut()
+                .append_pair("app_id", credentials["app_id"].as_str().unwrap())
+                .append_pair("app_key", credentials["app_key"].as_str().unwrap())
+                .append_pair("results_per_page", "50")
+                .append_pair("sort_by", "date");
+            for key in ["what_or", "where", "max_days_old"] {
+                if let Some(value) = source.config.get(key) {
+                    if let Some(value) = value.as_str() {
+                        endpoint.query_pairs_mut().append_pair(key, value);
+                    } else if let Some(value) = value.as_u64() {
+                        endpoint
+                            .query_pairs_mut()
+                            .append_pair(key, &value.to_string());
+                    }
+                }
+            }
+        }
         let initial_page = page_number(
             &endpoint,
             match provider {
                 Provider::Arbeitnow => 1,
                 Provider::Muse => 0,
+                Provider::Adzuna | Provider::Jobicy => 1,
             },
         )
         .map_err(ClientError::Configuration)?;
@@ -260,11 +512,17 @@ impl SearchSession {
                 .min(now + Duration::from_secs(duration))
                 .min(now + Duration::from_secs(workflow_duration)),
             exhausted: false,
+            cache,
+            pending_error: None,
         })
     }
 
     pub fn is_exhausted(&self) -> bool {
-        self.exhausted || (self.pages > 0 && self.next.is_none() && self.candidates.len() == 0)
+        self.exhausted
+            || (self.pages > 0
+                && self.next.is_none()
+                && self.candidates.len() == 0
+                && self.pending_error.is_none())
     }
 
     fn stop(&mut self, termination: CoverageTermination, message: &str) -> SearchStep {
@@ -279,6 +537,18 @@ impl SearchSession {
     }
 
     fn continuation(&self, raw: &str) -> Result<Url, ClientError> {
+        if matches!(self.provider, Provider::Adzuna | Provider::Jobicy) {
+            let url = Url::parse(raw)
+                .map_err(|_| ClientError::Extraction("Invalid provider continuation".into()))?;
+            // These continuations are constructed locally from validated metadata,
+            // never accepted as provider URLs.
+            if url.origin() != self.endpoint.origin() || self.visited.contains(url.as_str()) {
+                return Err(ClientError::Extraction(
+                    "Repeated provider pagination cursor".into(),
+                ));
+            }
+            return Ok(url);
+        }
         if raw.len() > MAX_URL_BYTES {
             return Err(ClientError::Extraction(
                 "Search pagination URL exceeds 8192 bytes".into(),
@@ -304,6 +574,7 @@ impl SearchSession {
                     match self.provider {
                         Provider::Arbeitnow => 1,
                         Provider::Muse => 0,
+                        Provider::Adzuna | Provider::Jobicy => 1,
                     },
                 )
                 .map_err(ClientError::Extraction)?
@@ -335,6 +606,10 @@ impl SearchSession {
                 Provider::Muse => serde_json::from_value::<MuseItem>(value)
                     .map_err(|error| format!("Invalid Muse posting: {error}"))
                     .and_then(MuseItem::posting),
+                Provider::Adzuna => {
+                    adzuna_posting(value).map_err(|_| "Invalid Adzuna posting".into())
+                }
+                Provider::Jobicy => jobicy_posting(value),
             };
             let event = posting
                 .and_then(|posting| posting.event(&self.source_id))
@@ -345,6 +620,9 @@ impl SearchSession {
                     invalid_posting: Some(true),
                 });
             return Ok(SearchStep::Event(Box::new(event)));
+        }
+        if let Some(message) = self.pending_error.take() {
+            return Err(ClientError::Extraction(message));
         }
         if self.pages >= self.max_pages {
             return Ok(self.stop(
@@ -361,25 +639,50 @@ impl SearchSession {
             self.continuation(&raw)?
         };
         self.visited.insert(url.to_string());
-        let response = timeout_at(self.deadline, client.fetch_text_at(url.as_str(), false)).await;
-        let (body, actual) = match response {
+        let response = timeout_at(self.deadline, async {
+            match self.provider {
+                Provider::Adzuna => client.fetch_adzuna_json(&url).await,
+                Provider::Jobicy => {
+                    let cache = self.cache.as_ref().expect("Jobicy cache configured");
+                    if let Some(value) = cache.read(&url).await? {
+                        // Cache bytes must pass the same collection validation as live pages.
+                        if valid_jobicy_envelope(&value) {
+                            return Ok(value);
+                        }
+                    }
+                    let mut value: Value = client.fetch_json(url.as_str()).await?;
+                    if valid_jobicy_envelope(&value) {
+                        value = cache.store(&url, value).await?;
+                    }
+                    Ok(value)
+                }
+                _ => {
+                    let (body, actual) = client.fetch_text_at(url.as_str(), false).await?;
+                    let actual = http_url(&actual).map_err(ClientError::Extraction)?;
+                    if actual.origin() != self.endpoint.origin()
+                        || actual.path() != self.endpoint.path()
+                    {
+                        return Err(ClientError::Extraction(
+                            "Search feed redirected outside its configured collection".into(),
+                        ));
+                    }
+                    Ok(serde_json::from_str(&body)?)
+                }
+            }
+        })
+        .await;
+        let value = match response {
             Err(_) => return Ok(self.stop(CoverageTermination::TimeLimit,
                 "Search source/workflow time limit reached during a feed request; coverage is incomplete")),
             Ok(result) => result?,
         };
-        let actual = http_url(&actual).map_err(ClientError::Extraction)?;
-        if actual.origin() != self.endpoint.origin() || actual.path() != self.endpoint.path() {
-            return Err(ClientError::Extraction(
-                "Search feed redirected outside its configured collection".into(),
-            ));
-        }
         let (candidates, next) = match self.provider {
             Provider::Arbeitnow => {
-                let response: SearchResponse = serde_json::from_str(&body)?;
+                let response: SearchResponse = serde_json::from_value(value)?;
                 (response.data, response.links.and_then(|links| links.next))
             }
             Provider::Muse => {
-                let response: MuseResponse = serde_json::from_str(&body)?;
+                let response: MuseResponse = serde_json::from_value(value)?;
                 let requested_page = page_number(&url, 0).map_err(ClientError::Extraction)?;
                 if response.page != requested_page
                     || (response.page_count > 0 && response.page >= response.page_count)
@@ -405,6 +708,78 @@ impl SearchSession {
                     None
                 };
                 (response.results, next)
+            }
+            Provider::Adzuna => {
+                let mut value = value;
+                let candidates: Vec<Value> = serde_json::from_value(
+                    value.get_mut("results").map(Value::take).ok_or_else(|| {
+                        ClientError::Extraction(
+                            "Adzuna response requires results collection".into(),
+                        )
+                    })?,
+                )
+                .map_err(|_| {
+                    ClientError::Extraction("Adzuna response requires results collection".into())
+                })?;
+                let page = url
+                    .path()
+                    .rsplit('/')
+                    .next()
+                    .and_then(|page| page.parse::<u64>().ok())
+                    .unwrap_or(1);
+                let next = match value.get("count").and_then(Value::as_u64) {
+                    Some(count) if count < candidates.len() as u64 => {
+                        self.pending_error = Some("Invalid Adzuna count metadata".into());
+                        None
+                    }
+                    Some(count) if !candidates.is_empty() && page.saturating_mul(50) < count => {
+                        let mut next = url.clone();
+                        next.set_path(&format!("/v1/api/jobs/us/search/{}", page + 1));
+                        Some(next.into())
+                    }
+                    Some(_) => None,
+                    None => {
+                        self.pending_error = Some("Invalid Adzuna count metadata".into());
+                        None
+                    }
+                };
+                (candidates, next)
+            }
+            Provider::Jobicy => {
+                let mut value = value;
+                let candidates: Vec<Value> = serde_json::from_value(
+                    value.get_mut("jobs").map(Value::take).ok_or_else(|| {
+                        ClientError::Extraction("Jobicy response requires jobs collection".into())
+                    })?,
+                )
+                .map_err(|_| {
+                    ClientError::Extraction("Jobicy response requires jobs collection".into())
+                })?;
+                let next = match (
+                    value.get("hasMore").and_then(Value::as_bool),
+                    value.get("nextCursor"),
+                ) {
+                    (Some(true), Some(Value::String(cursor)))
+                        if !cursor.trim().is_empty()
+                            && cursor.len() <= MAX_URL_BYTES
+                            && !candidates.is_empty() =>
+                    {
+                        let next = replace_query(&url, "cursor", cursor);
+                        if self.visited.contains(next.as_str()) {
+                            self.pending_error = Some("Repeated Jobicy pagination cursor".into());
+                            None
+                        } else {
+                            Some(next.into())
+                        }
+                    }
+                    (Some(false), Some(Value::Null)) => None,
+                    _ => {
+                        self.pending_error =
+                            Some("Invalid Jobicy hasMore/nextCursor pagination metadata".into());
+                        None
+                    }
+                };
+                (candidates, next)
             }
         };
         self.pages += 1;
@@ -449,7 +824,17 @@ impl Posting {
         } else {
             classify_workplace(None, &location, Some(text))
         };
-        let salary = Salary::from_text(text);
+        let salary = if self.prefer_structured_salary {
+            self.salary.or_else(|| {
+                self.salary_from_description
+                    .then(|| Salary::from_text(text))
+                    .flatten()
+            })
+        } else if self.salary_from_description {
+            Salary::from_text(text).or(self.salary)
+        } else {
+            self.salary
+        };
         let sponsorship = (!text.is_empty()).then(|| classify_sponsorship(text));
         let clearance = (!text.is_empty()).then(|| classify_clearance(text));
         let work_auth = (!text.is_empty()).then(|| classify_work_auth(text));

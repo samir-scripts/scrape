@@ -516,6 +516,7 @@ mod tests {
             blocked_postings: vec![],
             max_jobs_per_run: None,
             starting_source_index: None,
+            http_proxy: None,
         };
         let counts = RunCounts {
             fetched: 12,
