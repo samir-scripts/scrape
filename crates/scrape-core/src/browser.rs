@@ -1,9 +1,10 @@
 //! Shared browser runtime discovery, isolated session storage contracts, and RFC 6455 CDP WebSocket transport.
-use crate::protocol::BrowserRuntimeStatus;
+use crate::protocol::{BrowserRuntimeStatus, HttpProxyConfig};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
@@ -320,11 +321,30 @@ pub fn discover_browser_runtime() -> BrowserRuntimeStatus {
     }
 }
 
+/// Chromium's implicit loopback bypass must be disabled so configured routing
+/// also applies to local destinations. Validation keeps userinfo out of argv.
+pub fn chromium_proxy_args(proxy: &HttpProxyConfig) -> Result<Vec<String>, String> {
+    let proxy = proxy.clone().validate()?;
+    Ok(vec![
+        format!("--proxy-server={}", proxy.server),
+        "--proxy-bypass-list=<-loopback>".to_string(),
+    ])
+}
+
+struct ProxyAuthState {
+    username: String,
+    password: String,
+    attempted: HashSet<String>,
+}
+
 /// Minimal RFC 6455 WebSocket JSON-RPC client for local loopback Chrome DevTools Protocol.
 pub struct CdpWsClient {
     stream: TcpStream,
     leftover: Vec<u8>,
     next_id: u64,
+    events: VecDeque<Value>,
+    proxy_auth: HashMap<String, ProxyAuthState>,
+    auth_commands: HashSet<u64>,
 }
 
 impl CdpWsClient {
@@ -407,7 +427,112 @@ impl CdpWsClient {
             stream,
             leftover,
             next_id: 1,
+            events: VecDeque::new(),
+            proxy_auth: HashMap::new(),
+            auth_commands: HashSet::new(),
         })
+    }
+
+    /// Enable interception before navigation. Credentials are sent only in
+    /// response to a proxy challenge, never an origin/server challenge.
+    pub fn enable_proxy_auth(
+        &mut self,
+        proxy: &HttpProxyConfig,
+        session_id: Option<&str>,
+        timeout: Duration,
+    ) -> Result<(), String> {
+        let proxy = proxy.clone().validate()?;
+        let (Some(username), Some(password)) = (proxy.username, proxy.password) else {
+            return Ok(());
+        };
+        let key = session_id.unwrap_or("").to_string();
+        self.proxy_auth.insert(
+            key.clone(),
+            ProxyAuthState {
+                username,
+                password,
+                attempted: HashSet::new(),
+            },
+        );
+        if self
+            .call(
+                "Fetch.enable",
+                json!({
+                    "handleAuthRequests": true,
+                    "patterns": [{"urlPattern": "*", "requestStage": "Request"}],
+                }),
+                session_id,
+                timeout,
+            )
+            .is_err()
+        {
+            self.proxy_auth.remove(&key);
+            return Err("Failed to enable Chromium proxy authentication".into());
+        }
+        Ok(())
+    }
+
+    /// Forget secrets and challenge history after the owning target is closed.
+    pub fn forget_proxy_auth(&mut self, session_id: Option<&str>) {
+        self.proxy_auth.remove(session_id.unwrap_or(""));
+    }
+
+    /// Clear all per-target credentials after disposing a browser context.
+    pub fn clear_proxy_auth(&mut self) {
+        self.proxy_auth.clear();
+    }
+
+    /// Unrelated CDP events remain available instead of being discarded by call.
+    pub fn take_event(&mut self) -> Option<Value> {
+        self.events.pop_front()
+    }
+
+    fn handle_proxy_event(&mut self, message: &Value) -> Result<bool, String> {
+        let sid = message.get("sessionId").and_then(Value::as_str);
+        let Some(auth) = self.proxy_auth.get_mut(sid.unwrap_or("")) else {
+            return Ok(false);
+        };
+        let method = message.get("method").and_then(Value::as_str).unwrap_or("");
+        let request_id = message.pointer("/params/requestId").and_then(Value::as_str);
+        let (command, params) = match (method, request_id) {
+            ("Fetch.authRequired", Some(request_id)) => {
+                let is_proxy = message
+                    .pointer("/params/authChallenge/source")
+                    .and_then(Value::as_str)
+                    == Some("Proxy");
+                let response = if !is_proxy {
+                    json!({"response": "Default"})
+                } else if auth.attempted.contains(request_id) || auth.attempted.len() >= 4096 {
+                    // One attempt per request prevents a bad password retry loop.
+                    json!({"response": "CancelAuth"})
+                } else {
+                    auth.attempted.insert(request_id.to_string());
+                    json!({"response": "ProvideCredentials",
+                        "username": auth.username, "password": auth.password})
+                };
+                (
+                    "Fetch.continueWithAuth",
+                    json!({
+                        "requestId": request_id, "authChallengeResponse": response,
+                    }),
+                )
+            }
+            ("Fetch.requestPaused", Some(request_id)) => {
+                ("Fetch.continueRequest", json!({"requestId": request_id}))
+            }
+            _ => return Ok(false),
+        };
+        let id = self.next_id;
+        self.next_id += 1;
+        let mut payload = json!({"id": id, "method": command, "params": params});
+        if let Some(sid) = sid {
+            payload["sessionId"] = json!(sid);
+        }
+        let encoded = serde_json::to_vec(&payload)
+            .map_err(|_| "Failed encoding Chromium proxy authentication command".to_string())?;
+        self.write_masked_frame(0x81, &encoded)?;
+        self.auth_commands.insert(id);
+        Ok(true)
     }
 
     pub fn call(
@@ -462,8 +587,22 @@ impl CdpWsClient {
             })?;
             let message: Value = serde_json::from_str(&text)
                 .map_err(|e| format!("Malformed CDP JSON message during {method}: {e}"))?;
+            if self.handle_proxy_event(&message)? {
+                continue;
+            }
+            if let Some(response_id) = message.get("id").and_then(Value::as_u64) {
+                if self.auth_commands.remove(&response_id) {
+                    if message.get("error").is_some() {
+                        return Err("Chromium proxy authentication command failed".into());
+                    }
+                    continue;
+                }
+            }
             if message.get("id").and_then(Value::as_u64) == Some(id) {
                 if let Some(err) = message.get("error") {
+                    if !self.proxy_auth.is_empty() {
+                        return Err(format!("CDP {method} failed (proxy authentication active)"));
+                    }
                     let msg = err
                         .get("message")
                         .and_then(Value::as_str)
@@ -472,6 +611,7 @@ impl CdpWsClient {
                 }
                 return Ok(message.get("result").cloned().unwrap_or_else(|| json!({})));
             }
+            self.events.push_back(message);
         }
     }
 

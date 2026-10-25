@@ -5,9 +5,11 @@ use super::stealth::{
 };
 use crate::client::{ClientError, HttpClient};
 use scrape_core::browser::{
-    is_login_wall, BrowserCookie, CdpWsClient, ResolvedBrowserRuntime, NEEDS_LOGIN_MESSAGE,
+    chromium_proxy_args, is_login_wall, BrowserCookie, CdpWsClient, ResolvedBrowserRuntime,
+    NEEDS_LOGIN_MESSAGE,
 };
 use scrape_core::locator::QueryEngine;
+use scrape_core::protocol::HttpProxyConfig;
 use scrape_core::static_source::StaticSourceConfig;
 use scrape_core::WorkerSource;
 use scraper::Html;
@@ -57,6 +59,7 @@ pub struct BrowserPool {
     ws_client: Mutex<Option<CdpWsClient>>,
     child: Mutex<Option<Child>>,
     user_data_dir: Mutex<Option<tempfile::TempDir>>,
+    http_proxy: Option<HttpProxyConfig>,
 }
 
 impl BrowserPool {
@@ -67,6 +70,7 @@ impl BrowserPool {
             ws_client: Mutex::new(None),
             child: Mutex::new(None),
             user_data_dir: Mutex::new(None),
+            http_proxy: None,
         }
     }
 
@@ -77,7 +81,22 @@ impl BrowserPool {
             ws_client: Mutex::new(None),
             child: Mutex::new(None),
             user_data_dir: Mutex::new(None),
+            http_proxy: None,
         }
+    }
+
+    pub fn with_proxy(mut self, proxy: Option<&HttpProxyConfig>) -> Result<Self, ClientError> {
+        self.http_proxy = proxy
+            .cloned()
+            .map(HttpProxyConfig::validate)
+            .transpose()
+            .map_err(ClientError::Configuration)?;
+        if self.http_proxy.is_some() && self.ws_url_override.is_some() {
+            return Err(ClientError::Configuration(
+                "Proxy routing requires app-launched Chromium; external CDP is unsupported".into(),
+            ));
+        }
+        Ok(self)
     }
 
     fn with_client<F, T>(&self, timeout: Duration, f: F) -> Result<T, ClientError>
@@ -102,6 +121,12 @@ impl BrowserPool {
         }
         match resolve_runtime()? {
             ResolvedBrowserRuntime::WebSocket(ws_url) => {
+                if self.http_proxy.is_some() {
+                    return Err(ClientError::Configuration(
+                        "Proxy routing requires app-launched Chromium; external CDP is unsupported"
+                            .into(),
+                    ));
+                }
                 CdpWsClient::connect(&ws_url, timeout).map_err(ClientError::Extraction)
             }
             ResolvedBrowserRuntime::Executable { path, .. } => {
@@ -119,6 +144,9 @@ impl BrowserPool {
             ClientError::Extraction(format!("Failed creating ephemeral browser profile: {e}"))
         })?;
         let mut cmd = Command::new(executable);
+        if let Some(proxy) = &self.http_proxy {
+            cmd.args(chromium_proxy_args(proxy).map_err(ClientError::Configuration)?);
+        }
         cmd.arg("--headless=new")
             .arg("--remote-debugging-port=0")
             .arg(format!("--user-data-dir={}", temp_dir.path().display()))
@@ -304,6 +332,7 @@ impl BrowserPool {
                 session_cookies,
                 remaining_pages,
                 &remaining_time,
+                self.http_proxy.as_ref(),
             );
 
             // Always close target and dispose context immediately after the turn!
@@ -319,6 +348,9 @@ impl BrowserPool {
                 None,
                 Duration::from_millis(500),
             );
+            ws.clear_proxy_auth();
+            // This renderer has no notification consumer beyond the turn.
+            while ws.take_event().is_some() {}
 
             result
         })
@@ -367,6 +399,7 @@ fn render_inside_target(
     session_cookies: &[BrowserCookie],
     remaining_pages: u32,
     remaining_time: &dyn Fn() -> Result<Duration, ClientError>,
+    http_proxy: Option<&HttpProxyConfig>,
 ) -> Result<RenderedPage, ClientError> {
     let attach_res = call_cdp(
         ws,
@@ -380,6 +413,10 @@ fn render_inside_target(
         .and_then(Value::as_str)
         .map(str::to_string);
     let sid = session_id.as_deref();
+    if let Some(proxy) = http_proxy {
+        ws.enable_proxy_auth(proxy, sid, remaining_time()?)
+            .map_err(ClientError::Extraction)?;
+    }
 
     call_cdp(ws, "Page.enable", json!({}), sid, remaining_time()?)?;
     call_cdp(ws, "Network.enable", json!({}), sid, remaining_time()?)?;
@@ -435,16 +472,26 @@ fn render_inside_target(
         )?;
     }
 
-    call_cdp(
+    let navigation = call_cdp(
         ws,
         "Page.navigate",
         json!({ "url": transport_url.as_str() }),
         sid,
         remaining_time()?,
     )?;
+    if http_proxy.is_some() && navigation.get("errorText").is_some() {
+        return Err(ClientError::Extraction(
+            "Chromium could not navigate through the configured proxy".into(),
+        ));
+    }
 
     let (mut snapshot, mut document) =
         wait_for_ready_snapshot(ws, sid, config.wait_for.as_ref(), remaining_time)?;
+    if http_proxy.is_some() && snapshot.href.starts_with("chrome-error:") {
+        return Err(ClientError::Extraction(
+            "Chromium could not load the page through the configured proxy".into(),
+        ));
+    }
 
     let canonical_href = client.canonical_url(requested_url.as_str(), &snapshot.href);
     let has_items = !item_query.elements(&document, None).is_empty();

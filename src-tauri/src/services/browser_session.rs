@@ -1,11 +1,12 @@
 use crate::error::{AppError, Result};
 use scrape_core::{
     browser::{
-        discover_browser_runtime, resolve_browser_runtime, BrowserCookie, CdpWsClient,
-        StoredBrowserSession,
+        chromium_proxy_args, discover_browser_runtime, resolve_browser_runtime, BrowserCookie,
+        CdpWsClient, StoredBrowserSession,
     },
     protocol::{
         BrowserRuntimeStatus, BrowserSessionStatus, BrowserSessionSummary, CoverageTermination,
+        HttpProxyConfig,
     },
 };
 use serde_json::{json, Value};
@@ -16,7 +17,7 @@ use std::{
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::{LazyLock, Mutex},
+    sync::{mpsc, LazyLock, Mutex},
     time::Duration,
 };
 
@@ -24,10 +25,94 @@ struct ActiveLoginSession {
     ws_url: String,
     child: Option<Child>,
     profile_dir: Option<PathBuf>,
+    commands: Option<mpsc::Sender<LoginCommand>>,
+    event_thread: Option<std::thread::JoinHandle<()>>,
+}
+
+enum LoginCommand {
+    Cookies(mpsc::Sender<std::result::Result<Value, String>>),
+    Stop,
+}
+
+/// The same connection services auth while the user interacts and while cookies
+/// are collected; reconnecting only at Save would leave challenges unanswered.
+fn start_login_event_loop(
+    ws_url: &str,
+    login_url: &str,
+    proxy: &HttpProxyConfig,
+) -> Result<(mpsc::Sender<LoginCommand>, std::thread::JoinHandle<()>)> {
+    let timeout = Duration::from_secs(5);
+    let mut client = CdpWsClient::connect(ws_url, timeout).map_err(AppError::Validation)?;
+    let targets = client
+        .call("Target.getTargets", json!({}), None, timeout)
+        .map_err(AppError::Validation)?;
+    let target = targets
+        .pointer("/targetInfos")
+        .and_then(Value::as_array)
+        .and_then(|items| items.iter().find(|item| item["type"] == "page"))
+        .and_then(|item| item["targetId"].as_str())
+        .ok_or_else(|| AppError::Validation("Chromium login page is unavailable".into()))?;
+    let attached = client
+        .call(
+            "Target.attachToTarget",
+            json!({"targetId": target, "flatten": true}),
+            None,
+            timeout,
+        )
+        .map_err(AppError::Validation)?;
+    let sid = attached["sessionId"]
+        .as_str()
+        .ok_or_else(|| AppError::Validation("Chromium login session is unavailable".into()))?
+        .to_string();
+    client
+        .enable_proxy_auth(proxy, Some(&sid), timeout)
+        .map_err(AppError::Validation)?;
+    let navigation = client
+        .call(
+            "Page.navigate",
+            json!({"url": login_url}),
+            Some(&sid),
+            timeout,
+        )
+        .map_err(AppError::Validation)?;
+    if navigation.get("errorText").is_some() {
+        return Err(AppError::Validation(
+            "Chromium could not navigate through the configured proxy".into(),
+        ));
+    }
+    let (tx, rx) = mpsc::channel();
+    let thread = std::thread::spawn(move || loop {
+        match rx.recv_timeout(Duration::from_millis(100)) {
+            Ok(LoginCommand::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            Ok(LoginCommand::Cookies(reply)) => {
+                let cookies = client
+                    .call("Storage.getCookies", json!({}), None, timeout)
+                    .or_else(|_| {
+                        client.call("Network.getAllCookies", json!({}), Some(&sid), timeout)
+                    });
+                let _ = reply.send(cookies);
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                if client
+                    .call("Browser.getVersion", json!({}), None, timeout)
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        }
+        // These notifications have no host consumer. Explicitly consume them
+        // here, rather than allowing an interactive login to grow the queue.
+        while client.take_event().is_some() {}
+    });
+    Ok((tx, thread))
 }
 
 impl ActiveLoginSession {
     fn shutdown(&mut self) {
+        if let Some(commands) = self.commands.take() {
+            let _ = commands.send(LoginCommand::Stop);
+        }
         if let Some(mut child) = self.child.take() {
             #[cfg(unix)]
             unsafe {
@@ -35,6 +120,9 @@ impl ActiveLoginSession {
             }
             let _ = child.kill();
             let _ = child.wait();
+        }
+        if let Some(thread) = self.event_thread.take() {
+            let _ = thread.join();
         }
         if let Some(dir) = self.profile_dir.take() {
             let _ = fs::remove_dir_all(dir);
@@ -158,13 +246,22 @@ fn spawn_headed_login_browser(
     session_dir: &Path,
     session_id: &str,
     login_url: &str,
+    http_proxy: Option<&HttpProxyConfig>,
 ) -> Result<ActiveLoginSession> {
     let executable_path = match resolve_browser_runtime().map_err(AppError::Validation)? {
         scrape_core::browser::ResolvedBrowserRuntime::WebSocket(ws_url) => {
+            if http_proxy.is_some() {
+                return Err(AppError::Validation(
+                    "Proxy routing requires app-launched Chromium; external CDP is unsupported"
+                        .into(),
+                ));
+            }
             return Ok(ActiveLoginSession {
                 ws_url,
                 child: None,
                 profile_dir: None,
+                commands: None,
+                event_thread: None,
             });
         }
         scrape_core::browser::ResolvedBrowserRuntime::Executable { path, .. } => path,
@@ -173,6 +270,9 @@ fn spawn_headed_login_browser(
     ensure_private_dir(&profile_dir)?;
 
     let mut cmd = Command::new(&executable_path);
+    if let Some(proxy) = http_proxy {
+        cmd.args(chromium_proxy_args(proxy).map_err(AppError::Validation)?);
+    }
     cmd.args([
         "--remote-debugging-port=0",
         "--no-first-run",
@@ -181,7 +281,11 @@ fn spawn_headed_login_browser(
         "--disable-sync",
         "--window-size=1280,900",
         &format!("--user-data-dir={}", profile_dir.display()),
-        login_url,
+        if http_proxy.is_some() {
+            "about:blank"
+        } else {
+            login_url
+        },
     ])
     .stdin(Stdio::null())
     .stdout(Stdio::null())
@@ -226,16 +330,28 @@ fn spawn_headed_login_browser(
     });
 
     match rx.recv_timeout(Duration::from_secs(10)) {
-        Ok(ws_url) if !ws_url.is_empty() => Ok(ActiveLoginSession {
-            ws_url,
-            child: Some(child),
-            profile_dir: Some(profile_dir),
-        }),
+        Ok(ws_url) if !ws_url.is_empty() => {
+            let mut active = ActiveLoginSession {
+                ws_url,
+                child: Some(child),
+                profile_dir: Some(profile_dir),
+                commands: None,
+                event_thread: None,
+            };
+            if let Some(proxy) = http_proxy {
+                let (commands, thread) = start_login_event_loop(&active.ws_url, login_url, proxy)?;
+                active.commands = Some(commands);
+                active.event_thread = Some(thread);
+            }
+            Ok(active)
+        }
         _ => {
             let mut failed = ActiveLoginSession {
                 ws_url: String::new(),
                 child: Some(child),
                 profile_dir: Some(profile_dir),
+                commands: None,
+                event_thread: None,
             };
             failed.shutdown();
             Err(AppError::Internal(
@@ -286,7 +402,9 @@ pub async fn open_browser_session(
     StoredBrowserSession::validate_session_id(&session_id).map_err(AppError::Validation)?;
     let storage_relpath = format!("browser_sessions/{session_id}.json");
 
-    let active = spawn_headed_login_browser(session_dir, &session_id, &normalized_url)?;
+    let proxy = super::http_proxy::configuration().await?;
+    let active =
+        spawn_headed_login_browser(session_dir, &session_id, &normalized_url, proxy.as_ref())?;
     {
         let mut guard = ACTIVE_SESSIONS.lock().unwrap();
         if let Some(mut previous) = guard.insert(session_id.clone(), active) {
@@ -399,12 +517,19 @@ pub async fn save_browser_session(
         guard.remove(&valid_id)
     };
     if active.is_none() {
+        if super::http_proxy::configuration().await?.is_some() {
+            return Err(AppError::Validation(
+                "Open an app-launched login window to save a session with proxy routing".into(),
+            ));
+        }
         if let Ok(ws_url) = std::env::var("SCRAPE_CDP_WS_URL") {
             if !ws_url.trim().is_empty() {
                 active = Some(ActiveLoginSession {
                     ws_url: ws_url.trim().to_string(),
                     child: None,
                     profile_dir: None,
+                    commands: None,
+                    event_thread: None,
                 });
             }
         }
@@ -416,12 +541,25 @@ pub async fn save_browser_session(
     })?;
 
     let timeout = Duration::from_secs(5);
-    let mut client = CdpWsClient::connect(&active.ws_url, timeout).map_err(AppError::Validation)?;
-    let cookie_payload = client
-        .call("Storage.getCookies", json!({}), None, timeout)
-        .or_else(|_| client.call("Network.getAllCookies", json!({}), None, timeout))
-        .map_err(AppError::Validation)?;
-    drop(client);
+    let cookie_payload = if let Some(commands) = &active.commands {
+        let (reply, response) = mpsc::channel();
+        commands.send(LoginCommand::Cookies(reply)).map_err(|_| {
+            AppError::Validation("Chromium proxy login connection is no longer available".into())
+        })?;
+        response
+            .recv_timeout(Duration::from_secs(12))
+            .map_err(|_| {
+                AppError::Validation("Timed out collecting Chromium login cookies".into())
+            })?
+            .map_err(AppError::Validation)?
+    } else {
+        let mut client =
+            CdpWsClient::connect(&active.ws_url, timeout).map_err(AppError::Validation)?;
+        client
+            .call("Storage.getCookies", json!({}), None, timeout)
+            .or_else(|_| client.call("Network.getAllCookies", json!({}), None, timeout))
+            .map_err(AppError::Validation)?
+    };
     active.shutdown();
 
     let cookies = parse_cdp_cookies(&cookie_payload, &domain);
@@ -626,6 +764,94 @@ mod tests {
         let _ = stream.write_all(&frame);
     }
 
+    #[test]
+    fn proxy_login_services_idle_and_cookie_collection_auth_events() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (authenticated, observed_auth) = mpsc::channel();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            accept_ws_handshake(&mut stream);
+            let mut pending = None;
+            let mut challenge_number = 0;
+            while let Some(command) = read_ws_frame(&mut stream) {
+                let method = command["method"].as_str().unwrap();
+                let result = match method {
+                    "Target.getTargets" => {
+                        json!({"targetInfos": [{"type": "page", "targetId": "login"}]})
+                    }
+                    "Target.attachToTarget" => json!({"sessionId": "login-session"}),
+                    "Fetch.enable" => {
+                        assert_eq!(command["sessionId"], "login-session");
+                        json!({})
+                    }
+                    "Browser.getVersion" | "Storage.getCookies" => {
+                        // Challenge after navigation has returned, then again
+                        // while Save is waiting for the cookie command response.
+                        pending = Some(command["id"].clone());
+                        challenge_number += 1;
+                        write_ws_frame(
+                            &mut stream,
+                            &json!({
+                                "method": "Fetch.authRequired", "sessionId": "login-session",
+                                "params": {"requestId": format!("{method}-{challenge_number}"),
+                                    "authChallenge": {"source": "Proxy"}}
+                            }),
+                        );
+                        continue;
+                    }
+                    "Fetch.continueWithAuth" => {
+                        assert_eq!(
+                            command["params"]["authChallengeResponse"],
+                            json!({
+                                "response": "ProvideCredentials", "username": "fixture-user",
+                                "password": "fixture-password"
+                            })
+                        );
+                        write_ws_frame(&mut stream, &json!({"id": command["id"], "result": {}}));
+                        write_ws_frame(
+                            &mut stream,
+                            &json!({
+                                "id": pending.take().unwrap(),
+                                "result": {"cookies": [{"name": "session", "value": "fixture-cookie"}]}
+                            }),
+                        );
+                        authenticated.send(()).unwrap();
+                        continue;
+                    }
+                    _ => json!({}),
+                };
+                write_ws_frame(&mut stream, &json!({"id": command["id"], "result": result}));
+            }
+        });
+        let config = HttpProxyConfig {
+            server: "http://127.0.0.1:8080".into(),
+            username: Some("fixture-user".into()),
+            password: Some("fixture-password".into()),
+        };
+        let (commands, thread) = start_login_event_loop(
+            &format!("ws://{address}/devtools/browser/fixture"),
+            "https://login.fixture.invalid/",
+            &config,
+        )
+        .unwrap();
+        observed_auth.recv_timeout(Duration::from_secs(5)).unwrap();
+        let (reply, response) = mpsc::channel();
+        commands.send(LoginCommand::Cookies(reply)).unwrap();
+        let cookies = response
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .unwrap();
+        assert_eq!(cookies["cookies"][0]["value"], "fixture-cookie");
+        observed_auth.recv_timeout(Duration::from_secs(5)).unwrap();
+        commands.send(LoginCommand::Stop).unwrap();
+        thread.join().unwrap();
+        server.join().unwrap();
+    }
+
     #[tokio::test]
     async fn browser_session_lifecycle_persists_private_domain_scoped_cookies_and_clears() {
         let dir = tempfile::tempdir().unwrap();
@@ -677,6 +903,8 @@ mod tests {
                 ws_url: format!("ws://{ws_addr}/devtools/browser/mock"),
                 child: None,
                 profile_dir: None,
+                commands: None,
+                event_thread: None,
             };
             ensure_private_dir(&session_dir).unwrap();
             let session_id = "session-workday-1".to_string();
