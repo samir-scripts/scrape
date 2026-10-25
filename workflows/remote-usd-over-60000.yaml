@@ -1,0 +1,112 @@
+# Generated from Rust template catalog v3. Do not edit.
+# Remote-only with evidenced advertised annual USD pay over $60,000: a range whose upper endpoint exceeds the threshold qualifies, not a guaranteed minimum. Unknown, hourly/monthly and other currencies excluded; no annualization, currency conversion, date or geography restriction. Adzuna predicted pay and bare native amounts without annual evidence do not qualify. The Muse and Germany-focused Arbeitnow provide bounded listings; Arbeitnow does not establish original publication dates. Jobicy covers seven days with a three-hour delay and hourly response caching. Direct boards: Cloudflare/Bitwarden Greenhouse, Linear Ashby, SEP Lever and NVIDIA Workday. Google/Apple (Needs review) and Netflix/Amazon (Setup required) remain company-picker choices, excluded here without granting script trust or enabling them. Adzuna not enabled — setup required: configure credentials in Settings > System > Job providers, then explicitly enable the source. Loading or saving never starts scraping. Sources are bounded, not exhaustive; local matching remains authoritative.
+version: 9
+max_jobs_per_run: 20
+metadata:
+  name: Remote — Advertised Annual USD Pay Over $60,000
+  enabled: true
+sources:
+  - id: themuse
+    label: The Muse — bounded cross-company listings
+    enabled: true
+    extractor:
+      kind: search
+      url: themuse
+      source_config: {}
+  - id: arbeitnow
+    label: Arbeitnow — Germany-focused; original date unknown
+    enabled: true
+    extractor:
+      kind: search
+      url: arbeitnow
+      source_config: {}
+  - id: jobicy
+    label: Jobicy — remote; seven-day feed, three-hour delay
+    enabled: true
+    extractor:
+      kind: search
+      url: jobicy
+      source_config: {}
+  - id: adzuna
+    label: Adzuna not enabled — setup required
+    enabled: false
+    extractor:
+      kind: search
+      url: adzuna
+      source_config:
+        what_or: remote
+  - id: cloudflare
+    label: Cloudflare — Greenhouse
+    enabled: true
+    employer_hint: Cloudflare
+    extractor:
+      kind: greenhouse
+      url: https://boards.greenhouse.io/cloudflare
+  - id: bitwarden
+    label: Bitwarden — Greenhouse
+    enabled: true
+    employer_hint: Bitwarden
+    extractor:
+      kind: greenhouse
+      url: https://boards.greenhouse.io/bitwarden
+  - id: linear
+    label: Linear — Ashby
+    enabled: true
+    employer_hint: Linear
+    extractor:
+      kind: ashby
+      url: https://jobs.ashbyhq.com/linear
+  - id: sep
+    label: SEP — Lever
+    enabled: true
+    employer_hint: SEP
+    extractor:
+      kind: lever
+      url: https://jobs.lever.co/sep
+  - id: nvidia
+    label: NVIDIA — Workday
+    enabled: true
+    employer_hint: NVIDIA
+    extractor:
+      kind: workday
+      url: https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite
+schedule:
+  cadence: manual
+  time: 09:00
+  timezone: America/New_York
+  run_on_startup: false
+filters:
+  role_types: []
+  include_keywords: []
+  exclude_keywords: []
+  locations: []
+  matching:
+    target_roles: []
+    companies: []
+    keywords: null
+    posting_date: null
+    compensation:
+      min_minor: 6000001
+      max_minor: null
+      currency: USD
+      interval: year
+      include_unknown: false
+      match_mode: advertised_amount
+    role_types: []
+    workplaces:
+      - remote
+    experience_min: null
+    experience_max: null
+    experience_include_unknown: false
+    experience_match_mode: required_minimum
+    new_grad: null
+    sponsorship: []
+    work_auth: []
+    clearance: []
+    countries: []
+    regions: []
+    cities: []
+    location_include_unknown: false
+retention:
+  days: 30
+  policy: untracked_only

@@ -3,7 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { AddSourceModal } from "../components/views/settings/AddSourceModal";
-import { api, SAMPLE_SWE_SOURCE } from "../lib/api";
+import { api, SAMPLE_ENGINEERING_SOURCE } from "../lib/api";
 import { sourceToWorkflowSpec, validateWorkflowYaml, workflowSpecToYaml, normalizedEndpoint } from "../lib/yamlWorkflow";
 import type { WorkflowPreview } from "../bindings/WorkflowPreview";
 import type { WorkflowSpec } from "../bindings/WorkflowSpec";
@@ -32,7 +32,7 @@ describe("role-first workflow boundaries", () => {
     { roles: "Line Cook,Store Associate", companies: "", date: "Today (since local midnight)", preset: "today" },
   ])("creates $roles without a career URL, previews and saves without scraping", async ({ roles, companies, date, preset }) => {
     const user = userEvent.setup();
-    const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_SWE_SOURCE);
+    const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_ENGINEERING_SOURCE);
     const run = vi.spyOn(api, "runSourceNow");
     const detect = vi.spyOn(api, "detectSource");
     const extract = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => preview(spec));
@@ -50,7 +50,7 @@ describe("role-first workflow boundaries", () => {
     await user.click(screen.getByRole("button", { name: "Save workflow" }));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     const spec = save.mock.calls[0][0];
-    expect(spec.version).toBe(8);
+    expect(spec.version).toBe(9);
     expect(spec.sources).toHaveLength((companies ? companies.split(",").length : 0) + 2);
     expect(spec.sources.filter(source => source.extractor.kind === "search")).toHaveLength(2);
     expect(spec.sources.filter(source => source.extractor.kind === "search").map(source => source.extractor.url)).toEqual(["themuse", "arbeitnow"]);
@@ -77,8 +77,8 @@ describe("role-first workflow boundaries", () => {
   it("defaults to 20, invalidates preview on limit changes, rejects invalid drafts and saves YAML limit", async () => {
     const user = userEvent.setup();
     const extract = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => preview(spec));
-    const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_SWE_SOURCE);
-    render(<AddSourceModal isOpen initialSource={SAMPLE_SWE_SOURCE} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_ENGINEERING_SOURCE);
+    render(<AddSourceModal isOpen initialSource={SAMPLE_ENGINEERING_SOURCE} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
     const limit = screen.getByRole("textbox", { name: "Maximum matching jobs per run" });
     expect((limit as HTMLInputElement).value).toBe("20");
@@ -108,9 +108,9 @@ describe("role-first workflow boundaries", () => {
   });
   it("preserves saved names, cents, arbitrary relative hours and legacy filters until edited", async () => {
     const user = userEvent.setup();
-    const spec = sourceToWorkflowSpec(SAMPLE_SWE_SOURCE);
+    const spec = sourceToWorkflowSpec(SAMPLE_ENGINEERING_SOURCE);
     spec.metadata.name = "My jobs at home";
-    spec.filters = { ...spec.filters, matching: { ...spec.filters?.matching, target_roles: ["Engineer"], companies: ["Acme"], posting_date: { preset: null, last_hours: 37, from: null, through: null, timezone: "America/New_York", include_unknown: true }, compensation: { min_minor: 5025, max_minor: 6075, currency: "USD", interval: "hour", include_unknown: false } } } as WorkflowSpec["filters"];
+    spec.filters = { ...spec.filters, matching: { ...spec.filters?.matching, target_roles: ["Engineer"], companies: ["Acme"], posting_date: { preset: null, last_hours: 37, from: null, through: null, timezone: "America/New_York", include_unknown: true }, compensation: { min_minor: 5025, max_minor: 6075, currency: "USD", interval: "hour", include_unknown: false, match_mode: "advertised_amount" } } } as WorkflowSpec["filters"];
     const extract = vi.spyOn(api, "previewWorkflow").mockImplementation(async input => preview(input));
     render(<AddSourceModal isOpen initialSpec={spec} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
     await chooseMulti(user, "Target roles", "Intern");
@@ -118,11 +118,16 @@ describe("role-first workflow boundaries", () => {
     await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
     expect((screen.getByLabelText("Last N hours") as HTMLInputElement).value).toBe("37");
     expect((screen.getByRole("textbox", { name: "Minimum per hour" }) as HTMLInputElement).value).toBe("50.25");
+    expect(screen.getByRole("button", { name: "Salary matching" }).textContent).toContain("Advertised endpoint");
+    const minimum = screen.getByRole("textbox", { name: "Minimum per hour" });
+    await user.clear(minimum);
+    await user.type(minimum, "51");
+    await user.tab();
     await toSchedule(user);
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
     await screen.findByText(/3 examined/);
     expect(extract.mock.calls[0][0].filters?.matching?.posting_date).toEqual(spec.filters?.matching?.posting_date);
-    expect(extract.mock.calls[0][0].filters?.matching?.compensation).toEqual(spec.filters?.matching?.compensation);
+    expect(extract.mock.calls[0][0].filters?.matching?.compensation).toEqual({ ...spec.filters?.matching?.compensation, min_minor: 5100 });
     expect(extract.mock.calls[0][0].sources).toEqual(spec.sources);
     await user.click(screen.getByRole("button", { name: "Criteria" }));
     await user.click(screen.getByRole("button", { name: "Date posted range", expanded: false }));
@@ -142,7 +147,7 @@ describe("role-first workflow boundaries", () => {
     const extract = vi.spyOn(api, "previewWorkflow").mockImplementationOnce(() => pending).mockImplementation(async spec => preview(spec));
     const cancel = vi.spyOn(api, "cancelWorkflowPreview").mockResolvedValue(true);
     const settings = vi.spyOn(api, "updateSetting");
-    render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_SWE_SOURCE, cadence: "global" }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    render(<AddSourceModal isOpen initialSource={{ ...SAMPLE_ENGINEERING_SOURCE, cadence: "global" }} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "Continue to Criteria" })); await toSchedule(user);
     await user.click(screen.getByRole("button", { name: "Schedule" }));
     expect(screen.getByRole("button", { name: "Schedule", expanded: false }).textContent).toContain("daily");
@@ -170,7 +175,9 @@ describe("role-first workflow boundaries", () => {
     const result = { kind: "greenhouse", identifier: "acme-new", name: "Acme" };
     const detect = vi.spyOn(api, "detectSource").mockImplementationOnce(() => pending).mockResolvedValue(result);
     const extract = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => preview(spec));
-    render(<AddSourceModal isOpen initialSource={SAMPLE_SWE_SOURCE} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    const initialSpec = sourceToWorkflowSpec(SAMPLE_ENGINEERING_SOURCE);
+    initialSpec.sources = [{ ...initialSpec.sources[0], extractor: { ...initialSpec.sources[0].extractor, kind: "greenhouse", url: "https://boards.greenhouse.io/acme" } }];
+    render(<AddSourceModal isOpen initialSpec={initialSpec} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
     await user.type(screen.getByRole("combobox", { name: "Any keywords" }), "Engineer");
     await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
     await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
@@ -209,7 +216,7 @@ describe("role-first workflow boundaries", () => {
   });
   it("uses ClockPicker in the selected time format and saves the edited local run time", async () => {
     const user = userEvent.setup();
-    const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_SWE_SOURCE);
+    const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_ENGINEERING_SOURCE);
     const extract = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => preview(spec));
     render(<AddSourceModal isOpen is24h onClose={vi.fn()} onSourceSaved={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
@@ -230,7 +237,7 @@ describe("role-first workflow boundaries", () => {
     expect(save.mock.calls[0][0].schedule?.time).toBe("09:01");
   });
   it("roundtrips version8 search and role/company/date rules without silent drops", () => {
-    const spec = sourceToWorkflowSpec(SAMPLE_SWE_SOURCE); spec.version = 8;
+    const spec = sourceToWorkflowSpec(SAMPLE_ENGINEERING_SOURCE); spec.version = 8;
     spec.sources = [{ id: "search", label: "Public listings", enabled: true, extractor: { kind: "search", url: "" } }];
     spec.filters = { matching: { ...spec.filters?.matching, target_roles: ["Line Cook"], companies: ["Acme"], posting_date: { preset: "past_week", last_hours: null, from: null, through: null, timezone: "UTC", include_unknown: false } } } as WorkflowSpec["filters"];
     spec.filters!.matching!.experience_match_mode = "required_minimum";

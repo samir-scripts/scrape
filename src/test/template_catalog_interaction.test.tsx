@@ -9,8 +9,9 @@ import { useWorkflowDraft } from "../hooks/useWorkflowDraft";
 import { AddSourceModal } from "../components/views/settings/AddSourceModal";
 
 afterEach(cleanup);
-function Harness() {
+function Harness({ companies = [] }: { companies?: string[] }) {
   const initial = useRef(structuredClone(SAMPLE_WORKFLOW_TEMPLATES[0].spec));
+  initial.current.filters!.matching!.companies = companies;
   const model = useWorkflowDraft({ isOpen: true, initialSpec: initial.current, onSourceSaved: () => {} });
   return <>
     <WorkflowSections draft={model.draft} change={model.change} advanced={false} section="Roles" setTargetCompanies={model.setTargetCompanies} attachCompanyBoard={model.attachCompanyBoard} />
@@ -44,7 +45,7 @@ it("keeps example loading in Advanced and requires whole-draft replacement confi
   expect(screen.queryByRole("button", { name: "Load example workflow" })).toBeNull();
   await user.click(screen.getByRole("button", { name: "Advanced" }));
   await user.click(screen.getByRole("button", { name: "Load example workflow" }));
-  const template = SAMPLE_WORKFLOW_TEMPLATES.find(template => template.id === "streaming-cloud-script")!;
+  const template = SAMPLE_WORKFLOW_TEMPLATES.find(template => template.id === "remote-usd-over-60000")!;
   await user.click(screen.getByRole("option", { name: template.name }));
   expect((screen.getByRole("textbox", { name: "Workflow name" }) as HTMLInputElement).value).toBe("Keep my edits");
   await user.click(screen.getByRole("button", { name: "Keep editing" }));
@@ -55,6 +56,29 @@ it("keeps example loading in Advanced and requires whole-draft replacement confi
   expect((screen.getByRole("textbox", { name: "Workflow name" }) as HTMLInputElement).value).toBe(template.name);
   await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
   await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
-  expect(screen.getAllByRole("checkbox", { name: /^Enable (Netflix|Amazon)$/ }).every(input => !(input as HTMLInputElement).checked)).toBe(true);
-  expect((screen.getByRole("button", { name: "Save disabled for review" }) as HTMLButtonElement).disabled).toBe(false);
+  expect((screen.getByRole("checkbox", { name: "Enable Adzuna not enabled — setup required" }) as HTMLInputElement).checked).toBe(false);
+  expect(screen.queryByRole("button", { name: "Save disabled for review" })).toBeNull();
+  expect(screen.queryByRole("checkbox", { name: /^Enable (Netflix|Amazon)$/ })).toBeNull();
+  expect(screen.getByRole("checkbox", { name: "Enable Jobicy — remote; seven-day feed, three-hour delay" })).toBeTruthy();
+});
+
+it("keeps independent gated company choices available without changing canonical matching or enabling them", async () => {
+  const user = userEvent.setup();
+  render(<Harness companies={["Google", "Netflix"]} />);
+  await user.click(screen.getByRole("button", { name: "Attach career board for Google" }));
+  await user.click(screen.getByRole("button", { name: "Attach career board for Netflix" }));
+  const spec = validateWorkflowYaml(screen.getByTestId("draft").textContent!).parsedSpec!;
+  const google = spec.sources.find(source => source.employer_hint === "Google")!;
+  const netflix = spec.sources.find(source => source.employer_hint === "Netflix")!;
+  expect(google.enabled).toBe(false);
+  expect(google.extractor.mode).toBe("static");
+  expect(netflix.enabled).toBe(false);
+  expect(netflix.extractor.mode).toBe("script");
+  expect(netflix.extractor.script?.code).toContain("version: 2");
+  expect(netflix.extractor.script?.interpreter).toBeUndefined();
+  expect(spec.filters?.matching?.target_roles).toEqual(SAMPLE_WORKFLOW_TEMPLATES[0].spec.filters?.matching?.target_roles);
+  expect(spec.filters?.matching?.posting_date?.preset).toBe("past_12h");
+  expect(SAMPLE_WORKFLOW_TEMPLATES.map(template => template.id)).toEqual([
+    "software-engineering-last-12-hours", "cherry-hill-fast-food-last-month", "remote-usd-over-60000",
+  ]);
 });

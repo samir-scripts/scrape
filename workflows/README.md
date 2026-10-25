@@ -1,6 +1,6 @@
 # Built-in workflow templates
 
-Rust owns catalog version 2 in [`template_catalog.rs`](../src-tauri/src/services/template_catalog.rs). It validates WorkflowSpec v8 through the ordinary workflow service. The picker, these YAML files and verification extractors are generated projections. Edit Rust definitions or bundled scripts, not outputs, then run:
+Rust owns catalog version 3 in [`template_catalog.rs`](../src-tauri/src/services/template_catalog.rs). It validates WorkflowSpec v9 through the ordinary workflow service. The picker and these three YAML files are generated projections. Edit Rust definitions or bundled scripts, not outputs, then run:
 
 ```sh
 npm run gen:templates
@@ -8,23 +8,33 @@ npm run check:templates
 npm run gen:types
 ```
 
-**Load test workflows adds six examples without replacing existing workflows.** Four ATS templates (Cloudflare, Bitwarden, Linear, SEP) use title keywords only. Employment, workplace, and geography are unconstrained, including unknown evidence. Cloudflare's default is `cloudflare-systems-network.yaml`; it is not the internship example. The 20-job total cap includes refreshed postings; Preview accepts at most 10.
+The catalog contains exactly three manual workflows, each capped at 20 accepted postings per run and retaining untracked postings for 30 days:
 
-`*-restrictive.yaml` examples retain explicit role/workplace/geography restrictions; `software-engineering-internships.yaml` retains older internship/keyword/location-text semantics. New v8 projections add empty role/company lists without changing these predicates. These five restrictive examples appear in the picker but are not automatically seeded. Unknown provider fields stay unknown; zero matches may be correct. Inspect preview diagnostics before saving.
+| Workflow | Authoritative local criteria |
+| --- | --- |
+| Software Engineering & Related — Past 12 Hours | Explicit engineering/related title phrases and original publication within 12 hours; unknown dates excluded. No employment, geography, workplace or pay restriction. |
+| Fast Food — Cherry Hill, NJ — Past 30 Days | Front-line title phrases **and** literal fast-food/chain evidence in title/company/description; Cherry Hill, US-NJ and US in the same location tuple; original publication within rolling 720 hours. Unknown dates/geography excluded. |
+| Remote — Advertised Annual USD Pay Over $60,000 | Remote-only and evidenced native annual USD advertised pay above $60,000. A $50k–$80k range qualifies; lower-only $50k and exactly $60k do not. No hourly/monthly annualization, currency conversion or date/geography restriction. |
 
-Google/Apple static extraction and Netflix/Amazon script examples are **disabled** and labelled Needs review / Setup required. They do not establish verified full-site coverage: URL resolution, site selectors and pagination remain Plan 12 Section 6 work. All matching restrictions are shown in Review, with exact YAML available.
+Engineering and remote profiles include The Muse, Arbeitnow, Jobicy, Adzuna and five direct boards: Cloudflare/Bitwarden Greenhouse, Linear Ashby, SEP Lever and NVIDIA Workday. Fast-food uses only Adzuna and The Muse. **Adzuna is disabled by default in all three profiles**: configure App ID/App key in **Settings > System > Job providers**, then enable it explicitly. Credentials remain local and are not part of YAML or exports.
 
-New role-first workflows enable both built-in public search feeds without requiring
-source selection: The Muse (bounded worldwide listings) and Arbeitnow (Germany-focused,
-with unknown original dates). Roles/optional Companies narrow observed feed postings
-locally; selected supported companies may add verified direct boards without replacing
-matching. Saved/imported sources are unchanged. Neither feed guarantees every employer;
-government listings, including USAJOBS, are not supported. See the
-[v8 contract](../plans/workflow-v3.md) for provider schemas and bounds.
+Coverage is bounded, not exhaustive. The Muse's remaining fast-food coverage does not establish current Cherry Hill vacancies. Arbeitnow focuses on Germany and does not establish original publication dates, so unknown dates cannot satisfy the engineering window. Jobicy establishes remote work but exposes a seven-day feed delayed three hours; public responses are cached for an hour. Adzuna descriptions are truncated, predicted pay is excluded, and bare native salary fields do not prove an annual interval. Local Rust rules, not provider queries, decide acceptance. Zero matches may be correct.
+
+Google/Apple static sources remain **Needs review** and Netflix/Amazon script sources remain **Setup required**, independently available from the company picker but not attached to runnable built-ins. Selecting all sources never grants script trust or claims unavailable coverage. New custom role-first workflows retain their existing The Muse/Arbeitnow defaults.
+
+**Replace test workflows** is an explicit, reviewed action: exact recognized shipped examples are selected by default; custom or modified workflows remain preserved unless selected. Review removals and the three targets before confirming. Loading/saving never launches a scrape or enables Adzuna. Saved jobs, notes, favorites, tracking/history and suppression are retained. Replacement reports the recovery backup path; never restore a full backup automatically over newer user data. Existing startup does not automatically replace old examples.
+
+Legacy recognition specs and recorded provider verification profiles are frozen separately from this production catalog. Recorded route hashes, script fingerprints and expected provider outcomes do not change when user-facing profiles change. See the [workflow contract](../plans/workflow-v3.md) for canonical matching semantics.
+
+## Public HTML sources and proxy
+
+Custom workflows can use **Website crawl** to start from an employer's public HTML URL and follow a bounded, same-origin set of links. Choose JSON-LD or explicit CSS/XPath fields; page/depth limits, per-host pacing and `robots.txt` checks apply. Preview is read-only, and inaccessible/login-gated pages remain unsupported rather than being bypassed.
+
+An optional HTTP(S) proxy is configured under **Settings > System > Network proxy**. Credentials are write-only and stored in the local OS credential store; they are never part of workflow YAML or exports. HTTP and app-launched Chromium extraction use the configured proxy. Basic credentials over an HTTP proxy are not transport-encrypted; prefer HTTPS or a trusted local network. Unset the proxy to restore direct routing. Only use a proxy you control or are authorized to use.
 
 ## Script setup
 
-Netflix/Amazon scripts are embedded at compile time from `crates/scrape-worker/examples/extractors/`. Generated workflows carry the actual code under catalog v2 and custom script protocol 2; no repository files or working directory are needed. Executable fingerprint review remains local; code, arguments or interpreter edits invalidate trust.
+Netflix/Amazon scripts are embedded at compile time from `crates/scrape-worker/examples/extractors/`. Independent company presets carry the actual code using custom script protocol 2; no repository files or working directory are needed. Executable fingerprint review remains local; code, arguments or interpreter edits invalidate trust.
 
 1. Open each source's custom extraction settings and enter an **absolute path to an installed Node.js 18+ executable**. The desktop app does not download a runtime or search a developer shell for `node`.
 2. Check the environment, then save the workflow disabled for review.
@@ -33,4 +43,4 @@ Netflix/Amazon scripts are embedded at compile time from `crates/scrape-worker/e
 
 Imported file scripts must use an absolute path to a readable regular file (maximum 1 MiB), or carry embedded code. Missing files/runtime produce setup errors. Existing saved configuration is preserved; a legacy relative path or `node` command must be configured locally before execution. Imports never carry trust. Scripts run with local privileges; process isolation is not an OS sandbox.
 
-The existing browser demonstration remains labelled and deliberately restrictive. It is not the new desktop seed and is not live provider evidence. Required verification uses recordings/local fixtures and temporary databases; full native and live provider acceptance remains open.
+Browser demonstrations and recorded provider fixtures are labelled and are not live extraction evidence. Required execution proof uses recordings/local fixtures, temporary databases, isolated credential stores and cache directories. Fixture success does not establish current Cherry Hill availability; live Adzuna requires personal credentials.

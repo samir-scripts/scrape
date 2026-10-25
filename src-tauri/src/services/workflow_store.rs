@@ -9,28 +9,42 @@ use sqlx::SqlitePool;
 
 pub(super) async fn save(
     pool: &SqlitePool,
-    mut spec: WorkflowSpec,
+    spec: WorkflowSpec,
     id: Option<String>,
     imported: bool,
     timezone: &str,
     repair: bool,
 ) -> Result<Source> {
+    let mut tx = pool.begin().await?;
+    let workflow_id = save_in_transaction(&mut tx, spec, id, imported, timezone, repair).await?;
+    tx.commit().await?;
+    SourcesRepo::get(pool, &workflow_id).await
+}
+
+pub(crate) async fn save_in_transaction(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    mut spec: WorkflowSpec,
+    id: Option<String>,
+    imported: bool,
+    timezone: &str,
+    repair: bool,
+) -> Result<String> {
     // Validate every child before writing; preserve the caller's effective filters.
     super::workflow::validate(serde_json::to_value(&spec)?, timezone)?;
     let old = match &id {
-        Some(id) => Some(SourcesRepo::get(pool, id).await?),
+        Some(id) => Some(SourcesRepo::get_tx(tx, id).await?),
         None => None,
     };
     let expected: Option<String> = if let Some(id) = &id {
         sqlx::query_scalar("SELECT config FROM sources WHERE id=?")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(&mut **tx)
             .await?
     } else {
         None
     };
+    let tx = &mut **tx;
     let workflow_id = id.unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
-    let mut tx = pool.begin().await?;
     if old.is_some() {
         let owner: Option<String> =
             sqlx::query_scalar("SELECT workflow_id FROM sources WHERE id=?")
@@ -74,6 +88,14 @@ pub(super) async fn save(
         }
         owners.push(owner.is_some());
     }
+    let origin = if imported {
+        None
+    } else {
+        old.as_ref()
+            .and_then(|source| source.config.get("__builtin_workflow").cloned())
+            .map(|marker| super::sample_workflows::refreshed_origin_marker(&spec, marker))
+            .transpose()?
+    };
     let original_inputs = workflow_source_inputs(&spec, timezone)?;
     let primary = if let Some(index) = spec.sources.iter().position(|s| s.id == workflow_id) {
         index
@@ -165,6 +187,9 @@ pub(super) async fn save(
     {
         root_config["__starting_source_index"] = index.clone();
     }
+    if let Some(origin) = &origin {
+        root_config["__builtin_workflow"] = origin.clone();
+    }
     let cadence = root.cadence.unwrap_or_default();
     let enabled = spec.metadata.enabled.unwrap_or(true) && !pending;
     let next = if repair {
@@ -228,7 +253,11 @@ pub(super) async fn save(
         let config = if is_root {
             root_config.clone()
         } else {
-            input.config.clone().unwrap_or(json!({}))
+            let mut config = input.config.clone().unwrap_or(json!({}));
+            if let Some(origin) = &origin {
+                config["__builtin_workflow"] = origin.clone();
+            }
+            config
         };
         sqlx::query("INSERT INTO sources (id,workflow_id,kind,name,identifier,config,enabled,employer_hint,order_index,created_at,cadence,cadence_cron,next_run_at,retention_days,retention_policy,filters,script_trusted,script_sha256,needs_review) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,name=excluded.name,identifier=excluded.identifier,config=excluded.config,enabled=excluded.enabled,employer_hint=excluded.employer_hint,order_index=excluded.order_index,cadence=excluded.cadence,cadence_cron=excluded.cadence_cron,next_run_at=excluded.next_run_at,retention_days=excluded.retention_days,retention_policy=excluded.retention_policy,filters=excluded.filters,script_trusted=excluded.script_trusted,script_sha256=excluded.script_sha256,needs_review=excluded.needs_review")
             .bind(&entry.id).bind(&workflow_id).bind(kind.as_str().unwrap()).bind(if is_root {&spec.metadata.name} else {&entry.label}).bind(&input.identifier).bind(config.to_string()).bind(row_enabled)
@@ -252,8 +281,7 @@ pub(super) async fn save(
             }
         }
     }
-    tx.commit().await?;
-    SourcesRepo::get(pool, &workflow_id).await
+    Ok(workflow_id)
 }
 
 /// Explicit forward data repair. The caller supplies a fresh recovery path;
@@ -457,7 +485,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("repair.db");
         let pool = crate::db::init_db(&path).await.unwrap();
-        let input = crate::db::sources::SourcesRepo::sample_workflows_suite().remove(4);
+        let input = crate::db::sources::SourcesRepo::sample_workflows_suite().remove(0);
         let parent = SourcesRepo::create(&pool, input).await.unwrap();
         sqlx::query("UPDATE sources SET name='Personal name',filters='{}',next_run_at='2030-01-01T09:00:00Z' WHERE id=?").bind(&parent.id).execute(&pool).await.unwrap();
         let job=crate::services::ingestion::scraped_job_from_event(serde_json::from_value(json!({"type":"job","source_id":parent.id,"external_id":"protected","title":"Authored protected repair fixture","company":"Authored","role_type":"unknown","url":"https://fixture.invalid/protected"})).unwrap()).unwrap();
@@ -470,6 +498,10 @@ mod tests {
             .unwrap();
         sqlx::query("INSERT INTO job_status_events(job_id,to_status,changed_at) SELECT id,'interviewing','2026-01-01' FROM jobs").execute(&pool).await.unwrap();
         sqlx::query("INSERT INTO blocked_postings(identity,title,company,blocked_at) VALUES ('authored-block','Protected','Authored','2026-01-01')").execute(&pool).await.unwrap();
+        let sources_before_repair: i64 = sqlx::query_scalar("SELECT count(*) FROM sources")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         let before = SourcesRepo::get(&pool, &parent.id).await.unwrap();
         let missing_dir = directory.path().join("missing/backup.db");
         assert!(repair_ownership(&pool, &parent.id, &missing_dir, "UTC")
@@ -550,7 +582,11 @@ mod tests {
                 .fetch_all(&pool)
                 .await
                 .unwrap();
-        assert_eq!(children.len(), 2);
+        let expected_children = repaired.config["__workflow_spec"]["sources"]
+            .as_array()
+            .unwrap()
+            .len();
+        assert_eq!(children.len(), expected_children);
         for entry in repaired.config["__workflow_spec"]["sources"]
             .as_array()
             .unwrap()
@@ -572,7 +608,7 @@ mod tests {
                 .fetch_one(&snapshot)
                 .await
                 .unwrap(),
-            1
+            sources_before_repair
         );
         snapshot.close().await;
         pool.close().await;

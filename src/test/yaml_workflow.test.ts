@@ -39,6 +39,55 @@ describe("YAML Workflow Validator & Serializer", () => {
     expect(workflowSpecToCreateInput(result.parsedSpec!).config).toMatchObject(config);
   });
 
+  it("accepts the new bounded public feeds and preserves advertised-pay matching", () => {
+    const result = validateWorkflowYaml(`
+version: 9
+metadata:
+  name: Remote salary search
+sources:
+  - id: jobicy
+    label: Jobicy
+    enabled: true
+    extractor:
+      kind: search
+      url: jobicy
+schedule:
+  cadence: manual
+filters:
+  matching:
+    workplaces: [remote]
+    compensation:
+      min_minor: 6000001
+      max_minor: null
+      currency: USD
+      interval: year
+      include_unknown: false
+      match_mode: advertised_amount
+`);
+    expect(result.isValid).toBe(true);
+    expect(result.parsedSpec?.sources[0].extractor.url).toBe("jobicy");
+    expect(result.parsedSpec?.filters?.matching?.compensation?.match_mode).toBe("advertised_amount");
+  });
+
+  it("rejects credentials and host-only runtime fields in imported provider configuration", () => {
+    for (const source_config of [
+      { app_id: "fixture", app_key: "fixture-secret" },
+      { __provider_credentials: { app_id: "fixture", app_key: "fixture-secret" } },
+      { __provider_cache_dir: "/tmp/fixture-cache" },
+      { endpoint: "https://fixture.test/jobs?app_key=fixture-secret" },
+    ]) {
+      const spec = {
+        version: 9,
+        metadata: { name: "Untrusted provider configuration" },
+        sources: [{ id: "adzuna", label: "Adzuna", enabled: true, extractor: { kind: "search", url: "adzuna", source_config } }],
+        schedule: { cadence: "manual" },
+      };
+      const result = validateWorkflowYaml(workflowSpecToYaml(spec as WorkflowSpec));
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(error => /credential|private runtime/.test(error.message))).toBe(true);
+    }
+  });
+
   const validV2Yaml = `
 version: 2
 metadata:
@@ -211,7 +260,7 @@ retention:
     };
 
     const spec = sourceToWorkflowSpec(source);
-    expect(spec.version).toBe(8);
+    expect(spec.version).toBe(9);
     expect(spec.metadata.name).toBe("Ramp");
     expect(spec.sources[0].extractor.kind).toBe("ashby");
     expect(spec.sources[0].extractor.url).toBe("https://jobs.ashbyhq.com/ramp");

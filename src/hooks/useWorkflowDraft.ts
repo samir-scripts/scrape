@@ -23,13 +23,13 @@ const appendCompanyBoards = (sources: WorkflowSourceSpec[], companyIds: readonly
     if (next.some(source => normalizedEndpoint(source.extractor.kind, source.extractor.url) === endpoint)) continue;
     const source = structuredClone(option.source);
     source.id = `source-${crypto.randomUUID()}`;
-    source.enabled = source.enabled && option.template.readiness === "ready" && !source.extractor.script && source.extractor.mode !== "script";
+    source.enabled = source.enabled && option.company.readiness === "ready" && !source.extractor.script && source.extractor.mode !== "script";
     next.push(source);
   }
   return next;
 };
 const newDraft = (): WorkflowSpec => ({
-  version: 8, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true },
+  version: 9, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true },
   sources: [
     { id: "source-1", label: "Cross-Company Search", enabled: true, extractor: { kind: "search", url: "themuse" } },
     { id: "source-2", label: "Arbeitnow — Germany-focused listings", enabled: true, extractor: { kind: "search", url: "arbeitnow" } },
@@ -117,7 +117,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
       ...current,
       sources: current.sources.map(source => source.id === sourceId ? {
         ...source, label: option.source.label, employer_hint: option.source.employer_hint,
-        enabled: source.enabled && option.source.enabled && option.template.readiness === "ready" && !option.source.extractor.script && option.source.extractor.mode !== "script",
+        enabled: source.enabled && option.source.enabled && option.company.readiness === "ready" && !option.source.extractor.script && option.source.extractor.mode !== "script",
         extractor: structuredClone(option.source.extractor),
       } : source),
     });

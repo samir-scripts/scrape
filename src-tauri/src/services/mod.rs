@@ -25,4 +25,10 @@ pub mod workflow_store;
 mod matching_compatibility_tests;
 
 pub mod provider_verification;
+
+pub mod http_proxy;
+pub mod legacy_sample_workflows;
+pub mod provider_credentials;
+pub mod provider_presets;
+pub mod provider_verification_profiles;
 pub mod template_catalog;

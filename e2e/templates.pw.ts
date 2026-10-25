@@ -6,43 +6,43 @@ import { contrastFailures } from "./contrast";
 
 // Offline browser demonstration only. Rust fixtures prove execution/persistence.
 for (const theme of ["paper", "obsidian"]) {
-  test(`${theme} selects a canonical template, saves unknown choices and reopens them`, async ({ page }) => {
+  test(`${theme} loads and previews the current engineering workflow template without scraping`, async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 900 });
     await page.goto("/?demo=1&fixtures=1");
     await page.getByRole("button", { name: "SETTINGS", exact: true }).click();
     if (theme === "obsidian") await page.getByRole("button", { name: /^OBSIDIAN/ }).click();
     await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
-    await page.getByRole("button", { name: /add workflow|new workflow|create workflow/i }).click();
+    for (const name of [
+      "Software Engineering & Related — Past 12 Hours",
+      "Fast Food — Cherry Hill, NJ — Past 30 Days",
+      "Remote — Advertised Annual USD Pay Over $60,000",
+    ]) await expect(page.getByRole("button", { name: `Edit workflow ${name}`, exact: true })).toBeVisible();
+
+    const runsBefore = await page.evaluate(() => JSON.parse(localStorage.getItem("scrape:demo:v1:runs") || "[]").length);
+    await page.getByRole("button", { name: "Add workflow", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Create workflow" });
-    const template = catalog.templates.find(template => template.id === "sep-midwest-consulting")!;
-    await dialog.getByRole("button", { name: "Advanced" }).click();
+    const template = catalog.templates.find(template => template.id === "software-engineering-last-12-hours")!;
+    await dialog.getByRole("button", { name: "Advanced", exact: true }).click();
     await dialog.getByRole("button", { name: "Load example workflow" }).click();
     await page.getByRole("option", { name: template.name, exact: true }).click();
+    await dialog.getByRole("textbox", { name: "Workflow name" }).fill("E2E engineering profile");
     await dialog.getByRole("button", { name: "Continue to Criteria" }).click();
-    await dialog.getByRole("checkbox", { name: "Internship", exact: true }).check();
-    await dialog.getByRole("checkbox", { name: "Unknown employment", exact: true }).check();
-    await dialog.getByRole("checkbox", { name: "Remote", exact: true }).check();
-    await dialog.getByRole("checkbox", { name: "Unknown workplace", exact: true }).check();
-    expect(await contrastFailures(page)).toEqual([]);
-    await page.screenshot({ path: `plans/assets/11-template-catalog-review/${theme}-criteria-1024.png` });
     await dialog.getByRole("button", { name: "Continue to Sources" }).click();
-    await expect(dialog.getByLabel("Selected company details").getByText(template.description)).toBeVisible();
+    await expect(dialog.getByText(/Adzuna requires personal API credentials/)).toBeVisible();
+    await expect(dialog.getByText(/coverage.*not.*exhaustive|never every/i)).toBeVisible();
     await dialog.getByRole("button", { name: "Continue to Schedule" }).click();
     await dialog.getByRole("button", { name: "Continue to Review" }).click();
-    await dialog.getByRole("button", { name: "Preview matches", exact: true }).click();
-    await expect(dialog.getByRole("heading", { name: "1 eligible matches", exact: true })).toBeVisible();
-    await expect(dialog.getByRole("link", { name: "Systems Engineer Intern - Distributed Data", exact: true })).toBeVisible();
     const summary = dialog.getByRole("region", { name: "Matching rules summary" });
-    await expect(summary).toContainText("unknown");
-    await expect(summary).toContainText("internship");
+    await expect(summary).toContainText("Software Engineer");
+    await expect(summary).toContainText("past 12h");
+    await expect(summary).toContainText("Exclude unknown dates");
+    await expect(dialog.getByRole("button", { name: "Preview matches" })).toBeEnabled();
+    await dialog.getByRole("button", { name: "Preview matches", exact: true }).click();
+    await expect(dialog.getByRole("heading", { name: "3 eligible matches", exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: "Save workflow", exact: true }).click();
     await expect(dialog.getByText(/Saving has not started a scrape/)).toBeVisible();
     await dialog.getByRole("button", { name: "Done", exact: true }).click();
-    await page.getByRole("button", { name: `Edit workflow ${template.name}`, exact: true }).click();
-    const reopened = page.getByRole("dialog", { name: "Edit workflow" });
-    await reopened.getByRole("button", { name: "Continue to Criteria" }).click();
-    for (const name of ["Internship", "Unknown employment", "Remote", "Unknown workplace"]) {
-      await expect(reopened.getByRole("checkbox", { name, exact: true })).toBeChecked();
-    }
+    await expect(page.getByRole("button", { name: "Edit workflow E2E engineering profile", exact: true })).toBeVisible();
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("scrape:demo:v1:runs") || "[]").length)).toBe(runsBefore);
   });
 }

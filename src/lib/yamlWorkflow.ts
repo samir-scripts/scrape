@@ -138,9 +138,9 @@ export function validateWorkflowYaml(
   }
 
   // Version check
-  if (json.version !== undefined && ![1, 2, 3, 4, 5, 6, 7, 8].includes(json.version)) {
+  if (json.version !== undefined && ![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(json.version)) {
     errors.push({
-      message: `Unsupported workflow version ${json.version}. Expected supported versions: 1–8`,
+      message: `Unsupported workflow version ${json.version}. Expected supported versions: 1–9`,
     });
   }
 
@@ -219,7 +219,25 @@ export function validateWorkflowYaml(
         }
         if (extractor.kind === "search") {
           const provider = (extractor.url || "").trim().toLowerCase();
-          if (!["", "default", "themuse", "arbeitnow"].includes(provider)) errors.push({ message: `sources[${i}].extractor.url: unsupported search provider` });
+          if (!["", "default", "themuse", "arbeitnow", "adzuna", "jobicy"].includes(provider)) errors.push({ message: `sources[${i}].extractor.url: unsupported search provider` });
+          const sourceConfig = extractor.source_config;
+          if (sourceConfig && typeof sourceConfig === "object" && !Array.isArray(sourceConfig)) {
+            const config = sourceConfig as Record<string, unknown>;
+            for (const key of ["app_id", "app_key", "__provider_credentials", "__provider_cache_dir"]) {
+              if (key in config) errors.push({ message: `sources[${i}].extractor.source_config.${key}: provider credentials and private runtime fields cannot be imported or saved` });
+            }
+            if (typeof config.endpoint === "string") {
+              try {
+                const endpoint = new URL(config.endpoint);
+                for (const [key] of endpoint.searchParams) {
+                  if (["app_id", "app_key", "appid", "appkey"].includes(key.toLowerCase())) {
+                    errors.push({ message: `sources[${i}].extractor.source_config.endpoint: credential-bearing query parameters are not allowed` });
+                    break;
+                  }
+                }
+              } catch { /* Rust validation reports malformed endpoint syntax. */ }
+            }
+          }
           const endpointKey = normalizedEndpoint("search", provider);
           if (seenEndpoints.has(endpointKey)) errors.push({ message: `Duplicate source endpoint: ${endpointKey}` });
           else seenEndpoints.add(endpointKey);
@@ -320,6 +338,13 @@ export function validateWorkflowYaml(
         if (!["past_12h", "today", "past_24h", "past_week", "past_month", "any"].includes(date.preset)) errors.push({ message: "filters.matching.posting_date.preset is unsupported" });
         if (date.last_hours != null || date.from != null || date.through != null) errors.push({ message: "filters.matching.posting_date.preset cannot be combined with last_hours, from or through" });
       }
+      const compensation = matching.compensation;
+      if (compensation != null && typeof compensation === "object") {
+        if (compensation.match_mode != null && !["range_overlap", "advertised_amount"].includes(compensation.match_mode)) {
+          errors.push({ message: "filters.matching.compensation.match_mode must be range_overlap or advertised_amount" });
+        }
+        compensation.match_mode = compensation.match_mode ?? "range_overlap";
+      }
       if (matching.experience_match_mode != null && !["advertised_range_overlap", "required_minimum"].includes(matching.experience_match_mode)) errors.push({ message: "filters.matching.experience_match_mode must be advertised_range_overlap or required_minimum" });
       for (const key of ["experience_min", "experience_max"] as const) {
         const val = matching[key];
@@ -401,7 +426,7 @@ export function validateWorkflowYaml(
   return {
     isValid: true,
     errors: [],
-    parsedSpec: { ...json, version: json.version ?? 8 } as WorkflowSpec,
+    parsedSpec: { ...json, version: json.version ?? 9 } as WorkflowSpec,
   };
 }
 
@@ -479,7 +504,7 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
 
   return {
     ...snapshot,
-    version: snapshot?.version ?? 8,
+    version: snapshot?.version ?? 9,
     max_jobs_per_run: snapshot?.max_jobs_per_run ?? INGESTION_LIMITS.default,
     metadata: {
       ...snapshot?.metadata,

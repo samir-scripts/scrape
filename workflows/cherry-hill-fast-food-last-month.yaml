@@ -1,0 +1,110 @@
+# Generated from Rust template catalog v3. Do not edit.
+# Front-line role title AND literal fast-food evidence in title/company/description; Cherry Hill + US-NJ + US in one location tuple; original publication within rolling 720 hours. Unknown dates/geography excluded. Adzuna discovery is disabled until setup. Remaining The Muse coverage is limited, not verified Cherry Hill availability. Adzuna not enabled — setup required: configure credentials in Settings > System > Job providers, then explicitly enable the source. Loading or saving never starts scraping. Sources are bounded, not exhaustive; local matching remains authoritative.
+version: 9
+max_jobs_per_run: 20
+metadata:
+  name: Fast Food — Cherry Hill, NJ — Past 30 Days
+  enabled: true
+sources:
+  - id: adzuna
+    label: Adzuna not enabled — setup required
+    enabled: false
+    extractor:
+      kind: search
+      url: adzuna
+      source_config:
+        max_days_old: 30
+        what_or: restaurant crew cashier cook fast food
+        where: Cherry Hill, New Jersey
+  - id: themuse
+    label: The Muse — bounded cross-company listings
+    enabled: true
+    extractor:
+      kind: search
+      url: themuse
+      source_config: {}
+schedule:
+  cadence: manual
+  time: 09:00
+  timezone: America/New_York
+  run_on_startup: false
+filters:
+  role_types: []
+  include_keywords: []
+  exclude_keywords: []
+  locations: []
+  matching:
+    target_roles:
+      - Fast Food
+      - Fast-Food
+      - Crew Member
+      - Crew Team Member
+      - Team Member
+      - Restaurant Crew
+      - Cashier
+      - Cook
+      - Shift Manager
+      - Shift Leader
+      - Restaurant Manager
+      - Food Service Worker
+    companies: []
+    keywords:
+      any:
+        - fast food
+        - fast-food
+        - quick service
+        - quick-service
+        - McDonald's
+        - McDonalds
+        - Burger King
+        - Wendy's
+        - Taco Bell
+        - Chick-fil-A
+        - KFC
+        - Popeyes
+        - Chipotle
+        - Five Guys
+        - Shake Shack
+        - Sonic Drive-In
+        - Arby's
+        - Dairy Queen
+        - White Castle
+        - Checkers
+        - Rally's
+        - Jollibee
+        - Culver's
+        - Whataburger
+      all: []
+      exclude: []
+      fields:
+        - title
+        - company
+        - description
+    posting_date:
+      preset: past_month
+      last_hours: null
+      from: null
+      through: null
+      timezone: America/New_York
+      include_unknown: false
+    compensation: null
+    role_types: []
+    workplaces: []
+    experience_min: null
+    experience_max: null
+    experience_include_unknown: false
+    experience_match_mode: required_minimum
+    new_grad: null
+    sponsorship: []
+    work_auth: []
+    clearance: []
+    countries:
+      - US
+    regions:
+      - US-NJ
+    cities:
+      - Cherry Hill
+    location_include_unknown: false
+retention:
+  days: 30
+  policy: untracked_only
