@@ -7,7 +7,7 @@ use scrape_core::{RoleType, SourceCadence, SourceKind, WorkerFilters};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
-pub const WORKFLOW_SPEC_VERSION: u32 = 8;
+pub const WORKFLOW_SPEC_VERSION: u32 = 9;
 
 macro_rules! optional_fields {
     ($name:ident { $($field:ident: $kind:ty),* $(,)? }) => {
@@ -335,11 +335,11 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
             }
         }
         value = serde_json::json!({"version":3,"metadata":{"name":value.get("company"),"company":value.get("company")},"extractor":extractor,"schedule":{"cadence":value.pointer("/cadence/type").cloned().unwrap_or(Value::String("global".into())),"cron":value.pointer("/cadence/cron")}});
-    } else if matches!(version, 2..=8) {
+    } else if matches!(version, 2..=9) {
         // Legacy extractor roots become source collections before decoding.
     } else {
         return Err(AppError::Validation(format!(
-            "version: unsupported workflow version {version}; supported versions are 1–8"
+            "version: unsupported workflow version {version}; supported versions are 1–9"
         )));
     }
     if submitted_version <= 4 && value.get("sources").is_none() {
@@ -530,6 +530,16 @@ pub fn normalized_source_endpoint(extractor: &WorkflowExtractor) -> Result<Strin
         return Ok(format!("Search:{provider}"));
     }
     if extractor.kind.expects_url() {
+        if extractor
+            .source_config
+            .as_ref()
+            .is_some_and(|config| config.get("crawl").is_some())
+            && !scrape_core::branding::http_url(&extractor.url)
+        {
+            return Err(AppError::Validation(
+                "extractor.url: website crawl requires an HTTP(S) URL without credentials".into(),
+            ));
+        }
         let normalized = scrape_core::identity::normalized_detail_url(&extractor.url)
             .map_err(AppError::Validation)?;
         if extractor.kind == SourceKind::Workday {
@@ -942,6 +952,7 @@ pub fn validated_stored_config(kind: SourceKind, config: &Value) -> Result<Value
         "__starting_source_index",
         "__invalid_original_config",
         "__invalid_original_filters",
+        "__builtin_workflow",
     ] {
         public.as_object_mut().unwrap().remove(key);
     }
@@ -974,6 +985,13 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
     if kind == SourceKind::Search {
         return scrape_core::search_source::validate_config(config).map_err(AppError::Validation);
     }
+    let crawl =
+        scrape_core::static_source::CrawlConfig::parse(config).map_err(AppError::Validation)?;
+    if crawl.is_some() && kind != SourceKind::Selector {
+        return Err(AppError::Validation(
+            "extractor.crawl: requires kind: selector".into(),
+        ));
+    }
     let mode = scrape_core::extraction::mode(config).map_err(AppError::Validation)?;
     if kind != SourceKind::Selector && mode != ExtractionMode::Static {
         return Err(AppError::Validation(
@@ -999,6 +1017,7 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
         "follow_links",
         "max_pages",
         "max_source_duration_s",
+        "crawl",
         "next_page",
         "next_page_attribute",
         "next_page_regex",
@@ -1030,6 +1049,10 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
         "url_pattern",
         "url_patterns",
         "exclude_url_patterns",
+        "per_host_delay_ms",
+        "jitter_ms",
+        "ignore_robots",
+        "public_html",
     ];
     for key in config
         .as_object()
@@ -1160,6 +1183,17 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
     if kind == SourceKind::Selector
         && mode != ExtractionMode::Script
         && hydration.is_none()
+        && !crawl.as_ref().is_some_and(|crawl| {
+            matches!(
+                crawl.extraction,
+                scrape_core::static_source::CrawlExtraction::Jsonld
+                    | scrape_core::static_source::CrawlExtraction::PublicHtml
+            )
+        })
+        && !config
+            .get("public_html")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
         && ["item", "title", "link"].iter().any(|key| {
             config
                 .get(key)
@@ -1189,6 +1223,118 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn website_crawl_requires_explicit_extraction_and_preserves_selector_validation() {
+        use serde_json::json;
+        assert!(validate_config(
+            SourceKind::Selector,
+            &json!({"crawl":{"extraction":"jsonld"}})
+        )
+        .is_ok());
+        assert!(validate_config(
+            SourceKind::Selector,
+            &json!({"crawl":{"extraction":"selectors"},"item":"article","title":"h2","link":"a"})
+        )
+        .is_ok());
+        for config in [
+            json!({}),
+            json!({"crawl":{"extraction":"selectors"}}),
+            json!({"crawl":{"extraction":"jsonld","unknown":1}}),
+            json!({"crawl":{"extraction":"jsonld","max_pages":0}}),
+            json!({"crawl":{"extraction":"jsonld"},"next_page":"a"}),
+            json!({"crawl":{"extraction":"jsonld"},"mode":"browser"}),
+            json!({"crawl":{"extraction":"jsonld"},"mode":"script","script":{"runtime":"js","code":"ignored"}}),
+        ] {
+            assert!(
+                validate_config(SourceKind::Selector, &config).is_err(),
+                "{config}"
+            );
+        }
+        assert!(validate_config(
+            SourceKind::Jsonld,
+            &json!({"crawl":{"extraction":"jsonld"}})
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn compensation_modes_upgrade_without_changing_saved_overlap_rules() {
+        use scrape_core::enrich::{CompensationMatchMode, Salary};
+
+        assert_eq!(WORKFLOW_SPEC_VERSION, 9);
+        assert_eq!(scrape_core::PROTOCOL_VERSION, 11);
+        let v1 = validate(
+            serde_json::json!({
+                "version": 1, "company": "Legacy", "url": "https://boards.greenhouse.io/fixture",
+                "engine": {"kind": "greenhouse"}
+            }),
+            "UTC",
+        )
+        .unwrap();
+        assert_eq!(v1.version, 9);
+        assert!(v1
+            .filters
+            .as_ref()
+            .is_none_or(|filters| filters.compensation.is_none()));
+        let lower =
+            Salary::from_structured(Some(50000.0), None, Some("USD"), Some("year"), None).unwrap();
+        for version in 2..=9 {
+            let mut value = serde_json::json!({
+                "version": version, "metadata": {"name": "Saved native pay"},
+                "sources": [{"id": "fixture", "label": "Fixture",
+                    "extractor": {"kind": "greenhouse", "url": "https://boards.greenhouse.io/fixture"}}],
+                "filters": {
+                    "compensation": {"min_minor": 6000001, "currency": "USD", "interval": "year"},
+                    "matching": {"compensation": {"min_minor": 6000001, "currency": "USD", "interval": "year"}}
+                }
+            });
+            for explicit_overlap in [false, true] {
+                if explicit_overlap {
+                    value["filters"]["compensation"]["match_mode"] =
+                        Value::String("range_overlap".into());
+                    value["filters"]["matching"]["compensation"]["match_mode"] =
+                        Value::String("range_overlap".into());
+                }
+                let spec = validate(value.clone(), "UTC").unwrap();
+                assert_eq!(spec.version, 9);
+                let reopened = validate(serde_json::to_value(&spec).unwrap(), "UTC").unwrap();
+                assert_eq!(spec.filters, reopened.filters);
+                let filters = reopened.filters.unwrap();
+                for pay in [
+                    filters.compensation.unwrap(),
+                    filters.matching.unwrap().compensation.unwrap(),
+                ] {
+                    assert_eq!(
+                        pay.match_mode,
+                        CompensationMatchMode::RangeOverlap,
+                        "v{version}"
+                    );
+                    assert!(pay.matches(&lower.ranges), "v{version}");
+                }
+            }
+        }
+        let spec = validate(serde_json::json!({
+            "version": 9, "metadata": {"name": "Advertised pay"},
+            "sources": [{"id": "fixture", "label": "Fixture",
+                "extractor": {"kind": "greenhouse", "url": "https://boards.greenhouse.io/fixture"}}],
+            "filters": {"matching": {"compensation": {
+                "min_minor": 6000001, "currency": "USD", "interval": "year",
+                "match_mode": "advertised_amount"
+            }}}
+        }), "UTC")
+        .unwrap();
+        let reopened = validate(serde_json::to_value(&spec).unwrap(), "UTC").unwrap();
+        let pay = reopened
+            .filters
+            .unwrap()
+            .matching
+            .unwrap()
+            .compensation
+            .unwrap();
+        assert_eq!(pay.match_mode, CompensationMatchMode::AdvertisedAmount);
+        assert!(!pay.matches(&lower.ranges));
+    }
 
     #[test]
     fn role_first_search_validates_relative_dates_provider_identity_and_old_filter_preservation() {

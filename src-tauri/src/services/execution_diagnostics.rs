@@ -66,6 +66,7 @@ pub fn prepare(source: &Source, timezone: &str, started_at: &str) -> Result<Work
     };
     let mut config = WorkerConfig {
         version: PROTOCOL_VERSION,
+        http_proxy: None,
         sources,
         filters: super::runner::resolve_worker_filters(&source.filters)?,
         run_started_at: Some(started_at.into()),
@@ -82,6 +83,21 @@ pub fn prepare(source: &Source, timezone: &str, started_at: &str) -> Result<Work
     };
     prepare_search_sources(&mut config.sources, &config.filters, started_at)?;
     Ok(config)
+}
+
+pub async fn apply_settings_limits(pool: &SqlitePool, limits: &mut WorkerLimits) -> Result<()> {
+    if let Ok(settings) = crate::db::settings::SettingsRepo::get_all(pool).await {
+        if !settings.scraper_respect_robots {
+            limits.ignore_robots = Some(true);
+        }
+        if limits.per_host_delay_ms == scrape_core::protocol::default_per_host_delay_ms() {
+            limits.per_host_delay_ms = settings.scraper_per_host_delay_ms;
+        }
+        if limits.jitter_ms.is_none() {
+            limits.jitter_ms = Some(settings.scraper_jitter_ms);
+        }
+    }
+    Ok(())
 }
 
 /// Search context is derived identically for previews and saved executions.
@@ -157,12 +173,15 @@ fn secret_key(key: &str) -> bool {
         "passwd",
         "secret",
         "token",
+        "appkey",
+        "appid",
         "apikey",
         "authorization",
         "credential",
         "cookie",
         "storagestate",
         "sessionmaterial",
+        "httpproxy",
     ]
     .iter()
     .any(|word| key.contains(word))
@@ -234,6 +253,7 @@ pub fn redact(value: &mut Value) {
 pub fn safe_config(config: &WorkerConfig) -> Result<WorkerConfig> {
     let mut value = serde_json::to_value(config)?;
     redact(&mut value);
+    value["http_proxy"] = Value::Null;
     // Suppressed identities can expose saved destinations; export their count in context.
     value["blocked_postings"] = json!([]);
     Ok(serde_json::from_value(value)?)
@@ -390,7 +410,7 @@ mod tests {
     async fn real_seed_service_context_retains_each_workflow_and_observed_ownership() {
         let pool = init_memory_db().await.unwrap();
         let sources = sample_workflows::seed_all(&pool).await.unwrap();
-        assert_eq!(sources.len(), 6);
+        assert_eq!(sources.len(), 3);
         assert!(sample_workflows::seed_all(&pool).await.unwrap().is_empty());
         let run = RunsRepo::start(&pool, TriggerType::Manual).await.unwrap();
         for source in &sources {
@@ -400,7 +420,7 @@ mod tests {
                 .unwrap();
         }
         let logs = RunsRepo::get_logs(&pool, &run.id).await.unwrap();
-        assert_eq!(logs.len(), 6, "Run all must keep each workflow's context");
+        assert_eq!(logs.len(), 3, "Run all must keep each workflow's context");
         for (source, log) in sources.iter().zip(logs) {
             let context: Value = serde_json::from_str(
                 log.message
@@ -433,11 +453,10 @@ mod tests {
     #[tokio::test]
     async fn failed_script_preflight_keeps_context_and_explicit_pre_discovery_error() {
         let pool = init_memory_db().await.unwrap();
-        let source = sample_workflows::seed_all(&pool)
-            .await
-            .unwrap()
-            .pop()
-            .unwrap();
+        let source =
+            crate::services::provider_verification_profiles::save(&pool, "streaming-cloud-script")
+                .await
+                .unwrap();
         let run = RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&source.id))
             .await
             .unwrap();

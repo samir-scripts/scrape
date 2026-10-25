@@ -532,8 +532,7 @@ impl ScrapeRunner {
             .flatten()
             .unwrap_or_else(|| "UTC".to_string());
 
-        let mut config = super::execution_diagnostics::prepare(&source, &tz_str, &run.started_at)?;
-        config.blocked_postings = crate::db::postings::suppression_snapshot(&self.pool).await?;
+        let config = super::execution_diagnostics::prepare(&source, &tz_str, &run.started_at)?;
         let worker_sources = config.sources.clone();
         let starting_index = config.starting_source_index.unwrap_or(0);
 
@@ -706,7 +705,7 @@ impl ScrapeRunner {
         app: &AppHandle,
         run_id: &str,
         workflow_id: &str,
-        config: WorkerConfig,
+        mut config: WorkerConfig,
     ) -> Result<(i64, i64, HashMap<String, (String, Option<String>)>)> {
         let mut counts = RunCounts {
             examination_incomplete: Some(true),
@@ -714,6 +713,24 @@ impl ScrapeRunner {
         };
         RunsRepo::record_counts(&self.pool, run_id, &counts).await?;
         super::execution_diagnostics::preflight(&self.pool, run_id, workflow_id, &config).await?;
+        let hydration = async {
+            super::provider_credentials::hydrate(app, &mut config).await?;
+            super::http_proxy::hydrate(&mut config).await?;
+            super::execution_diagnostics::apply_settings_limits(&self.pool, &mut config.limits).await
+        }
+        .await;
+        if let Err(error) = hydration {
+            let message = error.to_string();
+            self.log_event(
+                app,
+                run_id,
+                LogLevel::Error,
+                Some(workflow_id),
+                &format!("Execution preflight failed before discovery: {message}"),
+            )
+            .await;
+            return Err(error);
+        }
         let mut budget = super::ingestion::RunPostingBudget::new(&config.sources)?;
         let (mut rx, child) = crate::services::process::worker_command(app)?
             .args(["--stdin"])

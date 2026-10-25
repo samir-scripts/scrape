@@ -80,15 +80,47 @@ pub async fn set_scheduler_paused(
 
 #[tauri::command]
 pub async fn detect_source(app: AppHandle, url: String) -> Result<serde_json::Value> {
-    let output = crate::services::process::worker_command(&app)?
-        .args(["--detect", &url])
-        .output()
-        .await
-        .map_err(|e| AppError::Internal(format!("Failed to execute detect: {}", e)))?;
-
-    let stdout_str = String::from_utf8_lossy(&output.stdout);
-    let val: serde_json::Value = serde_json::from_str(stdout_str.trim())
-        .map_err(|e| AppError::Internal(format!("Failed to parse detect result: {}", e)))?;
+    let proxy = crate::services::http_proxy::configuration().await?;
+    let (mut receiver, child) = crate::services::process::worker_command(&app)?
+        .args(["--detect-proxy-stdin", "--detect", &url])
+        .spawn()
+        .map_err(|_| AppError::Internal("Failed to execute source detection worker".into()))?;
+    let mut child = crate::services::process::ChildGuard::new(child);
+    let mut input = serde_json::to_vec(&proxy)?;
+    input.push(b'\n');
+    child.write(&input).map_err(|_| {
+        AppError::Internal("Failed to send source detection transport configuration".into())
+    })?;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(45);
+    let mut stdout = Vec::new();
+    loop {
+        match tokio::time::timeout_at(deadline, receiver.recv()).await {
+            Ok(Some(CommandEvent::Stdout(bytes))) => {
+                if stdout.len().saturating_add(bytes.len()) > 64 * 1024 {
+                    return Err(AppError::Internal(
+                        "Source detection output exceeded its limit".into(),
+                    ));
+                }
+                stdout.extend_from_slice(&bytes);
+            }
+            Ok(Some(CommandEvent::Terminated(status))) => {
+                child.disarm();
+                if status.code != Some(0) {
+                    return Err(AppError::Internal("Source detection worker failed".into()));
+                }
+                break;
+            }
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                return Err(AppError::Internal(
+                    "Source detection worker ended without completion".into(),
+                ))
+            }
+            Err(_) => return Err(AppError::Internal("Source detection timed out".into())),
+        }
+    }
+    let val: serde_json::Value = serde_json::from_slice(&stdout)
+        .map_err(|_| AppError::Internal("Failed to parse source detection result".into()))?;
 
     Ok(val)
 }
@@ -161,6 +193,7 @@ async fn execute_dry_run_worker(
     crate::services::script_trust::validate_execution(pool, &sources).await?;
     let mut config = WorkerConfig {
         version: PROTOCOL_VERSION,
+        http_proxy: None,
         run_started_at: Some(scrape_core::now_iso()),
         filters_by_source: Default::default(),
         sources,
@@ -175,7 +208,9 @@ async fn execute_dry_run_worker(
         &config.filters,
         config.run_started_at.as_deref().unwrap(),
     )?;
-
+    crate::services::provider_credentials::hydrate(app, &mut config).await?;
+    crate::services::http_proxy::hydrate(&mut config).await?;
+    crate::services::execution_diagnostics::apply_settings_limits(pool, &mut config.limits).await?;
     let (mut rx, child) = crate::services::process::worker_command(app)?
         .args(["--stdin", "--dry-run"])
         .spawn()

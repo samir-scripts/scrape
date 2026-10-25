@@ -19,6 +19,13 @@ pub struct Settings {
     pub scraper_enabled: bool,
     pub scraper_cron: String,
     pub scraper_run_on_startup: bool,
+    pub scraper_respect_robots: bool,
+    #[ts(type = "number")]
+    pub scraper_per_host_delay_ms: u64,
+    #[ts(type = "number")]
+    pub scraper_jitter_ms: u64,
+    #[ts(type = "number")]
+    pub scraper_max_jobs_per_run: u64,
     pub filters_include_keywords: Vec<String>,
     pub filters_exclude_keywords: Vec<String>,
     pub filters_locations: Vec<String>,
@@ -47,6 +54,10 @@ impl Default for Settings {
             scraper_enabled: true,
             scraper_cron: "0 0 */6 * * *".to_string(),
             scraper_run_on_startup: false,
+            scraper_respect_robots: false,
+            scraper_per_host_delay_ms: 750,
+            scraper_jitter_ms: 500,
+            scraper_max_jobs_per_run: 20,
             filters_include_keywords: Vec::new(),
             filters_exclude_keywords: Vec::new(),
             filters_locations: Vec::new(),
@@ -77,6 +88,10 @@ impl SettingsRepo {
     const KEY_SCRAPER_ENABLED: &'static str = "scraper.enabled";
     const KEY_SCRAPER_CRON: &'static str = "scraper.cron";
     const KEY_SCRAPER_RUN_ON_STARTUP: &'static str = "scraper.run_on_startup";
+    const KEY_SCRAPER_RESPECT_ROBOTS: &'static str = "scraper.respect_robots";
+    const KEY_SCRAPER_PER_HOST_DELAY: &'static str = "scraper.per_host_delay_ms";
+    const KEY_SCRAPER_JITTER: &'static str = "scraper.jitter_ms";
+    const KEY_SCRAPER_MAX_JOBS: &'static str = "scraper.max_jobs_per_run";
     const KEY_FILTERS_INCLUDE: &'static str = "filters.include_keywords";
     const KEY_FILTERS_EXCLUDE: &'static str = "filters.exclude_keywords";
     const KEY_FILTERS_LOCATIONS: &'static str = "filters.locations";
@@ -138,6 +153,22 @@ impl SettingsRepo {
             (
                 Self::KEY_SCRAPER_RUN_ON_STARTUP,
                 serde_json::to_string(&defaults.scraper_run_on_startup)?,
+            ),
+            (
+                Self::KEY_SCRAPER_RESPECT_ROBOTS,
+                serde_json::to_string(&defaults.scraper_respect_robots)?,
+            ),
+            (
+                Self::KEY_SCRAPER_PER_HOST_DELAY,
+                serde_json::to_string(&defaults.scraper_per_host_delay_ms)?,
+            ),
+            (
+                Self::KEY_SCRAPER_JITTER,
+                serde_json::to_string(&defaults.scraper_jitter_ms)?,
+            ),
+            (
+                Self::KEY_SCRAPER_MAX_JOBS,
+                serde_json::to_string(&defaults.scraper_max_jobs_per_run)?,
             ),
             (
                 Self::KEY_FILTERS_INCLUDE,
@@ -313,6 +344,26 @@ impl SettingsRepo {
                         settings.scraper_run_on_startup = v;
                     }
                 }
+                Self::KEY_SCRAPER_RESPECT_ROBOTS => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.scraper_respect_robots = v;
+                    }
+                }
+                Self::KEY_SCRAPER_PER_HOST_DELAY => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.scraper_per_host_delay_ms = v;
+                    }
+                }
+                Self::KEY_SCRAPER_JITTER => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.scraper_jitter_ms = v;
+                    }
+                }
+                Self::KEY_SCRAPER_MAX_JOBS => {
+                    if let Ok(v) = serde_json::from_str(&val_str) {
+                        settings.scraper_max_jobs_per_run = v;
+                    }
+                }
                 Self::KEY_FILTERS_INCLUDE => {
                     if let Ok(v) = serde_json::from_str(&val_str) {
                         settings.filters_include_keywords = v;
@@ -393,9 +444,12 @@ impl SettingsRepo {
             Self::KEY_SCRAPER_ENABLED,
             Self::KEY_SCRAPER_CRON,
             Self::KEY_SCRAPER_RUN_ON_STARTUP,
+            Self::KEY_SCRAPER_RESPECT_ROBOTS,
+            Self::KEY_SCRAPER_PER_HOST_DELAY,
+            Self::KEY_SCRAPER_JITTER,
+            Self::KEY_SCRAPER_MAX_JOBS,
             Self::KEY_FILTERS_INCLUDE,
             Self::KEY_FILTERS_EXCLUDE,
-            Self::KEY_FILTERS_LOCATIONS,
             Self::KEY_FILTERS_ROLE_TYPES,
             Self::KEY_NOTIFICATIONS_ENABLED,
             Self::KEY_APP_START_HIDDEN,
