@@ -211,6 +211,14 @@ async fn execute_dry_run_worker(
     crate::services::provider_credentials::hydrate(app, &mut config).await?;
     crate::services::http_proxy::hydrate(&mut config).await?;
     crate::services::execution_diagnostics::apply_settings_limits(pool, &mut config.limits).await?;
+    config.limits.max_workflow_duration_s = config.limits.max_workflow_duration_s.min(45);
+    config.limits.max_source_duration_s = config.limits.max_source_duration_s.min(20);
+    let enrichment = config
+        .limits
+        .enrichment
+        .get_or_insert_with(Default::default);
+    enrichment.timeout_ms = enrichment.timeout_ms.min(15_000);
+    enrichment.max_requests = enrichment.max_requests.min(15);
     let (mut rx, child) = crate::services::process::worker_command(app)?
         .args(["--stdin", "--dry-run"])
         .spawn()

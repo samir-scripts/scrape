@@ -44,7 +44,7 @@ pub(crate) struct SelectorSession {
     pages_visited: u32,
     page_limit_reached: bool,
     source_deadline: Instant,
-    detail_deadline: Instant,
+    detail_budget: Duration,
     navigation_timeout: Duration,
     detail_limit: u32,
     detail_requests: u32,
@@ -195,7 +195,7 @@ impl SelectorSession {
             pages_visited,
             page_limit_reached,
             source_deadline,
-            detail_deadline: Instant::now() + Duration::from_millis(enrichment.timeout_ms),
+            detail_budget: Duration::from_millis(enrichment.timeout_ms),
             navigation_timeout,
             detail_limit: enrichment.max_requests,
             detail_requests: 0,
@@ -210,6 +210,9 @@ impl SelectorSession {
                 .insert(url.to_string(), (html, actual.to_string()));
         }
         Ok(session)
+    }
+    pub fn detail_requests(&self) -> u32 {
+        self.detail_requests
     }
     pub async fn next(
         &mut self,
@@ -381,7 +384,7 @@ impl SelectorSession {
         }
         let mut warning = None;
         let mut detail_received = false;
-        let bound = if Instant::now() >= self.detail_deadline {
+        let bound = if self.detail_budget.is_zero() || Instant::now() >= self.source_deadline {
             Some(CoverageTermination::TimeLimit)
         } else if self.config.crawl.as_ref().is_some_and(|crawl| {
             self.pages_visited >= self.config.max_pages || self.crawl_depth >= crawl.max_depth
@@ -436,7 +439,8 @@ impl SelectorSession {
                             &self.session_cookies,
                             1,
                             self.navigation_timeout,
-                            self.source_deadline.min(self.detail_deadline),
+                            self.source_deadline
+                                .min(Instant::now() + self.detail_budget),
                         )
                         .await?;
                     Ok::<(String, String), ClientError>((rendered.html, rendered.actual_url))
@@ -448,14 +452,14 @@ impl SelectorSession {
                     }
                 }
             };
-            match timeout_at(
-                self.source_deadline
-                    .min(self.detail_deadline)
-                    .min(Instant::now() + self.navigation_timeout),
-                detail_fetch,
-            )
-            .await
-            {
+            let call_deadline = self
+                .source_deadline
+                .min(Instant::now() + self.detail_budget)
+                .min(Instant::now() + self.navigation_timeout);
+            let call_started = Instant::now();
+            let call_res = timeout_at(call_deadline, detail_fetch).await;
+            self.detail_budget = self.detail_budget.saturating_sub(call_started.elapsed());
+            match call_res {
                 Ok(Ok((html, actual))) => {
                     match merge_detail(&mut posting, &html, &actual, &self.config, &self.source) {
                         Ok(()) => detail_received = true,
@@ -489,6 +493,7 @@ impl SelectorSession {
                     warning = Some((format!("Static detail {url} unavailable: {e}"), termination))
                 }
                 Err(_) => {
+                    self.detail_budget = Duration::ZERO;
                     self.detail_bound_reported = true;
                     if self.config.crawl.is_some() {
                         self.visited.insert(url.clone());
@@ -842,7 +847,7 @@ mod tests {
             pages_visited: 1,
             page_limit_reached: false,
             source_deadline: Instant::now() - Duration::from_secs(1),
-            detail_deadline: Instant::now() + Duration::from_secs(45),
+            detail_budget: Duration::from_secs(45),
             navigation_timeout: Duration::from_secs(30),
             detail_limit: 100,
             detail_requests: 0,

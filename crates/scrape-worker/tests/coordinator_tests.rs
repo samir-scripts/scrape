@@ -1768,3 +1768,163 @@ fn jobicy_cached_json_is_schema_validated_again_before_reuse() {
     );
     assert_eq!(feed_requests(&server).len(), 2);
 }
+
+#[test]
+fn multi_source_enrichment_budget_and_turn_yielding_prevent_non_jobicy_starvation() {
+    let cache = tempfile::tempdir().unwrap();
+    let server = Server::new(|path| {
+        if path.contains("/jobicy.com/api/jobs") {
+            return json!({
+                "jobs": [jobicy_job(101)],
+                "hasMore": false,
+                "nextCursor": null
+            })
+            .to_string();
+        }
+        if path.contains("/boards-api.greenhouse.io/v1/boards/cloudflare/jobs") {
+            return json!({
+                "jobs": [
+                    {
+                        "id": 201,
+                        "title": "Cloudflare Remote Engineer",
+                        "absolute_url": "https://boards.greenhouse.io/cloudflare/jobs/201",
+                        "location": { "name": "Remote" },
+                        "company_name": "Cloudflare",
+                        "first_published": "2026-10-15T00:00:00Z",
+                        "updated_at": "2026-10-15T00:00:00Z",
+                        "content": "<p>Estimated annual salary of $184,000-$230,000.</p>"
+                    }
+                ]
+            })
+            .to_string();
+        }
+        if path.contains("/boards-api.greenhouse.io/v1/boards/bitwarden/jobs") {
+            if path.contains("?content=true") {
+                return json!({
+                    "jobs": [
+                        {
+                            "id": 301,
+                            "title": "Bitwarden Stale Role",
+                            "absolute_url": "https://boards.greenhouse.io/bitwarden/jobs/301",
+                            "location": { "name": "Remote" },
+                            "company_name": "Bitwarden",
+                            "first_published": "2026-09-01T00:00:00Z",
+                            "updated_at": "2026-09-01T00:00:00Z",
+                            "content": "<p>No pay info</p>"
+                        }
+                    ]
+                })
+                .to_string();
+            }
+            // Delay bitwarden detail
+            std::thread::sleep(Duration::from_millis(50));
+            return json!({"id": 301, "pay_input_ranges": []}).to_string();
+        }
+        if path.contains("/wday/cxs/") {
+            if path.contains("/jobs") {
+                return json!({
+                    "total": 1,
+                    "jobPostings": [
+                        {
+                            "title": "NVIDIA Remote Architect",
+                            "externalPath": "/job/401",
+                            "bulletFields": ["JR401"],
+                            "locationsText": "6 Locations",
+                            "postedOn": "Posted Yesterday"
+                        }
+                    ]
+                })
+                .to_string();
+            }
+            if path.contains("/job/") {
+                return json!({
+                    "jobPostingInfo": {
+                        "jobReqId": "JR401",
+                        "timeType": "Full time",
+                        "location": "US, CA, Santa Clara",
+                        "additionalLocations": ["US, Remote"],
+                        "startDate": "2026-10-24",
+                        "jobDescription": "<p>The base salary range is 190,000 USD - 250,000 USD per year.</p>"
+                    }
+                })
+                .to_string();
+            }
+        }
+        "<html>Fixture careers</html>".into()
+    });
+
+    let sources = vec![
+        json!({
+            "id": "jobicy",
+            "kind": "search",
+            "name": "Jobicy",
+            "identifier": "jobicy",
+            "config": { "__provider_cache_dir": cache.path().to_str().unwrap() }
+        }),
+        json!({
+            "id": "cloudflare",
+            "kind": "greenhouse",
+            "name": "Cloudflare",
+            "identifier": "cloudflare",
+            "config": {}
+        }),
+        json!({
+            "id": "bitwarden",
+            "kind": "greenhouse",
+            "name": "Bitwarden",
+            "identifier": "bitwarden",
+            "config": {}
+        }),
+        json!({
+            "id": "nvidia",
+            "kind": "workday",
+            "name": "NVIDIA",
+            "identifier": "https://nvidia.myworkdayjobs.com/NVIDIAExternalCareerSite",
+            "config": { "max_pages": 1 }
+        }),
+    ];
+
+    let events = run_worker_config(
+        &server,
+        sources,
+        json!({
+            "matching": {
+                "workplaces": ["remote"],
+                "compensation": {
+                    "min_minor": 6000001,
+                    "currency": "USD",
+                    "interval": "year",
+                    "match_mode": "advertised_amount"
+                }
+            }
+        }),
+        20,
+        0,
+        false,
+        json!({
+            "per_host_delay_ms": 0,
+            "request_timeout_s": 5,
+            "enrichment": { "timeout_ms": 5000, "max_requests": 5 }
+        }),
+    );
+
+    let mut accepted_by_source = std::collections::HashMap::new();
+    for event in &events {
+        if let WorkerEvent::Job { source_id, .. } = event {
+            *accepted_by_source.entry(source_id.clone()).or_insert(0) += 1;
+        }
+    }
+
+    assert!(
+        accepted_by_source.get("jobicy").copied().unwrap_or(0) >= 1,
+        "Jobicy must emit jobs: {accepted_by_source:?}"
+    );
+    assert!(
+        accepted_by_source.get("cloudflare").copied().unwrap_or(0) >= 1,
+        "Cloudflare must not be starved: {accepted_by_source:?}"
+    );
+    assert!(
+        accepted_by_source.get("nvidia").copied().unwrap_or(0) >= 1,
+        "NVIDIA must emit remote jobs: {accepted_by_source:?}"
+    );
+}

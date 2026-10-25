@@ -155,6 +155,111 @@ impl GreenhouseJob {
             self.content = detail.content;
         }
     }
+    pub(crate) fn effective_location(&self) -> (String, String) {
+        let raw_location_name = self
+            .location
+            .as_ref()
+            .and_then(|l| l.name.clone())
+            .unwrap_or_default();
+        let offices_str = self
+            .offices
+            .as_ref()
+            .map(|offs| {
+                offs.iter()
+                    .filter_map(|o| o.location.as_deref().or(o.name.as_deref()))
+                    .filter(|s| !s.trim().is_empty())
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            })
+            .unwrap_or_default();
+
+        let is_arrangement_keyword = raw_location_name.eq_ignore_ascii_case("In-Office")
+            || raw_location_name.eq_ignore_ascii_case("In Office")
+            || raw_location_name.eq_ignore_ascii_case("On-Site")
+            || raw_location_name.eq_ignore_ascii_case("OnSite")
+            || raw_location_name.eq_ignore_ascii_case("Hybrid")
+            || raw_location_name.eq_ignore_ascii_case("Distributed")
+            || raw_location_name.eq_ignore_ascii_case("Remote");
+
+        let effective_location_str = if is_arrangement_keyword
+            && !raw_location_name.eq_ignore_ascii_case("Remote")
+            && !offices_str.is_empty()
+        {
+            offices_str
+        } else if !raw_location_name.is_empty() {
+            raw_location_name.clone()
+        } else {
+            offices_str
+        };
+        (raw_location_name, effective_location_str)
+    }
+    pub(crate) fn can_resolve_unresolved(
+        &self,
+        unresolved: &[scrape_core::matching::RejectionReason],
+    ) -> bool {
+        use scrape_core::matching::RejectionReason;
+        let content_missing = self
+            .content
+            .as_ref()
+            .is_none_or(|value| value.trim().is_empty());
+        let location_missing = self
+            .location
+            .as_ref()
+            .and_then(|location| location.name.as_deref())
+            .is_none_or(|value| value.trim().is_empty());
+        unresolved.iter().all(|reason| match reason {
+            RejectionReason::PostingDate => self.first_published.is_none(),
+            RejectionReason::Compensation => {
+                self.pay_input_ranges.as_ref().is_none_or(Vec::is_empty)
+            }
+            RejectionReason::Company => self
+                .company_name
+                .as_ref()
+                .is_none_or(|value| value.trim().is_empty()),
+            RejectionReason::Workplace | RejectionReason::Geography => {
+                content_missing || location_missing || self.offices.is_none()
+            }
+            RejectionReason::Experience
+            | RejectionReason::NewGrad
+            | RejectionReason::Sponsorship
+            | RejectionReason::WorkAuthorization
+            | RejectionReason::Clearance
+            | RejectionReason::KeywordAny
+            | RejectionReason::KeywordAll
+            | RejectionReason::KeywordExclusion
+            | RejectionReason::Query
+            | RejectionReason::Policy
+            | RejectionReason::LegacyKeywords
+            | RejectionReason::LegacyExclusion
+            | RejectionReason::LegacyLocation => content_missing || location_missing,
+            RejectionReason::RoleType
+            | RejectionReason::LegacyRoleType
+            | RejectionReason::InvalidCandidate => false,
+        })
+    }
+    pub(crate) fn needs_detail(&self, candidate: &WorkerEvent) -> bool {
+        !(self.first_published.is_some()
+            && self
+                .content
+                .as_ref()
+                .is_some_and(|value| !value.trim().is_empty())
+            && self
+                .location
+                .as_ref()
+                .and_then(|location| location.name.as_deref())
+                .is_some_and(|value| !value.trim().is_empty())
+            && self
+                .company_name
+                .as_ref()
+                .is_some_and(|value| !value.trim().is_empty())
+            && matches!(
+                candidate,
+                WorkerEvent::Job {
+                    salary: Some(s),
+                    ..
+                } if s.ranges.iter().any(|r| r.interval.is_some())
+            ))
+    }
     pub(crate) fn evidence(&self) -> scrape_core::matching::MatchingEvidence {
         use scrape_core::FilterField;
         let mut fields = vec![FilterField::Title, FilterField::RoleType];
@@ -172,43 +277,35 @@ impl GreenhouseJob {
         {
             fields.push(FilterField::Company);
         }
-        if self
-            .location
-            .as_ref()
-            .and_then(|location| location.name.as_deref())
-            .is_some_and(|value| {
-                !value.trim().is_empty()
-                    && (value.eq_ignore_ascii_case("Remote")
-                        || self.offices.is_some()
-                        || !matches!(
-                            value.to_ascii_lowercase().as_str(),
-                            "in-office"
-                                | "in office"
-                                | "on-site"
-                                | "onsite"
-                                | "hybrid"
-                                | "distributed"
-                        ))
-            })
+        let (raw_location_name, effective_location_str) = self.effective_location();
+        if !effective_location_str.trim().is_empty()
+            && (raw_location_name.eq_ignore_ascii_case("Remote")
+                || self.offices.is_some()
+                || !matches!(
+                    raw_location_name.to_ascii_lowercase().as_str(),
+                    "in-office" | "in office" | "on-site" | "onsite" | "hybrid" | "distributed"
+                ))
         {
             fields.push(FilterField::Location);
         }
         let description = self.content.as_deref().map(|content| {
             normalize_description_with_format(content, DescriptionFormat::Html, 32768).plain_text
         });
+        let has_interval_salary = description
+            .as_deref()
+            .and_then(Salary::from_text)
+            .is_some_and(|s| s.ranges.iter().any(|r| r.interval.is_some()));
         scrape_core::matching::MatchingEvidence {
             fields,
             posting_date: self.first_published.is_some(),
             compensation: self
                 .pay_input_ranges
                 .as_ref()
-                .is_some_and(|ranges| !ranges.is_empty()),
+                .is_some_and(|ranges| !ranges.is_empty())
+                || has_interval_salary,
             known: if classify_workplace(
-                None,
-                self.location
-                    .as_ref()
-                    .and_then(|l| l.name.as_deref())
-                    .unwrap_or(""),
+                Some(&raw_location_name),
+                &effective_location_str,
                 description.as_deref(),
             ) != scrape_core::WorkplaceType::Unknown
             {
@@ -309,60 +406,63 @@ async fn scrape_greenhouse_filtered_at(
         }
         let mut evidence = job.evidence();
         let assessment = matcher.assess(&candidate, started, &evidence);
-        if !assessment.rejected.is_empty() {
+        if !assessment.rejected.is_empty() || !job.can_resolve_unresolved(&assessment.unresolved) {
+            evidence.opportunity_exhausted = true;
             if !sink(candidate, Some(evidence)) {
                 break;
             }
             continue;
         }
-        let bound = if tokio::time::Instant::now() >= deadline {
-            Some(CoverageTermination::TimeLimit)
-        } else if requests >= limits.max_requests {
-            Some(CoverageTermination::RequestLimit)
-        } else {
-            None
-        };
         let mut unavailable = None;
         let mut detail_received = false;
-        if let Some(bound) = bound {
+        if !job.needs_detail(&candidate) {
             evidence.opportunity_exhausted = true;
-            if !bound_reported {
-                unavailable = Some((format!("Greenhouse detail enrichment reached its {} bound; missing publication dates and compensation remain unknown", if bound == CoverageTermination::TimeLimit { "time" } else { "request" }), Some(bound)));
-                bound_reported = true;
-            }
         } else {
-            requests += 1;
-            let detail_url = format!("{board_url}/{}?pay_transparency=true", job.id);
-            match tokio::time::timeout_at(
-                deadline,
-                client.fetch_json_cached::<GreenhouseJob>(&detail_url),
-            )
-            .await
-            {
-                Ok(Ok(detail)) if detail.id == job.id => {
-                    job.merge_detail(detail);
-                    detail_received = true;
-                    evidence = job.evidence();
-                    evidence.opportunity_exhausted = true;
+            let bound = if tokio::time::Instant::now() >= deadline {
+                Some(CoverageTermination::TimeLimit)
+            } else if requests >= limits.max_requests {
+                Some(CoverageTermination::RequestLimit)
+            } else {
+                None
+            };
+            if let Some(bound) = bound {
+                evidence.opportunity_exhausted = true;
+                if !bound_reported {
+                    unavailable = Some((format!("Greenhouse detail enrichment reached its {} bound; missing publication dates and compensation remain unknown", if bound == CoverageTermination::TimeLimit { "time" } else { "request" }), Some(bound)));
+                    bound_reported = true;
                 }
-                result => {
-                    evidence.opportunity_exhausted = true;
-                    let termination = result
-                        .as_ref()
-                        .err()
-                        .map(|_| CoverageTermination::TimeLimit);
-                    unavailable = Some((format!("Greenhouse detail {} unavailable or has a mismatched ID: {result:?}. Retry the source to obtain missing evidence.",job.id), termination));
+            } else {
+                requests += 1;
+                let detail_url = format!("{board_url}/{}?pay_transparency=true", job.id);
+                match tokio::time::timeout_at(
+                    deadline,
+                    client.fetch_json_cached::<GreenhouseJob>(&detail_url),
+                )
+                .await
+                {
+                    Ok(Ok(detail)) if detail.id == job.id => {
+                        job.merge_detail(detail);
+                        detail_received = true;
+                        evidence = job.evidence();
+                        evidence.opportunity_exhausted = true;
+                    }
+                    result => {
+                        evidence.opportunity_exhausted = true;
+                        let termination = result
+                            .as_ref()
+                            .err()
+                            .map(|_| CoverageTermination::TimeLimit);
+                        unavailable = Some((format!("Greenhouse detail {} unavailable or has a mismatched ID: {result:?}. Retry the source to obtain missing evidence.",job.id), termination));
+                    }
                 }
             }
         }
         let candidate = job.event(source)?;
-        if detail_received {
-            if let WorkerEvent::Job {
-                salary: Some(_), ..
-            } = &candidate
-            {
-                evidence.compensation = true;
-            }
+        if let WorkerEvent::Job {
+            salary: Some(_), ..
+        } = &candidate
+        {
+            evidence.compensation = true;
         }
         let final_assessment = matcher.assess(&candidate, started, &evidence);
         if detail_received
@@ -475,38 +575,7 @@ pub(crate) fn parse_greenhouse_jobs_with(
 ) -> Result<bool, ClientError> {
     for job in jobs {
         let role_type = RoleType::infer(&job.title, None);
-        let raw_location_name = job.location.and_then(|l| l.name).unwrap_or_default();
-        let offices_str = job
-            .offices
-            .as_ref()
-            .map(|offs| {
-                offs.iter()
-                    .filter_map(|o| o.location.as_deref().or(o.name.as_deref()))
-                    .filter(|s| !s.trim().is_empty())
-                    .collect::<Vec<_>>()
-                    .join("; ")
-            })
-            .unwrap_or_default();
-
-        let is_arrangement_keyword = raw_location_name.eq_ignore_ascii_case("In-Office")
-            || raw_location_name.eq_ignore_ascii_case("In Office")
-            || raw_location_name.eq_ignore_ascii_case("On-Site")
-            || raw_location_name.eq_ignore_ascii_case("OnSite")
-            || raw_location_name.eq_ignore_ascii_case("Hybrid")
-            || raw_location_name.eq_ignore_ascii_case("Distributed")
-            || raw_location_name.eq_ignore_ascii_case("Remote");
-
-        let effective_location_str = if is_arrangement_keyword
-            && !raw_location_name.eq_ignore_ascii_case("Remote")
-            && !offices_str.is_empty()
-        {
-            offices_str
-        } else if !raw_location_name.is_empty() {
-            raw_location_name.clone()
-        } else {
-            offices_str
-        };
-
+        let (raw_location_name, effective_location_str) = job.effective_location();
         let mut locations = loc_enrich::parse(&effective_location_str);
 
         let description_source = job.content.clone();

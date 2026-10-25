@@ -32,7 +32,8 @@ pub struct CoordinatorSession {
     greenhouse_jobs: Option<Vec<serde_json::Value>>,
     greenhouse_base: Option<String>,
     greenhouse_requests: u32,
-    greenhouse_deadline: Option<Instant>,
+    greenhouse_budget: std::time::Duration,
+    source_deadline: Instant,
     greenhouse_limits: EnrichmentLimits,
     greenhouse_bound_reported: bool,
     greenhouse_discovered: HashSet<String>,
@@ -103,6 +104,13 @@ impl CoordinatorSession {
         } else {
             workflow_cap
         };
+        let source_limits =
+            scrape_core::extraction::limits(&source.config).map_err(ClientError::Configuration)?;
+        let source_duration_s = source_limits
+            .max_source_duration_s
+            .min(extraction_limits.max_source_duration_s);
+        let source_deadline = workflow_deadline
+            .min(Instant::now() + std::time::Duration::from_secs(source_duration_s));
 
         let mut session = Self {
             source,
@@ -123,7 +131,8 @@ impl CoordinatorSession {
             greenhouse_jobs: None,
             greenhouse_base: None,
             greenhouse_requests: 0,
-            greenhouse_deadline: None,
+            greenhouse_budget: std::time::Duration::from_millis(enrichment_limits.timeout_ms),
+            source_deadline,
             greenhouse_limits: enrichment_limits.clone(),
             greenhouse_bound_reported: false,
             greenhouse_discovered: HashSet::new(),
@@ -168,9 +177,6 @@ impl CoordinatorSession {
                 }
                 session.greenhouse_jobs = Some(response.jobs);
                 session.greenhouse_base = Some(base);
-                session.greenhouse_deadline = Some(
-                    Instant::now() + std::time::Duration::from_millis(enrichment_limits.timeout_ms),
-                );
             }
             SourceKind::Lever => {
                 let mut events = Vec::new();
@@ -331,9 +337,11 @@ impl CoordinatorSession {
         }
 
         if let Some(selector) = &mut self.selector_session {
-            let before = selector.pages_visited();
+            let before_pages = selector.pages_visited();
+            let before_details = selector.detail_requests();
             let step = selector.next(client, &self.filters, started).await?;
-            self.yield_after_candidate |= selector.pages_visited() > before;
+            self.yield_after_candidate |= selector.pages_visited() > before_pages
+                || selector.detail_requests() > before_details;
             return match step {
                 crate::adapters::selector_session::SelectorStep::Event(event) => {
                     self.exhausted = selector.is_exhausted();
@@ -365,7 +373,9 @@ impl CoordinatorSession {
             };
         }
         if let Some(workday) = &mut self.workday_session {
+            let before_details = workday.detail_requests();
             let step = workday.next(client, &self.filters, started).await?;
+            self.yield_after_candidate |= workday.detail_requests() > before_details;
             return match step {
                 crate::adapters::workday::WorkdayStep::Event(event) => {
                     self.exhausted = workday.is_exhausted();
@@ -380,7 +390,6 @@ impl CoordinatorSession {
         }
         if let Some(search) = &mut self.search_session {
             let step = search.next(client).await?;
-            self.yield_after_candidate = true;
             return match step {
                 crate::adapters::search::SearchStep::Event(event) => {
                     self.exhausted = search.is_exhausted();
@@ -460,22 +469,27 @@ impl CoordinatorSession {
 
                 let mut evidence = job.evidence();
                 let assessment = matcher.assess(&candidate, started, &evidence);
-                if !assessment.rejected.is_empty() {
+                if !assessment.rejected.is_empty()
+                    || !job.can_resolve_unresolved(&assessment.unresolved)
+                {
+                    evidence.opportunity_exhausted = true;
                     return Ok(Some((candidate, Some(evidence))));
                 }
 
-                let deadline = self.greenhouse_deadline.unwrap();
-                let bound = if tokio::time::Instant::now() >= deadline {
-                    Some(CoverageTermination::TimeLimit)
-                } else if self.greenhouse_requests >= self.greenhouse_limits.max_requests {
-                    Some(CoverageTermination::RequestLimit)
-                } else {
-                    None
-                };
+                let bound =
+                    if self.greenhouse_budget.is_zero() || Instant::now() >= self.source_deadline {
+                        Some(CoverageTermination::TimeLimit)
+                    } else if self.greenhouse_requests >= self.greenhouse_limits.max_requests {
+                        Some(CoverageTermination::RequestLimit)
+                    } else {
+                        None
+                    };
 
                 let mut unavailable = None;
                 let mut detail_received = false;
-                if let Some(bound) = bound {
+                if !job.needs_detail(&candidate) {
+                    evidence.opportunity_exhausted = true;
+                } else if let Some(bound) = bound {
                     evidence.opportunity_exhausted = true;
                     if !self.greenhouse_bound_reported {
                         unavailable = Some((
@@ -489,18 +503,26 @@ impl CoordinatorSession {
                     }
                 } else {
                     self.greenhouse_requests += 1;
+                    self.yield_after_candidate = true;
                     let board_url = format!(
                         "{}/v1/boards/{}/jobs",
                         self.greenhouse_base.as_ref().unwrap(),
                         self.source.identifier.trim()
                     );
                     let detail_url = format!("{board_url}/{}?pay_transparency=true", job.id);
-                    match tokio::time::timeout_at(
-                        deadline,
+                    let call_deadline = self
+                        .source_deadline
+                        .min(Instant::now() + self.greenhouse_budget);
+                    let call_started = Instant::now();
+                    let detail_result = tokio::time::timeout_at(
+                        call_deadline,
                         client.fetch_json_cached::<GreenhouseJob>(&detail_url),
                     )
-                    .await
-                    {
+                    .await;
+                    self.greenhouse_budget = self
+                        .greenhouse_budget
+                        .saturating_sub(call_started.elapsed());
+                    match detail_result {
                         Ok(Ok(detail)) if detail.id == job.id => {
                             job.merge_detail(detail);
                             detail_received = true;
@@ -508,6 +530,7 @@ impl CoordinatorSession {
                             evidence.opportunity_exhausted = true;
                         }
                         result => {
+                            self.greenhouse_budget = std::time::Duration::ZERO;
                             evidence.opportunity_exhausted = true;
                             let termination = result
                                 .as_ref()
@@ -525,13 +548,11 @@ impl CoordinatorSession {
                 }
 
                 let candidate = job.event(&self.source)?;
-                if detail_received {
-                    if let WorkerEvent::Job {
-                        salary: Some(_), ..
-                    } = &candidate
-                    {
-                        evidence.compensation = true;
-                    }
+                if let WorkerEvent::Job {
+                    salary: Some(_), ..
+                } = &candidate
+                {
+                    evidence.compensation = true;
                 }
 
                 let final_assessment = matcher.assess(&candidate, started, &evidence);
@@ -572,10 +593,15 @@ impl CoordinatorSession {
 
                 if self.branding.is_none()
                     && self.greenhouse_requests < self.greenhouse_limits.max_requests
-                    && tokio::time::Instant::now() < deadline
+                    && !self.greenhouse_budget.is_zero()
+                    && Instant::now() < self.source_deadline
                 {
-                    match tokio::time::timeout_at(
-                        deadline,
+                    let branding_deadline = self
+                        .source_deadline
+                        .min(Instant::now() + self.greenhouse_budget);
+                    let branding_started = Instant::now();
+                    let branding_result = tokio::time::timeout_at(
+                        branding_deadline,
                         CompanyBranding::fetch_source(
                             client,
                             &job.absolute_url,
@@ -587,8 +613,11 @@ impl CoordinatorSession {
                             &self.source,
                         ),
                     )
-                    .await
-                    {
+                    .await;
+                    self.greenhouse_budget = self
+                        .greenhouse_budget
+                        .saturating_sub(branding_started.elapsed());
+                    match branding_result {
                         Ok(asset) => {
                             if let Some(warning) = asset.warning(&self.source.id) {
                                 self.pending_events.push_back((warning, None));
@@ -596,6 +625,7 @@ impl CoordinatorSession {
                             self.branding = Some(asset);
                         }
                         Err(_) => {
+                            self.greenhouse_budget = std::time::Duration::ZERO;
                             self.greenhouse_bound_reported = true;
                             self.pending_events.push_back((
                                 WorkerEvent::Warning {
@@ -609,7 +639,6 @@ impl CoordinatorSession {
                         }
                     }
                 }
-
                 let candidate = match &self.branding {
                     Some(branding) => branding.apply(candidate),
                     None => candidate,
@@ -825,13 +854,19 @@ impl SourceCoordinator {
                 .get(&source.id)
                 .unwrap_or(&self.filters)
                 .clone();
+            let source_limits = scrape_core::extraction::limits(&source.config).unwrap_or_default();
+            let source_duration_s = source_limits
+                .max_source_duration_s
+                .min(self.limits.max_source_duration_s);
+            let init_deadline = workflow_deadline
+                .min(Instant::now() + std::time::Duration::from_secs(source_duration_s));
             let initialized = if Instant::now() >= workflow_deadline {
                 Err(ClientError::TimeLimit(
                     "Workflow duration reached before this source could initialize".into(),
                 ))
             } else {
                 tokio::time::timeout_at(
-                    workflow_deadline,
+                    init_deadline,
                     CoordinatorSession::init(
                         &self.client,
                         self.browser.clone(),

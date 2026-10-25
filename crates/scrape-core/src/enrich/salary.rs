@@ -38,7 +38,7 @@ pub struct Salary {
 
 static RANGE_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-    r"(?i)([$€£]|USD|CAD|EUR|GBP)?\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(k)?\s*(?:-|–|—|to)\s*([$€£]|USD|CAD|EUR|GBP)?\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(k)?(?:\s*(USD|CAD|EUR|GBP))?(?:\s*(?:/|per|a)\s*(year|yr|annum|annually|annual|hour|hr|hourly|month|mo|week|wk|day))?"
+    r"(?i)([$€£]|USD|CAD|EUR|GBP)?\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(k)?(?:\s*(USD|CAD|EUR|GBP))?\s*(?:-|–|—|to)\s*([$€£]|USD|CAD|EUR|GBP)?\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(k)?(?:\s*(USD|CAD|EUR|GBP))?(?:\s*(?:/|per|a)\s*(year|yr|annum|annually|annual|hour|hr|hourly|month|mo|week|wk|day))?"
 ).unwrap()
 });
 static SINGLE_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -193,15 +193,16 @@ impl Salary {
                         * if multiplier { 1000.0 } else { 1.0 },
                 )
             };
-            let lo = amount(&caps[2], caps.get(3).is_some() || caps.get(6).is_some())?;
-            let hi = amount(&caps[5], caps.get(6).is_some())?;
+            let lo = amount(&caps[2], caps.get(3).is_some() || caps.get(7).is_some())?;
+            let hi = amount(&caps[6], caps.get(7).is_some())?;
             if lo > hi {
                 continue;
             }
             let curr = currency(
-                caps.get(7)
+                caps.get(8)
                     .or(caps.get(1))
                     .or(caps.get(4))
+                    .or(caps.get(5))
                     .map(|m| m.as_str()),
             );
             let preceding = text[..span.start()]
@@ -212,7 +213,7 @@ impl Salary {
                 .chars()
                 .rev()
                 .collect::<String>();
-            let interval = parse_interval(caps.get(8).map(|m| m.as_str()))
+            let interval = parse_interval(caps.get(9).map(|m| m.as_str()))
                 .or_else(|| parse_interval(Some(&preceding)));
             if curr.is_none() && interval.is_none() {
                 continue;

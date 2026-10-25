@@ -32,6 +32,7 @@
 23. [Vite / esbuild JSX Transformation Error in `.test.ts` Test Files](#23-vite--esbuild-jsx-transformation-error-in-testts-test-files)
 24. [SQLx Migration Checksum VersionMismatch & Non-Unwinding macOS Startup Panic](#24-sqlx-migration-checksum-versionmismatch--non-unwinding-macos-startup-panic)
 29. [Workflow editor: duplicate scrollbar and background scrolling](#29-workflow-editor-duplicate-scrollbar-and-background-scrolling)
+30. [Multi-source scraper timeout and non-Jobicy source starvation](#30-multi-source-scraper-timeout-and-non-jobicy-source-starvation)
 
 ---
 
@@ -469,3 +470,24 @@ Catalog repair `6b27c35`, generated contracts `4573ec9`, editor/browser evidence
 - **Root Cause:** The workflow registry viewport is a scroll owner behind its descendant editor dialog; the shared modal also left outer dialog overflow at the browser default. The pre-change Chromium capture measured the editor body as vertically scrollable (`1268px` range at 1280×800 and `1561px` at 480×700), with the outer dialog's computed overflow `auto` and the panel `visible`. The pre-change outer dialog had no scroll range in those captures, so its visible track was not established as the reported second scrollbar's owner. A stable gutter alone is not an active scrollbar.
 - **Solution & Rule:** The registry viewport is suspended while a non-inline dialog is open; the dialog and panel clip overflow; only the modal body owns vertical scrolling and contains overscroll. In the repaired Chromium journeys, the registry computed overflow is `hidden`, body wheel input at both boundaries and over the backdrop does not move the registry/document/shell/footer, and Cancel/Escape restore registry scrolling and focus. `e2e/workflow-scroll.pw.ts` passed 5/5 across Paper/Obsidian and desktop/narrow sizes; zoom/workflow/inspector browser coverage passed 10/10, and focused interaction tests passed 13/13. TypeScript and style checks passed. Reviewed captures: `../assets/29-workflow-scroll-review/paper-desktop.png`, `paper-narrow.png`, `obsidian-desktop.png`, and `obsidian-narrow.png`.
 - **Acceptance limits:** The isolated native workflow harness was attempted twice. Its first attempt timed out on the stale `Add workflow` text selector; that selector was changed to the control's accessible name. The next attempt timed out waiting for the Cloudflare catalog option before reaching that call site. The cause is not established. Native visual and physical-wheel behavior and live-data behavior were not tested; do not mark those verified.
+
+---
+
+### 30. Multi-source scraper timeout and non-Jobicy source starvation
+
+- **Phase:** Phase 3.12 / Multi-source Ingestion
+- **Error Signature:**
+  Scraping multi-source workflows (such as `software-engineering-last-12-hours` or `remote-usd-over-60000`) or running preview in the UI times out around 60 seconds with 0 jobs outside of `jobicy`.
+- **Root Causes:**
+  1. **Workday unbounded pagination**: `WorkdaySession::new` ignored `WorkerLimits` (`max_pages_per_source` and `max_source_duration_s`), paginating up to 2,000 jobs (100 pages) until reaching the workflow deadline.
+  2. **Workday detail field discarding and `"N Locations"` classification**: `merge_workday_detail` only updated role type, leaving salary, start date, and location empty. Furthermore, `"6 Locations"` multi-location counts were misclassified as `Onsite`, causing immediate rejection under `remote`.
+  3. **Wall-clock enrichment deadlines anchored at `init`**: Detail enrichment deadlines were set as fixed timestamps at coordinator initialization. Because Greenhouse and Workday executed consecutive detail requests without yielding, early sources consumed the time budget and starved later sources (`cloudflare` deadline expired after only 2 detail calls).
+  4. **Greenhouse futile detail requests & discarded content salaries**: Greenhouse fetched `?pay_transparency=true` even when `Workplace` was unresolvable from details. Additionally, `if detail_received` guarded `evidence.compensation = true`, so once enrichment limits were reached, jobs with explicit salaries in `job.content` were rejected as unresolved.
+  5. **`SearchSession` over-yielding**: Yielded after every in-memory candidate pop, causing thousands of coordinator rounds and visiting slow network sources on every rejected candidate.
+  6. **Host preview & sidecar supervisor timeout mismatch**: Host preview killed the process at 60s while default worker limits permitted 600s/180s.
+- **Solution & Rule:**
+  1. Enforce `max_pages` and `source_deadline` in `WorkdaySession`, and extract salary, locations, start date, and workplace in `merge_workday_detail`.
+  2. Treat `"N Locations"` count strings as unknown workplace on listings until detail resolution.
+  3. Convert fixed wall-clock deadlines to active per-source budgets (`detail_budget`, `greenhouse_budget`) decremented only during that source's detail/branding requests, and yield turns after detail network requests.
+  4. Check `can_resolve_unresolved` and `needs_detail` before Greenhouse detail requests, and recognize content salaries for `evidence.compensation`.
+  5. Clamp dry-run preview limits to 45s/15s to fit the 60s host preview window, and provide a 15s supervisor grace period.

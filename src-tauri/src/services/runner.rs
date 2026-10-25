@@ -716,7 +716,8 @@ impl ScrapeRunner {
         let hydration = async {
             super::provider_credentials::hydrate(app, &mut config).await?;
             super::http_proxy::hydrate(&mut config).await?;
-            super::execution_diagnostics::apply_settings_limits(&self.pool, &mut config.limits).await
+            super::execution_diagnostics::apply_settings_limits(&self.pool, &mut config.limits)
+                .await
         }
         .await;
         if let Err(error) = hydration {
@@ -775,9 +776,14 @@ impl ScrapeRunner {
         let mut sidecar_err: Option<String> = None;
 
         let mut saw_done = false;
+        let base_seconds = if config.sources.len() == 1 {
+            config.limits.max_source_duration_s
+        } else {
+            config.limits.max_workflow_duration_s
+        };
         let deadline = Instant::now()
             + Duration::from_secs(super::process::execution_seconds(
-                if config.sources.len() == 1 { 180 } else { 600 },
+                base_seconds.saturating_add(15),
             ));
         loop {
             let received = tokio::select! {

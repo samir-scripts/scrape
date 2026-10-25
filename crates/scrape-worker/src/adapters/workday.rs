@@ -23,6 +23,8 @@ static WORKDAY_LOCALE_RE: LazyLock<Regex> =
 static WORKDAY_DAYS_AGO_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"posted\s+(\d+)\s+days?\s+ago").expect("valid regex"));
 
+static WORKDAY_MULTI_LOCATIONS_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)^\d+\s+locations?$").expect("valid regex"));
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkdayEndpoint {
     pub origin: String,
@@ -195,7 +197,10 @@ pub fn workplace_from_locations(locations: &[&str]) -> WorkplaceType {
             return WorkplaceType::Hybrid;
         }
     }
-    if !locations.is_empty() && !locations[0].trim().is_empty() {
+    if locations.iter().any(|loc| {
+        let trimmed = loc.trim();
+        !trimmed.is_empty() && !WORKDAY_MULTI_LOCATIONS_RE.is_match(trimmed)
+    }) {
         WorkplaceType::Onsite
     } else {
         WorkplaceType::Unknown
@@ -235,7 +240,11 @@ fn posting_to_event(
         .unwrap_or(&source.name)
         .to_string();
 
-    let locations = loc_enrich::parse(&loc_text);
+    let locations = if WORKDAY_MULTI_LOCATIONS_RE.is_match(loc_text.trim()) {
+        Vec::new()
+    } else {
+        loc_enrich::parse(&loc_text)
+    };
     let location_data_complete = loc_enrich::has_geographic_value(&locations);
     let experience = extract_experience(&title, "");
     let is_new_grad = experience.is_new_grad;
@@ -283,6 +292,15 @@ fn merge_workday_detail(
     let WorkerEvent::Job {
         title,
         url,
+        location,
+        locations,
+        location_data_complete,
+        workplace_type,
+        date_posted,
+        salary,
+        sponsorship,
+        clearance,
+        work_auth,
         role_type,
         experience,
         is_new_grad,
@@ -318,15 +336,97 @@ fn merge_workday_detail(
         }
     }
     *role_type = RoleType::infer(title, info.time_type.as_deref());
+    if date_posted.is_none() {
+        *date_posted = info
+            .start_date
+            .as_deref()
+            .filter(|d| !d.trim().is_empty())
+            .map(str::to_owned);
+    }
+    let mut detail_loc_strings: Vec<String> = Vec::new();
+    for candidate_loc in info
+        .location
+        .iter()
+        .chain(info.locations_text.iter())
+        .chain(info.additional_locations.iter())
+    {
+        let trimmed = candidate_loc.trim();
+        if !trimmed.is_empty()
+            && !WORKDAY_MULTI_LOCATIONS_RE.is_match(trimmed)
+            && !detail_loc_strings
+                .iter()
+                .any(|existing| existing == trimmed)
+        {
+            detail_loc_strings.push(trimmed.to_string());
+        }
+    }
+    if !detail_loc_strings.is_empty() {
+        if location.trim().is_empty() || WORKDAY_MULTI_LOCATIONS_RE.is_match(location.trim()) {
+            *location = detail_loc_strings.join("; ");
+        }
+        let country_hint = info
+            .country
+            .as_ref()
+            .and_then(|c| c.id.as_deref().or(c.descriptor.as_deref()));
+        let parsed_detail: Vec<_> = detail_loc_strings
+            .iter()
+            .flat_map(|label| loc_enrich::parse_with_country(label, country_hint))
+            .collect();
+        if locations.is_empty() && !parsed_detail.is_empty() {
+            *locations = parsed_detail;
+        } else {
+            for loc in parsed_detail {
+                if !locations.contains(&loc) {
+                    locations.push(loc);
+                }
+            }
+        }
+    }
+    let detail_loc_refs: Vec<&str> = detail_loc_strings.iter().map(String::as_str).collect();
     if let Some(raw) = info.job_description.filter(|raw| !raw.trim().is_empty()) {
         let normalized = normalize_description_with_format(&raw, DescriptionFormat::Html, 32768);
         let classified = extract_experience(title, &normalized.plain_text);
         *is_new_grad = classified.is_new_grad;
         *experience = Some(classified);
+        let section_locations = loc_enrich::from_description_sections(&normalized);
+        *location_data_complete =
+            loc_enrich::has_geographic_value(locations) || section_locations.section_found;
+        locations.extend(section_locations.locations);
+        if *workplace_type == WorkplaceType::Unknown {
+            let from_desc = scrape_core::enrich::classify_workplace(
+                None,
+                location,
+                Some(&normalized.plain_text),
+            );
+            *workplace_type = if from_desc != WorkplaceType::Unknown {
+                from_desc
+            } else if !detail_loc_refs.is_empty() {
+                workplace_from_locations(&detail_loc_refs)
+            } else {
+                WorkplaceType::Unknown
+            };
+        }
+        if salary.is_none() {
+            *salary = scrape_core::enrich::Salary::from_text(&normalized.plain_text);
+        }
+        *sponsorship = Some(scrape_core::enrich::classify_sponsorship(
+            &normalized.plain_text,
+        ));
+        *clearance = Some(scrape_core::enrich::classify_clearance(
+            &normalized.plain_text,
+        ));
+        *work_auth = Some(scrape_core::enrich::classify_work_auth(
+            &normalized.plain_text,
+        ));
         *description_text = Some(normalized.plain_text.clone());
         *description = Some(normalized);
         *description_source = Some(raw);
         *description_format = Some(DescriptionFormat::Html);
+    } else if !detail_loc_refs.is_empty() {
+        if *workplace_type == WorkplaceType::Unknown {
+            *workplace_type = workplace_from_locations(&detail_loc_refs);
+        }
+        *location_data_complete = loc_enrich::has_geographic_value(locations);
     }
     Ok(true)
 }
@@ -432,8 +532,11 @@ pub(crate) struct WorkdaySession {
     branding: CompanyBranding,
     branding_emitted: bool,
     pending: VecDeque<(WorkerEvent, Option<MatchingEvidence>)>,
-    detail_deadline: Instant,
+    detail_budget: Duration,
+    source_deadline: Instant,
     workflow_deadline: Instant,
+    pages_visited: u32,
+    max_pages: u32,
     detail_limit: u32,
     detail_requests: u32,
     detail_bound_reported: bool,
@@ -444,11 +547,25 @@ impl WorkdaySession {
     pub async fn new(
         client: &HttpClient,
         source: &WorkerSource,
-        _limits: &WorkerLimits,
+        limits: &WorkerLimits,
         enrichment: &EnrichmentLimits,
         workflow_deadline: Instant,
     ) -> Result<Self, ClientError> {
         let endpoint = WorkdayEndpoint::parse(&source.identifier)?;
+        let overrides =
+            scrape_core::extraction::limits(&source.config).map_err(ClientError::Configuration)?;
+        let max_pages = (source
+            .config
+            .get("max_pages")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(scrape_core::search_source::DEFAULT_MAX_PAGES as u64)
+            as u32)
+            .min(limits.max_pages_per_source);
+        let duration_s = overrides
+            .max_source_duration_s
+            .min(limits.max_source_duration_s);
+        let source_deadline =
+            workflow_deadline.min(Instant::now() + Duration::from_secs(duration_s));
         let branding = CompanyBranding::fetch_source(
             client,
             &source.identifier,
@@ -468,9 +585,11 @@ impl WorkdaySession {
             branding,
             branding_emitted: false,
             pending: VecDeque::new(),
-            detail_deadline: (Instant::now() + Duration::from_millis(enrichment.timeout_ms))
-                .min(workflow_deadline),
+            detail_budget: Duration::from_millis(enrichment.timeout_ms),
+            source_deadline,
             workflow_deadline,
+            pages_visited: 0,
+            max_pages,
             detail_limit: enrichment.max_requests,
             detail_requests: 0,
             detail_bound_reported: false,
@@ -483,6 +602,10 @@ impl WorkdaySession {
 
     pub fn total(&self) -> Option<u64> {
         self.total
+    }
+
+    pub fn detail_requests(&self) -> u32 {
+        self.detail_requests
     }
 
     pub fn is_exhausted(&self) -> bool {
@@ -513,13 +636,14 @@ impl WorkdaySession {
         };
 
         let response: WorkdayListResponse = timeout_at(
-            self.workflow_deadline,
+            self.source_deadline.min(self.workflow_deadline),
             client.post_json(&list_url, &payload),
         )
         .await
         .map_err(|_| {
             ClientError::TimeLimit("Workday listing reached workflow time limit".into())
         })??;
+        self.pages_visited += 1;
         if self.total.is_none() {
             self.total = response.total;
         }
@@ -559,9 +683,37 @@ impl WorkdaySession {
             }
         }
 
+        if Instant::now() >= self.source_deadline {
+            self.exhausted = true;
+            self.candidates.clear();
+            return Ok(WorkdayStep::Event(Box::new((
+                WorkerEvent::Warning {
+                    source_id: self.source.id.clone(),
+                    message: "Workday source/workflow time limit reached; remaining board pages were not visited".into(),
+                    eligibility_incomplete: true,
+                    termination: Some(CoverageTermination::TimeLimit),
+                },
+                None,
+            ))));
+        }
+
         if self.candidates.is_empty() {
             if self.exhausted {
                 return Ok(WorkdayStep::Exhausted);
+            }
+            if self.pages_visited >= self.max_pages {
+                self.exhausted = true;
+                return Ok(WorkdayStep::Event(Box::new((
+                    WorkerEvent::Warning {
+                        source_id: self.source.id.clone(),
+                        message:
+                            "Workday page limit reached; remaining board pages were not visited"
+                                .into(),
+                        eligibility_incomplete: true,
+                        termination: Some(CoverageTermination::PageLimit),
+                    },
+                    None,
+                ))));
             }
             self.fetch_next_page(client).await?;
             if self.candidates.is_empty() {
@@ -606,7 +758,7 @@ impl WorkdaySession {
         let mut warning = None;
         let mut detail_received = false;
         if let Some(url) = detail_url.filter(|url| self.seen_details.insert(url.clone())) {
-            let bound = if Instant::now() >= self.detail_deadline {
+            let bound = if self.detail_budget.is_zero() || Instant::now() >= self.source_deadline {
                 Some(CoverageTermination::TimeLimit)
             } else if self.detail_requests >= self.detail_limit {
                 Some(CoverageTermination::RequestLimit)
@@ -620,12 +772,18 @@ impl WorkdaySession {
                 }
             } else {
                 self.detail_requests += 1;
-                match timeout_at(
-                    self.detail_deadline,
+                let call_deadline = self
+                    .source_deadline
+                    .min(self.workflow_deadline)
+                    .min(Instant::now() + self.detail_budget);
+                let call_started = Instant::now();
+                let detail_result = timeout_at(
+                    call_deadline,
                     client.fetch_json::<WorkdayDetailResponse>(&url),
                 )
-                .await
-                {
+                .await;
+                self.detail_budget = self.detail_budget.saturating_sub(call_started.elapsed());
+                match detail_result {
                     Ok(Ok(detail)) => match merge_workday_detail(
                         &mut event,
                         detail,
@@ -649,6 +807,7 @@ impl WorkdaySession {
                         warning = Some((format!("Workday detail {url} unavailable: {error}"), None))
                     }
                     Err(_) => {
+                        self.detail_budget = Duration::ZERO;
                         self.detail_bound_reported = true;
                         warning = Some((format!("Workday detail {url} reached its time limit; missing evidence remains unknown"), Some(CoverageTermination::TimeLimit)));
                     }

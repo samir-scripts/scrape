@@ -1226,3 +1226,86 @@ fn workday_maximum_only_detail_is_unknown_for_required_minimum() {
         }
     }
 }
+
+#[test]
+fn workday_multi_location_remote_salary_details_are_resolved() {
+    let server = Server::new(|path| {
+        if path.ends_with("/jobs") {
+            return json!({
+                "total": 50,
+                "jobPostings": [
+                    {
+                        "title": "Senior Systems Engineer",
+                        "externalPath": "/job/1",
+                        "bulletFields": ["JR1"],
+                        "locationsText": "6 Locations",
+                        "postedOn": "Posted 30+ Days Ago"
+                    }
+                ]
+            })
+            .to_string();
+        }
+        if path.contains("/job/") {
+            return json!({
+                "jobPostingInfo": {
+                    "jobReqId": "JR1",
+                    "timeType": "Full time",
+                    "location": "US, CA, Santa Clara",
+                    "additionalLocations": ["US, Remote", "US, WA, Remote"],
+                    "startDate": "2026-10-24",
+                    "jobDescription": "<p>We offer competitive pay. The base salary range is 184,000 USD - 287,500 USD per year. We provide comprehensive benefits.</p>"
+                }
+            })
+            .to_string();
+        }
+        "<html>Fixture careers</html>".into()
+    });
+    let mut src = workday_source(5);
+    src["config"]["max_pages"] = json!(1);
+    let events = run(
+        &server,
+        vec![src],
+        json!({
+            "matching": {
+                "workplaces": ["remote"],
+                "compensation": {
+                    "min_minor": 6000001,
+                    "currency": "USD",
+                    "interval": "year",
+                    "match_mode": "advertised_amount"
+                }
+            }
+        }),
+        vec![],
+        false,
+    );
+    assert_eq!(jobs(&events), 1);
+    let job = events
+        .iter()
+        .find(|e| matches!(e, WorkerEvent::Job { .. }))
+        .expect("Accepted job");
+    if let WorkerEvent::Job {
+        external_id,
+        workplace_type,
+        salary,
+        date_posted,
+        ..
+    } = job
+    {
+        assert_eq!(external_id, "JR1");
+        assert_eq!(*workplace_type, scrape_core::WorkplaceType::Remote);
+        assert_eq!(date_posted.as_deref(), Some("2026-10-24"));
+        let salary = salary.as_ref().expect("Evidenced salary");
+        assert_eq!(salary.currency, "USD");
+        assert_eq!(salary.ranges[0].min_minor, Some(18400000));
+        assert_eq!(salary.ranges[0].max_minor, Some(28750000));
+    } else {
+        unreachable!();
+    }
+    let scan = &summary(&events)[0];
+    scan.validate().unwrap();
+    assert_eq!(
+        scan.termination,
+        scrape_core::protocol::CoverageTermination::PageLimit
+    );
+}
