@@ -1,8 +1,12 @@
+import type { HttpProxyStatus } from "../bindings/HttpProxyStatus";
+import type { JsonValue } from "../bindings/serde_json/JsonValue";
 import type { RoleTitleSuggestion } from "../bindings/RoleTitleSuggestion";
 import type { CompanySuggestion } from "../bindings/CompanySuggestion";
 import type { FilterCompatibilityRestriction } from "../bindings/FilterCompatibilityRestriction";
 import type { WorkflowFilters } from "../bindings/WorkflowFilters";
-import type { SeedWorkflowReport } from "../bindings/SeedWorkflowReport";
+import type { WorkflowReplacementPreview } from "../bindings/WorkflowReplacementPreview";
+import type { WorkflowReplacementSelection } from "../bindings/WorkflowReplacementSelection";
+import type { WorkflowReplacementReport } from "../bindings/WorkflowReplacementReport";
 import { INGESTION_LIMITS } from "../bindings/ingestionLimits";
 import { errorMessage } from "./errors";
 import type { WorkflowSpec } from "../bindings/WorkflowSpec";
@@ -67,6 +71,10 @@ export const DEFAULT_SETTINGS: Settings = {
   scraper_enabled: true,
   scraper_cron: "0 0 */6 * * *",
   scraper_run_on_startup: false,
+  scraper_respect_robots: false,
+  scraper_per_host_delay_ms: 750,
+  scraper_jitter_ms: 500,
+  scraper_max_jobs_per_run: 20,
   filters_include_keywords: [],
   filters_exclude_keywords: [],
   filters_locations: [],
@@ -111,30 +119,41 @@ let devNotifications: AppNotification[] = [
   },
 ];
 
-// This historical demonstration is deliberately restrictive. It is not the new
-// default seed; its configuration comes from the labelled canonical example.
-const demoSampleInput = workflowSpecToCreateInput(SAMPLE_WORKFLOW_TEMPLATES.find(template => template.id === "software-engineering-internships")!.spec);
-export const SAMPLE_SWE_SOURCE: Source = {
-  id: "sample-swe-internships-1",
-  kind: "greenhouse",
-  name: "Cloudflare — Software Engineering Internships",
-  identifier: "cloudflare",
-  config: SAMPLE_WORKFLOW_TEMPLATES.find(template => template.id === "software-engineering-internships")!.extractors[0].config,
-  enabled: true,
-  last_run_at: null,
-  last_status: null,
-  last_error: null,
-  created_at: new Date().toISOString(),
-  cadence: "daily",
-  cadence_cron: "0 0 9 * * *",
-  next_run_at: null,
-  last_run_duration_ms: null,
-  retention_days: BigInt(45),
-  retention_policy: "untracked_only",
-  filters: demoSampleInput.filters ?? {},
-  needs_review: false, script_trusted: false,
-};
+function demoSourceFromTemplate(templateId: string, id: string): Source {
+  const template = SAMPLE_WORKFLOW_TEMPLATES.find(candidate => candidate.id === templateId);
+  if (!template) throw new Error(`Missing demonstration workflow ${templateId}`);
+  const input = workflowSpecToCreateInput(template.spec);
+  const config: Record<string, JsonValue> = input.config && typeof input.config === "object" && !Array.isArray(input.config)
+    ? { ...input.config as Record<string, JsonValue> }
+    : {};
+  config.__builtin_workflow = { catalog_version: 3, template_id: template.id, fingerprint: JSON.stringify(template.spec) };
+  return {
+    id,
+    kind: input.kind as Source["kind"],
+    name: template.name,
+    identifier: input.identifier,
+    config,
+    enabled: true,
+    last_run_at: null,
+    last_status: null,
+    last_error: null,
+    created_at: new Date().toISOString(),
+    cadence: "manual",
+    cadence_cron: null,
+    next_run_at: null,
+    last_run_duration_ms: null,
+    retention_days: BigInt(input.retention_days ?? 30),
+    retention_policy: input.retention_policy ?? "untracked_only",
+    filters: input.filters ?? {},
+    needs_review: false,
+    script_trusted: false,
+  };
+}
 
+export const SAMPLE_ENGINEERING_SOURCE = demoSourceFromTemplate("software-engineering-last-12-hours", "demo-software-engineering");
+export const SAMPLE_FAST_FOOD_SOURCE = demoSourceFromTemplate("cherry-hill-fast-food-last-month", "demo-fast-food");
+export const SAMPLE_REMOTE_SOURCE = demoSourceFromTemplate("remote-usd-over-60000", "demo-remote-salary");
+const BUILTIN_DEMO_SOURCES = [SAMPLE_ENGINEERING_SOURCE, SAMPLE_FAST_FOOD_SOURCE, SAMPLE_REMOTE_SOURCE];
 let devSources: Source[] = (() => {
   try {
     if (typeof localStorage !== "undefined") {
@@ -142,7 +161,7 @@ let devSources: Source[] = (() => {
       if (saved) return JSON.parse(saved, (key, value) => ["retention_days", "duration_ms"].includes(key) && typeof value === "number" ? BigInt(value) : value);
     }
   } catch {}
-  return isFixtureMode() ? [{ ...SAMPLE_SWE_SOURCE }] : [];
+  return isFixtureMode() ? BUILTIN_DEMO_SOURCES.map(source => ({ ...source, config: structuredClone(source.config), filters: structuredClone(source.filters) })) : [];
 })();
 
 function saveDevSources() {
@@ -151,6 +170,26 @@ function saveDevSources() {
       localStorage.setItem(`${storagePrefix}:sources`, JSON.stringify(devSources, (_, value) => typeof value === "bigint" ? Number(value) : value));
     }
   } catch {}
+}
+
+const LEGACY_DEMO_SAMPLE_IDS = new Set(["sample-swe-internships-1"]);
+function demoWorkflowMarker(source: Source): { template_id?: string } {
+  const config = source.config && typeof source.config === "object" && !Array.isArray(source.config)
+    ? source.config as Record<string, unknown>
+    : {};
+  const marker = config.__builtin_workflow;
+  return marker && typeof marker === "object" ? marker as { template_id?: string } : {};
+}
+function demoReplacementFingerprint(source: Source): string {
+  return JSON.stringify(source, (_, value) => typeof value === "bigint" ? Number(value) : value);
+}
+function exactDemoBuiltin(source: Source, templateId: string): boolean {
+  const template = SAMPLE_WORKFLOW_TEMPLATES.find(candidate => candidate.id === templateId);
+  const config = source.config && typeof source.config === "object" && !Array.isArray(source.config)
+    ? source.config as Record<string, unknown>
+    : {};
+  return !!template && demoWorkflowMarker(source).template_id === templateId &&
+    JSON.stringify(config.__workflow_spec) === JSON.stringify(template.spec);
 }
 
 let devJobs: Job[] = (() => {
@@ -256,7 +295,7 @@ const executionDelayStep = () => {
 };
 
 export function __resetDevData() {
-  devSources = [{ ...SAMPLE_SWE_SOURCE }];
+  devSources = BUILTIN_DEMO_SOURCES.map(source => ({ ...source, config: structuredClone(source.config), filters: structuredClone(source.filters) }));
   devJobs = [];
   devSourceRuns = [];
   devLogs = {};
@@ -501,37 +540,74 @@ function matchesDemoWorkflow(job: Job, source: Source): boolean {
   const filters = source.filters as WorkflowSpec["filters"] || {};
   if (filters.query || filters.policy) throw new Error("Expert queries and policies require desktop validation.");
   const rules = filters.matching;
-  if (rules?.target_roles?.length || rules?.companies?.length) throw new Error("Role and company filtering requires the desktop application.");
+  const title = job.title.toLocaleLowerCase("en-US");
+  if (rules?.target_roles?.length && !rules.target_roles.some(role => title.includes(role.toLocaleLowerCase("en-US")))) return false;
+  if (rules?.companies?.length && !rules.companies.some(company => job.company.toLocaleLowerCase("en-US").includes(company.toLocaleLowerCase("en-US")))) return false;
   if (rules?.experience_match_mode === "required_minimum" && (rules.experience_min != null || rules.experience_max != null)) throw new Error("Minimum required experience filtering requires the desktop application.");
-  if (rules?.posting_date) throw new Error("Posting-date previews require desktop extraction.");
+  const dateFilter = rules?.posting_date;
+  if (dateFilter) {
+    if (dateFilter.preset && !["past_12h", "past_24h", "past_week", "past_month", "any"].includes(dateFilter.preset)) {
+      throw new Error("This publication-date rule requires the desktop application.");
+    }
+    if (!job.date_posted) {
+      if (!dateFilter.include_unknown) return false;
+    } else {
+      const posted = Date.parse(job.date_posted);
+      if (!Number.isFinite(posted)) {
+        if (!dateFilter.include_unknown) return false;
+      } else {
+        const now = Date.now();
+        const hours = dateFilter.preset === "any" ? null : dateFilter.last_hours ?? ({
+          past_12h: 12, past_24h: 24, past_week: 168, past_month: 720,
+        } as Record<string, number>)[dateFilter.preset || ""] ?? null;
+        if (hours != null && (posted < now - hours * 3_600_000 || posted > now)) return false;
+        if (dateFilter.from && posted < Date.parse(`${dateFilter.from}T00:00:00Z`)) return false;
+        if (dateFilter.through && posted > Date.parse(`${dateFilter.through}T23:59:59.999Z`)) return false;
+      }
+    }
+  }
   const includes = filters.include_keywords;
   const excludes = filters.exclude_keywords;
   const locations = filters.locations;
   const roles = filters.role_types;
-  const text = `${job.title} ${job.location || ""}`.toLowerCase();
-  const contains = (word: string) => text.includes(word.toLowerCase());
+  const text = `${job.title} ${job.location || ""}`.toLocaleLowerCase("en-US");
+  const contains = (word: string) => text.includes(word.toLocaleLowerCase("en-US"));
   if (includes && includes.length && !includes.some(contains)) return false;
   if (excludes && excludes.length && excludes.some(contains)) return false;
-  if (locations && locations.length && !locations.some(loc => (job.location || "").toLowerCase().includes(loc.toLowerCase()))) return false;
+  if (locations && locations.length && !locations.some(loc => (job.location || "").toLocaleLowerCase("en-US").includes(loc.toLocaleLowerCase("en-US")))) return false;
   if (roles && roles.length && !roles.includes(job.role_type)) return false;
   const keywords = rules?.keywords;
   if (keywords) {
     const values = { title: job.title, company: job.company, location: job.location || "", description: job.description_text || "" };
-    const haystack = keywords.fields.map(field => values[field as keyof typeof values] || "").join(" ").toLowerCase();
-    const match = (word: string) => haystack.includes(word.toLowerCase());
+    const haystack = keywords.fields.map(field => values[field as keyof typeof values] || "").join(" ").toLocaleLowerCase("en-US");
+    const match = (word: string) => haystack.includes(word.toLocaleLowerCase("en-US"));
     if (keywords.any?.length && !keywords.any.some(match)) return false;
     if (keywords.all?.length && !keywords.all.every(match)) return false;
     if (keywords.exclude?.length && keywords.exclude.some(match)) return false;
   }
   if (rules?.workplaces?.length && !rules.workplaces.includes(job.workplace_type)) return false;
   const pay = rules?.compensation || filters.compensation;
+  if (pay?.match_mode === "advertised_amount") {
+    const accepted = (job.compensation || []).some(range => {
+      if (range.derived || range.currency?.toUpperCase() !== pay.currency?.toUpperCase() || range.interval !== pay.interval) return false;
+      const upper = range.max_minor ?? range.min_minor;
+      const lower = range.min_minor ?? range.max_minor;
+      return upper != null && lower != null &&
+        (pay.min_minor == null || upper >= pay.min_minor) &&
+        (pay.max_minor == null || lower <= pay.max_minor);
+    });
+    if (!accepted) return false;
+  }
   return matchesJob(job, {
     role_types: rules?.role_types, experience_min: rules?.experience_min, experience_max: rules?.experience_max,
     experience_include_unknown: rules?.experience_include_unknown, new_grad: rules?.new_grad,
     sponsorship: rules?.sponsorship, clearance: rules?.clearance, work_auth: rules?.work_auth,
     countries: rules?.countries, regions: rules?.regions, cities: rules?.cities, location_include_unknown: rules?.location_include_unknown,
-    salary_min: pay?.min_minor == null ? undefined : pay.min_minor / 100, salary_max: pay?.max_minor == null ? undefined : pay.max_minor / 100,
-    salary_interval: pay?.interval, salary_currency: pay?.currency, salary_include_unknown: pay?.include_unknown,
+    salary_min: pay?.match_mode === "advertised_amount" || pay?.min_minor == null ? undefined : pay.min_minor / 100,
+    salary_max: pay?.match_mode === "advertised_amount" || pay?.max_minor == null ? undefined : pay.max_minor / 100,
+    salary_interval: pay?.match_mode === "advertised_amount" ? undefined : pay?.interval,
+    salary_currency: pay?.match_mode === "advertised_amount" ? undefined : pay?.currency,
+    salary_include_unknown: pay?.include_unknown,
   });
 }
 
@@ -591,11 +667,11 @@ const apiImplementation = {
 
   getCompanyLogoAsset: (assetReference: string): Promise<string> => invoke<string>("get_company_logo_asset", { assetReference }),
 
-  fetchCompanyLogo: (company: string, websiteUrl?: string): Promise<CompanyLogo | null> => {
+  ensureCompanyLogoForJob: (jobId: string): Promise<CompanyLogo | null> => {
     if (!isTauri()) {
       return Promise.resolve(null);
     }
-    return invoke<CompanyLogo | null>("fetch_company_logo", { company, websiteUrl: websiteUrl || null });
+    return invoke<CompanyLogo | null>("ensure_company_logo_for_job", { jobId });
   },
 
   getJob: (id: string): Promise<Job> => {
@@ -786,6 +862,32 @@ const apiImplementation = {
     return invoke<Settings>("update_setting", { key, value });
   },
 
+  getHttpProxyStatus: (): Promise<HttpProxyStatus> => {
+    if (!isTauri()) return Promise.resolve({ configured: false, server: null, authenticated: false });
+    return invoke<HttpProxyStatus>("get_http_proxy_status");
+  },
+  setHttpProxy: (server: string, username?: string | null, password?: string | null): Promise<HttpProxyStatus> => {
+    if (!isTauri()) return Promise.reject(new Error("Proxy configuration is available only in the desktop app."));
+    return invoke<HttpProxyStatus>("set_http_proxy", { server, username: username || null, password: password || null });
+  },
+  clearHttpProxy: (): Promise<HttpProxyStatus> => {
+    if (!isTauri()) return Promise.reject(new Error("Proxy configuration is available only in the desktop app."));
+    return invoke<HttpProxyStatus>("clear_http_proxy");
+  },
+
+  getAdzunaCredentialStatus: (): Promise<{ configured: boolean }> => {
+    if (!isTauri()) return Promise.resolve({ configured: false });
+    return invoke<{ configured: boolean }>("get_adzuna_credential_status");
+  },
+  setAdzunaCredentials: (appId: string, appKey: string): Promise<{ configured: boolean }> => {
+    if (!isTauri()) return Promise.reject(new Error("Adzuna credentials are available only in the desktop app."));
+    return invoke<{ configured: boolean }>("set_adzuna_credentials", { appId, appKey });
+  },
+  clearAdzunaCredentials: (): Promise<{ configured: boolean }> => {
+    if (!isTauri()) return Promise.reject(new Error("Adzuna credentials are available only in the desktop app."));
+    return invoke<{ configured: boolean }>("clear_adzuna_credentials");
+  },
+
   // Sources
   listSources: (): Promise<Source[]> => {
     if (!isTauri()) return Promise.resolve([...devSources]);
@@ -800,56 +902,60 @@ const apiImplementation = {
     return invoke<Source>("get_source", { id });
   },
 
-  seedSampleWorkflow: (): Promise<Source> => {
-    if (!isTauri()) {
-      const existing = devSources.find((s) => s.identifier === "cloudflare" && s.kind === "greenhouse");
-      if (existing) return Promise.resolve(existing);
-      const newSource = { ...SAMPLE_SWE_SOURCE, id: `sample-${Date.now()}` };
-      devSources.push(newSource);
-      saveDevSources();
-      return Promise.resolve(newSource);
-    }
-    return invoke<Source>("seed_sample_workflow");
+  previewTestWorkflowReplacement: async (): Promise<WorkflowReplacementPreview> => {
+    if (isTauri()) return invoke<WorkflowReplacementPreview>("preview_test_workflow_replacement");
+    return {
+      target_template_ids: SAMPLE_WORKFLOW_TEMPLATES.map(template => template.id),
+      candidates: devSources.map(source => {
+        const marker = demoWorkflowMarker(source);
+        const legacy = LEGACY_DEMO_SAMPLE_IDS.has(source.id);
+        const current = !!marker.template_id && exactDemoBuiltin(source, marker.template_id);
+        return {
+          id: source.id,
+          name: source.name,
+          fingerprint: demoReplacementFingerprint(source),
+          selected_by_default: legacy,
+          reason: legacy
+            ? "Exact labeled legacy demonstration workflow"
+            : current
+              ? "Current built-in workflow — retained"
+              : "Other workflow — preserved unless explicitly selected",
+        };
+      }),
+    };
   },
 
-  seedAllSampleWorkflows: (): Promise<SeedWorkflowReport> => {
-    if (!isTauri()) {
-      const before = new Set(devSources.map(source => source.id));
-      const selected: Source[] = [];
-      for (const tpl of SAMPLE_WORKFLOW_TEMPLATES.filter(template => template.seed)) {
-        const executable = tpl.spec.sources.some(source => source.extractor.script || source.extractor.mode === "script");
-        const input = workflowSpecToCreateInput(executable ? { ...tpl.spec, metadata: { ...tpl.spec.metadata, enabled: false } } : tpl.spec);
-        if (!devSources.some((s) => s.name === tpl.name || (s.identifier === input.identifier && s.kind === input.kind))) {
-          const newSource: Source = {
-            id: `sample-${crypto.randomUUID()}`,
-            kind: input.kind as any,
-            name: input.name,
-            identifier: input.identifier,
-            config: (input.config || {}) as any,
-            enabled: input.enabled ?? true,
-            last_run_at: null,
-            last_status: null,
-            last_error: null,
-            created_at: new Date().toISOString(),
-            cadence: input.cadence || "daily",
-            cadence_cron: input.cadence_cron || null,
-            next_run_at: null,
-            last_run_duration_ms: null,
-            retention_days: BigInt(input.retention_days || 45),
-            retention_policy: input.retention_policy || "untracked_only",
-            filters: (input.filters || {}) as any,
-            needs_review: executable,
-            script_trusted: false,
-          };
-          devSources.push(newSource);
-        }
-        const selectedSource = devSources.find(s => s.name === tpl.name || (s.identifier === input.identifier && s.kind === input.kind));
-        if (selectedSource) selected.push(selectedSource);
+  replaceTestWorkflows: async (selected: WorkflowReplacementSelection[]): Promise<WorkflowReplacementReport> => {
+    if (isTauri()) return invoke<WorkflowReplacementReport>("replace_test_workflows", { selected });
+    const preview = await api.previewTestWorkflowReplacement();
+    const seen = new Set<string>();
+    for (const selection of selected) {
+      if (seen.has(selection.id)) throw new Error("Duplicate workflow replacement selection.");
+      seen.add(selection.id);
+      const candidate = preview.candidates.find(item => item.id === selection.id);
+      if (!candidate || candidate.fingerprint !== selection.fingerprint) {
+        throw new Error("Workflow changed while replacing test workflows. Reload and review the selection.");
       }
-      saveDevSources();
-      return Promise.resolve({ created: selected.filter(source => !before.has(source.id)), already_present: selected.filter(source => before.has(source.id)), needs_review: selected.filter(source => source.needs_review).map(source => source.id) });
     }
-    return invoke<SeedWorkflowReport>("seed_all_sample_workflows");
+    const removed_ids = selected.map(selection => selection.id).sort();
+    const preserved_ids = devSources.filter(source => !seen.has(source.id)).map(source => source.id).sort();
+    const nextSources = devSources.filter(source => !seen.has(source.id));
+    const created: Source[] = [];
+    for (const template of SAMPLE_WORKFLOW_TEMPLATES) {
+      if (nextSources.some(source => demoWorkflowMarker(source).template_id === template.id)) continue;
+      const source = demoSourceFromTemplate(template.id, `demo-${template.id}-${crypto.randomUUID()}`);
+      nextSources.push(source);
+      created.push(source);
+    }
+    devSources = nextSources;
+    saveDevSources();
+    return {
+      created,
+      removed_ids,
+      preserved_ids,
+      backup_path: null,
+      setup_required: ["Adzuna requires credentials in Settings and explicit source enablement."],
+    };
   },
 
   createSource: (input: {
@@ -1038,19 +1144,19 @@ const apiImplementation = {
           timestamp: new Date().toISOString(),
           level: "warn",
           source_id: id,
-          message: `Sidecar worker warning: Slow response from endpoint (>3000ms)`,
+          message: "Demonstration mode simulated a provider warning; no provider requests were made.",
         });
         await new Promise((r) => setTimeout(r, delayMs));
 
         const finishedAt = new Date().toISOString();
-        const errMsg = "Network timeout connecting to careers endpoint (HTTP 504 Gateway Timeout)";
+        const errMsg = "Simulated provider failure in demonstration mode; no network request was made.";
         devLogs[runId].push({
           id: `log-${Date.now()}-3`,
           run_id: runId,
           timestamp: finishedAt,
           level: "error",
           source_id: id,
-          message: `Failed to extract postings: ${errMsg}`,
+          message: `Demonstration fixture failure: ${errMsg}`,
         });
         devLogs[runId].push({
           id: `log-${Date.now()}-4`,
@@ -1084,7 +1190,7 @@ const apiImplementation = {
         timestamp: new Date().toISOString(),
         level: "info",
         source_id: id,
-        message: `Sidecar worker spawned. Fetching listings from configured endpoint...`,
+        message: "Demonstration mode generated fictional fixture postings; no provider requests were made.",
       });
       saveDevLogs();
 
@@ -1092,7 +1198,7 @@ const apiImplementation = {
 
       const newJobs = target
         ? generateScrapedJobsForSource(target)
-        : generateScrapedJobsForSource({ ...SAMPLE_SWE_SOURCE, id, name: "Target Workflow" });
+        : generateScrapedJobsForSource({ ...SAMPLE_ENGINEERING_SOURCE, id, name: "Target Workflow" });
 
       let newlyAddedCount = 0;
       let refreshedCount = 0;
@@ -1135,7 +1241,7 @@ const apiImplementation = {
         timestamp: new Date().toISOString(),
         level: "info",
         source_id: id,
-        message: `Extracted ${extractedCount} postings from source. Policy engine matched ${matchedCount} postings against criteria.`,
+        message: `Demonstration fixtures: ${extractedCount} fictional postings generated; ${matchedCount} matched the saved workflow.`,
       });
 
       const finishedAt = new Date().toISOString();
@@ -1231,7 +1337,7 @@ const apiImplementation = {
     })) throw new Error("Browser and script extraction require the desktop application; executable configurations require local trust.");
     // Demonstration validates the form shape; expert syntax requires the desktop validator.
     if (result.parsedSpec?.filters?.query || result.parsedSpec?.filters?.policy) throw new Error("Expert queries and policies require desktop validation.");
-    return { ...result.parsedSpec!, version: 8, max_jobs_per_run: result.parsedSpec!.max_jobs_per_run ?? INGESTION_LIMITS.default };
+    return { ...result.parsedSpec!, version: 9, max_jobs_per_run: result.parsedSpec!.max_jobs_per_run ?? INGESTION_LIMITS.default };
   },
   importWorkflow: async (spec: unknown): Promise<WorkflowSpec> => {
     if (isTauri()) return invoke("import_workflow", { spec });
@@ -1252,7 +1358,7 @@ const apiImplementation = {
     if (isTauri()) return invoke("preview_workflow", { spec, requestId });
     const validated = await api.validateWorkflow(spec);
     const input = workflowSpecToCreateInput(validated);
-    const source = { ...SAMPLE_SWE_SOURCE, ...input, id: "demo-preview", created_at: new Date().toISOString() } as Source;
+    const source = { ...SAMPLE_ENGINEERING_SOURCE, ...input, id: "demo-preview", created_at: new Date().toISOString() } as Source;
     const events = await api.testSourceTransient({ kind: source.kind, name: source.name, identifier: source.identifier, config: source.config, filters: {} });
     const fixtures = generateScrapedJobsForSource(source, false);
     const matched = events.filter(event => event.type === "job" && matchesDemoWorkflow(fixtures.find(job => job.external_id === event.external_id)!, source));
@@ -1307,7 +1413,7 @@ const apiImplementation = {
   testSourceTransient: (input: TransientSourceInput): Promise<WorkerEvent[]> => {
     if (!isTauri()) {
       const dummySource: Source = {
-        ...SAMPLE_SWE_SOURCE,
+        ...SAMPLE_ENGINEERING_SOURCE,
         name: input.name,
         identifier: input.identifier,
         kind: input.kind as any,

@@ -1,13 +1,15 @@
 import { Icon } from "../../ui/Icon";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { isTauri } from "@tauri-apps/api/core";
 import type { Settings } from "../../../bindings/Settings";
+import type { HttpProxyStatus } from "../../../bindings/HttpProxyStatus";
+import { Input } from "../../ui/Input";
 import { api } from "../../../lib/api";
 import { formatDateTime } from "../../../lib/formatters";
 import { Toggle } from "../../ui/Toggle";
 import { Button } from "../../ui/Button";
 import { Rule } from "../../ui/Rule";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { isTauri } from "@tauri-apps/api/core";
 import { Select } from "../../ui/Select";
 import { formatDate } from "../../../lib/formatters";
 
@@ -22,6 +24,77 @@ export function SystemSettings({
 }: SystemSettingsProps) {
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateCheckStatus, setUpdateCheckStatus] = useState<string | null>(null);
+  const [adzunaAppId, setAdzunaAppId] = useState("");
+  const [adzunaAppKey, setAdzunaAppKey] = useState("");
+  const [adzunaConfigured, setAdzunaConfigured] = useState(false);
+  const [adzunaBusy, setAdzunaBusy] = useState(false);
+  const [adzunaStatus, setAdzunaStatus] = useState<string | null>(null);
+  const [proxy, setProxy] = useState<HttpProxyStatus>({ configured: false, server: null, authenticated: false });
+  const [proxyServer, setProxyServer] = useState("");
+  const [proxyUsername, setProxyUsername] = useState("");
+  const [proxyPassword, setProxyPassword] = useState("");
+  const [proxyBusy, setProxyBusy] = useState(false);
+  const [proxyMessage, setProxyMessage] = useState<string | null>(null);
+  useEffect(() => {
+    void api.getHttpProxyStatus().then(setProxy).catch(() => setProxyMessage("Unable to read proxy status."));
+  }, []);
+  const changeProxy = async (clear: boolean) => {
+    setProxyBusy(true);
+    setProxyMessage(null);
+    try {
+      setProxy(clear ? await api.clearHttpProxy() : await api.setHttpProxy(proxyServer, proxyUsername || null, proxyPassword || null));
+      setProxyServer("");
+      setProxyUsername("");
+      setProxyPassword("");
+      setProxyMessage(clear ? "Proxy cleared. New requests use direct routing." : "Proxy saved in the operating system secure store.");
+    } catch {
+      // Do not render transport/keyring errors that might echo credentials.
+      setProxyMessage("Could not update proxy configuration. Check the endpoint and credential pair; the previous configuration is unchanged.");
+    } finally {
+      setProxyBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    void api.getAdzunaCredentialStatus().then(({ configured }) => {
+      setAdzunaConfigured(configured);
+    }).catch((error: unknown) => {
+      setAdzunaStatus(error instanceof Error ? error.message : "Unable to read secure-store status.");
+    });
+  }, []);
+
+  const handleSaveAdzuna = async () => {
+    setAdzunaBusy(true);
+    setAdzunaStatus(null);
+    try {
+      const result = await api.setAdzunaCredentials(adzunaAppId, adzunaAppKey);
+      setAdzunaConfigured(result.configured);
+      setAdzunaAppId("");
+      setAdzunaAppKey("");
+      setAdzunaStatus("Credentials saved in the operating system secure store. Enable Adzuna separately in a workflow.");
+    } catch (error) {
+      setAdzunaStatus(error instanceof Error ? error.message : "Could not save credentials.");
+    } finally {
+      setAdzunaBusy(false);
+    }
+  };
+
+  const handleClearAdzuna = async () => {
+    setAdzunaBusy(true);
+    setAdzunaStatus(null);
+    try {
+      const result = await api.clearAdzunaCredentials();
+      setAdzunaConfigured(result.configured);
+      setAdzunaAppId("");
+      setAdzunaAppKey("");
+      setAdzunaStatus("Adzuna credentials cleared.");
+    } catch (error) {
+      setAdzunaStatus(error instanceof Error ? error.message : "Could not clear credentials.");
+    } finally {
+      setAdzunaBusy(false);
+    }
+  };
 
   const handleCheckUpdate = async () => {
     try {
@@ -138,6 +211,109 @@ export function SystemSettings({
           onChange={(enabled) => onUpdateSetting("scraper.enabled", enabled)}
           label="AUTOMATIC SCRAPING ENABLED"
         />
+      </section>
+
+      <section
+        className="flex flex-col gap-4 p-4 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/30"
+        aria-label="Web scraping & crawler"
+      >
+        <h3 className="font-mono text-xs font-bold uppercase tracking-wider">
+          Web Scraping & Crawler (Dev Build)
+        </h3>
+        <p className="font-mono text-xs text-[var(--color-ink-mute)]">
+          Configure crawl rules, natural request pacing, and robots policy for research and public web scraping.
+        </p>
+
+        <Toggle
+          checked={settings.scraper_respect_robots ?? false}
+          onChange={(checked) => onUpdateSetting("scraper.respect_robots", checked)}
+          label="RESPECT ROBOTS.TXT"
+        />
+        <p className="font-mono text-xs text-[var(--color-ink-mute)]">
+          {settings.scraper_respect_robots
+            ? "Robots.txt is respected. Pages disallowed by robots policy will be rejected."
+            : "Robots.txt compliance is disabled (dev/research mode). The crawler will fetch target career pages without robots restrictions."}
+        </p>
+
+        <div className="grid grid-cols-3 gap-4 pt-2">
+          <label className="grid gap-1 text-xs text-[var(--color-ink-mute)]">
+            DEFAULT MAX JOBS PER RUN
+            <input
+              type="number"
+              min={1}
+              max={10000}
+              value={settings.scraper_max_jobs_per_run ?? 20}
+              onChange={(e) => onUpdateSetting("scraper.max_jobs_per_run", Number(e.target.value))}
+              className="h-9 border border-[var(--color-ink)] bg-[var(--color-paper)] px-2 text-[var(--color-ink)] font-mono text-xs"
+            />
+          </label>
+          <label className="grid gap-1 text-xs text-[var(--color-ink-mute)]">
+            BASE REQUEST DELAY (MS)
+            <input
+              type="number"
+              min={0}
+              max={10000}
+              value={settings.scraper_per_host_delay_ms ?? 750}
+              onChange={(e) => onUpdateSetting("scraper.per_host_delay_ms", Number(e.target.value))}
+              className="h-9 border border-[var(--color-ink)] bg-[var(--color-paper)] px-2 text-[var(--color-ink)] font-mono text-xs"
+            />
+          </label>
+          <label className="grid gap-1 text-xs text-[var(--color-ink-mute)]">
+            RANDOMIZED JITTER (MS)
+            <input
+              type="number"
+              min={0}
+              max={10000}
+              value={settings.scraper_jitter_ms ?? 500}
+              onChange={(e) => onUpdateSetting("scraper.jitter_ms", Number(e.target.value))}
+              className="h-9 border border-[var(--color-ink)] bg-[var(--color-paper)] px-2 text-[var(--color-ink)] font-mono text-xs"
+            />
+          </label>
+        </div>
+        <p className="font-mono text-xs text-[var(--color-ink-mute)]">
+          Natural limits: between consecutive requests to the same host, the scraper sleeps for base delay + random jitter to emulate realistic browsing patterns.
+        </p>
+      </section>
+
+      <section className="flex flex-col gap-3 p-4 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/30" aria-label="Job providers">
+        <h3 className="font-mono text-xs font-bold uppercase tracking-wider">Job providers / Adzuna</h3>
+        <p className="font-mono text-xs text-[var(--color-ink-mute)]">Credentials stay in the operating system secure store. They are injected only for Adzuna execution; saving credentials does not enable a workflow source.</p>
+        <p role="status" className="font-mono text-xs">{adzunaConfigured ? "Adzuna credentials configured." : "Adzuna setup required."}</p>
+        <label className="grid gap-2 text-xs text-[var(--color-ink-mute)]">
+          App ID
+          <input autoComplete="off" value={adzunaAppId} onChange={(event) => setAdzunaAppId(event.target.value)} className="h-9 border border-[var(--color-ink)] bg-[var(--color-paper)] px-2 text-[var(--color-ink)]" />
+        </label>
+        <label className="grid gap-2 text-xs text-[var(--color-ink-mute)]">
+          App key
+          <input type="password" autoComplete="new-password" value={adzunaAppKey} onChange={(event) => setAdzunaAppKey(event.target.value)} className="h-9 border border-[var(--color-ink)] bg-[var(--color-paper)] px-2 text-[var(--color-ink)]" />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={adzunaBusy || !adzunaAppId.trim() || !adzunaAppKey.trim() || !isTauri()} onClick={handleSaveAdzuna}>Save credentials</Button>
+          <Button variant="ghost" disabled={adzunaBusy || !adzunaConfigured || !isTauri()} onClick={handleClearAdzuna}>Clear credentials</Button>
+        </div>
+        {adzunaStatus && <p role="status" className="font-mono text-xs">{adzunaStatus}</p>}
+      </section>
+
+      <section aria-label="HTTP proxy" className="flex flex-col gap-3 p-4 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/30">
+        <h3 className="font-mono text-xs font-bold uppercase tracking-wider">Network / HTTP proxy</h3>
+        <p className="font-mono text-xs text-[var(--color-ink-mute)]">Supply your own static HTTP(S) forward proxy; none is bundled. Routes built-in HTTP and app-launched Chromium only, with no direct fallback when configured. A proxy does not bypass robots, login walls or access restrictions.</p>
+        <p className="font-mono text-xs text-[var(--color-ink-mute)]">Basic credentials sent to an HTTP proxy are not transport-encrypted. Prefer an HTTPS proxy or a trusted local network.</p>
+        <p className="font-mono text-xs">{!isTauri() ? "Desktop app required. Demo/recorded mode does not configure proxy routing." : proxy.configured ? `Configured: ${proxy.server}${proxy.authenticated ? " (authenticated)" : ""}` : "No proxy configured."}</p>
+        <label className="grid gap-2 text-xs">Proxy endpoint
+          <Input autoComplete="off" placeholder="http://proxy.example:8080" value={proxyServer} onChange={event => setProxyServer(event.target.value)} />
+        </label>
+        <label className="grid gap-2 text-xs">Proxy username (optional, write-only)
+          <Input type="password" autoComplete="new-password" value={proxyUsername} onChange={event => setProxyUsername(event.target.value)} />
+        </label>
+        <label className="grid gap-2 text-xs">Proxy password (optional, write-only)
+          <Input type="password" autoComplete="new-password" value={proxyPassword} onChange={event => setProxyPassword(event.target.value)} />
+        </label>
+        <p className="text-xs text-[var(--color-ink-mute)]">Use an endpoint with scheme, host and port, without embedded credentials. Supply both username and password or neither. Saved credentials are never loaded into these fields.</p>
+        <div className="flex gap-2">
+          <Button disabled={proxyBusy || !isTauri() || !proxyServer.trim()} onClick={() => void changeProxy(false)}>Save proxy</Button>
+          <Button variant="ghost" disabled={proxyBusy || !isTauri() || !proxy.configured} onClick={() => void changeProxy(true)}>Clear proxy</Button>
+        </div>
+        {proxyMessage && <p role="alert" className="font-mono text-xs">{proxyMessage}</p>}
       </section>
 
       {/* Locale & Timezone Info */}

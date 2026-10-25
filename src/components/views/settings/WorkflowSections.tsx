@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CompatibilityFilters } from "./CompatibilityFilters";
 import { CompanyPicker, selectedCompanyId, companyOptions } from "./CompanyPicker";
 import { ExperienceFilter } from "../../filters/ExperienceFilter";
@@ -29,10 +29,10 @@ const loadRoleOptions = async (query: string): Promise<MultiSelectOption[]> =>
     value: title, label: title,
     description: `${soc_code} · ${["Canonical title", "Reported title", "Alternate title"][priority_tier - 1]}`,
   }));
-const companySelectionOptions: MultiSelectOption[] = companyOptions.map(({ company, source, domain, template }) => ({
+const companySelectionOptions: MultiSelectOption[] = companyOptions.map(({ company, source, domain }) => ({
   value: company.name, label: company.name,
-  searchText: `${company.name} ${source.extractor.kind} ${domain} ${template.readiness}`,
-  description: `${source.extractor.kind} · ${template.readiness.replaceAll("_", " ")}`,
+  searchText: `${company.name} ${source.extractor.kind} ${domain} ${company.readiness}`,
+  description: `${source.extractor.kind} · ${company.readiness.replaceAll("_", " ")}`,
 }));
 
 const loadCompanyOptions = async (query: string): Promise<MultiSelectOption[]> => {
@@ -47,10 +47,10 @@ const loadCompanyOptions = async (query: string): Promise<MultiSelectOption[]> =
         value: suggestion.name,
         label: suggestion.name,
         searchText: preset
-          ? `${suggestion.name} ${preset.source.extractor.kind} ${preset.domain} ${preset.template.readiness}`
+          ? `${suggestion.name} ${preset.source.extractor.kind} ${preset.domain} ${preset.company.readiness}`
           : suggestion.name,
         description: preset
-          ? `${preset.source.extractor.kind} · ${preset.template.readiness.replaceAll("_", " ")}${seen ? ` · ${seen}` : ""}`
+          ? `${preset.source.extractor.kind} · ${preset.company.readiness.replaceAll("_", " ")}${seen ? ` · ${seen}` : ""}`
           : `${seen} · employer filter only; no verified career source`,
       };
     });
@@ -119,6 +119,13 @@ export function WorkflowSections({
 }) {
   const filters = draft.filters || {};
   const rules = { ...emptyRules(), ...filters.matching };
+  const compensationMatchMode = rules.compensation?.match_mode ?? "range_overlap";
+  const [adzunaCredentialConfigured, setAdzunaCredentialConfigured] = useState<boolean | null>(null);
+  useEffect(() => {
+    void api.getAdzunaCredentialStatus()
+      .then(({ configured }) => setAdzunaCredentialConfigured(configured))
+      .catch(() => setAdzunaCredentialConfigured(false));
+  }, []);
   const setRules = (patch: Partial<PostingRules>) =>
     change(current => ({
       ...current,
@@ -217,7 +224,7 @@ export function WorkflowSections({
             </span>
           </div>
           <p className="text-xs text-[var(--color-ink-mute)]">
-            The Muse covers bounded public listings, not every employer. No API key or career URL is needed. Arbeitnow is Germany-focused; original dates may be unknown.
+            The Muse is a bounded public feed; Arbeitnow is Germany-focused and may lack original dates. Jobicy is remote-only, covers its seven-day feed after a three-hour delay, and synchronizes at most hourly. Adzuna requires personal API credentials configured in Settings and explicit source enablement. Provider coverage is limited, not every employer; Google, Apple, Netflix and Amazon scripts remain separately review-gated.
           </p>
         </div>
 
@@ -228,13 +235,13 @@ export function WorkflowSections({
           const alreadyAttached = (draft.sources || []).some(source => normalizedEndpoint(source.extractor.kind, source.extractor.url) === endpoint);
           if (alreadyAttached) return null;
           return <div key={targetCo} className="border border-[var(--color-border)] p-3 bg-[var(--color-surface-raised)] flex items-center justify-between gap-3 text-xs">
-            <span>Career board for <strong>{match.company.name}</strong> · {match.template.readiness.replaceAll("_", " ")}. Setup-required, review and script sources attach disabled.</span>
+            <span>Career board for <strong>{match.company.name}</strong> · {match.company.readiness.replaceAll("_", " ")}. Setup-required, review and script sources attach disabled.</span>
             <Button type="button" size="sm" aria-label={`Attach career board for ${match.company.name}`}
               onClick={() => attachCompanyBoard(match.company.id)}>Attach career board</Button>
           </div>;
         })}
         <p className="text-xs text-[var(--color-text-muted)] max-w-prose">
-          New workflows enable The Muse (bounded worldwide listings) and Arbeitnow (Germany-focused; original dates may be unknown). Preview and Run check every enabled source; coverage is not every employer. Government listings, including USAJOBS, are not supported.
+          New workflows use selected feeds and verified direct boards within bounded request limits; coverage is never every employer. Jobicy has a seven-day publication window and three-hour delay. Adzuna requires local credentials in Settings &gt; System &gt; Job providers and explicit enablement. Preview applies all matching locally. Google, Apple, Netflix and Amazon remain available only as separately review-gated company sources; USAJOBS is not supported.
         </p>
         <div className="flex items-center justify-between gap-2 pt-2 border-t border-[var(--color-border)]">
           <h4 className="font-bold text-sm">
@@ -261,6 +268,13 @@ export function WorkflowSections({
           >
             + Add source
           </Button>
+        </div>
+        <div className="border-t border-[var(--color-border)] pt-2">
+          <JobLimitInput
+            label="Scraper job limit (max matching jobs per run)"
+            value={draft.max_jobs_per_run ?? INGESTION_LIMITS.default}
+            onChange={value => change(value == null ? { ...draft } : { ...draft, max_jobs_per_run: value })}
+          />
         </div>
 
         {hasDuplicates && (
@@ -386,8 +400,20 @@ export function WorkflowSections({
                 {source.extractor.kind === "search" && <label className="grid gap-1 text-sm">Public listings provider
                   <Select aria-label={`Source ${index + 1} search provider`}
                     value={!source.extractor.url || source.extractor.url === "default" ? "themuse" : source.extractor.url}
-                    options={[{ value: "themuse", label: "The Muse — bounded worldwide listings" }, { value: "arbeitnow", label: "Arbeitnow — Germany-focused feed" }]}
-                    onChange={provider => change(current => ({ ...current, sources: current.sources.map(item => item.id === source.id ? { ...item, extractor: { ...item.extractor, url: provider } } : item) }))} />
+                    options={[
+                      { value: "themuse", label: "The Muse — bounded worldwide listings" },
+                      { value: "arbeitnow", label: "Arbeitnow — Germany-focused feed" },
+                      { value: "jobicy", label: "Jobicy — remote feed, seven days, hourly cache" },
+                      { value: "adzuna", label: "Adzuna — US listings (requires credentials)" },
+                    ]}
+                    onChange={provider => change(current => ({ ...current, sources: current.sources.map(item => item.id === source.id ? { ...item, extractor: { ...item.extractor, url: provider, source_config: {} } } : item) }))} />
+                  {source.extractor.url === "adzuna" && (
+                    <span role="status" className="text-xs text-[var(--color-ink-mute)]">
+                      {adzunaCredentialConfigured
+                        ? "Credentials configured; enable this source explicitly to search."
+                        : "Setup required: configure credentials in Settings > System > Job providers. Saving credentials does not enable this source."}
+                    </span>
+                  )}
                 </label>}
 
                 <details className="border-t border-[var(--color-border)] pt-2 text-xs">
@@ -455,7 +481,7 @@ export function WorkflowSections({
                           "workday",
                           "jsonld",
                           "selector",
-                        ].map((value) => ({ value, label: value }))}
+                        ].map((value) => ({ value, label: value === "selector" ? "selector / Website crawl" : value }))}
                         onChange={(kind) => {
                           const nextSources = [...draft.sources];
                           nextSources[index] = {
@@ -469,6 +495,47 @@ export function WorkflowSections({
                         }}
                       />
                     </label>
+                    {source.extractor.kind === "selector" && (() => {
+                      const rawConfig = source.extractor.source_config;
+                      const config = rawConfig && typeof rawConfig === "object" && !Array.isArray(rawConfig) ? rawConfig : {};
+                      const crawl = config.crawl && typeof config.crawl === "object" && !Array.isArray(config.crawl) ? config.crawl : null;
+                      const updateCrawl = (value: typeof config.crawl) => {
+                        const nextConfig = { ...config };
+                        if (value) nextConfig.crawl = value;
+                        else delete nextConfig.crawl;
+                        change(current => ({ ...current, sources: current.sources.map(item => item.id === source.id
+                          ? { ...item, extractor: { ...item.extractor, mode: "static", source_config: nextConfig } } : item) }));
+                      };
+                      return <fieldset className="grid gap-3">
+                        <legend className="text-sm font-semibold">Website crawl</legend>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input type="checkbox" aria-label={`Source ${index + 1} website crawl`} checked={!!crawl}
+                            onChange={event => updateCrawl(event.target.checked ? { max_pages: 20, max_depth: 2, extraction: "jsonld" } : null)} />
+                          Enable bounded website crawl using the source URL above
+                        </label>
+                        <p className="text-xs text-[var(--color-text-muted)]">Public career/job HTML on the supplied site only, not internet-wide search. Existing feeds and ATS remain available. Pages without supported job fields may yield no postings. Robots and access restrictions still apply.</p>
+                        {crawl && <>
+                          <label className="grid gap-1 text-sm">Page cap
+                            <Input aria-label={`Source ${index + 1} crawl page cap`} type="number" min={1} max={100} value={Number(crawl.max_pages ?? 20)}
+                              onChange={event => updateCrawl({ ...crawl, max_pages: Number(event.target.value) })} />
+                          </label>
+                          <label className="grid gap-1 text-sm">Maximum depth (seed is zero)
+                            <Input aria-label={`Source ${index + 1} crawl depth`} type="number" min={0} max={5} value={Number(crawl.max_depth ?? 2)}
+                              onChange={event => updateCrawl({ ...crawl, max_depth: Number(event.target.value) })} />
+                          </label>
+                          <label className="grid gap-1 text-sm">Crawl extraction
+                            <Select aria-label={`Source ${index + 1} crawl extraction`} value={String(crawl.extraction ?? "jsonld")}
+                              options={[
+                                { value: "jsonld", label: "JobPosting JSON-LD" },
+                                { value: "public_html", label: "Public HTML (automatic link & card discovery)" },
+                                { value: "selectors", label: "Configured selectors" },
+                              ]}
+                              onChange={extraction => updateCrawl({ ...crawl, extraction })} />
+                          </label>
+                          <p className="text-xs text-[var(--color-text-muted)]">Static HTML only. Remove next-page pagination before enabling crawl; configured selectors require item, title and link fields.</p>
+                        </>}
+                      </fieldset>;
+                    })()}
 
                     {source.extractor.kind === "selector" && (
                       <CustomExtractorConfig
@@ -636,6 +703,34 @@ export function WorkflowSections({
           </div>
           <CompatibilityFilters draft={draft} change={change} advanced={advanced} />
         </section>
+            <label className="grid gap-2 border-t border-[var(--color-border)] pt-3 text-sm">
+              Salary matching
+              <Select
+                aria-label="Salary matching"
+                value={compensationMatchMode}
+                options={[
+                  { value: "range_overlap", label: "Range overlaps threshold" },
+                  { value: "advertised_amount", label: "Advertised endpoint meets threshold" },
+                ]}
+                onChange={(value) =>
+                  setRules({
+                    compensation: {
+                      ...(rules.compensation ?? {
+                        min_minor: null,
+                        max_minor: null,
+                        currency: null,
+                        interval: null,
+                        include_unknown: false,
+                      }),
+                      match_mode: value === "advertised_amount" ? "advertised_amount" : "range_overlap",
+                    },
+                  })
+                }
+              />
+              <span className="text-xs text-[var(--color-ink-mute)]">
+                Advertised amount uses only evidenced native pay endpoints; it does not annualize or convert currencies.
+              </span>
+            </label>
             <SalaryRangeFilter
               salaryMin={
                 rules.compensation?.min_minor == null
@@ -654,24 +749,34 @@ export function WorkflowSections({
               onChange={(values) =>
                 setRules({
                   compensation:
-                    !values.interval &&
-                    !values.currency &&
-                    values.salaryMin == null &&
-                    values.salaryMax == null
+                  !values.interval &&
+                  !values.currency &&
+                  values.salaryMin == null &&
+                  values.salaryMax == null
+                    ? compensationMatchMode === "range_overlap"
                       ? null
                       : {
-                          min_minor:
-                            values.salaryMin == null
-                              ? null
-                              : Math.round(values.salaryMin * 100),
-                          max_minor:
-                            values.salaryMax == null
-                              ? null
-                              : Math.round(values.salaryMax * 100),
-                          currency: values.currency,
-                          interval: values.interval,
+                          min_minor: null,
+                          max_minor: null,
+                          currency: null,
+                          interval: null,
                           include_unknown: values.includeUnknown,
-                        },
+                          match_mode: compensationMatchMode,
+                        }
+                    : {
+                        min_minor:
+                          values.salaryMin == null
+                            ? null
+                            : Math.round(values.salaryMin * 100),
+                        max_minor:
+                          values.salaryMax == null
+                            ? null
+                            : Math.round(values.salaryMax * 100),
+                        currency: values.currency,
+                        interval: values.interval,
+                        include_unknown: values.includeUnknown,
+                        match_mode: compensationMatchMode,
+                      },
                 })
               }
             />
