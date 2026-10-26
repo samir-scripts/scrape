@@ -4866,3 +4866,275 @@ async fn modified_software_engineering_workflow_scrapes_public_html_and_ats_with
 
     pool.close().await;
 }
+
+#[tokio::test]
+async fn imported_software_engineering_crawler_yaml_caps_persisted_discoveries_at_forty() {
+    use scrape_lib::services::{execution_diagnostics, workflow};
+    use serde_json::json;
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    };
+
+    const STARTED: &str = "2026-10-26T16:00:00Z";
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap();
+    let parse_script = r#"import fs from "node:fs"; import { parse } from "yaml"; console.log(JSON.stringify(parse(fs.readFileSync("workflows/software-engineering-web-scraper-test.yaml", "utf8"))));"#;
+    let parsed_yaml = Command::new("node")
+        .current_dir(repo)
+        .args(["--input-type=module", "-e", parse_script])
+        .output()
+        .unwrap();
+    assert!(
+        parsed_yaml.status.success(),
+        "workflow YAML parser failed: {}",
+        String::from_utf8_lossy(&parsed_yaml.stderr)
+    );
+    let yaml_value: serde_json::Value = serde_json::from_slice(&parsed_yaml.stdout).unwrap();
+    let spec = workflow::validate(yaml_value, "America/New_York").unwrap();
+    assert_eq!(spec.sources.len(), 2);
+    assert_eq!(spec.max_jobs_per_run, Some(40));
+    assert_eq!(
+        spec.filters
+            .as_ref()
+            .unwrap()
+            .matching
+            .as_ref()
+            .unwrap()
+            .target_roles
+            .len(),
+        30
+    );
+
+    let mut details = std::collections::HashMap::new();
+    let mut hubs = std::collections::HashMap::new();
+    for (slug, prefix) in [("palantir", "palantir"), ("sep", "sep")] {
+        let mut links = Vec::new();
+        for n in 0..23 {
+            let id = format!("{prefix}-{n:02}");
+            links.push(format!(
+                "<article><a href='/{slug}/jobs/{id}'>Software Engineer</a></article>"
+            ));
+            details.insert(
+                format!("/jobs.lever.co/{slug}/jobs/{id}"),
+                "<html><h1>Software Engineer</h1><main><div class='job-description'><p>Build dependable software systems and distributed platform services.</p></div><div class='location'>Austin, TX</div><time datetime='2026-10-26T10:00:00Z'>Today</time></main></html>".to_string(),
+            );
+        }
+        if slug == "palantir" {
+            for (id, title, location, date) in [
+                (
+                    "old",
+                    "Software Engineer",
+                    "Austin, TX",
+                    Some("2026-10-25T15:59:59.999Z"),
+                ),
+                ("undated", "Software Engineer", "Austin, TX", None),
+                (
+                    "canada",
+                    "Software Engineer",
+                    "Toronto, ON, Canada",
+                    Some("2026-10-26T10:00:00Z"),
+                ),
+                (
+                    "unknown",
+                    "Software Engineer",
+                    "Remote",
+                    Some("2026-10-26T10:00:00Z"),
+                ),
+                (
+                    "unrelated",
+                    "Accounting Manager",
+                    "Austin, TX",
+                    Some("2026-10-26T10:00:00Z"),
+                ),
+            ] {
+                links.push(format!(
+                    "<article><a href='/palantir/jobs/{id}'>{title}</a></article>"
+                ));
+                let date = date
+                    .map(|value| format!("<time datetime='{value}'>Today</time>"))
+                    .unwrap_or_default();
+                details.insert(
+                    format!("/jobs.lever.co/palantir/jobs/{id}"),
+                    format!(
+                        "<html><h1>{title}</h1><main><div class='job-description'><p>Build dependable software systems and distributed platform services.</p></div><div class='location'>{location}</div>{date}</main></html>"
+                    ),
+                );
+            }
+        }
+        hubs.insert(
+            format!("/jobs.lever.co/{slug}/openings"),
+            format!("<html><body>{}</body></html>", links.join("")),
+        );
+    }
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    listener.set_nonblocking(true).unwrap();
+    let stopped = Arc::new(AtomicBool::new(false));
+    let stop_server = Arc::clone(&stopped);
+    let requests = Arc::new(Mutex::new(Vec::<String>::new()));
+    let server_requests = Arc::clone(&requests);
+    let server = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(90);
+        while !stop_server.load(Ordering::SeqCst) && Instant::now() < deadline {
+            let Ok((mut stream, _)) = listener.accept() else {
+                std::thread::sleep(Duration::from_millis(2));
+                continue;
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut buffer = [0; 8192];
+            let count = stream.read(&mut buffer).unwrap();
+            let request = String::from_utf8_lossy(&buffer[..count]);
+            let path = request.split_whitespace().nth(1).unwrap().to_string();
+            server_requests.lock().unwrap().push(path.clone());
+            let route = path.split('?').next().unwrap().trim_end_matches('/');
+            let body = match route {
+                "/jobs.lever.co/palantir" => {
+                    "<a href='/palantir/openings'>Openings</a>".to_string()
+                }
+                "/jobs.lever.co/sep" => "<a href='/sep/openings'>Openings</a>".to_string(),
+                "/jobs.lever.co/palantir/openings" | "/jobs.lever.co/sep/openings" => hubs
+                    .get(route)
+                    .unwrap_or_else(|| panic!("unexpected crawl hub {route}"))
+                    .clone(),
+                other => details
+                    .get(other)
+                    .unwrap_or_else(|| panic!("unexpected replay route {other}"))
+                    .clone(),
+            };
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+        }
+    });
+
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("crawler-workflow.db");
+    let pool = scrape_lib::db::init_db(&database).await.unwrap();
+    let saved = workflow::persist(&pool, spec, None, true, "America/New_York")
+        .await
+        .unwrap();
+    let saved = SourcesRepo::get(&pool, &saved.id).await.unwrap();
+    let mut config = execution_diagnostics::prepare(&saved, "America/New_York", STARTED).unwrap();
+    assert_eq!(config.max_jobs_per_run, Some(40));
+    assert_eq!(config.sources.len(), 2);
+    for source in &mut config.sources {
+        assert_eq!(source.kind, SourceKind::Selector);
+        source.config["per_host_delay_ms"] = json!(0);
+        source.config["jitter_ms"] = json!(0);
+    }
+    config.limits.per_host_delay_ms = 0;
+    config.limits.jitter_ms = Some(0);
+    config.limits.request_timeout_s = 5;
+
+    let mut expected_ids = None;
+    for pass in 0..2 {
+        let events = invoke_replay(&config, false, Some(&origin));
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, WorkerEvent::Error { .. })),
+            "worker errors: {events:?}"
+        );
+        let WorkerEvent::Done { stats } = events.last().unwrap() else {
+            panic!("missing worker completion")
+        };
+        assert_eq!(stats.jobs_emitted, 40);
+        let batch: Vec<_> = events
+            .iter()
+            .filter(|event| matches!(event, WorkerEvent::Job { .. }))
+            .cloned()
+            .map(|event| scraped_job_from_event(event).unwrap())
+            .collect();
+        assert_eq!(batch.len(), 40);
+        let ids: std::collections::BTreeSet<_> = batch
+            .iter()
+            .map(|job| job.external_id.clone().unwrap())
+            .collect();
+        assert_eq!(ids.len(), 40);
+        if let Some(first) = &expected_ids {
+            assert_eq!(&ids, first, "rerun changed which 40 jobs were accepted");
+        } else {
+            expected_ids = Some(ids.clone());
+        }
+        for job in &batch {
+            assert_eq!(job.date_posted.as_deref(), Some("2026-10-26T10:00:00Z"));
+            assert!(
+                job.locations
+                    .iter()
+                    .any(|location| { location.country_code.as_deref() == Some("US") }),
+                "job lacks US evidence: {job:?}"
+            );
+            assert!(!job.title.contains("Accounting Manager"));
+        }
+        let counts = JobsRepo::upsert_scraped(&pool, &batch).await.unwrap();
+        assert_eq!(
+            (counts.inserted, counts.updated),
+            if pass == 0 { (40, 0) } else { (0, 40) }
+        );
+        let discovered = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+        assert_eq!(discovered.total, 40);
+        assert!(discovered.items.iter().all(|job| {
+            job.date_posted.as_deref() == Some("2026-10-26T10:00:00Z")
+                && job
+                    .locations
+                    .iter()
+                    .any(|location| location.country_code.as_deref() == Some("US"))
+        }));
+        for negative in ["old", "undated", "canada", "unknown", "unrelated"] {
+            assert!(
+                !discovered.items.iter().any(|job| {
+                    job.external_id
+                        .as_deref()
+                        .is_some_and(|id| id.ends_with(negative))
+                }),
+                "negative candidate {negative} persisted"
+            );
+        }
+    }
+    stopped.store(true, Ordering::SeqCst);
+    server.join().unwrap();
+    {
+        let observed = requests.lock().unwrap();
+        assert!(observed
+            .iter()
+            .any(|path| path == "/jobs.lever.co/palantir"));
+        assert!(observed.iter().any(|path| path == "/jobs.lever.co/sep"));
+        assert!(observed.iter().any(|path| path.contains("/jobs/palantir-")));
+        assert!(observed.iter().any(|path| path.contains("/jobs/sep-")));
+        assert!(observed
+            .iter()
+            .all(|path| !path.contains("api") && !path.ends_with("/robots.txt")));
+    }
+
+    pool.close().await;
+    let reopened = scrape_lib::db::init_db(&database).await.unwrap();
+    let reopened_source = SourcesRepo::get(&reopened, &saved.id).await.unwrap();
+    assert_eq!(
+        reopened_source.config["__workflow_spec"]["sources"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        reopened_source.config["__workflow_spec"]["max_jobs_per_run"],
+        json!(40)
+    );
+    assert_eq!(
+        JobsRepo::list(&reopened, JobFilter::default())
+            .await
+            .unwrap()
+            .total,
+        40
+    );
+    reopened.close().await;
+}

@@ -26,6 +26,12 @@ Google/Apple static sources remain **Needs review** and Netflix/Amazon script so
 
 Legacy recognition specs and recorded provider verification profiles are frozen separately from this production catalog. Recorded route hashes, script fingerprints and expected provider outcomes do not change when user-facing profiles change. See the [workflow contract](../plans/workflow-v3.md) for canonical matching semantics.
 
+## Software Engineering crawler test
+
+[`software-engineering-web-scraper-test.yaml`](software-engineering-web-scraper-test.yaml) is a standalone development/test workflow, not a generated built-in and not automatically seeded. It runs only the bounded public-HTML crawler/scraper against Palantir and SEP career pages; original posting time must be within 24 hours and location must be evidenced as US. A run can add at most 40 accepted jobs, not a guaranteed 40 and not a limit on existing Discovered rows. Import or replace the intended saved workflow explicitly.
+
+Both sources set `ignore_robots: true` for testing/development only. This bypass does not change worker defaults or other workflows. Keep it limited to this fixture workflow; normal custom workflows retain their configured robots policy.
+
 ## Public HTML sources and proxy
 
 Custom workflows can use **Website crawl** to start from an employer's public HTML URL and follow a bounded, same-origin set of links. Choose JSON-LD or explicit CSS/XPath fields; page/depth limits, per-host pacing and `robots.txt` checks apply. Preview is read-only, and inaccessible/login-gated pages remain unsupported rather than being bypassed.

@@ -29,9 +29,11 @@ workflow-replacement dialog. Its database backup precedes one atomic transaction
 custom workflows and saved-job state remain preserved.
 Current contracts: WorkflowSpec **9**, worker protocol **11**, migration **32**.
 Custom workflows can also crawl explicitly supplied public HTML sites. The static
-crawler uses same-origin link traversal, `robots.txt`, a default 750 ms per-host
+crawler uses same-origin link traversal, `robots.txt` by default, a default 750 ms per-host
 delay, page/depth caps, and ordinary HTTP semantics; it does not search the web
-or bypass access controls. An optional user-configured HTTP(S) proxy routes HTTP and Chromium
+or bypass login/access controls. The standalone Software Engineering development/test
+workflow deliberately ignores `robots.txt` for its two test sources only.
+An optional user-configured HTTP(S) proxy routes HTTP and Chromium
 requests. Proxy credentials stay outside workflows/exports and are stored locally.
 See [workflow setup](workflows/README.md) and the isolated
 [native crawl/proxy smoke](scripts/native-web-scraping.mjs).

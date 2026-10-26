@@ -235,16 +235,18 @@ limits apply across HTTP, browser and script candidates.
 See [configuration examples](../../plans/workflow-v3.md#static-pagination-and-details).
 
 Advanced static selector sources can enable bounded public HTML crawling with
-`crawl: { max_pages: 20, max_depth: 2, extraction: "jsonld" }`. Seeds are depth
+`crawl: { max_pages: 20, max_depth: 2, extraction: "public_html" }`. Seeds are depth
 zero; pages are counted as attempted and links are limited to the seed's HTTP(S)
-origin. JSON-LD reuses the existing `JobPosting` parser; `extraction: "selectors"`
-uses configured locators. Both modes use the shared robots and paced HTTP client,
-preserve valid earlier postings when later pages fail, and report page/time-limit
-coverage distinctly. This does not crawl search-engine results or discover the
-internet; user-provided public career/job URLs complement supported ATS and feeds.
+origin. `extraction: "jsonld"` parses structured `JobPosting` data,
+`extraction: "selectors"` uses configured locators, and `extraction: "public_html"`
+uses automatic page/link heuristics without requiring configured field locators.
+All static crawl requests share the source's configured pacing and robots policy.
+Robots are respected by default; `ignore_robots: true` bypasses `robots.txt` for that
+source only and must remain confined to explicit test/development workflows.
+Partial coverage retains confirmed jobs and page/time-limit outcomes. Crawling starts
+only from user-provided URLs; it does not discover search-engine results or the web.
 An optional secure-store HTTP(S) proxy routes shared HTTP transports and
-application-launched Chromium, without changing robots policy or enabling a
-direct-route fallback.
+application-launched Chromium, without enabling a direct-route fallback.
 Use `scrape-worker --protocol-version` to query the authoritative version rather
 than duplicating it in a harness. Protocol-v10 requests are rejected explicitly.
 

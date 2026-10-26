@@ -524,6 +524,7 @@ impl SelectorSession {
             if self.config.crawl.is_some() {
                 self.pages_visited += 1;
             }
+            let scoped_client = client.for_static_source(&self.config);
             let detail_fetch = async {
                 if self.mode == ExtractionMode::Browser {
                     let pool = self.browser.as_ref().ok_or_else(|| {
@@ -550,9 +551,11 @@ impl SelectorSession {
                     Ok::<(String, String), ClientError>((rendered.html, rendered.actual_url))
                 } else {
                     if let Some(origin) = &self.crawl_origin {
-                        client.fetch_text_same_origin_at(&url, origin, true).await
+                        scoped_client
+                            .fetch_text_same_origin_at(&url, origin, true)
+                            .await
                     } else {
-                        client.fetch_text_at(&url, true).await
+                        scoped_client.fetch_text_at(&url, true).await
                     }
                 }
             };
@@ -720,14 +723,14 @@ impl SelectorSession {
         if cached.is_none() {
             self.pages_visited += 1;
         }
-        self.visited.insert(url.to_string());
         let result = if let Some(page) = cached {
             Ok(Ok(page))
         } else {
+            let scoped_client = client.for_static_source(&self.config);
             timeout_at(
                 self.source_deadline
                     .min(Instant::now() + self.navigation_timeout),
-                client.fetch_text_same_origin_at(
+                scoped_client.fetch_text_same_origin_at(
                     url.as_str(),
                     self.crawl_origin.as_ref().unwrap(),
                     true,

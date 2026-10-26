@@ -539,17 +539,25 @@ pub(crate) fn extract_heuristic_candidates(
     config: &scrape_core::static_source::StaticSourceConfig,
     sink: &mut dyn FnMut(SelectorCandidate) -> bool,
 ) -> Result<(), ClientError> {
-    let mut jsonld_found = false;
+    let mut jsonld_events = Vec::new();
     super::jsonld::extract_job_postings_with(
         &document.html(),
         base_url.as_str(),
         source,
         &mut |event| {
-            jsonld_found = true;
-            sink(SelectorCandidate::Extracted(Box::new(event)))
+            jsonld_events.push(event);
+            true
         },
     );
-    if jsonld_found {
+    if jsonld_events
+        .iter()
+        .any(|event| matches!(event, WorkerEvent::Job { .. }))
+    {
+        for event in jsonld_events {
+            if !sink(SelectorCandidate::Extracted(Box::new(event))) {
+                return Ok(());
+            }
+        }
         return Ok(());
     }
 
@@ -567,6 +575,7 @@ pub(crate) fn extract_heuristic_candidates(
         Err(_) => return Ok(()),
     };
 
+    let mut heuristic_found = false;
     let mut seen_urls = std::collections::HashSet::new();
 
     for anchor in document.select(&anchor_sel) {
@@ -708,6 +717,7 @@ pub(crate) fn extract_heuristic_candidates(
             }
         }
 
+        heuristic_found = true;
         let posting = SelectorCandidate::Posting(Box::new(SelectorPosting {
             title: raw_title,
             url: job_url_str.clone(),
@@ -753,6 +763,7 @@ pub(crate) fn extract_heuristic_candidates(
                             company_logo: company_logo.clone(),
                             detail_url: None,
                         }));
+                        heuristic_found = true;
                         let _ = sink(posting);
                     }
                 }
@@ -760,6 +771,13 @@ pub(crate) fn extract_heuristic_candidates(
         }
     }
 
+    if !heuristic_found {
+        for event in jsonld_events {
+            if !sink(SelectorCandidate::Extracted(Box::new(event))) {
+                break;
+            }
+        }
+    }
     Ok(())
 }
 

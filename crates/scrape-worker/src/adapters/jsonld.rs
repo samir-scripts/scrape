@@ -213,10 +213,23 @@ fn parse_job_posting_map(
 
     let location = extract_location(map.get("jobLocation"));
 
-    let raw_url = map.get("url").and_then(|u| u.as_str());
+    let raw_url = map.get("url").and_then(|value| value.as_str());
+    let public_html_crawl = source
+        .config
+        .pointer("/crawl/extraction")
+        .and_then(Value::as_str)
+        == Some("public_html");
     let job_url = raw_url
         .filter(|s| !s.trim().is_empty())
         .and_then(|s| Url::parse(page_url).ok()?.join(s).ok())
+        .or_else(|| {
+            if !public_html_crawl {
+                return None;
+            }
+            Url::parse(page_url)
+                .ok()
+                .filter(|url| matches!(url.scheme(), "http" | "https"))
+        })
         .filter(|u| matches!(u.scheme(), "http" | "https"));
     let Some(job_url) = job_url else {
         return Some(WorkerEvent::Error {

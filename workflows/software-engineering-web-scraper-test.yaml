@@ -1,84 +1,43 @@
-# Multi-source web scraping and ATS ingestion test workflow.
-# Combines public HTML career page scraping, JSON-LD extraction, public search feeds, and targeted ATS boards.
+# Development/test-only workflow for exercising bounded public-HTML crawling and automatic page scraping.
+# This intentionally ignores robots.txt; do not copy that setting into ordinary user workflows.
 version: 9
 max_jobs_per_run: 40
 metadata:
-  name: Software Engineering — Web Scraper & Multi-Source Test
+  name: Software Engineering & Related — US · Past 24 Hours · Crawler Test
   enabled: true
 sources:
-  - id: public-html-careers
-    label: Public HTML Career Page — Heuristic Web Scraper
+  - id: palantir-public-html
+    label: Palantir — Website crawl and automatic scraping
     enabled: true
-    employer_hint: Custom Tech Corp
+    employer_hint: Palantir Technologies
     extractor:
       kind: selector
       mode: static
-      url: https://customtech.example.test/careers
+      url: https://jobs.lever.co/palantir
       source_config:
         crawl:
-          max_pages: 10
+          max_pages: 50
           max_depth: 2
           extraction: public_html
-        per_host_delay_ms: 750
+        per_host_delay_ms: 1000
         jitter_ms: 500
         ignore_robots: true
-  - id: jsonld-careers
-    label: Direct JSON-LD Career Board
-    enabled: true
-    employer_hint: Enterprise Cloud
-    extractor:
-      kind: jsonld
-      url: https://enterprisecloud.example.test/careers
-      source_config: {}
-  - id: themuse
-    label: The Muse — bounded cross-company listings
-    enabled: true
-    extractor:
-      kind: search
-      url: themuse
-      source_config: {}
-  - id: arbeitnow
-    label: Arbeitnow — Germany-focused listings
-    enabled: true
-    extractor:
-      kind: search
-      url: arbeitnow
-      source_config: {}
-  - id: jobicy
-    label: Jobicy — remote listings
-    enabled: true
-    extractor:
-      kind: search
-      url: jobicy
-      source_config: {}
-  - id: cloudflare
-    label: Cloudflare — Greenhouse
-    enabled: true
-    employer_hint: Cloudflare
-    extractor:
-      kind: greenhouse
-      url: https://boards.greenhouse.io/cloudflare
-  - id: linear
-    label: Linear — Ashby
-    enabled: true
-    employer_hint: Linear
-    extractor:
-      kind: ashby
-      url: https://jobs.ashbyhq.com/linear
-  - id: sep
-    label: SEP — Lever
+  - id: sep-public-html
+    label: SEP — Website crawl and automatic scraping
     enabled: true
     employer_hint: SEP
     extractor:
-      kind: lever
+      kind: selector
+      mode: static
       url: https://jobs.lever.co/sep
-  - id: nvidia
-    label: NVIDIA — Workday
-    enabled: true
-    employer_hint: NVIDIA
-    extractor:
-      kind: workday
-      url: https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite
+      source_config:
+        crawl:
+          max_pages: 50
+          max_depth: 2
+          extraction: public_html
+        per_host_delay_ms: 1000
+        jitter_ms: 500
+        ignore_robots: true
 schedule:
   cadence: manual
   time: 09:00

@@ -296,6 +296,19 @@ impl<'a> MatchingEvaluator<'a> {
         evidence: &MatchingEvidence,
         assessment: &mut MatchingAssessment,
     ) {
+        if assessment
+            .rejected
+            .iter()
+            .chain(&assessment.unresolved)
+            .any(|reason| {
+                matches!(
+                    reason,
+                    RejectionReason::PostingDate | RejectionReason::Geography
+                )
+            })
+        {
+            return;
+        }
         if assessment.rejected.iter().any(|reason| {
             matches!(
                 reason,
@@ -478,7 +491,6 @@ impl<'a> MatchingEvaluator<'a> {
                 !matches!(
                     reason,
                     RejectionReason::KeywordAll
-                        | RejectionReason::PostingDate
                         | RejectionReason::Compensation
                         | RejectionReason::Workplace
                         | RejectionReason::Experience

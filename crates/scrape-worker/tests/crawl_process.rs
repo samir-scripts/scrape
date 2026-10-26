@@ -13,7 +13,7 @@ use std::{
         Arc, Mutex,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 struct Response {
@@ -40,6 +40,7 @@ impl Response {
 struct Server {
     origin: String,
     requests: Arc<Mutex<Vec<String>>>,
+    arrivals: Arc<Mutex<Vec<Instant>>>,
     stop: Arc<AtomicBool>,
     thread: Option<thread::JoinHandle<()>>,
 }
@@ -50,6 +51,8 @@ impl Server {
         listener.set_nonblocking(true).unwrap();
         let requests = Arc::new(Mutex::new(Vec::new()));
         let seen = requests.clone();
+        let arrivals = Arc::new(Mutex::new(Vec::new()));
+        let arrival_log = arrivals.clone();
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = stop.clone();
         let thread = thread::spawn(move || {
@@ -79,6 +82,7 @@ impl Server {
                         let request = String::from_utf8_lossy(&buf[..n]);
                         let path = request.split_whitespace().nth(1).unwrap().to_string();
                         seen.lock().unwrap().push(path.clone());
+                        arrival_log.lock().unwrap().push(Instant::now());
                         let response = handler(&path);
                         let _ = write!(
                             stream,
@@ -99,12 +103,16 @@ impl Server {
         Self {
             origin,
             requests,
+            arrivals,
             stop,
             thread: Some(thread),
         }
     }
     fn paths(&self) -> Vec<String> {
         self.requests.lock().unwrap().clone()
+    }
+    fn arrivals(&self) -> Vec<Instant> {
+        self.arrivals.lock().unwrap().clone()
     }
 }
 impl Drop for Server {
@@ -209,6 +217,313 @@ fn jobs(events: &[WorkerEvent]) -> Vec<&WorkerEvent> {
 }
 fn crawl(pages: u32, depth: u32) -> Value {
     json!({"crawl":{"max_pages":pages,"max_depth":depth,"extraction":"jsonld"}})
+}
+fn plain_html_detail(title: &str, location: Option<&str>, date: Option<&str>) -> String {
+    let location = location
+        .map(|text| format!("<div class='location'>{text}</div>"))
+        .unwrap_or_default();
+    let date = date
+        .map(|text| format!("<time datetime='{text}'>Posted</time>"))
+        .unwrap_or_default();
+    format!(
+        "<html><h1>{title}</h1><main><div class='job-description'><p>Build dependable software systems, distributed services, and platform APIs for customers.</p></div>{location}<div class='salary'>$100,000 - $140,000 per year</div>{date}</main></html>"
+    )
+}
+
+#[test]
+fn public_html_crawl_falls_back_to_card_and_detail_when_jsonld_is_incomplete() {
+    let server = Server::new(|path| match path {
+        "/careers" => Response::html("<a href='/openings'>Open positions</a>"),
+        "/openings" => Response::html(
+            r#"<script type="application/ld+json">{"@type":"JobPosting","title":"Software Engineer"}</script><article><a href="/jobs/role">Software Engineer</a><div class="location">Austin, TX</div><time datetime="2026-10-15T20:00:00Z">Today</time></article>"#,
+        ),
+        "/jobs/role" => Response::html(
+            r#"<script type="application/ld+json">{"@type":"JobPosting","title":"Software Engineer","datePosted":"2026-10-15T20:00:00Z","description":"Responsibilities include building dependable services and maintaining production software systems.","jobLocation":{"@type":"Place","address":{"@type":"PostalAddress","addressLocality":"Austin","addressRegion":"TX","addressCountry":"US"}},"hiringOrganization":{"name":"Fixture Company"}}</script>"#,
+        ),
+        other => panic!("unexpected request {other}"),
+    });
+    let mut config = crawl(10, 2);
+    config["crawl"]["extraction"] = json!("public_html");
+    config["per_host_delay_ms"] = json!(0);
+    config["jitter_ms"] = json!(0);
+    config["ignore_robots"] = json!(true);
+    let filters = json!({"matching": {
+        "target_roles": ["Software Engineer"],
+        "posting_date": {"preset": "past_24h", "timezone": "UTC", "include_unknown": false},
+        "countries": ["US"],
+        "location_include_unknown": false
+    }});
+    let events = run_with_filters(
+        vec![source(&server, "incomplete-jsonld", "/careers", config)],
+        10,
+        filters,
+    );
+
+    let accepted = jobs(&events);
+    assert_eq!(accepted.len(), 1, "events: {events:?}");
+    assert!(matches!(
+        accepted[0],
+        WorkerEvent::Job { title, url, .. }
+            if title == "Software Engineer" && url.ends_with("/jobs/role")
+    ));
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, WorkerEvent::Error { .. })),
+        "incomplete structured data should not mask valid public HTML evidence: {events:?}"
+    );
+    assert_eq!(stats(&events)[0].invalid, 0);
+}
+
+#[test]
+fn plain_html_crawl_extracts_postings_and_enforces_date_and_us_evidence() {
+    use std::collections::HashMap;
+
+    let cases = [
+        (
+            "boundary",
+            "Software Engineer",
+            Some("Austin, TX"),
+            Some("2026-10-15T00:00:00Z"),
+        ),
+        (
+            "newer",
+            "Software Engineer",
+            Some("Seattle, WA"),
+            Some("2026-10-15T23:59:59Z"),
+        ),
+        (
+            "older",
+            "Software Engineer",
+            Some("Austin, TX"),
+            Some("2026-10-14T23:59:59.999Z"),
+        ),
+        (
+            "future",
+            "Software Engineer",
+            Some("Austin, TX"),
+            Some("2026-10-16T00:00:00.001Z"),
+        ),
+        (
+            "missing-date",
+            "Software Engineer",
+            Some("Austin, TX"),
+            None,
+        ),
+        (
+            "invalid-date",
+            "Software Engineer",
+            Some("Austin, TX"),
+            Some("not-a-date"),
+        ),
+        (
+            "canada",
+            "Software Engineer",
+            Some("Toronto, ON, Canada"),
+            Some("2026-10-15T20:00:00Z"),
+        ),
+        (
+            "unknown",
+            "Software Engineer",
+            Some("Remote"),
+            Some("2026-10-15T20:00:00Z"),
+        ),
+        (
+            "remote-us",
+            "Software Engineer",
+            Some("Remote, United States"),
+            Some("2026-10-15T20:00:00Z"),
+        ),
+        (
+            "remote-only",
+            "Software Engineer",
+            Some("Remote"),
+            Some("2026-10-15T20:00:00Z"),
+        ),
+        (
+            "unrelated",
+            "Accounting Manager",
+            Some("Austin, TX"),
+            Some("2026-10-15T20:00:00Z"),
+        ),
+    ];
+    let links = cases
+        .iter()
+        .map(|(id, title, _, _)| format!("<article><a href='/jobs/{id}'>{title}</a></article>"))
+        .collect::<String>();
+    let pages: HashMap<_, _> = cases
+        .iter()
+        .map(|(id, title, location, date)| {
+            (
+                format!("/jobs/{id}"),
+                plain_html_detail(title, *location, *date),
+            )
+        })
+        .collect();
+    let server = Server::new(move |path| match path {
+        "/careers" => Response::html("<a href='/openings'>Open positions</a>"),
+        "/openings" => Response::html(links.clone()),
+        other => Response::html(
+            pages
+                .get(other)
+                .unwrap_or_else(|| panic!("unexpected request {other}"))
+                .clone(),
+        ),
+    });
+
+    let mut config = crawl(20, 2);
+    config["crawl"]["extraction"] = json!("public_html");
+    config["per_host_delay_ms"] = json!(0);
+    config["jitter_ms"] = json!(0);
+    config["ignore_robots"] = json!(true);
+    let filters = json!({"matching": {
+        "target_roles": ["Software Engineer"],
+        "posting_date": {"preset": "past_24h", "timezone": "UTC", "include_unknown": false},
+        "countries": ["US"],
+        "location_include_unknown": false
+    }});
+    let events = run_with_filters(
+        vec![source(&server, "plain-html", "/careers", config)],
+        20,
+        filters,
+    );
+
+    let accepted: Vec<_> = jobs(&events)
+        .into_iter()
+        .map(|event| match event {
+            WorkerEvent::Job {
+                title,
+                url,
+                date_posted,
+                location,
+                locations,
+                description_text,
+                ..
+            } => (
+                url,
+                title,
+                date_posted,
+                location,
+                locations,
+                description_text,
+            ),
+            _ => unreachable!(),
+        })
+        .collect();
+    assert_eq!(
+        accepted.len(),
+        3,
+        "accepted postings: {accepted:?}; events: {events:?}"
+    );
+    for (url, title, date, location, locations, description) in &accepted {
+        let id = url.rsplit('/').next().unwrap();
+        assert!(
+            url.ends_with(&format!("/jobs/{id}")),
+            "wrong original URL: {url}"
+        );
+        assert_eq!(*title, "Software Engineer");
+        assert!(date.is_some());
+        assert!(
+            location.contains("Austin")
+                || location.contains("Seattle")
+                || location.contains("Remote")
+        );
+        assert!(
+            locations
+                .iter()
+                .any(|loc| loc.country_code.as_deref() == Some("US")),
+            "US evidence missing for {id}: {locations:?}"
+        );
+        assert!(description
+            .as_deref()
+            .unwrap_or("")
+            .contains("dependable software systems"));
+    }
+    let ids: Vec<_> = accepted
+        .iter()
+        .map(|(url, ..)| url.rsplit('/').next().unwrap())
+        .collect();
+    assert!(
+        ids.contains(&"boundary") && ids.contains(&"newer") && ids.contains(&"remote-us"),
+        "wrong accepted identities: {ids:?}"
+    );
+    assert_eq!(
+        accepted
+            .iter()
+            .find(|(url, ..)| url.ends_with("/jobs/boundary"))
+            .unwrap()
+            .2
+            .as_deref(),
+        Some("2026-10-15T00:00:00Z")
+    );
+    for (id, ..) in cases
+        .iter()
+        .filter(|(id, ..)| !["boundary", "newer", "remote-us"].contains(id))
+    {
+        assert!(!ids.contains(id), "ineligible job was accepted: {id}");
+    }
+    let stats = &stats(&events)[0];
+    assert_eq!(stats.accepted, 3);
+    assert!(
+        stats.rejected + stats.unresolved >= 8,
+        "ineligible candidates lack accounting: {stats:?}"
+    );
+    let paths = server.paths();
+    assert_eq!(paths[0], "/careers");
+    assert_eq!(paths[1], "/openings");
+    for (id, ..) in cases {
+        assert!(
+            paths.contains(&format!("/jobs/{id}")),
+            "crawler did not visit detail page {id}: {paths:?}"
+        );
+    }
+    assert!(!paths.contains(&"/robots.txt".to_string()));
+}
+
+#[test]
+fn static_crawl_applies_source_delay_and_ignores_robots_for_all_pages() {
+    let server = Server::new(|path| {
+        match path {
+        "/robots.txt" => Response::html("User-agent: *\nDisallow: /jobs/blocked\n"),
+        "/seed" => Response::html("<a href='/careers'>Careers</a>"),
+        "/careers" => Response::html(
+            "<a href='/jobs/allowed'>Software Engineer role</a><a href='/jobs/blocked'>Software Engineer role</a>",
+        ),
+        "/jobs/allowed" | "/jobs/blocked" => Response::html(
+            "<h1>Software Engineer</h1><main><p>Build software systems and services.</p></main><div class='location'>United States</div><time datetime='2026-10-15T20:00:00Z'>Today</time>",
+        ),
+        other => panic!("unexpected request {other}"),
+    }
+    });
+    let mut config = crawl(4, 2);
+    config["crawl"]["extraction"] = json!("public_html");
+    config["per_host_delay_ms"] = json!(1000);
+    config["jitter_ms"] = json!(0);
+    config["ignore_robots"] = json!(true);
+    let events = run(vec![source(&server, "crawler-policy", "/seed", config)], 4);
+    let paths = server.paths();
+    assert_eq!(paths.len(), 4, "{paths:?}");
+    assert!(
+        paths.contains(&"/jobs/blocked".to_string()),
+        "robots-disallowed child was skipped: {paths:?}"
+    );
+    assert!(
+        !paths.contains(&"/robots.txt".to_string()),
+        "ignore_robots still fetched robots.txt: {paths:?}"
+    );
+    let arrivals = server.arrivals();
+    assert_eq!(arrivals.len(), paths.len());
+    for pair in arrivals.windows(2) {
+        assert!(
+            pair[1].duration_since(pair[0]) >= Duration::from_millis(980),
+            "source delay not applied across crawl requests: {:?}",
+            pair[1].duration_since(pair[0])
+        );
+    }
+    assert_eq!(
+        stats(&events)[0].termination,
+        CoverageTermination::Exhausted
+    );
 }
 
 #[test]
@@ -649,38 +964,20 @@ fn role_and_keyword_guided_crawl_prioritizes_relevant_links_and_scrapes_majority
         filters,
     );
 
-    let matched_jobs = jobs(&events);
-    assert_eq!(
-        matched_jobs.len(),
-        1,
-        "Expected exactly 1 job meeting majority requirements; events={events:?}"
+    assert!(
+        jobs(&events).is_empty(),
+        "undated HTML posting passed strict date eligibility: {events:?}"
     );
-
-    let WorkerEvent::Job {
-        title,
-        url,
-        location,
-        description_text,
-        salary,
-        ..
-    } = matched_jobs[0]
-    else {
-        panic!("Expected Job event");
-    };
-
-    assert_eq!(title, "Senior Software Engineer");
-    assert!(url.ends_with("/jobs/software-engineer"));
-    assert_eq!(location, "Austin, TX");
-    assert!(description_text
-        .as_deref()
-        .unwrap_or("")
-        .contains("distributed Rust"));
-    assert!(salary.is_some());
-
-    // Verify link prioritization: /jobs/software-engineer was visited before boilerplate
+    assert!(
+        events.iter().any(|event| matches!(
+            event,
+            WorkerEvent::Warning { message, .. } if message.contains("posting_date")
+        )),
+        "undated candidate lacks posting-date rejection/unresolved evidence: {events:?}"
+    );
     let paths = server.paths();
     assert!(
         paths.contains(&"/jobs/software-engineer".to_string()),
-        "The prioritized software engineering job must have been visited; paths={paths:?}"
+        "The prioritized software engineering detail page must have been visited; paths={paths:?}"
     );
 }
