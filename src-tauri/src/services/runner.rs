@@ -1013,8 +1013,14 @@ impl ScrapeRunner {
                                         LogLevel::Info,
                                         Some(&source_id),
                                         &format!(
-                                            "Employer logo {company}: {:?}; {}",
-                                            logo.status,
+                                            "Employer logo {company}: {}; {}",
+                                            match logo.status {
+                                                scrape_core::branding::LogoStatus::MissingMetadata => {
+                                                    "No logo asset on source (using initials avatar)"
+                                                        .to_string()
+                                                }
+                                                status => format!("{status:?}"),
+                                            },
                                             logo.diagnostic
                                                 .as_deref()
                                                 .unwrap_or("source evidence recorded")

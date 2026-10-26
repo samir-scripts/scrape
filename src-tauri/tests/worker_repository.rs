@@ -4621,7 +4621,8 @@ async fn screenshot_search_filters_survive_preview_save_run_and_discovered() {
 }
 
 #[tokio::test]
-async fn modified_software_engineering_workflow_scrapes_public_html_and_ats_with_sleep_and_job_limit() {
+async fn modified_software_engineering_workflow_scrapes_public_html_and_ats_with_sleep_and_job_limit(
+) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let request_times = std::sync::Arc::new(std::sync::Mutex::new(Vec::<(String, Instant)>::new()));
@@ -4643,10 +4644,15 @@ async fn modified_software_engineering_workflow_scrapes_public_html_and_ats_with
             };
             let req = String::from_utf8_lossy(&buf[..n]);
             let path = req.split_whitespace().nth(1).unwrap_or("");
-            times.lock().unwrap().push((path.to_string(), Instant::now()));
+            times
+                .lock()
+                .unwrap()
+                .push((path.to_string(), Instant::now()));
             count += 1;
             let (status, body) = match path {
-                p if p.ends_with("/robots.txt") => ("200 OK", "User-agent: *\nAllow: /\n".to_string()),
+                p if p.ends_with("/robots.txt") => {
+                    ("200 OK", "User-agent: *\nAllow: /\n".to_string())
+                }
                 p if p.ends_with("/html-careers") => (
                     "200 OK",
                     r#"<!DOCTYPE html>
@@ -4806,7 +4812,13 @@ async fn modified_software_engineering_workflow_scrapes_public_html_and_ats_with
     let events = invoke_replay(&config_capped, false, Some(&format!("http://{address}")));
     let mut jobs = Vec::new();
     for event in events {
-        if let WorkerEvent::Job { title, company, url, .. } = &event {
+        if let WorkerEvent::Job {
+            title,
+            company,
+            url,
+            ..
+        } = &event
+        {
             assert!(!title.is_empty(), "Job title must not be empty");
             assert!(!company.is_empty(), "Company must not be empty");
             assert!(url.starts_with("http"), "URL must be valid HTTP");
@@ -4818,21 +4830,38 @@ async fn modified_software_engineering_workflow_scrapes_public_html_and_ats_with
     JobsRepo::upsert_scraped(&pool, &jobs).await.unwrap();
 
     // Exactly 2 jobs are scraped and saved, matching max_jobs_per_run cap!
-    assert_eq!(jobs.len(), 2, "Expected exactly 2 jobs due to max_jobs_per_run cap");
+    assert_eq!(
+        jobs.len(),
+        2,
+        "Expected exactly 2 jobs due to max_jobs_per_run cap"
+    );
 
     let discovered = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
-    assert_eq!(discovered.total, 2, "SQLite must hold exactly 2 jobs from the capped run");
+    assert_eq!(
+        discovered.total, 2,
+        "SQLite must hold exactly 2 jobs from the capped run"
+    );
 
     // 2. Verify built-in sleep pacing: requests to the public HTML host are paced
     let recorded = request_times.lock().unwrap().clone();
-    assert!(recorded.len() >= 2, "Server must have received multiple requests");
+    assert!(
+        recorded.len() >= 2,
+        "Server must have received multiple requests"
+    );
     let html_requests: Vec<_> = recorded
         .into_iter()
         .filter(|(p, _)| p.contains("html-careers") || p.contains("careers"))
         .collect();
     if html_requests.len() >= 2 {
-        let total_span = html_requests.last().unwrap().1.duration_since(html_requests[0].1);
-        assert!(total_span >= Duration::from_millis(15), "Requests must be paced with built-in sleep");
+        let total_span = html_requests
+            .last()
+            .unwrap()
+            .1
+            .duration_since(html_requests[0].1);
+        assert!(
+            total_span >= Duration::from_millis(15),
+            "Requests must be paced with built-in sleep"
+        );
     }
 
     pool.close().await;

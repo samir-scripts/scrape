@@ -539,10 +539,15 @@ pub(crate) fn extract_heuristic_candidates(
     sink: &mut dyn FnMut(SelectorCandidate) -> bool,
 ) -> Result<(), ClientError> {
     let mut jsonld_found = false;
-    super::jsonld::extract_job_postings_with(&document.html(), base_url.as_str(), source, &mut |event| {
-        jsonld_found = true;
-        sink(SelectorCandidate::Extracted(Box::new(event)))
-    });
+    super::jsonld::extract_job_postings_with(
+        &document.html(),
+        base_url.as_str(),
+        source,
+        &mut |event| {
+            jsonld_found = true;
+            sink(SelectorCandidate::Extracted(Box::new(event)))
+        },
+    );
     if jsonld_found {
         return Ok(());
     }
@@ -564,7 +569,9 @@ pub(crate) fn extract_heuristic_candidates(
     let mut seen_urls = std::collections::HashSet::new();
 
     for anchor in document.select(&anchor_sel) {
-        let Some(href) = anchor.value().attr("href") else { continue; };
+        let Some(href) = anchor.value().attr("href") else {
+            continue;
+        };
         let href_lower = href.to_ascii_lowercase();
         let is_job_link = href_lower.contains("/job/")
             || href_lower.contains("/jobs/")
@@ -584,7 +591,9 @@ pub(crate) fn extract_heuristic_candidates(
             continue;
         }
 
-        let Ok(mut job_url) = base_url.join(href) else { continue; };
+        let Ok(mut job_url) = base_url.join(href) else {
+            continue;
+        };
         if !matches!(job_url.scheme(), "http" | "https") {
             continue;
         }
@@ -598,16 +607,37 @@ pub(crate) fn extract_heuristic_candidates(
             continue;
         }
 
-        let raw_title = anchor.text().collect::<Vec<_>>().join(" ").trim().to_string();
+        let raw_title = anchor
+            .text()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .trim()
+            .to_string();
         if raw_title.is_empty() || raw_title.len() < 3 || raw_title.len() > 120 {
             continue;
         }
 
         let title_lower = raw_title.to_ascii_lowercase();
-        if matches!(title_lower.as_str(),
-            "apply" | "apply now" | "read more" | "view job" | "view details" | "details"
-            | "learn more" | "more" | "careers" | "jobs" | "search jobs" | "sign in" | "log in"
-            | "all jobs" | "back" | "home" | "privacy policy" | "terms of service"
+        if matches!(
+            title_lower.as_str(),
+            "apply"
+                | "apply now"
+                | "read more"
+                | "view job"
+                | "view details"
+                | "details"
+                | "learn more"
+                | "more"
+                | "careers"
+                | "jobs"
+                | "search jobs"
+                | "sign in"
+                | "log in"
+                | "all jobs"
+                | "back"
+                | "home"
+                | "privacy policy"
+                | "terms of service"
         ) {
             continue;
         }

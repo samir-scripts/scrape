@@ -309,7 +309,10 @@ fn test_heuristic_public_html_extraction() {
     match &events[0] {
         WorkerEvent::Job { title, url, .. } => {
             assert_eq!(title, "Senior Systems Engineer");
-            assert_eq!(url, "https://acme.example.com/careers/senior-systems-engineer");
+            assert_eq!(
+                url,
+                "https://acme.example.com/careers/senior-systems-engineer"
+            );
         }
         other => panic!("Expected Job event, got: {other:?}"),
     }
@@ -317,7 +320,10 @@ fn test_heuristic_public_html_extraction() {
     match &events[1] {
         WorkerEvent::Job { title, url, .. } => {
             assert_eq!(title, "Staff Platform Architect");
-            assert_eq!(url, "https://acme.example.com/jobs/platform-architect?dept=infra");
+            assert_eq!(
+                url,
+                "https://acme.example.com/jobs/platform-architect?dept=infra"
+            );
         }
         other => panic!("Expected Job event, got: {other:?}"),
     }

@@ -1,7 +1,7 @@
 # Multi-source web scraping and ATS ingestion test workflow.
 # Combines public HTML career page scraping, JSON-LD extraction, public search feeds, and targeted ATS boards.
 version: 9
-max_jobs_per_run: 25
+max_jobs_per_run: 40
 metadata:
   name: Software Engineering — Web Scraper & Multi-Source Test
   enabled: true
@@ -93,26 +93,43 @@ filters:
     target_roles:
       - Software Engineer
       - Software Developer
+      - Software Development Engineer
       - Backend Engineer
+      - Backend Developer
+      - Back-end Engineer
+      - Back-end Developer
       - Frontend Engineer
+      - Frontend Developer
+      - Front-end Engineer
+      - Front-end Developer
       - Full Stack
+      - Full-Stack
       - Platform Engineer
       - Infrastructure Engineer
       - DevOps Engineer
       - Site Reliability Engineer
       - Data Engineer
+      - Machine Learning Engineer
       - ML Engineer
+      - AI Engineer
       - QA Engineer
+      - Quality Assurance Engineer
+      - Test Automation Engineer
+      - Embedded Software
       - Firmware Engineer
+      - Mobile Engineer
+      - iOS Engineer
+      - Android Engineer
+      - Web Developer
     companies: []
     keywords: null
     posting_date:
-      preset: past_month
+      preset: past_24h
       last_hours: null
       from: null
       through: null
       timezone: America/New_York
-      include_unknown: true
+      include_unknown: false
     compensation: null
     role_types: []
     workplaces: []
@@ -124,10 +141,11 @@ filters:
     sponsorship: []
     work_auth: []
     clearance: []
-    countries: []
+    countries:
+      - US
     regions: []
     cities: []
-    location_include_unknown: true
+    location_include_unknown: false
 retention:
   days: 30
   policy: untracked_only

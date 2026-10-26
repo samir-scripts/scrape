@@ -232,9 +232,8 @@ impl GreenhouseJob {
             | RejectionReason::LegacyKeywords
             | RejectionReason::LegacyExclusion
             | RejectionReason::LegacyLocation => content_missing || location_missing,
-            RejectionReason::RoleType
-            | RejectionReason::LegacyRoleType
-            | RejectionReason::InvalidCandidate => false,
+            RejectionReason::RoleType | RejectionReason::LegacyRoleType => true,
+            RejectionReason::InvalidCandidate => false,
         })
     }
     pub(crate) fn needs_detail(&self, candidate: &WorkerEvent) -> bool {
@@ -1041,4 +1040,5 @@ mod tests {
             panic!("Expected WorkerEvent::Job");
         }
     }
+
 }

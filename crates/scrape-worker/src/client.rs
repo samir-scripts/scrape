@@ -94,7 +94,9 @@ impl HttpClient {
     pub fn new(timeout_s: u64, per_host_delay_ms: u64) -> Self {
         let timeout = Duration::from_secs(timeout_s);
         let default_jitter = if per_host_delay_ms > 0 {
-            Some(Duration::from_millis((per_host_delay_ms / 3).clamp(50, 500)))
+            Some(Duration::from_millis(
+                (per_host_delay_ms / 3).clamp(50, 500),
+            ))
         } else {
             None
         };
@@ -117,7 +119,10 @@ impl HttpClient {
         }
     }
 
-    pub fn for_static_source(&self, config: &scrape_core::static_source::StaticSourceConfig) -> Self {
+    pub fn for_static_source(
+        &self,
+        config: &scrape_core::static_source::StaticSourceConfig,
+    ) -> Self {
         let mut cloned = self.clone();
         if let Some(delay) = config.per_host_delay_ms {
             cloned.per_host_delay = Duration::from_millis(delay);

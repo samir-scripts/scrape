@@ -181,11 +181,7 @@ pub fn limits(config: &Value) -> Result<crate::WorkerLimits, String> {
         );
     }
     if let Some(value) = config.get("ignore_robots") {
-        limits.ignore_robots = Some(
-            value
-                .as_bool()
-                .ok_or("ignore_robots: expected boolean")?,
-        );
+        limits.ignore_robots = Some(value.as_bool().ok_or("ignore_robots: expected boolean")?);
     }
     limits.validate()?;
     Ok(limits)

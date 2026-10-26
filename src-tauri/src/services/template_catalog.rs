@@ -219,7 +219,7 @@ pub fn catalog() -> Result<WorkflowTemplateCatalog> {
         (
             "software-engineering-last-12-hours",
             "Software Engineering & Related — Past 12 Hours",
-            format!("Literal engineering title roles; original publication in the past 12 hours, including the exact boundary. Unknown dates excluded; employment, geography, workplace and pay unrestricted. {BROAD_COVERAGE} {COVERAGE}"),
+            format!("Literal engineering title roles; original publication in the past 12 hours, including the exact boundary. Unknown dates excluded (direct employer boards such as Cloudflare, Bitwarden, Linear, SEP, and NVIDIA match 0 candidates unless a role was originally published within the past 12 hours); employment, geography, workplace and pay unrestricted. {BROAD_COVERAGE} {COVERAGE}"),
             sources(&companies, false, "software developer engineer devops firmware", Some(1))?,
             json!({"target_roles":ENGINEERING_ROLES,"posting_date":date("past_12h")}),
         ),
