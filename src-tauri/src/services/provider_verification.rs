@@ -307,13 +307,15 @@ fn validated_jobs(config: &WorkerConfig, events: &[WorkerEvent]) -> VResult<Vec<
         return Err("Missing, duplicated or foreign child source summary".into());
     }
     let mut batch = Vec::new();
+    let mut emitted_by_source = BTreeMap::<&str, u64>::new();
     for event in events {
         if let Some(id) = event.source_id() {
             if !owned.contains(id) {
                 return Err("Worker emitted a foreign source ID".into());
             }
         }
-        if let WorkerEvent::Job { .. } = event {
+        if let WorkerEvent::Job { source_id, .. } = event {
+            *emitted_by_source.entry(source_id).or_default() += 1;
             batch.push(ingestion::scraped_job_from_event(event.clone())?);
         }
     }
@@ -326,6 +328,15 @@ fn validated_jobs(config: &WorkerConfig, events: &[WorkerEvent]) -> VResult<Vec<
     }
     for scan in &stats.sources {
         scan.validate()?;
+        if scan.commit_feedback
+            || scan.accepted
+                != emitted_by_source
+                    .get(scan.source_id.as_str())
+                    .copied()
+                    .unwrap_or(0)
+        {
+            return Err("Source accepted counters disagree with emitted jobs".into());
+        }
         if scan.outcome.is_none() {
             return Err("Source summary lacks its terminal acceptance outcome".into());
         }
