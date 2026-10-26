@@ -92,3 +92,10 @@ with `0700` directory and `0600` file permissions on Unix, passes `SCRAPE_SESSIO
 to the worker sidecar, reconciles `CoverageTermination::NeedsLogin` scan outcomes back
 to `browser_sessions`, removes session files on full data reset, and rejects unavailable
 custom script execution explicitly until Phase 6D.
+
+Workflow Preview modifies only a transient worker configuration: public-HTML
+sources receive a six-navigation cap, while the existing 20-second source and
+45-second workflow deadlines remain hard bounds. Saved page limits and normal
+execution are unchanged. Preview diagnostics report page/request/time coverage
+as sampled and distinguish source-duration from navigation timeouts; zero
+unresolved candidates do not produce an eligibility-incomplete error.

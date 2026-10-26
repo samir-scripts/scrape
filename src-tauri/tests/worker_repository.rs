@@ -5026,6 +5026,18 @@ async fn imported_software_engineering_crawler_yaml_caps_persisted_discoveries_a
     let mut config = execution_diagnostics::prepare(&saved, "America/New_York", STARTED).unwrap();
     assert_eq!(config.max_jobs_per_run, Some(40));
     assert_eq!(config.sources.len(), 2);
+    let mut preview = config.clone();
+    execution_diagnostics::cap_public_html_preview_pages(&mut preview.sources);
+    for source in &preview.sources {
+        assert_eq!(source.config["crawl"]["max_pages"], json!(6));
+    }
+    let unchanged = SourcesRepo::get(&pool, &saved.id).await.unwrap();
+    let full_run = execution_diagnostics::prepare(&unchanged, "America/New_York", STARTED).unwrap();
+    for source in &full_run.sources {
+        assert_eq!(source.config["crawl"]["max_pages"], json!(50));
+    }
+    assert_eq!(full_run.limits.max_source_duration_s, 180);
+    assert_eq!(full_run.limits.max_workflow_duration_s, 600);
     for source in &mut config.sources {
         assert_eq!(source.kind, SourceKind::Selector);
         source.config["per_host_delay_ms"] = json!(0);
@@ -5034,6 +5046,36 @@ async fn imported_software_engineering_crawler_yaml_caps_persisted_discoveries_a
     config.limits.per_host_delay_ms = 0;
     config.limits.jitter_ms = Some(0);
     config.limits.request_timeout_s = 5;
+    for source in &mut preview.sources {
+        source.config["per_host_delay_ms"] = json!(0);
+        source.config["jitter_ms"] = json!(0);
+    }
+    preview.limits.per_host_delay_ms = 0;
+    preview.limits.jitter_ms = Some(0);
+    preview.limits.request_timeout_s = 5;
+    preview.limits.max_source_duration_s = 20;
+    preview.limits.max_workflow_duration_s = 45;
+    preview.max_jobs_per_run = Some(10);
+    let preview_events = invoke_replay(&preview, true, Some(&origin));
+    assert!(
+        !preview_events
+            .iter()
+            .any(|event| matches!(event, WorkerEvent::Error { .. })),
+        "preview worker errors: {preview_events:?}"
+    );
+    let WorkerEvent::Done { stats } = preview_events.last().unwrap() else {
+        panic!("missing Preview completion")
+    };
+    assert_eq!(stats.sources.len(), 2);
+    assert!(stats.jobs_emitted <= 10);
+    assert!(preview
+        .sources
+        .iter()
+        .all(|source| { source.config["crawl"]["max_pages"] == json!(6) }));
+    assert!(config
+        .sources
+        .iter()
+        .all(|source| { source.config["crawl"]["max_pages"] == json!(50) }));
 
     let mut expected_ids = None;
     for pass in 0..2 {
@@ -5137,4 +5179,82 @@ async fn imported_software_engineering_crawler_yaml_caps_persisted_discoveries_a
         40
     );
     reopened.close().await;
+}
+
+#[test]
+fn public_html_preview_cap_preserves_smaller_and_unrelated_sources() {
+    use scrape_lib::services::execution_diagnostics::cap_public_html_preview_pages;
+    use serde_json::json;
+    let make = |kind, config| WorkerSource {
+        id: "preview-fixture".into(),
+        name: "Fictional Preview".into(),
+        kind,
+        identifier: "https://example.com/jobs".into(),
+        config,
+    };
+    let mut sources = vec![
+        make(
+            SourceKind::Selector,
+            json!({"crawl":{"extraction":"public_html","max_pages":50}}),
+        ),
+        make(
+            SourceKind::Selector,
+            json!({"crawl":{"extraction":"public_html","max_pages":2}}),
+        ),
+        make(
+            SourceKind::Selector,
+            json!({"crawl":{"extraction":"public_html"}}),
+        ),
+        make(
+            SourceKind::Selector,
+            json!({"crawl":{"extraction":"jsonld","max_pages":50}}),
+        ),
+        make(
+            SourceKind::Jsonld,
+            json!({"crawl":{"extraction":"public_html","max_pages":50}}),
+        ),
+        make(SourceKind::Selector, json!({"container":".job"})),
+    ];
+    let original = sources.clone();
+    cap_public_html_preview_pages(&mut sources);
+    assert_eq!(sources[0].config["crawl"]["max_pages"], json!(6));
+    assert_eq!(sources[1].config["crawl"]["max_pages"], json!(2));
+    assert_eq!(sources[2].config["crawl"]["max_pages"], json!(6));
+    for index in 3..sources.len() {
+        assert_eq!(sources[index].config, original[index].config);
+    }
+    assert_eq!(original[0].config["crawl"]["max_pages"], json!(50));
+}
+
+#[test]
+fn preview_scan_summary_distinguishes_coverage_limits_and_unresolved_evidence() {
+    use scrape_core::protocol::{CoverageTermination, ScanOutcome, SourceScanStats};
+    use scrape_lib::services::execution_diagnostics::preview_scan_summary;
+    let time_limited = SourceScanStats {
+        termination: CoverageTermination::TimeLimit,
+        outcome: Some(ScanOutcome::Partial),
+        ..Default::default()
+    };
+    let summary = preview_scan_summary(&time_limited);
+    assert!(summary.sampled);
+    assert_eq!(summary.error, None);
+
+    let mut unresolved = SourceScanStats {
+        termination: CoverageTermination::PageLimit,
+        outcome: Some(ScanOutcome::Partial),
+        unresolved: 3,
+        ..Default::default()
+    };
+    let summary = preview_scan_summary(&unresolved);
+    assert!(summary.sampled);
+    assert_eq!(
+        summary.error.as_deref(),
+        Some("Source processing incomplete: 3 candidates need eligibility evidence. Inspect scan details and retry.")
+    );
+
+    unresolved.outcome = Some(ScanOutcome::Failed);
+    assert_eq!(
+        preview_scan_summary(&unresolved).error.as_deref(),
+        Some("Source could not complete usable processing. Inspect diagnostics and retry.")
+    );
 }

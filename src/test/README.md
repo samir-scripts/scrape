@@ -55,6 +55,7 @@ The `src/test` directory contains the automated test suites for the React fronte
 | [`workflow_import_interaction.test.tsx`](workflow_import_interaction.test.tsx) | Shared `WorkflowImportButton` file upload, validation, replacement confirmation, and error recovery. |
 | [`keyword_entry_interaction.test.tsx`](keyword_entry_interaction.test.tsx) | `KeywordInput` chip commits, phrase preservation, deduplication, IME composition, and synchronous flush. |
 | [`scan_diagnostics_interaction.test.tsx`](scan_diagnostics_interaction.test.tsx) | `ScanDiagnostics` categorized rejection breakdown and overlapping failure examples in preview and run details. |
+| [`workflow_preview_results.test.tsx`](workflow_preview_results.test.tsx) | Preview coverage sampling, per-source timeout diagnostics, and no false zero-unresolved eligibility error. |
 | [`enrichment_outcomes_interaction.test.tsx`](enrichment_outcomes_interaction.test.tsx) | Optional enrichment warning vs. required-evidence partial outcomes, cancellation, and log filtering. |
 | [`company_logo_interaction.test.tsx`](company_logo_interaction.test.tsx) | `CompanyLogo` local IPC asset loading, shared cache deduplication, initials fallback, and refresh retry. |
 | [`kanban_movement_interaction.test.tsx`](kanban_movement_interaction.test.tsx), [`job_status_queue.test.tsx`](job_status_queue.test.tsx) | Pointer/keyboard Kanban movement, `Move to` menus, and serialized per-job status mutation queue. |

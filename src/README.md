@@ -57,3 +57,8 @@ The `src/` directory contains the single-page web application frontend for Scrap
 | [`lib/`](lib/README.md) | IPC client, Zustand store, locally cached company assets, bounded automatic visible-job logo lookup, formatting helpers, YAML/workflow import bridges, and demo-only filtering/recorded data. |
 | [`styles/`](styles/README.md) | Tailwind CSS v4 styling rules, global typography tokens, and NieR brutalist semantic theme variables. |
 | [`test/`](test/README.md) | Vitest + React Testing Library suites covering components, user interactions, state stores, navigation, and contracts. |
+
+Workflow Review presents Preview coverage limits separately from candidate
+eligibility errors. A sampled Preview identifies the page, request, time, or
+result limit and links the per-source termination reason in Preview breakdown;
+Preview-only crawl limits do not alter saved source settings.

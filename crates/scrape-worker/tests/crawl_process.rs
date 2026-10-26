@@ -176,6 +176,14 @@ fn run_with_request_timeout(
     cap: u32,
     request_timeout_s: u64,
 ) -> Vec<WorkerEvent> {
+    run_with_limits(sources, cap, request_timeout_s, None)
+}
+fn run_with_limits(
+    sources: Vec<Value>,
+    cap: u32,
+    request_timeout_s: u64,
+    max_source_duration_s: Option<u64>,
+) -> Vec<WorkerEvent> {
     let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
         .arg("--stdin")
         .env_remove("SCRAPE_CDP_WS_URL")
@@ -184,7 +192,11 @@ fn run_with_request_timeout(
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    let config = json!({"version":PROTOCOL_VERSION,"sources":sources,"max_jobs_per_run":cap,"run_started_at":"2026-10-16T00:00:00Z","limits":{"per_host_delay_ms":0,"request_timeout_s":request_timeout_s}});
+    let mut limits = json!({"per_host_delay_ms":0,"request_timeout_s":request_timeout_s});
+    if let Some(duration) = max_source_duration_s {
+        limits["max_source_duration_s"] = json!(duration);
+    }
+    let config = json!({"version":PROTOCOL_VERSION,"sources":sources,"max_jobs_per_run":cap,"run_started_at":"2026-10-16T00:00:00Z","limits":limits});
     child
         .stdin
         .take()
@@ -821,7 +833,45 @@ fn later_robots_denial_and_navigation_timeout_preserve_earlier_postings() {
         "events={events:?}"
     );
     assert_eq!(stats(&events)[0].outcome, Some(ScanOutcome::Partial));
+    assert!(events.iter().any(|event| matches!(
+        event,
+        WorkerEvent::Warning { message, termination: Some(CoverageTermination::TimeLimit), .. }
+            if message == "Website crawl navigation reached its time limit"
+    )));
     assert_eq!(slow.paths(), ["/robots.txt", "/seed", "/slow"]);
+}
+
+#[test]
+fn source_deadline_wins_over_navigation_timeout_and_preserves_earlier_postings() {
+    let slow = Server::new(|path| match path {
+        "/robots.txt" => allow(),
+        "/seed" => Response::html(format!("{}<a href='/slow'>Slow</a>", posting("42"))),
+        "/slow" => {
+            thread::sleep(Duration::from_secs(11));
+            Response::html("<a href='/must-not-fetch'>Later</a>")
+        }
+        _ => panic!("request after source deadline"),
+    });
+    let mut config = crawl(20, 2);
+    config["navigation_timeout_s"] = json!(30);
+    let events = run_with_limits(
+        vec![source(&slow, "source-timeout", "/seed", config)],
+        20,
+        20,
+        Some(10),
+    );
+    assert_eq!(jobs(&events).len(), 1, "events={events:?}");
+    assert_eq!(
+        stats(&events)[0].termination,
+        CoverageTermination::TimeLimit
+    );
+    assert_eq!(stats(&events)[0].outcome, Some(ScanOutcome::Partial));
+    assert_eq!(slow.paths(), ["/robots.txt", "/seed", "/slow"]);
+    assert!(events.iter().any(|event| matches!(
+        event,
+        WorkerEvent::Warning { message, termination: Some(CoverageTermination::TimeLimit), .. }
+            if message == "Static source duration limit reached; remaining candidates/pages were not examined"
+    )));
 }
 
 #[test]

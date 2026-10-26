@@ -33,6 +33,12 @@ crawler uses same-origin link traversal, `robots.txt` by default, a default 750 
 delay, page/depth caps, and ordinary HTTP semantics; it does not search the web
 or bypass login/access controls. The standalone Software Engineering development/test
 workflow deliberately ignores `robots.txt` for its two test sources only.
+
+For workflow Preview, public-HTML crawl sources are capped at six navigations per
+source and the existing 20-second source/45-second workflow deadlines remain
+hard bounds. This changes only Preview's transient worker config; saved workflow
+page limits and normal runs are unchanged. A coverage-limited Preview is marked
+sampled with the limiting source shown in Preview breakdown.
 An optional user-configured HTTP(S) proxy routes HTTP and Chromium
 requests. Proxy credentials stay outside workflows/exports and are stored locally.
 See [workflow setup](workflows/README.md) and the isolated

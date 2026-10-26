@@ -16,6 +16,13 @@ Plan 11 remains a completed prior revision. Its eight implementation sections, e
 
 Plan 14 is the active, one-section-at-a-time workflow usability repair. Sections 1, 4, 6, 9 and 10 are implemented and evidence-recorded; Section 9 native selection/preview/save acceptance remains open. Section 6 enables both existing safe public feeds for new workflows and records why USAJOBS and the reviewed NYC dataset are not supported. Sections 2, 3, 7, 8, 11 and 12 remain open; see the [evidence ledger](14-implementation-evidence.md). The legacy static role catalog/XLSX pipeline is superseded by Section 9.
 
+An approved Preview/crawler diagnostics repair keeps the test workflow's role,
+US and rolling-24-hour filters intact. Preview alone caps public-HTML navigation
+at six pages/source; saved full runs keep 50. Source-vs-navigation timeout
+warnings and coverage sampling are reported without false zero-unresolved
+eligibility errors. Implementation and verification evidence will be recorded
+in the Plan 14 evidence ledger after all checks.
+
 Custom sources can crawl explicitly supplied public HTML with same-origin traversal,
 robots checks by default and bounded pacing/pages. The standalone Software
 Engineering crawler development/test workflow opts out of robots checks for its

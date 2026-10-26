@@ -44,8 +44,8 @@ export function WorkflowPreviewResults({ preview, draft, setError }: { preview: 
       )}
       {preview.sampled && (
         <p className="text-xs text-[var(--color-text-muted)]">
-          Preview stopped at its limit or is showing a sample of {preview.jobs.length} eligible postings.
-          Counts cover examined postings only; the source may contain more jobs.
+          Preview stopped at its page, time, request, or result limit. Counts cover examined postings only; more jobs may exist.
+          Preview-only limits do not change saved source limits.
         </p>
       )}
       <div className="grid gap-2">

@@ -10,6 +10,55 @@ use scrape_core::{WorkerConfig, WorkerLimits, WorkerSource, PROTOCOL_VERSION};
 use serde_json::{json, Value};
 use sqlx::{Row, SqlitePool};
 
+pub const PREVIEW_MAX_PUBLIC_HTML_PAGES_PER_SOURCE: u64 = 6;
+
+/// Bound only the transient Preview copy; saved execution keeps its crawl budget.
+pub fn cap_public_html_preview_pages(sources: &mut [WorkerSource]) {
+    for source in sources {
+        if source.kind != scrape_core::SourceKind::Selector
+            || source
+                .config
+                .pointer("/crawl/extraction")
+                .and_then(Value::as_str)
+                != Some("public_html")
+        {
+            continue;
+        }
+        let crawl = &mut source.config["crawl"];
+        let pages = crawl["max_pages"]
+            .as_u64()
+            .unwrap_or(PREVIEW_MAX_PUBLIC_HTML_PAGES_PER_SOURCE);
+        crawl["max_pages"] = json!(pages.min(PREVIEW_MAX_PUBLIC_HTML_PAGES_PER_SOURCE));
+    }
+}
+#[derive(Debug, PartialEq, Eq)]
+pub struct PreviewScanSummary {
+    pub error: Option<String>,
+    pub sampled: bool,
+}
+
+pub fn preview_scan_summary(scan: &scrape_core::protocol::SourceScanStats) -> PreviewScanSummary {
+    use scrape_core::protocol::{CoverageTermination, ScanOutcome};
+    let sampled = scan.limit_reached
+        || matches!(
+            scan.termination,
+            CoverageTermination::PageLimit
+                | CoverageTermination::RequestLimit
+                | CoverageTermination::TimeLimit
+        );
+    let error = match scan.outcome {
+        Some(ScanOutcome::Failed) => Some(
+            "Source could not complete usable processing. Inspect diagnostics and retry.".into(),
+        ),
+        Some(ScanOutcome::Partial) if scan.unresolved > 0 => Some(format!(
+            "Source processing incomplete: {} candidates need eligibility evidence. Inspect scan details and retry.",
+            scan.unresolved
+        )),
+        _ => None,
+    };
+    PreviewScanSummary { error, sampled }
+}
+
 /// The same preparation path is used by manual, scheduled and Run all execution.
 pub fn prepare(source: &Source, timezone: &str, started_at: &str) -> Result<WorkerConfig> {
     let spec = source

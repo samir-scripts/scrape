@@ -30,6 +30,8 @@ Legacy recognition specs and recorded provider verification profiles are frozen 
 
 [`software-engineering-web-scraper-test.yaml`](software-engineering-web-scraper-test.yaml) is a standalone development/test workflow, not a generated built-in and not automatically seeded. It runs only the bounded public-HTML crawler/scraper against Palantir and SEP career pages; original posting time must be within 24 hours and location must be evidenced as US. A run can add at most 40 accepted jobs, not a guaranteed 40 and not a limit on existing Discovered rows. Import or replace the intended saved workflow explicitly.
 
+Workflow Preview uses a transient six-navigation cap per public-HTML source, within its existing 20-second source/45-second workflow deadline. This is a quick representative preview; it does not change the saved 50-page source configuration or normal runs. Preview breakdown reports the termination reason, and a coverage-limited result is marked sampled.
+
 Both sources set `ignore_robots: true` for testing/development only. This bypass does not change worker defaults or other workflows. Keep it limited to this fixture workflow; normal custom workflows retain their configured robots policy.
 
 ## Public HTML sources and proxy

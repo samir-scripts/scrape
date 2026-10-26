@@ -213,6 +213,7 @@ async fn execute_dry_run_worker(
     crate::services::execution_diagnostics::apply_settings_limits(pool, &mut config.limits).await?;
     config.limits.max_workflow_duration_s = config.limits.max_workflow_duration_s.min(45);
     config.limits.max_source_duration_s = config.limits.max_source_duration_s.min(20);
+    crate::services::execution_diagnostics::cap_public_html_preview_pages(&mut config.sources);
     let enrichment = config
         .limits
         .enrichment
@@ -710,16 +711,12 @@ pub async fn preview_workflow(
                 }
                 result.sources = Some(stats.sources.clone());
                 for scan in stats.sources {
+                    let summary =
+                        crate::services::execution_diagnostics::preview_scan_summary(&scan);
                     result.blocked += scan.blocked;
-                    result.sampled |= scan.limit_reached;
-                    if matches!(
-                        scan.outcome,
-                        Some(
-                            scrape_core::protocol::ScanOutcome::Partial
-                                | scrape_core::protocol::ScanOutcome::Failed
-                        )
-                    ) {
-                        result.errors.push(if scan.outcome == Some(scrape_core::protocol::ScanOutcome::Failed) { "Source could not complete usable processing. Inspect diagnostics and retry.".into() } else { format!("Source processing incomplete: {} candidates need eligibility evidence. Inspect scan details and retry.",scan.unresolved) });
+                    result.sampled |= summary.sampled;
+                    if let Some(error) = summary.error {
+                        result.errors.push(error);
                     }
                 }
             }

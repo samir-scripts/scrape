@@ -104,6 +104,13 @@ postings do not consume that budget. Summary counts cover examined records only
 and identify limit-reached coverage. Shared Rust constants generate frontend
 defaults and bounds during binding export.
 
+The host applies a Preview-only cap of six navigations per public-HTML source;
+the seed and detail navigations count toward it. This bound does not rewrite
+saved workflow config or normal-run page limits. Source and navigation deadlines
+remain separate: a timeout warning identifies whichever deadline expired first.
+Preview summaries mark page/request/time-limited coverage as sampled; a partial
+source with zero unresolved candidates is not mislabeled as an eligibility error.
+
 
 ## Cross-employer search feeds
 

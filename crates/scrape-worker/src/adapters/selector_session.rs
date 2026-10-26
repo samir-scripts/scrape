@@ -723,13 +723,14 @@ impl SelectorSession {
         if cached.is_none() {
             self.pages_visited += 1;
         }
+        let navigation_deadline = Instant::now() + self.navigation_timeout;
+        let source_deadline_owns_timeout = self.source_deadline <= navigation_deadline;
         let result = if let Some(page) = cached {
             Ok(Ok(page))
         } else {
             let scoped_client = client.for_static_source(&self.config);
             timeout_at(
-                self.source_deadline
-                    .min(Instant::now() + self.navigation_timeout),
+                self.source_deadline.min(navigation_deadline),
                 scoped_client.fetch_text_same_origin_at(
                     url.as_str(),
                     self.crawl_origin.as_ref().unwrap(),
@@ -759,7 +760,11 @@ impl SelectorSession {
             }
             Err(_) => {
                 return Ok(self.stop(
-                    "Website crawl navigation reached its time limit",
+                    if source_deadline_owns_timeout {
+                        "Static source duration limit reached; remaining candidates/pages were not examined"
+                    } else {
+                        "Website crawl navigation reached its time limit"
+                    },
                     CoverageTermination::TimeLimit,
                 ))
             }
