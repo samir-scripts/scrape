@@ -1265,6 +1265,8 @@ or user database were used.
 
 ## Follow-up — committed discovery target
 
+Implementation commit: `6615bec`.
+
 The existing `max_jobs_per_run` value is now a target for newly inserted
 Discovered jobs. Protocol 13 sends one eligible candidate at a time and waits
 for the host's committed inserted/updated/blocked outcome. Preview and recorded
