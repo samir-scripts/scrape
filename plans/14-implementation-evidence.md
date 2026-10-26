@@ -176,3 +176,52 @@ constructed from an identifier.
 **Limits:** no government source is supported; no live USAJOBS/NYC requests,
 native workflow journey, or physical-device QA was performed. Feed verification
 uses local fixtures, not live-provider coverage.
+
+## Approved Software Engineering Preview crawler repair
+
+**Implementation commit:** `7cd4a10` (`fix: bound workflow preview crawler coverage`).
+
+**Implemented:** workflow Preview applies a six-navigation cap only to transient
+public-HTML selector configs. The saved Software Engineering workflow remains at
+50 pages/source; normal execution retains its source/workflow deadlines. Crawl
+timeout diagnostics now identify whichever source or navigation deadline expired
+first. Preview marks page/request/time limits as sampled and does not report an
+eligibility-evidence error for a partial source with zero unresolved candidates.
+Preview breakdown retains per-source termination details; logo decoding remains
+separate. The workflow's 24-hour US role/date rules, robots override, and 40-job
+persisted-run cap were not changed.
+
+**Checks run:**
+
+- `npm run build:sidecar` — packaged macOS worker built successfully.
+- `cargo test -p scrape-worker --test crawl_process --test adapter_tests` —
+  26 tests passed. Crawl fixtures proved navigation-specific and source-specific
+  timeout warnings, `TimeLimit`, prior posting retention and no later request.
+- `cargo test -p scrape --test worker_repository` — 29 tests passed against the
+  packaged worker and temporary databases. The exact saved test YAML was
+  previewed with a transient six-page cap and max 10 preview jobs; full-run
+  configuration remained 50 pages/source and its existing test persisted 40
+  eligible fixture jobs with strict date/US evidence.
+- `npx vitest run src/test/workflow_preview_results.test.tsx src/test/scan_diagnostics_interaction.test.tsx`
+  — 2 files, 4 tests passed.
+- `npx tsc --noEmit` — passed.
+- `npm run build` — passed; Vite transformed 789 modules. Existing large-chunk
+  advisory remains.
+- `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
+  `node scripts/check-style.mjs`, and `git diff --check` — passed.
+- `cargo build -p scrape` — passed.
+
+**Native limit:** `SCRAPE_NATIVE_WORKFLOW=1 npm run test:native-startup` did not
+reach Preview. The isolated WKWebView opened **Create workflow**, then timed out
+after 21.3 seconds waiting for the indexed O*NET Software Engineer suggestion.
+Startup logged `visible=true focused=false`; subsequent WebView diagnostics
+reported `visible` and `focused` true, with the modal still open. No native
+Preview surface/result is claimed. Artifacts:
+`/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-r2QqFx`.
+The separate `SCRAPE_NATIVE_WORKFLOW=1 node scripts/native-branding.mjs` run
+passed automatic logo branding only; it does not verify workflow Preview.
+
+**Limits:** all worker data came from loopback fixtures and isolated temporary
+SQLite. No live provider, installed app profile, or user's database was used.
+Zero current matches remain a valid result when no posting has evidenced
+publication within 24 hours and US location.
