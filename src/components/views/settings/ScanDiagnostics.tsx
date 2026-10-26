@@ -14,7 +14,7 @@ const reasons: Record<RejectionReason, string> = {
   company: "Company restriction",
 };
 const terminations: Record<SourceScanStats["termination"], string> = {
-  exhausted: "Source exhausted", job_limit: "Matching job limit reached",
+  exhausted: "Source exhausted", job_limit: "Run target reached",
   page_limit: "Page limit reached", needs_login: "Needs login",
   request_limit: "Request limit reached", time_limit: "Time limit reached",
   cancelled: "Cancelled", failed: "Source processing failed",
@@ -23,7 +23,7 @@ export function ScanDiagnostics({ sources }: { sources?: SourceScanStats[] | nul
   if (!sources?.length) return null;
   return <div className="grid gap-3">
     {sources.map(source => <section key={source.source_id} aria-label={`Scan details ${source.source_id}`} className="grid gap-2">
-      <p>{source.source_id}{source.outcome ? ` · ${runStatusLabel(source.outcome)}` : ""} · {terminations[source.termination]} · cap {source.limit}</p>
+      <p>{source.source_id}{source.outcome ? ` · ${runStatusLabel(source.outcome)}` : ""} · {source.termination === "job_limit" && !source.commit_feedback ? "Candidate limit reached" : terminations[source.termination]} · {source.commit_feedback ? `new discoveries ${source.newly_committed ?? 0} (workflow target ${source.limit})` : `candidate limit ${source.limit}`}</p>
       {source.provider_total != null && <p>Provider-reported total: {source.provider_total}</p>}
       <p>{source.examined} examined · {source.accepted} accepted · {source.rejected} matching rejections · {source.blocked} blocked · {source.duplicates} duplicates · {source.invalid} invalid · {source.unresolved ?? 0} unresolved · {source.enrichment_warnings ?? 0} enrichment warnings</p>
       <p className="text-[var(--color-ink-mute)]">Counts describe examined candidates. Accepted candidates passed worker matching, not necessarily persistence or new discovery. Unvisited pages and provider eligibility are not inferred.</p>

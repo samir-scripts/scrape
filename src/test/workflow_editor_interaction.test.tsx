@@ -41,6 +41,7 @@ describe("Preview readiness and current-revision saving", () => {
       sources: [{
         source_id: "fixture-company",
         limit: 10,
+        commit_feedback: false, newly_committed: 0,
         examined: 3,
         matched: 0,
         accepted: 0,
@@ -80,7 +81,7 @@ describe("Preview readiness and current-revision saving", () => {
     await user.click(screen.getByRole("button", { name: "Criteria" }));
     await user.click(screen.getByRole("button", { name: "Date posted range", expanded: false }));
     await user.click(screen.getByRole("option", { name: "Past 12 hours" }));
-    const limit = screen.getByRole("textbox", { name: "Maximum matching jobs per run" });
+    const limit = screen.getByRole("textbox", { name: "Target new Discovered jobs per run" });
     await user.clear(limit);
     await user.type(limit, "7");
     await toSchedule(user);
@@ -109,6 +110,7 @@ describe("Preview readiness and current-revision saving", () => {
       sources: [{
         source_id: "fixture-company",
         limit: 10,
+        commit_feedback: false, newly_committed: 0,
         examined: unresolved,
         matched: 0,
         accepted: 0,
@@ -196,7 +198,7 @@ describe("role-first workflow boundaries", () => {
     const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_ENGINEERING_SOURCE);
     render(<AddSourceModal isOpen initialSource={SAMPLE_ENGINEERING_SOURCE} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
-    const limit = screen.getByRole("textbox", { name: "Maximum matching jobs per run" });
+    const limit = screen.getByRole("textbox", { name: "Target new Discovered jobs per run" });
     expect((limit as HTMLInputElement).value).toBe("20");
     await toSchedule(user);
     await user.click(screen.getByRole("button", { name: "Preview matches" }));

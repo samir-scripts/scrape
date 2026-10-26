@@ -4,4 +4,4 @@ import type { RejectionCount } from "./RejectionCount";
 import type { RejectionExample } from "./RejectionExample";
 import type { ScanOutcome } from "./ScanOutcome";
 
-export type SourceScanStats = { source_id: string, limit: number, examined: number, matched: number, blocked: number, duplicates: number, invalid: number, limit_reached: boolean, accepted: number, rejected: number, rejections: Array<RejectionCount>, rejection_examples: Array<RejectionExample>, termination: CoverageTermination, provider_total: number | null, unresolved: number, enrichment_warnings: number, outcome?: ScanOutcome | null, };
+export type SourceScanStats = { source_id: string, limit: number, commit_feedback: boolean, newly_committed: number, examined: number, matched: number, blocked: number, duplicates: number, invalid: number, limit_reached: boolean, accepted: number, rejected: number, rejections: Array<RejectionCount>, rejection_examples: Array<RejectionExample>, termination: CoverageTermination, provider_total: number | null, unresolved: number, enrichment_warnings: number, outcome?: ScanOutcome | null, };

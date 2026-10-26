@@ -1262,3 +1262,43 @@ changes there and workspace Clippy reports `clippy::iter_overeager_cloned` at
 line 4439. That user-owned file was left untouched; task-owned Rust files pass
 rustfmt and the applicable crate/host Clippy checks. No live provider requests
 or user database were used.
+
+## Follow-up — committed discovery target
+
+The existing `max_jobs_per_run` value is now a target for newly inserted
+Discovered jobs. Protocol 13 sends one eligible candidate at a time and waits
+for the host's committed inserted/updated/blocked outcome. Preview and recorded
+provider verification remain non-persisting candidate samples. Filters, saved
+workflow values and safety bounds are unchanged.
+
+Checks run in this follow-up:
+
+- `cargo test --workspace`: 668 passed, one ignored, before the final added
+  cross-source and diagnostic-write regressions.
+- `cargo test -p scrape-worker --test coordinator_tests`: 42 passed, including
+  ordered feedback, fairness, exhaustion, invalid acknowledgements, the
+  acknowledgement deadline and stopping before the next detail request.
+- `cargo test -p scrape-worker --test limit_process --test crawl_process --test worker_process`:
+  59 passed.
+- `cargo test -p scrape --test worker_repository`: 32 passed, including
+  interactive temporary SQLite feedback with an existing row, cross-source
+  duplicates, a transactional block and two insertions.
+- `cargo test -p scrape --lib`: 242 passed, including retained committed data
+  when recording diagnostic counts fails.
+- `npx vitest run --maxWorkers=1`: 91 files, 566 tests passed.
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/workflows.pw.ts`:
+  3 passed. The demo fixture editor was also opened and the target changed to 7
+  in Chromium; no live data was used.
+- `npm run test:native`: passed with a real isolated Tauri host and sidecar:
+  a refresh preceded the next insertion, the target stopped before a third
+  candidate, and later source exhaustion reported a shortfall. Artifacts:
+  `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-BZqEj7`.
+- `npm run test:providers`: passed recorded/non-feedback provider verification;
+  this does not establish live provider coverage.
+- `npm run build:sidecar`, `npm run build`, `npx tsc --noEmit`,
+  `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`
+  and `node scripts/check-style.mjs`: passed. The production build retained its
+  existing large-chunk advisory.
+
+No live provider or user database was accessed. Physical-pointer, native file
+chooser and native zoom acceptance remain outside this check.

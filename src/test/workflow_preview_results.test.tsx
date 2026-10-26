@@ -26,6 +26,7 @@ it("shows time-limited Preview coverage without claiming zero unresolved candida
     sources: [{
       source_id: "Fictional public HTML source",
       limit: 10,
+      commit_feedback: false, newly_committed: 0,
       examined: 0,
       matched: 0,
       accepted: 0,
@@ -90,6 +91,7 @@ it("explains matching rejections and retains the actual reason breakdown", () =>
     sources: [{
       source_id: "company",
       limit: 10,
+      commit_feedback: false, newly_committed: 0,
       examined: 2,
       matched: 0,
       accepted: 0,
@@ -135,6 +137,7 @@ it("explains unresolved evidence without presenting unresolved candidates as eli
     sources: [{
       source_id: "undated",
       limit: 10,
+      commit_feedback: false, newly_committed: 0,
       examined: 1,
       matched: 0,
       accepted: 0,

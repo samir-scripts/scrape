@@ -508,6 +508,7 @@ mod tests {
         let run = RunsRepo::start(&pool, TriggerType::Manual).await.unwrap();
         let config = scrape_core::WorkerConfig {
             version: scrape_core::PROTOCOL_VERSION,
+            commit_feedback: false,
             sources: vec![],
             filters: Default::default(),
             filters_by_source: Default::default(),

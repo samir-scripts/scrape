@@ -9,6 +9,13 @@ const server = createServer((request, response) => {
   if (request.url.startsWith("/slow")) { request.on("close", () => response.destroy()); return; }
   if (request.url.startsWith("/detail")) { opened++; response.end("Native opener fixture reached"); return; }
   if (request.url === "/robots.txt") { response.end("User-agent: *\nAllow: /"); return; }
+  if (request.url === "/quota") {
+    response.end('<script type="application/ld+json">' + JSON.stringify([0, 1, 2].map(n => ({
+      "@type": "JobPosting", identifier: `quota-${n}`, title: `Quota Engineer ${n}`,
+      url: `/quota-job/${n}`, hiringOrganization: { name: "Quota Fixture" },
+    }))) + "</script>");
+    return;
+  }
   response.end(`<script type="application/ld+json">[
     {"@type":"JobPosting","identifier":"42","title":"Native Fixture Engineer","url":"/detail?gh_jid=42","hiringOrganization":{"name":"Fixture Co"},"baseSalary":{"currency":"USD","value":{"minValue":45.25,"maxValue":55.75,"unitText":"HOUR"}}},
     {"@type":"JobPosting","identifier":"43","title":"Annual Fixture Engineer","url":"/detail?gh_jid=43","baseSalary":{"currency":"USD","value":{"minValue":100000,"unitText":"YEAR"}}}
@@ -29,7 +36,7 @@ process.stdin.on("data", bytes => {
   const source = config.sources[0];
   const job = { type: "job", source_id: source.id, external_id: "failure-" + mode, title: "Partial protocol fixture " + mode, company: "Fixture Co", role_type: "full_time", salary: { min: 104520, max: 126360, currency: "USD", interval: "hour", raw: "USD 50.25–60.75 HOUR", source: "structured", ranges: [{ min_minor: 5025, max_minor: 6075, currency: "USD", interval: "hour", raw: "USD 50.25–60.75 HOUR", source: "structured", derived: false, location: null }] }, url: "${origin}/detail?fixture=" + mode };
   const progress = { type: "progress", source_id: source.id, fetched: 1, matched: 1 };
-  const summary = { source_id: source.id, limit: 20, examined: 1, matched: 1, accepted: 1, rejected: 0, blocked: 0, invalid: 0, duplicates: 0, unresolved: 0, enrichment_warnings: 0, limit_reached: false, rejections: [], rejection_examples: [], termination: "exhausted", outcome: "success" };
+  const summary = { source_id: source.id, limit: config.max_jobs_per_run || 20, commit_feedback: true, newly_committed: 1, examined: 1, matched: 1, accepted: 1, rejected: 0, blocked: 0, invalid: 0, duplicates: 0, unresolved: 0, enrichment_warnings: 0, limit_reached: false, rejections: [], rejection_examples: [], termination: "exhausted", outcome: "success" };
   const done = { type: "done", stats: { sources_ok: 1, sources_failed: 0, duration_ms: 1, jobs_emitted: 1, sources: [summary] } };
   const line = value => JSON.stringify(value) + "\\n";
   let output = Buffer.from(line(job) + line(progress));
@@ -37,7 +44,7 @@ process.stdin.on("data", bytes => {
     const required = mode === "required-evidence";
     const warning = { type: "warning", source_id: source.id, message: required ? "Required publication date unavailable" : "Optional logo download unavailable", eligibility_incomplete: required, termination: null };
     output = Buffer.from(line(warning) + (required ? "" : line(job)) + line({ ...progress, matched: required ? 0 : 1 }));
-    done.stats.sources = [{ source_id: source.id, limit: source.config?.__workflow_spec?.max_jobs_per_run || 20, examined: 1, matched: required ? 0 : 1, accepted: required ? 0 : 1, rejected: 0, blocked: 0, invalid: 0, duplicates: 0, limit_reached: false, rejections: [], rejection_examples: [], termination: required ? "failed" : "exhausted", provider_total: null, unresolved: required ? 1 : 0, enrichment_warnings: 1, outcome: required ? "partial" : "success_with_warnings" }];
+    done.stats.sources = [{ source_id: source.id, limit: config.max_jobs_per_run || 20, commit_feedback: true, newly_committed: required ? 0 : 1, examined: 1, matched: required ? 0 : 1, accepted: required ? 0 : 1, rejected: 0, blocked: 0, invalid: 0, duplicates: 0, limit_reached: false, rejections: [], rejection_examples: [], termination: required ? "failed" : "exhausted", provider_total: null, unresolved: required ? 1 : 0, enrichment_warnings: 1, outcome: required ? "partial" : "success_with_warnings" }];
     done.stats.jobs_emitted = required ? 0 : 1;
     done.stats.sources_ok = required ? 0 : 1; done.stats.sources_failed = required ? 1 : 0;
   }
@@ -51,9 +58,22 @@ process.stdin.on("data", bytes => {
     output = Buffer.concat([output, Buffer.from(invalid[0]), Buffer.from([255]), Buffer.from(invalid[1])]);
   }
   if (!["missing-completion", "timeout"].includes(mode)) output = Buffer.concat([output, Buffer.from(line(done))]);
-  process.stdout.write(output, () => {
+  const finish = remaining => process.stdout.write(remaining, () => {
     if (mode === "timeout") setInterval(() => {}, 1000);
     else process.exit(mode === "nonzero" ? 7 : 0);
+  });
+  const jobLine = Buffer.from(line(job));
+  const jobStart = output.indexOf(jobLine);
+  if (jobStart < 0) { finish(output); return; }
+  const afterJob = jobStart + jobLine.length;
+  process.stdout.write(output.subarray(0, afterJob), () => {
+    process.stdin.ref?.(); process.stdin.resume();
+    process.stdin.once("data", bytes => {
+      const ack = JSON.parse(bytes.toString().split("\\n")[0]);
+      if (ack.source_id !== source.id || ack.external_id !== job.external_id || ack.outcome !== "inserted") process.exit(8);
+      process.stdin.pause(); process.stdin.unref?.();
+      finish(output.subarray(afterJob));
+    });
   });
 });
 `;
@@ -177,6 +197,19 @@ await writeFile(join(directory, "smoke.js"), `
     await invoke("plugin:event|emit", { event: "native-smoke-control", payload: { mode: "restore-real-worker" } }); await pause(300);
     assert((await invoke("run_source_now", { id: recreated.id })).status === "success", "Protocol failure left the guard locked");
     steps.push("malformed/unknown-source/UTF-8 output, nonzero exit, missing completion, missing/duplicate summaries, timeout and partial-result recovery");
+    const quotaSpec = { version: 3, max_jobs_per_run: 1, metadata: { name: "Quota fixture" }, extractor: { kind: "jsonld", url: "${origin}/quota" }, schedule: { cadence: "manual", timezone: "UTC" }, filters: {} };
+    const quota = await invoke("save_workflow", { spec: quotaSpec, id: null });
+    const first = await invoke("run_source_now", { id: quota.id });
+    const second = await invoke("run_source_now", { id: quota.id });
+    assert(first.counts.inserted === 1 && first.counts.updated === 0, "First quota run did not stop at one insertion: " + JSON.stringify(first));
+    assert(second.counts.inserted === 1 && second.counts.updated === 1 && second.counts.sources[0].accepted === 2, "Refresh consumed the next discovery target: " + JSON.stringify(second));
+    const quotaJobs = (await invoke("list_jobs", { filter: {} })).items.filter(job => job.company === "Quota Fixture");
+    assert(quotaJobs.length === 2 && !quotaJobs.some(job => job.external_id === "quota-2"), "Run scheduled jobs beyond target");
+    const third = await invoke("run_source_now", { id: quota.id });
+    const exhausted = await invoke("run_source_now", { id: quota.id });
+    assert(third.counts.inserted === 1 && third.counts.updated === 2, "Third discovery did not follow refreshes");
+    assert(exhausted.counts.inserted === 0 && exhausted.counts.updated === 3 && exhausted.counts.sources[0].termination === "exhausted" && !exhausted.counts.sources[0].limit_reached, "Exhausted quota shortfall was misreported: " + JSON.stringify(exhausted));
+    steps.push("real host/sidecar quota: refresh followed by one committed discovery, stopping before the third");
     await invoke("plugin:opener|open_url", { url: "${origin}/detail?gh_jid=42", with: null });
     await pause(1500); steps.push("native external opener command");
     await invoke("plugin:event|emit", { event: "native-smoke-result", payload: { ok: true, steps } });

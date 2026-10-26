@@ -1,7 +1,7 @@
-# Workflow specification compatibility and current v9 contract
+# Workflow specification compatibility and current v10 contract
 
-Current canonical exports use **v9**, worker protocol **11**, and migration **32**.
-Rust accepts versions 1–8 through the same compatibility resolver. Older contract
+Current canonical exports use **v10**, worker protocol **13**, and migration **32**.
+Rust accepts versions 1–9 through the same compatibility resolver. Older contract
 descriptions below record their original behavior; saved rules are not broadened.
 
 The desktop validator is authoritative for create, edit, import and preview. Rust contracts generate the TypeScript representations in `src/bindings`. Versions 1 and 2 migrate explicitly to version 3; unknown fields and unsupported versions are errors with paths.
@@ -28,9 +28,9 @@ Unknown geography is excluded when a geographic filter is active unless explicit
 
 Extraction prioritizes structured address country/subdivision fields over text inference, with bounded aliases and word boundaries. JSON-LD keeps every location-array entry and nested Country values; for remote roles explicit `applicantLocationRequirements` takes precedence over physical office geography, followed by labeled eligibility sections. General company prose does not establish job eligibility. Unsupported or ambiguous geography remains unknown.
 
-`max_jobs_per_run` is an optional top-level whole number from 1 to 10,000, defaulting to **20** for new and existing workflows. It counts unique matching, valid, unblocked postings, including existing records refreshed by a run. Each workflow in Run all has its own budget. This is not a total saved-job capacity limit and does not remove existing jobs. The worker stops candidate processing and further detail/page requests when its budget is reached; downloading a provider's single complete-board response can be unavoidable. Matching follows provider order, so repeated runs may refresh the same first postings. Source summaries explicitly identify the limit and whether processing stopped there; totals describe examined records only.
+`max_jobs_per_run` is an optional top-level whole number from 1 to 10,000, defaulting to **20** for new and existing workflows. It targets newly inserted Discovered jobs: refreshes, restorations, duplicates and blocked postings do not count. Each workflow in Run all has its own target. This is not a total saved-job capacity limit and does not remove existing jobs. The worker stops scheduling further candidates after the host confirms the target number of insertions; a provider's complete-board response can already have been downloaded. Existing safety bounds or source exhaustion can leave the target unmet.
 
-Preview and Test use the same effective filters, block snapshot and worker acceptance pipeline, capped at the smaller of `max_jobs_per_run` and **10**. Preview has a bounded worker lifetime and cancellation, and writes no jobs, retention changes or scheduling state. A limit-reached result is labeled as potentially incomplete source coverage, rather than a complete-board count. Provider failures remain visible as errors. Browser demonstration previews use fictional fixtures and cannot verify date/eligibility extraction or expert rules.
+Preview and Test use the same effective filters, block snapshot and worker acceptance pipeline, capped at the smaller of `max_jobs_per_run` and **10** eligible matches. Preview does not persist and is not a prediction of new discoveries. It has a bounded worker lifetime and cancellation, and writes no jobs, retention changes or scheduling state. A limit-reached result is labeled as potentially incomplete source coverage. Provider failures remain visible as errors. Browser demonstration previews use fictional fixtures and cannot verify date/eligibility extraction or expert rules.
 
 Compatibility retains legacy keyword, location, role, expert query/policy and
 compensation predicates alongside structured rules. Every active group applies

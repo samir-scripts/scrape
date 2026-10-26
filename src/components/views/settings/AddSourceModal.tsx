@@ -163,7 +163,7 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
             </>}
           </section>
           <h3 className="font-bold text-base">Workflow summary</h3>
-          <p>Maximum {draft.max_jobs_per_run ?? INGESTION_LIMITS.default} matching jobs per run; preview accepts at most {Math.min(draft.max_jobs_per_run ?? INGESTION_LIMITS.default, INGESTION_LIMITS.preview)}.</p>
+          <p>Target {draft.max_jobs_per_run ?? INGESTION_LIMITS.default} new Discovered jobs per run; refreshes do not count and safety bounds can leave the target unmet. Preview does not save jobs and samples at most {Math.min(draft.max_jobs_per_run ?? INGESTION_LIMITS.default, INGESTION_LIMITS.preview)} eligible matches.</p>
           <div className="grid gap-1">
             <span className="font-semibold">Sources ({draft.sources?.length || 0}):</span>
             <ul className="list-disc pl-5">

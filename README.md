@@ -27,7 +27,10 @@ Save never runs a scrape.
 Older saved examples can be replaced only through the reviewed, fingerprinted
 workflow-replacement dialog. Its database backup precedes one atomic transaction;
 custom workflows and saved-job state remain preserved.
-Current contracts: WorkflowSpec **9**, worker protocol **11**, migration **32**.
+Current contracts: WorkflowSpec **10**, worker protocol **13**, migration **32**.
+The per-run target counts newly inserted Discovered jobs, not refreshes. Runs can
+finish below target when sources exhaust or existing safety bounds are reached;
+Preview is a non-writing sample rather than a prediction of new discoveries.
 Custom workflows can also crawl explicitly supplied public HTML sites. The static
 crawler uses same-origin link traversal, `robots.txt` by default, a default 750 ms per-host
 delay, page/depth caps, and ordinary HTTP semantics; it does not search the web

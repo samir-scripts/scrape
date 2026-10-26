@@ -41,6 +41,7 @@ it.each(["success", "no-match", "persistence-failure"] as const)("mocked IPC Loa
       inserted: scenario === "no-match" ? 0 : 1, updated: scenario === "success" ? 1 : 0,
       failed: scenario === "persistence-failure" ? 1 : 0, retention_removed: 0,
       sources: [{ source_id: source.id, limit: 20, examined: 3, matched: scenario === "no-match" ? 0 : 2,
+        commit_feedback: true, newly_committed: scenario === "no-match" ? 0 : 1,
         accepted: scenario === "no-match" ? 0 : 2, blocked: 0, rejected: scenario === "no-match" ? 3 : 1,
         duplicates: 0, invalid: 0, unresolved: 0, limit_reached: false, provider_total: null,
         enrichment_warnings: 0, termination: "exhausted", outcome: "success", rejections: [], rejection_examples: [] }],
@@ -217,6 +218,7 @@ it("scrapes modified software engineering workflow, enforces user job limit, and
       sources: [{
         source_id: source.id,
         limit: 2,
+        commit_feedback: true, newly_committed: 2,
         examined: 2,
         matched: 2,
         accepted: 2,

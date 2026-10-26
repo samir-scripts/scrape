@@ -93,16 +93,14 @@ JSON-LD relative destinations resolve against their extraction page; missing or
 unsafe destinations emit errors rather than borrowing the listing URL. Worker
 HTTP fixtures and process tests are deterministic and do not verify live providers.
 
-Worker protocol version 11 is current; version 5 introduced enrichment warnings,
-unresolved candidates, provider totals, and explicit source outcomes, building on
-coverage summaries from version 4. Older protocol configurations fail explicitly.
-Rebuild the packaged sidecar with `npm run build:sidecar` after updating host/worker
-code. The authoritative workflow parameter is `max_jobs_per_run` (default 20,
-range 1–10,000); Preview/Test accepts at most 10. Each workflow stops after its own
-eligible budget, including refreshed records. Rejected/invalid/duplicate/blocked
-postings do not consume that budget. Summary counts cover examined records only
-and identify limit-reached coverage. Shared Rust constants generate frontend
-defaults and bounds during binding export.
+Worker protocol version 13 adds ordered commit acknowledgements for persisted runs.
+Older protocol configurations fail explicitly. Rebuild the packaged sidecar with
+`npm run build:sidecar` after updating host/worker code. `max_jobs_per_run`
+(default 20, range 1–10,000) targets committed new Discovered jobs; refreshes,
+blocked postings and duplicates do not count. Safety bounds and source exhaustion
+can leave the target unmet. Preview and standalone execution remain non-persisting
+eligible-candidate samples; preview accepts at most 10. Summary counts cover
+examined records only. Shared Rust constants generate frontend defaults and bounds.
 
 The host applies a Preview-only cap of six navigations per public-HTML source;
 the seed and detail navigations count toward it. This bound does not rewrite
@@ -217,8 +215,7 @@ from read models without rewriting stored rows.
 
 When a workflow defines multiple sources (`sources[]`), `scrape-worker` coordinates
 ingestion across them using fair round-robin budgeting (`coordinator.rs`).
-- The total workflow budget `max_jobs_per_run` is distributed evenly across healthy sources.
-- For example, a cap of 20 across 3 healthy sources yields a 7/7/6 split.
+- Sources take turns yielding one eligible candidate; persisted runs stop when the shared target of committed new jobs is reached.
 - The starting source index rotates across consecutive actual runs (`starting_source_index`)
   so no single source starves downstream boards over time.
 - Previews and dry runs do NOT advance the starting source index.
@@ -279,7 +276,7 @@ detection (`CoverageTermination::NeedsLogin`) feed into the same authoritative
 
 ## Script evidence contract (Plan 12 Section 4)
 
-Custom scripts speak protocol **2**, distinct from host/worker protocol 11. Candidate
+Custom scripts speak protocol **2**, distinct from host/worker protocol 13. Candidate
 frames optionally provide employment_type, a snake-case workplace_type enum and
 validated locations tuples; Rust owns matching/acceptance. Unknown frame fields
 and version-1 frames fail explicitly. The supported pay text field is salary.

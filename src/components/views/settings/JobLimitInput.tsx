@@ -5,7 +5,7 @@ import { Input } from "../../ui/Input";
 export function JobLimitInput({
   value,
   onChange,
-  label = "Maximum matching jobs per run",
+  label = "Target new Discovered jobs per run",
 }: {
   value: number;
   onChange: (value: number | null) => void;
@@ -26,7 +26,7 @@ export function JobLimitInput({
       }} />
     <p id={`${id}-help`} className={!valid ? "text-[var(--color-danger)]" : "text-[var(--color-ink-mute)]"}>
       {!valid ? `Enter a whole number from 1 to ${INGESTION_LIMITS.maximum.toLocaleString("en-US")}. ` : ""}
-      Stop after this many matching, unblocked postings. Existing postings refreshed by this run count. Preview accepts at most {INGESTION_LIMITS.preview}.
+      Refreshes do not count. Safety bounds or source exhaustion can leave the target unmet. Preview does not save jobs and samples at most {Math.min(value, INGESTION_LIMITS.preview)} eligible matches.
     </p>
   </div>;
 }

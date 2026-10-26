@@ -7,13 +7,15 @@ use scrape_core::branding::{CompanyLogo, LogoStatus};
 use scrape_core::matching::{MatchingEvaluator, MatchingEvidence, RejectionReason};
 use scrape_core::protocol::{
     validate_job_limit, CoverageTermination, EnrichmentLimits, RejectionCount, RejectionExample,
-    ScanOutcome, SourceScanStats, WorkerStats, DEFAULT_MAX_JOBS_PER_RUN, PREVIEW_MAX_JOBS,
+    ScanOutcome, SourceScanStats, WorkerCommitOutcome, WorkerStats, DEFAULT_MAX_JOBS_PER_RUN,
+    PREVIEW_MAX_JOBS,
 };
 use scrape_core::{
     PostingIdentity, SourceKind, WorkerConfig, WorkerEvent, WorkerFilters, WorkerLimits,
     WorkerSource,
 };
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::future::Future;
 use tokio::time::Instant;
 use url::Url;
 
@@ -766,6 +768,7 @@ pub struct SourceCoordinator {
     pub started: DateTime<Utc>,
     pub limits: WorkerLimits,
     pub dry_run: bool,
+    pub commit_feedback: bool,
     pub max_jobs_per_run: u32,
     pub starting_source_index: usize,
 }
@@ -825,6 +828,7 @@ impl SourceCoordinator {
             started,
             limits,
             dry_run,
+            commit_feedback: config.commit_feedback && !dry_run,
             max_jobs_per_run: cap,
             starting_source_index: config.starting_source_index.unwrap_or(0),
         })
@@ -837,13 +841,45 @@ impl SourceCoordinator {
         self.run_at(emit, Instant::now()).await
     }
 
+    pub async fn run_with_feedback<F, G, Fut>(
+        &mut self,
+        emit: F,
+        feedback: G,
+    ) -> Result<WorkerStats, Box<dyn std::error::Error>>
+    where
+        F: FnMut(&WorkerEvent) -> Result<(), serde_json::Error>,
+        G: FnMut(String, String) -> Fut,
+        Fut: Future<Output = Result<WorkerCommitOutcome, String>>,
+    {
+        self.run_at_feedback(emit, feedback, Instant::now()).await
+    }
+
     async fn run_at<F>(
         &mut self,
-        mut emit: F,
+        emit: F,
         start_time: Instant,
     ) -> Result<WorkerStats, Box<dyn std::error::Error>>
     where
         F: FnMut(&WorkerEvent) -> Result<(), serde_json::Error>,
+    {
+        self.run_at_feedback(
+            emit,
+            |_, _| async { Err("Commit feedback unavailable".into()) },
+            start_time,
+        )
+        .await
+    }
+
+    async fn run_at_feedback<F, G, Fut>(
+        &mut self,
+        mut emit: F,
+        mut feedback: G,
+        start_time: Instant,
+    ) -> Result<WorkerStats, Box<dyn std::error::Error>>
+    where
+        F: FnMut(&WorkerEvent) -> Result<(), serde_json::Error>,
+        G: FnMut(String, String) -> Fut,
+        Fut: Future<Output = Result<WorkerCommitOutcome, String>>,
     {
         let workflow_deadline =
             start_time + std::time::Duration::from_secs(self.limits.max_workflow_duration_s);
@@ -892,7 +928,12 @@ impl SourceCoordinator {
                 })
             };
             match initialized {
-                Ok(session) => sessions.push(session),
+                Ok(mut session) => {
+                    if self.commit_feedback {
+                        session.stats.limit = self.max_jobs_per_run;
+                    }
+                    sessions.push(session);
+                }
                 Err(error) => {
                     emit(&WorkerEvent::Error {
                         invalid_posting: Some(false),
@@ -905,6 +946,7 @@ impl SourceCoordinator {
                     })?;
                     let stat = SourceScanStats {
                         source_id: source.id.clone(),
+                        commit_feedback: self.commit_feedback,
                         limit: self.max_jobs_per_run,
                         termination: match error {
                             ClientError::TimeLimit(_) => CoverageTermination::TimeLimit,
@@ -920,6 +962,7 @@ impl SourceCoordinator {
         }
 
         let mut total_accepted = 0u32;
+        let mut total_committed = 0u32;
         let mut workflow_seen_identities: HashSet<String> = HashSet::new();
         let mut workflow_seen_urls: HashSet<String> = HashSet::new();
         let n = sessions.len();
@@ -927,7 +970,12 @@ impl SourceCoordinator {
         if n > 0 {
             let start_idx = self.starting_source_index % n;
 
-            while total_accepted < self.max_jobs_per_run {
+            while (if self.commit_feedback {
+                total_committed
+            } else {
+                total_accepted
+            }) < self.max_jobs_per_run
+            {
                 let mut round_progress = false;
 
                 for step in 0..n {
@@ -936,7 +984,7 @@ impl SourceCoordinator {
                     if session.is_finished() {
                         continue;
                     }
-                    if session.accepted >= session.stats.limit {
+                    if !self.commit_feedback && session.accepted >= session.stats.limit {
                         session.stats.limit_reached = true;
                         continue;
                     }
@@ -1123,9 +1171,32 @@ impl SourceCoordinator {
 
                                         session.record_logo(company, company_logo);
                                         emit(&event)?;
+                                        if self.commit_feedback {
+                                            let outcome = tokio::time::timeout_at(
+                                                workflow_deadline,
+                                                feedback(
+                                                    session.source.id.clone(),
+                                                    external_id.clone(),
+                                                ),
+                                            )
+                                            .await
+                                            .map_err(|_| "Commit acknowledgement timed out")?
+                                            .map_err(|error| {
+                                                format!("Commit acknowledgement failed: {error}")
+                                            })?;
+                                            if outcome == WorkerCommitOutcome::Inserted {
+                                                total_committed += 1;
+                                                session.stats.newly_committed += 1;
+                                            }
+                                        }
 
-                                        if total_accepted >= self.max_jobs_per_run
-                                            || session.accepted >= session.stats.limit
+                                        if (if self.commit_feedback {
+                                            total_committed
+                                        } else {
+                                            total_accepted
+                                        }) >= self.max_jobs_per_run
+                                            || (!self.commit_feedback
+                                                && session.accepted >= session.stats.limit)
                                         {
                                             break;
                                         }
@@ -1155,7 +1226,12 @@ impl SourceCoordinator {
                         }
                     }
 
-                    if total_accepted >= self.max_jobs_per_run {
+                    if (if self.commit_feedback {
+                        total_committed
+                    } else {
+                        total_accepted
+                    }) >= self.max_jobs_per_run
+                    {
                         break;
                     }
                 }
@@ -1218,8 +1294,18 @@ impl SourceCoordinator {
         .await;
 
         for mut session in sessions {
-            session.stats.limit_reached = session.stats.accepted == u64::from(session.stats.limit);
-            if (total_accepted >= self.max_jobs_per_run || session.stats.limit_reached)
+            session.stats.commit_feedback = self.commit_feedback;
+            session.stats.limit_reached = if self.commit_feedback {
+                total_committed >= self.max_jobs_per_run && !session.exhausted && !session.failed
+            } else {
+                session.stats.accepted == u64::from(session.stats.limit)
+            };
+            if ((if self.commit_feedback {
+                total_committed
+            } else {
+                total_accepted
+            }) >= self.max_jobs_per_run
+                || session.stats.limit_reached)
                 && !session.exhausted
                 && !session.failed
             {

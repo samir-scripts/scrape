@@ -1,7 +1,7 @@
 use scrape_core::{WorkerEvent, PROTOCOL_VERSION};
 use serde_json::{json, Value};
 use std::{
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::TcpListener,
     process::{Command, Stdio},
     sync::{
@@ -179,6 +179,322 @@ fn worker_output(server: &Server, config: &Value, preview: bool) -> std::process
         .unwrap();
 
     child.wait_with_output().unwrap()
+}
+
+#[test]
+fn feedback_quota_counts_committed_insertions_instead_of_refreshes() {
+    let server = Server::new(|path| {
+        if path.contains("/v0/postings/source-a") {
+            generate_lever_postings(6, "source-a")
+        } else {
+            "[]".into()
+        }
+    });
+    let config = json!({
+        "version": PROTOCOL_VERSION,
+        "commit_feedback": true,
+        "sources": [{"id":"source-a","kind":"lever","name":"A","identifier":"source-a","config":{}}],
+        "limits": worker_limits(),
+        "max_jobs_per_run": 2
+    });
+    let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+        .args(["--stdin", "--replay-origin", &server.origin])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    writeln!(input, "{config}").unwrap();
+    let mut reader = BufReader::new(child.stdout.take().unwrap());
+    let mut jobs = 0;
+    let mut done = None;
+    loop {
+        let mut line = String::new();
+        if reader.read_line(&mut line).unwrap() == 0 {
+            break;
+        }
+        match serde_json::from_str::<WorkerEvent>(&line).unwrap() {
+            WorkerEvent::Job {
+                source_id,
+                external_id,
+                ..
+            } => {
+                jobs += 1;
+                let outcome = if jobs <= 2 { "updated" } else { "inserted" };
+                writeln!(
+                    input,
+                    "{}",
+                    json!({"source_id":source_id,"external_id":external_id,"outcome":outcome})
+                )
+                .unwrap();
+            }
+            WorkerEvent::Done { stats } => {
+                done = Some(stats);
+                break;
+            }
+            _ => {}
+        }
+    }
+    drop(input);
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(jobs, 4);
+    let stats = done.unwrap();
+    assert_eq!(stats.sources[0].accepted, 4);
+    assert_eq!(stats.sources[0].newly_committed, 2);
+    assert!(stats.sources[0].limit_reached);
+    stats.sources[0].validate().unwrap();
+}
+
+#[test]
+fn feedback_rejects_wrong_malformed_duplicate_and_eof_acknowledgements() {
+    let server = Server::new(|path| {
+        if path.contains("/v0/postings/source-a") {
+            generate_lever_postings(3, "source-a")
+        } else {
+            "[]".into()
+        }
+    });
+    for mode in ["wrong", "malformed", "duplicate", "eof"] {
+        let config = json!({"version":PROTOCOL_VERSION,"commit_feedback":true,
+            "sources":[{"id":"source-a","kind":"lever","name":"A","identifier":"source-a","config":{}}],
+            "limits":worker_limits(),"max_jobs_per_run":2});
+        let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+            .args(["--stdin", "--replay-origin", &server.origin])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut input = child.stdin.take().unwrap();
+        writeln!(input, "{config}").unwrap();
+        let mut reader = BufReader::new(child.stdout.take().unwrap());
+        loop {
+            let mut line = String::new();
+            assert_ne!(reader.read_line(&mut line).unwrap(), 0);
+            if let WorkerEvent::Job {
+                source_id,
+                external_id,
+                ..
+            } = serde_json::from_str(&line).unwrap()
+            {
+                match mode {
+                    "wrong" => writeln!(
+                        input,
+                        "{}",
+                        json!({"source_id":source_id,"external_id":"wrong","outcome":"inserted"})
+                    )
+                    .unwrap(),
+                    "malformed" => writeln!(input, "{{bad").unwrap(),
+                    "duplicate" => {
+                        let ack = json!({"source_id":source_id,"external_id":external_id,"outcome":"updated"});
+                        writeln!(input, "{ack}\n{ack}").unwrap();
+                    }
+                    _ => {}
+                }
+                break;
+            }
+        }
+        drop(input);
+        let output = child.wait_with_output().unwrap();
+        assert!(!output.status.success(), "{mode} unexpectedly succeeded");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("Commit acknowledgement failed"),
+            "{mode}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
+#[test]
+fn missing_acknowledgement_fails_at_workflow_deadline_without_closing_stdin() {
+    let server = Server::new(|path| {
+        if path.contains("/v0/postings/source-a") {
+            generate_lever_postings(1, "source-a")
+        } else {
+            "[]".into()
+        }
+    });
+    let config = json!({"version":PROTOCOL_VERSION,"commit_feedback":true,
+        "sources":[{"id":"source-a","kind":"lever","name":"A","identifier":"source-a","config":{}}],
+        "limits":{"per_host_delay_ms":0,"request_timeout_s":3,"max_workflow_duration_s":30},"max_jobs_per_run":2});
+    let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+        .args(["--stdin", "--replay-origin", &server.origin])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    writeln!(input, "{config}").unwrap();
+    let mut reader = BufReader::new(child.stdout.take().unwrap());
+    loop {
+        let mut line = String::new();
+        assert_ne!(reader.read_line(&mut line).unwrap(), 0);
+        if matches!(
+            serde_json::from_str::<WorkerEvent>(&line).unwrap(),
+            WorkerEvent::Job { .. }
+        ) {
+            break;
+        }
+    }
+    let deadline = std::time::Instant::now() + Duration::from_secs(35);
+    while child.try_wait().unwrap().is_none() {
+        if std::time::Instant::now() >= deadline {
+            child.kill().unwrap();
+            panic!("Worker did not terminate after acknowledgement deadline");
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    let output = child.wait_with_output().unwrap();
+    drop(input);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Commit acknowledgement timed out"));
+}
+
+#[test]
+fn feedback_preserves_fairness_and_reports_exhaustion_below_target() {
+    let server = Server::new(|path| {
+        if path.contains("/v0/postings/source-a") {
+            generate_lever_postings(1, "source-a")
+        } else if path.contains("/v0/postings/source-b") {
+            generate_lever_postings(1, "source-b")
+        } else {
+            "[]".into()
+        }
+    });
+    let config = json!({"version":PROTOCOL_VERSION,"commit_feedback":true,
+        "sources":[{"id":"source-a","kind":"lever","name":"A","identifier":"source-a","config":{}},
+                   {"id":"source-b","kind":"lever","name":"B","identifier":"source-b","config":{}}],
+        "limits":worker_limits(),"max_jobs_per_run":3});
+    let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+        .args(["--stdin", "--replay-origin", &server.origin])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    writeln!(input, "{config}").unwrap();
+    let mut reader = BufReader::new(child.stdout.take().unwrap());
+    let mut order = Vec::new();
+    let stats = loop {
+        let mut line = String::new();
+        assert_ne!(reader.read_line(&mut line).unwrap(), 0);
+        match serde_json::from_str::<WorkerEvent>(&line).unwrap() {
+            WorkerEvent::Job {
+                source_id,
+                external_id,
+                ..
+            } => {
+                let outcome = if source_id == "source-a" {
+                    "updated"
+                } else {
+                    "inserted"
+                };
+                order.push(source_id.clone());
+                writeln!(
+                    input,
+                    "{}",
+                    json!({"source_id":source_id,"external_id":external_id,"outcome":outcome})
+                )
+                .unwrap();
+            }
+            WorkerEvent::Done { stats } => break stats,
+            _ => {}
+        }
+    };
+    drop(input);
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(order, ["source-a", "source-b"]);
+    assert_eq!(
+        stats.sources.iter().map(|s| s.newly_committed).sum::<u64>(),
+        1
+    );
+    for scan in &stats.sources {
+        scan.validate().unwrap();
+        assert!(!scan.limit_reached);
+        assert_eq!(
+            scan.termination,
+            scrape_core::protocol::CoverageTermination::Exhausted
+        );
+    }
+}
+
+#[test]
+fn feedback_target_stops_before_fetching_next_detail() {
+    let server = Server::new(|path| {
+        match path {
+        "/fixture.test/careers" => (0..4).map(|id| format!("<article data-id='{id}'><a class=title href='/jobs/{id}'>Engineer {id}</a></article>")).collect(),
+        "/fixture.test/jobs/0" | "/fixture.test/jobs/1" | "/fixture.test/jobs/2" => "<time datetime='2026-10-15'></time>".into(),
+        _ => panic!("Unexpected request: {path}"),
+    }
+    });
+    let config = json!({"version":PROTOCOL_VERSION,"commit_feedback":true,"run_started_at":"2026-10-16T00:00:00Z",
+        "sources":[{"id":"static","kind":"selector","name":"Fixture","identifier":"https://fixture.test/careers",
+            "config":{"item":"article","title":".title","link":"a","id":".@data-id","follow_detail":true,"detail_fields":{"date":"time"}}}],
+        "filters":{"matching":{"posting_date":{"last_hours":72,"timezone":"UTC"}}},
+        "limits":worker_limits(),"max_jobs_per_run":2});
+    let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+        .args(["--stdin", "--replay-origin", &server.origin])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    writeln!(input, "{config}").unwrap();
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    let mut jobs = 0;
+    loop {
+        let mut line = String::new();
+        assert_ne!(output.read_line(&mut line).unwrap(), 0);
+        match serde_json::from_str::<WorkerEvent>(&line).unwrap() {
+            WorkerEvent::Job {
+                source_id,
+                external_id,
+                ..
+            } => {
+                jobs += 1;
+                let outcome = if jobs == 1 { "updated" } else { "inserted" };
+                writeln!(
+                    input,
+                    "{}",
+                    json!({"source_id":source_id,"external_id":external_id,"outcome":outcome})
+                )
+                .unwrap();
+            }
+            WorkerEvent::Done { .. } => break,
+            _ => {}
+        }
+    }
+    drop(input);
+    let result = child.wait_with_output().unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(jobs, 3);
+    let requests = server.requests.lock().unwrap();
+    assert_eq!(
+        requests
+            .iter()
+            .filter(|path| path.contains("/jobs/"))
+            .count(),
+        3
+    );
+    assert!(!requests.iter().any(|path| path.contains("/jobs/3")));
 }
 
 #[test]

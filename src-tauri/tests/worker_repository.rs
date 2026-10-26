@@ -11,7 +11,7 @@ use scrape_lib::db::{
 };
 use scrape_lib::services::ingestion::scraped_job_from_event;
 use std::{
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::TcpListener,
     process::{Command, Stdio},
     time::{Duration, Instant},
@@ -24,6 +24,10 @@ fn invoke(config: &WorkerConfig, preview: bool) -> Vec<WorkerEvent> {
     invoke_replay(config, preview, None)
 }
 fn invoke_replay(config: &WorkerConfig, preview: bool, origin: Option<&str>) -> Vec<WorkerEvent> {
+    // This event-only helper exercises non-persisting sample mode; persistence
+    // feedback is exercised separately with an interactive SQLite boundary.
+    let mut sample_config = config.clone();
+    sample_config.commit_feedback = false;
     let cwd = tempfile::tempdir().unwrap();
     let mut command = Command::new(worker());
     command.current_dir(cwd.path());
@@ -44,7 +48,7 @@ fn invoke_replay(config: &WorkerConfig, preview: bool, origin: Option<&str>) -> 
         .stdin
         .take()
         .unwrap()
-        .write_all(&serde_json::to_vec(config).unwrap())
+        .write_all(&serde_json::to_vec(&sample_config).unwrap())
         .unwrap();
     // Drain both pipes while the worker is running. Structured source evidence
     // can exceed the OS pipe buffer, and waiting before reading would deadlock.
@@ -88,6 +92,201 @@ fn invoke_replay(config: &WorkerConfig, preview: bool, origin: Option<&str>) -> 
         "Terminal completion is required"
     );
     events
+}
+
+#[tokio::test]
+async fn interactive_feedback_counts_only_committed_new_discoveries() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = std::thread::spawn(move || {
+        for stream in listener.incoming().take(3) {
+            let mut stream = stream.unwrap();
+            let mut request = [0; 4096];
+            let n = stream.read(&mut request).unwrap();
+            let body = if String::from_utf8_lossy(&request[..n]).starts_with("GET /robots.txt ") {
+                "User-agent: *\nAllow: /".to_string()
+            } else {
+                let jobs: Vec<_> = (0..5).map(|n| serde_json::json!({
+                    "@type":"JobPosting","identifier":format!("{n}"),"title":format!("Engineer {n}"),
+                    "url":format!("http://{address}/job/{n}"),"hiringOrganization":{"name":"Fixture"}
+                })).collect();
+                format!(
+                    "<script type=\"application/ld+json\">{}</script>",
+                    serde_json::to_string(&jobs).unwrap()
+                )
+            };
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+        }
+    });
+    let directory = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&directory.path().join("quota.db"))
+        .await
+        .unwrap();
+    let url = format!("http://{address}/careers");
+    let source = SourcesRepo::create(
+        &pool,
+        CreateSourceInput {
+            kind: SourceKind::Jsonld,
+            name: "Fixture".into(),
+            identifier: url.clone(),
+            config: Some(serde_json::json!({})),
+            enabled: Some(true),
+            cadence: Some(scrape_core::SourceCadence::Manual),
+            cadence_cron: None,
+            retention_days: Some(30),
+            retention_policy: Some("untracked_only".into()),
+            filters: None,
+        },
+    )
+    .await
+    .unwrap();
+    let second_url = format!("http://{address}/careers-second");
+    let second_source = SourcesRepo::create(
+        &pool,
+        CreateSourceInput {
+            kind: SourceKind::Jsonld,
+            name: "Second fixture".into(),
+            identifier: second_url.clone(),
+            config: Some(serde_json::json!({})),
+            enabled: Some(true),
+            cadence: Some(scrape_core::SourceCadence::Manual),
+            cadence_cron: None,
+            retention_days: Some(30),
+            retention_policy: Some("untracked_only".into()),
+            filters: None,
+        },
+    )
+    .await
+    .unwrap();
+    let existing: WorkerEvent = serde_json::from_value(serde_json::json!({
+        "type":"job","source_id":source.id,"external_id":"0","title":"Engineer 0","company":"Fixture",
+        "url":format!("http://{address}/job/0"),"location":"","role_type":"unknown"
+    })).unwrap();
+    JobsRepo::upsert_scraped(&pool, &[scraped_job_from_event(existing).unwrap()])
+        .await
+        .unwrap();
+    sqlx::query("UPDATE jobs SET notes='preserve', favorited=1 WHERE external_id='0'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let blocked: WorkerEvent = serde_json::from_value(serde_json::json!({
+        "type":"job","source_id":source.id,"external_id":"1","title":"Engineer 1","company":"Fixture",
+        "url":format!("http://{address}/job/1"),"location":"","role_type":"unknown"
+    })).unwrap();
+    JobsRepo::upsert_scraped(&pool, &[scraped_job_from_event(blocked).unwrap()])
+        .await
+        .unwrap();
+    let blocked_id: String = sqlx::query_scalar("SELECT id FROM jobs WHERE external_id='1'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    postings::remove(&pool, &blocked_id, true).await.unwrap();
+    let config = WorkerConfig {
+        commit_feedback: true,
+        max_jobs_per_run: Some(2),
+        sources: vec![
+            WorkerSource {
+                id: source.id.clone(),
+                kind: SourceKind::Jsonld,
+                name: "Fixture".into(),
+                identifier: url,
+                config: serde_json::json!({}),
+            },
+            WorkerSource {
+                id: second_source.id.clone(),
+                kind: SourceKind::Jsonld,
+                name: "Second fixture".into(),
+                identifier: second_url,
+                config: serde_json::json!({}),
+            },
+        ],
+        limits: WorkerLimits {
+            per_host_delay_ms: 0,
+            request_timeout_s: 3,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut child = Command::new(worker())
+        .arg("--stdin")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    writeln!(stdin, "{}", serde_json::to_string(&config).unwrap()).unwrap();
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    let mut observed = Vec::new();
+    let mut outcomes = Vec::new();
+    let mut summary = None;
+    loop {
+        let mut line = String::new();
+        if output.read_line(&mut line).unwrap() == 0 {
+            break;
+        }
+        let event: WorkerEvent = serde_json::from_str(&line).unwrap();
+        match &event {
+            WorkerEvent::Job {
+                source_id,
+                external_id,
+                ..
+            } => {
+                observed.push(external_id.clone());
+                let row = scraped_job_from_event(event.clone()).unwrap();
+                let result = JobsRepo::upsert_scraped(&pool, &[row]).await.unwrap();
+                let outcome = match (result.inserted, result.updated, result.blocked) {
+                    (1, 0, 0) => "inserted",
+                    (0, 1, 0) => "updated",
+                    (0, 0, 1) => "blocked",
+                    _ => panic!("invalid outcome"),
+                };
+                outcomes.push(outcome);
+                writeln!(stdin, "{}", serde_json::json!({"source_id":source_id,"external_id":external_id,"outcome":outcome})).unwrap();
+            }
+            WorkerEvent::Done { stats } => {
+                summary = Some(stats.clone());
+                break;
+            }
+            _ => {}
+        }
+    }
+    drop(stdin);
+    let result = child.wait_with_output().unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    server.join().unwrap();
+    assert_eq!(observed, ["0", "1", "2", "3"]);
+    assert_eq!(outcomes, ["updated", "blocked", "inserted", "inserted"]);
+    let scans = summary.unwrap().sources;
+    assert_eq!(scans.iter().map(|scan| scan.accepted).sum::<u64>(), 4);
+    assert_eq!(
+        scans.iter().map(|scan| scan.newly_committed).sum::<u64>(),
+        2
+    );
+    assert!(scans.iter().map(|scan| scan.duplicates).sum::<u64>() > 0);
+    let preserved: (String, i64) =
+        sqlx::query_as("SELECT notes, favorited FROM jobs WHERE external_id='0'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(preserved, ("preserve".into(), 1));
+    assert_eq!(
+        JobsRepo::list(&pool, JobFilter::default())
+            .await
+            .unwrap()
+            .total,
+        3
+    );
 }
 
 #[tokio::test]
@@ -1153,15 +1352,10 @@ async fn late_greenhouse_matches_refresh_with_provenance_and_protected_state() {
             Some(scrape_core::protocol::ScanOutcome::Success)
         );
         assert_eq!(scan.provider_total, Some(200));
-        let mut budget =
-            scrape_lib::services::ingestion::RunPostingBudget::new(&config.sources).unwrap();
         let rows: Vec<_> = events
             .into_iter()
             .filter(|event| matches!(event, WorkerEvent::Job { .. }))
-            .map(|event| {
-                budget.take(event.source_id().unwrap()).unwrap();
-                scraped_job_from_event(event).unwrap()
-            })
+            .map(|event| scraped_job_from_event(event).unwrap())
             .collect();
         let stats = JobsRepo::upsert_scraped(&pool, &rows).await.unwrap();
         assert_eq!(
@@ -5471,7 +5665,7 @@ fn version_ten_compatibility_and_worker_protocol_twelve_enforcement() {
     assert_eq!(spec.version, 10);
     assert!(spec.sources[0].extractor.source_config.is_none());
 
-    // Worker rejects protocol 11 payload with explicit error
+    // Worker rejects protocol 12 payload with explicit error.
     let mut child = Command::new(worker())
         .arg("--stdin")
         .stdin(Stdio::piped())
@@ -5481,7 +5675,7 @@ fn version_ten_compatibility_and_worker_protocol_twelve_enforcement() {
         .unwrap();
 
     let old_protocol_config = json!({
-        "version": 11,
+        "version": 12,
         "sources": [],
         "limits": { "per_host_delay_ms": 0, "request_timeout_s": 5 }
     });
@@ -5495,7 +5689,7 @@ fn version_ten_compatibility_and_worker_protocol_twelve_enforcement() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("Unsupported protocol version: expected 12, got 11"),
+        stderr.contains("Unsupported protocol version: expected 13, got 12"),
         "unexpected stderr: {stderr}"
     );
 }

@@ -15,7 +15,7 @@ test("create a workflow through actual controls without an implicit scrape", asy
   // Date matching is exercised through Rust/native fixtures, not this UI demo.
   await dialog.getByRole("button", { name: "Date posted range", exact: true }).click();
   await page.getByRole("option", { name: "Any time", exact: true }).click();
-  const limit = dialog.getByRole("textbox", { name: "Maximum matching jobs per run" });
+  const limit = dialog.getByRole("textbox", { name: "Target new Discovered jobs per run" });
   await expect(limit).toHaveValue("20");
   await limit.fill("7");
   const country = dialog.getByRole("combobox", { name: "Country", exact: true });
@@ -46,7 +46,7 @@ test("create a workflow through actual controls without an implicit scrape", asy
   await expect(dialog.getByText(/daily 09:01.*America\/New_York/)).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Save workflow" })).toBeDisabled();
   await dialog.getByRole("button", { name: "Preview matches" }).click();
-  await expect(dialog.getByText(/No eligible postings/)).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Save workflow" })).toBeEnabled();
   await dialog.getByRole("button", { name: "Save workflow" }).click();
   await expect(
     dialog.getByText(/Saving has not started a scrape/),
@@ -60,7 +60,7 @@ test("create a workflow through actual controls without an implicit scrape", asy
   await expect(edit.getByLabel("Workflow name")).toHaveValue("fixture-board");
   await expect(edit.getByRole("button", { name: "Remove NoSuchRole from Any keywords", exact: true })).toBeVisible();
   await edit.getByRole("button", { name: "Continue to Criteria" }).click();
-  await expect(edit.getByRole("textbox", { name: "Maximum matching jobs per run" })).toHaveValue("7");
+  await expect(edit.getByRole("textbox", { name: "Target new Discovered jobs per run" })).toHaveValue("7");
   await expect(edit.getByRole("combobox", { name: "Country", exact: true })).toHaveValue("United States");
   await expect(edit.getByRole("button", { name: "Remove New Jersey", exact: true })).toBeVisible();
   await expect(edit.getByRole("button", { name: "Remove New York from Cities / Location terms", exact: true })).toBeVisible();

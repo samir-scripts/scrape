@@ -193,6 +193,7 @@ async fn execute_dry_run_worker(
     crate::services::script_trust::validate_execution(pool, &sources).await?;
     let mut config = WorkerConfig {
         version: PROTOCOL_VERSION,
+        commit_feedback: false,
         http_proxy: None,
         run_started_at: Some(scrape_core::now_iso()),
         filters_by_source: Default::default(),

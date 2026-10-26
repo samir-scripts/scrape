@@ -122,6 +122,7 @@ pub fn prepare(source: &Source, timezone: &str, started_at: &str) -> Result<Work
     };
     let mut config = WorkerConfig {
         version: PROTOCOL_VERSION,
+        commit_feedback: true,
         http_proxy: None,
         sources,
         filters: super::runner::resolve_worker_filters(&source.filters)?,
@@ -696,6 +697,29 @@ mod tests {
 
     fn candidate(source_id: &str, id: &str) -> ScrapedJob {
         scraped_job_from_event(serde_json::from_value(json!({"type":"job","source_id":source_id,"external_id":id,"title":"Authored diagnostic fixture","company":"Authored","url":format!("https://fixture.invalid/jobs/{id}"),"role_type":"unknown"})).unwrap()).unwrap()
+    }
+    #[tokio::test]
+    async fn diagnostic_write_failure_after_commit_retains_inserted_job() {
+        let pool = init_memory_db().await.unwrap();
+        let source = sample_workflows::seed_default(&pool).await.unwrap();
+        let run = RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&source.id))
+            .await
+            .unwrap();
+        sqlx::query("CREATE TRIGGER fail_run_counts BEFORE UPDATE OF counts_json ON scrape_runs BEGIN SELECT RAISE(FAIL, 'injected diagnostic failure'); END")
+            .execute(&pool).await.unwrap();
+        let mut counts = RunCounts::default();
+        let error = persist_batch(
+            &pool,
+            &run.id,
+            &[candidate(&source.id, "committed")],
+            &mut counts,
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains("injected diagnostic failure"));
+        let rows = JobsRepo::list(&pool, Default::default()).await.unwrap();
+        assert_eq!(rows.total, 1);
+        assert_eq!(rows.items[0].external_id.as_deref(), Some("committed"));
     }
 
     #[tokio::test]

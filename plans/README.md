@@ -1,3 +1,9 @@
+The per-run `max_jobs_per_run` value now targets newly committed Discovered jobs
+rather than refreshed matches. Protocol 13 coordinates each persisted candidate
+with the host; source exhaustion and existing safety bounds can leave a shortfall.
+Preview remains a non-writing sample. See the [workflow contract](workflow-v3.md)
+and [verification evidence](11-implementation-evidence.md).
+
 Latest implementation revision: **searchable workflow role and company selection**,
 specified in [Plan 13](13-searchable-workflow-role-company-selection.md).
 The role catalog includes all detailed BLS 2018 occupations and pinned O*NET

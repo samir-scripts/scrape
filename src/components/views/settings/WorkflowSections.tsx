@@ -271,7 +271,6 @@ export function WorkflowSections({
         </div>
         <div className="border-t border-[var(--color-border)] pt-2">
           <JobLimitInput
-            label="Scraper job limit (max matching jobs per run)"
             value={draft.max_jobs_per_run ?? INGESTION_LIMITS.default}
             onChange={value => change(value == null ? { ...draft } : { ...draft, max_jobs_per_run: value })}
           />

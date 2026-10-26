@@ -11,6 +11,7 @@ it.each([
 ] as const)("explains %s without calling the source exhausted", (termination, label) => {
   render(<ScanDiagnostics sources={[{
     source_id: "Bounded fixture", limit: 20, examined: 2, matched: 2, accepted: 2,
+    commit_feedback: false, newly_committed: 0,
     blocked: 0, rejected: 0, duplicates: 0, invalid: 0, unresolved: 0,
     limit_reached: false, provider_total: null, enrichment_warnings: 0,
     termination, outcome: "partial", rejections: [], rejection_examples: [],
@@ -21,6 +22,7 @@ it.each([
 it("explains primary rejection counts and explicitly overlapping examples through controls", async () => {
   const source: SourceScanStats = {
     source_id: "Authored diagnostic fixture", limit: 20, examined: 438, matched: 2,
+    commit_feedback: false, newly_committed: 0,
     accepted: 2, blocked: 0, rejected: 436, duplicates: 0, invalid: 0,
     limit_reached: false, provider_total: null, termination: "exhausted", unresolved: 0, enrichment_warnings: 0, outcome: "success",
     rejections: [{ reason: "legacy_role_type", count: 436 }],

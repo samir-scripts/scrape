@@ -6,7 +6,7 @@ use crate::{RoleType, SourceKind, TriState, WorkplaceType};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 12;
+pub const PROTOCOL_VERSION: u32 = 13;
 pub const DEFAULT_NAVIGATION_TIMEOUT_S: u64 = 30;
 pub const MAX_PAGES_PER_SOURCE: u32 = 100;
 pub const DEFAULT_SOURCE_DURATION_S: u64 = 180;
@@ -209,6 +209,9 @@ impl HttpProxyConfig {
 pub struct WorkerConfig {
     #[serde(default = "default_protocol_version")]
     pub version: u32,
+    // Persisted runs wait for an ordered host commit acknowledgement for each job.
+    #[serde(default)]
+    pub commit_feedback: bool,
     pub sources: Vec<WorkerSource>,
     #[serde(default)]
     pub filters: WorkerFilters,
@@ -236,6 +239,7 @@ impl Default for WorkerConfig {
     fn default() -> Self {
         Self {
             version: PROTOCOL_VERSION,
+            commit_feedback: false,
             sources: vec![],
             filters: WorkerFilters::default(),
             filters_by_source: std::collections::HashMap::default(),
@@ -247,6 +251,22 @@ impl Default for WorkerConfig {
             http_proxy: None,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WorkerCommitAck {
+    pub source_id: String,
+    pub external_id: String,
+    pub outcome: WorkerCommitOutcome,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerCommitOutcome {
+    Inserted,
+    Updated,
+    Blocked,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
@@ -746,6 +766,11 @@ pub struct WorkerStats {
 pub struct SourceScanStats {
     pub source_id: String,
     pub limit: u32,
+    #[serde(default)]
+    pub commit_feedback: bool,
+    #[serde(default)]
+    #[ts(type = "number")]
+    pub newly_committed: u64,
     #[ts(type = "number")]
     pub examined: u64,
     #[ts(type = "number")]
@@ -800,6 +825,7 @@ impl SourceScanStats {
             self.examined,
             self.matched,
             self.accepted,
+            self.newly_committed,
             self.blocked,
             self.rejected,
             self.duplicates,
@@ -816,8 +842,11 @@ impl SourceScanStats {
             || u128::from(self.matched) != u128::from(self.accepted) + u128::from(self.blocked)
             || primary_count != u128::from(self.rejected)
             || categories.len() != self.rejections.len()
-            || self.accepted > u64::from(self.limit)
-            || self.limit_reached != (self.accepted == u64::from(self.limit))
+            || self.newly_committed > self.accepted
+            || (!self.commit_feedback
+                && (self.newly_committed != 0
+                    || self.accepted > u64::from(self.limit)
+                    || self.limit_reached != (self.accepted == u64::from(self.limit))))
             || self.rejection_examples.len() > 5
             || self.rejection_examples.iter().any(|e| {
                 e.overlapping.first() != Some(&e.primary) || !categories.contains(&e.primary)
@@ -863,6 +892,40 @@ pub enum CoverageTermination {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn feedback_summaries_allow_refreshes_but_not_unconfirmed_insertions() {
+        let mut stats = SourceScanStats {
+            source_id: "fixture".into(),
+            limit: 2,
+            commit_feedback: true,
+            examined: 4,
+            matched: 4,
+            accepted: 4,
+            newly_committed: 2,
+            limit_reached: true,
+            ..Default::default()
+        };
+        stats.validate().unwrap();
+        stats.newly_committed = 5;
+        assert!(stats.validate().is_err());
+        stats.newly_committed = 0;
+        stats.commit_feedback = false;
+        assert!(stats.validate().is_err());
+    }
+
+    #[test]
+    fn commit_acknowledgement_requires_exact_known_fields_and_outcome() {
+        let valid = serde_json::json!({"source_id":"s","external_id":"e","outcome":"inserted"});
+        let ack: WorkerCommitAck = serde_json::from_value(valid.clone()).unwrap();
+        assert_eq!(ack.outcome, WorkerCommitOutcome::Inserted);
+        let mut extra = valid.clone();
+        extra["unexpected"] = true.into();
+        assert!(serde_json::from_value::<WorkerCommitAck>(extra).is_err());
+        let mut unknown = valid;
+        unknown["outcome"] = "ignored".into();
+        assert!(serde_json::from_value::<WorkerCommitAck>(unknown).is_err());
+    }
 
     #[test]
     fn extraction_bounds_accept_valid_overrides_and_supply_authoritative_defaults() {

@@ -1,8 +1,8 @@
-use crate::db::jobs::ScrapedJob;
 use crate::db::runs::{LogLevel, RunCounts, RunStatus, RunsRepo, ScrapeRun, TriggerType};
 use crate::db::settings::SettingsRepo;
 use crate::db::sources::SourcesRepo;
 use crate::error::{AppError, Result};
+use scrape_core::protocol::{WorkerCommitAck, WorkerCommitOutcome, DEFAULT_MAX_JOBS_PER_RUN};
 use scrape_core::{WorkerConfig, WorkerEvent, WorkerFilters};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
@@ -732,7 +732,26 @@ impl ScrapeRunner {
             .await;
             return Err(error);
         }
-        let mut budget = super::ingestion::RunPostingBudget::new(&config.sources)?;
+        let target = match config.max_jobs_per_run {
+            Some(cap) => {
+                scrape_core::protocol::validate_job_limit(cap).map_err(AppError::Validation)?
+            }
+            None => {
+                let total: u32 = config
+                    .sources
+                    .iter()
+                    .map(|source| source.max_jobs_per_run())
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .map_err(AppError::Validation)?
+                    .into_iter()
+                    .sum();
+                if total == 0 {
+                    DEFAULT_MAX_JOBS_PER_RUN
+                } else {
+                    total
+                }
+            }
+        };
         let (mut rx, child) = crate::services::process::worker_command(app)?
             .args(["--stdin"])
             .spawn()
@@ -766,8 +785,7 @@ impl ScrapeRunner {
             )));
         }
 
-        let mut job_buffer: Vec<ScrapedJob> = Vec::new();
-        let mut last_flush = Instant::now();
+        let mut committed_by_source: HashMap<String, u64> = HashMap::new();
         let mut total_found = 0i64;
         let mut total_new = 0i64;
         let mut source_statuses: HashMap<String, (String, Option<String>)> = HashMap::new();
@@ -785,7 +803,7 @@ impl ScrapeRunner {
             + Duration::from_secs(super::process::execution_seconds(
                 base_seconds.saturating_add(15),
             ));
-        loop {
+        'worker: loop {
             let received = tokio::select! {
                 event = timeout_at(deadline, rx.recv()) => Some(event),
                 _ = tokio::time::sleep(Duration::from_millis(100)) => None,
@@ -826,7 +844,8 @@ impl ScrapeRunner {
                         Err(error) => {
                             sidecar_err =
                                 Some(format!("Worker output is not valid UTF-8: {error}"));
-                            continue;
+                            let _ = child.kill();
+                            break 'worker;
                         }
                     };
                     for line in text.lines() {
@@ -836,13 +855,15 @@ impl ScrapeRunner {
                         }
                         if saw_done {
                             sidecar_err = Some("Worker emitted data after completion".into());
-                            continue;
+                            let _ = child.kill();
+                            break 'worker;
                         }
                         let worker_event = match serde_json::from_str::<WorkerEvent>(trimmed) {
                             Ok(event) => event,
                             Err(error) => {
                                 sidecar_err = Some(format!("Malformed worker event: {error}"));
-                                continue;
+                                let _ = child.kill();
+                                break 'worker;
                             }
                         };
                         if let Some(source_id) = worker_event.source_id() {
@@ -850,38 +871,50 @@ impl ScrapeRunner {
                                 sidecar_err = Some(format!(
                                     "Worker emitted an unknown workflow ID: {source_id}"
                                 ));
-                                counts.failed += 1;
-                                continue;
+                                let _ = child.kill();
+                                break 'worker;
                             }
                         }
                         {
                             match worker_event {
                                 event @ WorkerEvent::Job { .. } => {
-                                    if let WorkerEvent::Job { ref source_id, .. } = event {
-                                        if let Err(error) = budget.take(source_id) {
-                                            sidecar_err = Some(error.to_string());
-                                            counts.failed += 1;
-                                            continue;
-                                        }
+                                    if total_new >= i64::from(target) {
+                                        return Err(AppError::Validation("Worker emitted a job after the discovery target was reached".into()));
                                     }
-                                    job_buffer
-                                        .push(super::ingestion::scraped_job_from_event(event)?);
+                                    let (source_id, external_id) = match &event {
+                                        WorkerEvent::Job {
+                                            source_id,
+                                            external_id,
+                                            ..
+                                        } => (source_id.clone(), external_id.clone()),
+                                        _ => unreachable!(),
+                                    };
+                                    let job = super::ingestion::scraped_job_from_event(event)?;
+                                    let stats = super::execution_diagnostics::persist_batch(
+                                        &self.pool,
+                                        run_id,
+                                        std::slice::from_ref(&job),
+                                        &mut counts,
+                                    )
+                                    .await?;
+                                    let outcome = match (stats.inserted, stats.updated, stats.blocked) {
+                                        (1, 0, 0) => {
+                                            total_new += 1;
+                                            *committed_by_source.entry(source_id.clone()).or_default() += 1;
+                                            WorkerCommitOutcome::Inserted
+                                        },
+                                        (0, 1, 0) => WorkerCommitOutcome::Updated,
+                                        (0, 0, 1) => WorkerCommitOutcome::Blocked,
+                                        _ => return Err(AppError::Internal("Persistence returned an inconsistent single-job outcome".into())),
+                                    };
                                     total_found += 1;
-
-                                    if job_buffer.len() >= 50
-                                        || last_flush.elapsed() >= Duration::from_millis(500)
-                                    {
-                                        let stats = super::execution_diagnostics::persist_batch(
-                                            &self.pool,
-                                            run_id,
-                                            &job_buffer,
-                                            &mut counts,
-                                        )
-                                        .await?;
-                                        total_new += stats.inserted;
-                                        job_buffer.clear();
-                                        last_flush = Instant::now();
-                                    }
+                                    let mut ack = serde_json::to_vec(&WorkerCommitAck {
+                                        source_id,
+                                        external_id,
+                                        outcome,
+                                    })?;
+                                    ack.push(b'\n');
+                                    child.write(&ack).map_err(|error| AppError::Internal(format!("Failed to acknowledge committed job to sidecar: {error}")))?;
                                 }
                                 WorkerEvent::Progress {
                                     source_id,
@@ -1052,6 +1085,18 @@ impl ScrapeRunner {
                                         sidecar_err.get_or_insert(error);
                                         continue;
                                     }
+                                    if stats.jobs_emitted != total_found as u64
+                                        || stats.sources.iter().map(|scan| u128::from(scan.accepted)).sum::<u128>() != total_found as u128
+                                        || stats.sources.iter().any(|scan| {
+                                            !scan.commit_feedback
+                                                || scan.limit != target
+                                                || scan.newly_committed != committed_by_source.get(&scan.source_id).copied().unwrap_or(0)
+                                                || (scan.limit_reached && total_new != i64::from(target))
+                                                || (scan.termination == scrape_core::protocol::CoverageTermination::JobLimit && !scan.limit_reached)
+                                        }) {
+                                        sidecar_err.get_or_insert_with(|| "Worker completion disagrees with committed discovery counts".into());
+                                        continue;
+                                    }
                                     counts.enrichment_warnings = Some(
                                         stats
                                             .sources
@@ -1109,7 +1154,7 @@ impl ScrapeRunner {
                                             (status.into(), message),
                                         );
                                         counts.blocked += scan.blocked as i64;
-                                        self.log_event(app, run_id, LogLevel::Info, Some(&scan.source_id), &format!("Examined {} postings; {} matched, {} blocked, {} duplicates; limit {}{}. Counts cover examined postings only.", scan.examined, scan.matched, scan.blocked, scan.duplicates, scan.limit, if scan.limit_reached { " reached; stopped early, source coverage may be incomplete" } else { " not reached" })).await;
+                                        self.log_event(app, run_id, LogLevel::Info, Some(&scan.source_id), &format!("Examined {} postings; {} matched, {} blocked, {} duplicates; {} new discoveries committed from this source toward workflow target {}; coverage {:?}. Counts cover examined postings only.", scan.examined, scan.matched, scan.blocked, scan.duplicates, scan.newly_committed, target, scan.termination)).await;
                                     }
                                     RunsRepo::record_counts(&self.pool, run_id, &counts).await?;
                                     saw_done = true;
@@ -1218,27 +1263,14 @@ impl ScrapeRunner {
             });
         }
 
-        // Flush remaining buffered jobs
-        if !job_buffer.is_empty() {
-            let stats = super::execution_diagnostics::persist_batch(
-                &self.pool,
-                run_id,
-                &job_buffer,
-                &mut counts,
-            )
-            .await?;
-            total_new += stats.inserted;
-            job_buffer.clear();
-        }
-
         self.log_event(
             app,
             run_id,
             LogLevel::Info,
             single_source_id,
             &format!(
-                "Execution finished: committed {} new jobs (found {} total)",
-                total_new, total_found
+                "Execution finished: committed {} of {} target new jobs ({} eligible candidates); {}",
+                total_new, target, total_found, if total_new >= i64::from(target) { "target reached" } else { "target not reached; see source coverage diagnostics" }
             ),
         )
         .await;

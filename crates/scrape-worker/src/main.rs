@@ -8,7 +8,12 @@ use scrape_worker::coordinator::SourceCoordinator;
 use scrape_worker::detect;
 use scrape_worker::filter::FilterMatcher;
 
-use std::io::{self, Read};
+use scrape_core::protocol::WorkerCommitAck;
+use std::io::{self, BufRead, BufReader, Read, Write};
+use std::sync::Arc;
+use tokio::sync::{mpsc, Mutex};
+
+type AcknowledgementReader = Arc<Mutex<mpsc::UnboundedReceiver<Result<String, String>>>>;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Scrape worker sidecar binary")]
@@ -156,14 +161,15 @@ async fn run_stdin_config(
     dry_run: bool,
     replay_origin: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut reader = BufReader::new(io::stdin());
     let mut input = String::new();
-    let _ = io::stdin().read_line(&mut input);
+    reader.read_line(&mut input)?;
 
     let config: WorkerConfig = match serde_json::from_str(input.trim()) {
         Ok(cfg) => cfg,
         Err(_) => {
             // Fallback for multiline or EOF-terminated JSON payloads
-            io::stdin().read_to_string(&mut input)?;
+            reader.read_to_string(&mut input)?;
             serde_json::from_str(&input)?
         }
     };
@@ -176,7 +182,28 @@ async fn run_stdin_config(
         std::process::exit(1);
     }
 
-    execute_worker(config, dry_run, replay_origin).await
+    let acknowledgements = if config.commit_feedback && !dry_run {
+        let (sender, receiver) = mpsc::unbounded_channel();
+        std::thread::spawn(move || loop {
+            let mut line = String::new();
+            match reader.read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) => {
+                    if sender.send(Ok(line)).is_err() {
+                        break;
+                    }
+                }
+                Err(error) => {
+                    let _ = sender.send(Err(error.to_string()));
+                    break;
+                }
+            }
+        });
+        Some(Arc::new(Mutex::new(receiver)))
+    } else {
+        None
+    };
+    execute_worker(config, dry_run, replay_origin, acknowledgements).await
 }
 
 async fn run_single_source(
@@ -215,6 +242,7 @@ async fn run_single_source(
 
     let config = WorkerConfig {
         version: PROTOCOL_VERSION,
+        commit_feedback: false,
         run_started_at: Some(scrape_core::now_iso()),
         filters_by_source: Default::default(),
         sources: vec![source],
@@ -226,13 +254,14 @@ async fn run_single_source(
         http_proxy: None,
     };
 
-    execute_worker(config, dry_run, replay_origin).await
+    execute_worker(config, dry_run, replay_origin, None).await
 }
 
 async fn execute_worker(
     config: WorkerConfig,
     dry_run: bool,
     replay_origin: Option<&str>,
+    reader: Option<AcknowledgementReader>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     config.limits.validate()?;
     if config.limits.concurrency != 1 {
@@ -268,12 +297,37 @@ async fn execute_worker(
         source.max_jobs_per_run()?;
     }
     let mut coordinator = SourceCoordinator::new(client, &config, dry_run, started)?;
-    coordinator.run(emit_event).await?;
+    if config.commit_feedback && !dry_run {
+        let reader = reader.ok_or("Commit feedback requires stdin")?;
+        coordinator
+            .run_with_feedback(emit_event, move |source_id, external_id| {
+                let reader = reader.clone();
+                async move {
+                    let line = reader
+                        .lock()
+                        .await
+                        .recv()
+                        .await
+                        .ok_or("EOF while awaiting acknowledgement")??;
+                    let ack: WorkerCommitAck =
+                        serde_json::from_str(&line).map_err(|e| e.to_string())?;
+                    if ack.source_id != source_id || ack.external_id != external_id {
+                        return Err("Acknowledgement does not match outstanding job".into());
+                    }
+                    Ok(ack.outcome)
+                }
+            })
+            .await?;
+    } else {
+        coordinator.run(emit_event).await?;
+    }
     Ok(())
 }
 
 fn emit_event(event: &WorkerEvent) -> Result<(), serde_json::Error> {
     let line = serde_json::to_string(event)?;
-    println!("{}", line);
+    let mut stdout = io::stdout().lock();
+    writeln!(stdout, "{line}").map_err(serde_json::Error::io)?;
+    stdout.flush().map_err(serde_json::Error::io)?;
     Ok(())
 }

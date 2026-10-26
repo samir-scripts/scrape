@@ -2,37 +2,6 @@ use crate::db::jobs::ScrapedJob;
 use crate::error::{AppError, Result};
 use scrape_core::{TriState, WorkerEvent};
 
-/// Defense at the persistence boundary against an overproducing sidecar.
-pub struct RunPostingBudget(std::collections::HashMap<String, u32>);
-impl RunPostingBudget {
-    pub fn new(sources: &[scrape_core::WorkerSource]) -> Result<Self> {
-        Ok(Self(
-            sources
-                .iter()
-                .map(|source| {
-                    Ok((
-                        source.id.clone(),
-                        source.max_jobs_per_run().map_err(AppError::Validation)?,
-                    ))
-                })
-                .collect::<Result<_>>()?,
-        ))
-    }
-    pub fn take(&mut self, source_id: &str) -> Result<()> {
-        let remaining = self
-            .0
-            .get_mut(source_id)
-            .ok_or_else(|| AppError::Validation(format!("Unknown workflow ID: {source_id}")))?;
-        if *remaining == 0 {
-            return Err(AppError::Validation(format!(
-                "Worker exceeded max_jobs_per_run for workflow {source_id}"
-            )));
-        }
-        *remaining -= 1;
-        Ok(())
-    }
-}
-
 /// The single ingestion mapper used by both the sidecar runner and boundary tests.
 pub fn scraped_job_from_event(event: WorkerEvent) -> Result<ScrapedJob> {
     match event {
@@ -171,32 +140,6 @@ pub fn scraped_job_from_event(event: WorkerEvent) -> Result<ScrapedJob> {
             })
         }
         _ => Err(AppError::Validation("Expected a posting event".into())),
-    }
-}
-
-#[cfg(test)]
-mod budget_tests {
-    use super::*;
-    #[test]
-    fn persistence_budget_rejects_surplus_and_unknown_sources_independently() {
-        let source = |id: &str| scrape_core::WorkerSource {
-            id: id.into(),
-            kind: scrape_core::SourceKind::Lever,
-            name: id.into(),
-            identifier: id.into(),
-            config: serde_json::json!({"__workflow_spec":{"max_jobs_per_run":2}}),
-        };
-        let mut budget = RunPostingBudget::new(&[source("one"), source("two")]).unwrap();
-        assert!(budget.take("unknown").is_err());
-        for id in ["one", "one", "two", "two"] {
-            budget.take(id).unwrap();
-        }
-        assert!(budget
-            .take("one")
-            .unwrap_err()
-            .to_string()
-            .contains("exceeded max_jobs_per_run"));
-        assert!(budget.take("two").is_err());
     }
 }
 

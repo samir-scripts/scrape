@@ -306,7 +306,6 @@ fn validated_jobs(config: &WorkerConfig, events: &[WorkerEvent]) -> VResult<Vec<
     if stats.sources.len() != owned.len() || reported != owned {
         return Err("Missing, duplicated or foreign child source summary".into());
     }
-    let mut budget = ingestion::RunPostingBudget::new(&config.sources)?;
     let mut batch = Vec::new();
     for event in events {
         if let Some(id) = event.source_id() {
@@ -314,8 +313,7 @@ fn validated_jobs(config: &WorkerConfig, events: &[WorkerEvent]) -> VResult<Vec<
                 return Err("Worker emitted a foreign source ID".into());
             }
         }
-        if let WorkerEvent::Job { source_id, .. } = event {
-            budget.take(source_id)?;
+        if let WorkerEvent::Job { .. } = event {
             batch.push(ingestion::scraped_job_from_event(event.clone())?);
         }
     }
@@ -596,6 +594,7 @@ async fn run_case(
     let run =
         RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&parent.id)).await?;
     let mut config = execution_diagnostics::prepare(&parent, "UTC", &run.started_at)?;
+    config.commit_feedback = false;
     config.blocked_postings = postings::suppression_snapshot(&pool).await?;
     // Only replay timing is changed; budgets, enrichment and matching stay real.
     if !live {
