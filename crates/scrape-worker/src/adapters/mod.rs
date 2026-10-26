@@ -97,14 +97,14 @@ pub async fn scrape_source_with_evidence(
             jsonld::scrape_jsonld_with(client, source, &mut |event| validated(event, None)).await
         }
         SourceKind::Selector => {
-            selector::scrape_selector_with(client, source, &mut |event| validated(event, None))
+            selector::scrape_selector_with(client, source, filters, started, limits, &mut validated)
                 .await
         }
         SourceKind::Workday => {
             workday::scrape_workday_with(client, source, &mut |event| validated(event, None)).await
         }
         SourceKind::Search => {
-            search::scrape_search_with(client, source, &mut |event| {
+            search::scrape_search_with(client, source, filters, started, limits, &mut |event| {
                 let evidence = scrape_core::matching::MatchingEvidence::from_event(&event, true);
                 validated(event, Some(evidence))
             })

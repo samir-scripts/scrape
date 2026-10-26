@@ -1,0 +1,86 @@
+# Development/test-only workflow for cross-employer heuristic discovery and HTML crawling.
+version: 10
+max_jobs_per_run: 40
+metadata:
+  name: Software Engineering & Related — US · Past 24 Hours · Heuristic Discovery Test
+  enabled: true
+sources:
+  - id: heuristic-public-html
+    label: Cross-employer heuristic discovery and HTML crawl
+    enabled: true
+    extractor:
+      kind: search
+      url: themuse
+      source_config:
+        follow_detail: true
+        max_pages: 50
+schedule:
+  cadence: manual
+  time: 09:00
+  timezone: America/New_York
+  run_on_startup: false
+filters:
+  role_types: []
+  include_keywords: []
+  exclude_keywords: []
+  locations: []
+  matching:
+    target_roles:
+      - Software Engineer
+      - Software Developer
+      - Software Development Engineer
+      - Backend Engineer
+      - Backend Developer
+      - Back-end Engineer
+      - Back-end Developer
+      - Frontend Engineer
+      - Frontend Developer
+      - Front-end Engineer
+      - Front-end Developer
+      - Full Stack
+      - Full-Stack
+      - Platform Engineer
+      - Infrastructure Engineer
+      - DevOps Engineer
+      - Site Reliability Engineer
+      - Data Engineer
+      - Machine Learning Engineer
+      - ML Engineer
+      - AI Engineer
+      - QA Engineer
+      - Quality Assurance Engineer
+      - Test Automation Engineer
+      - Embedded Software
+      - Firmware Engineer
+      - Mobile Engineer
+      - iOS Engineer
+      - Android Engineer
+      - Web Developer
+    companies: []
+    keywords: null
+    posting_date:
+      preset: past_24h
+      last_hours: null
+      from: null
+      through: null
+      timezone: America/New_York
+      include_unknown: false
+    compensation: null
+    role_types: []
+    workplaces: []
+    experience_min: null
+    experience_max: null
+    experience_include_unknown: true
+    experience_match_mode: required_minimum
+    new_grad: null
+    sponsorship: []
+    work_auth: []
+    clearance: []
+    countries:
+      - US
+    regions: []
+    cities: []
+    location_include_unknown: false
+retention:
+  days: 30
+  policy: untracked_only

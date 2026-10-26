@@ -213,7 +213,7 @@ async fn execute_dry_run_worker(
     crate::services::execution_diagnostics::apply_settings_limits(pool, &mut config.limits).await?;
     config.limits.max_workflow_duration_s = config.limits.max_workflow_duration_s.min(45);
     config.limits.max_source_duration_s = config.limits.max_source_duration_s.min(20);
-    crate::services::execution_diagnostics::cap_public_html_preview_pages(&mut config.sources);
+    crate::services::execution_diagnostics::cap_preview_crawl_pages(&mut config.sources);
     let enrichment = config
         .limits
         .enrichment
@@ -684,12 +684,26 @@ pub async fn preview_workflow(
             WorkerEvent::Warning {
                 message,
                 eligibility_incomplete,
+                termination,
                 ..
             } => {
-                if eligibility_incomplete {
-                    result.errors.push(message);
-                } else {
-                    result.warnings.get_or_insert_with(Vec::new).push(message);
+                use scrape_core::protocol::CoverageTermination;
+                match termination {
+                    Some(
+                        CoverageTermination::PageLimit
+                        | CoverageTermination::RequestLimit
+                        | CoverageTermination::TimeLimit,
+                    ) => {
+                        result.sampled = true;
+                        result.warnings.get_or_insert_with(Vec::new).push(message);
+                    }
+                    Some(
+                        CoverageTermination::Failed
+                        | CoverageTermination::NeedsLogin
+                        | CoverageTermination::Cancelled,
+                    ) => result.errors.push(message),
+                    _ if eligibility_incomplete => result.errors.push(message),
+                    _ => result.warnings.get_or_insert_with(Vec::new).push(message),
                 }
             }
             WorkerEvent::Branding {

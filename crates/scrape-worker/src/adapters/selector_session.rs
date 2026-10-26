@@ -25,27 +25,23 @@ pub struct CrawlSearchTerms {
     pub target_roles: Vec<String>,
     pub any_keywords: Vec<String>,
     pub all_keywords: Vec<String>,
-    pub exclude_keywords: Vec<String>,
 }
 impl CrawlSearchTerms {
     pub fn from_filters(filters: &WorkerFilters) -> Self {
         let mut target_roles = Vec::new();
         let mut any_keywords = filters.include_keywords.clone();
         let mut all_keywords = Vec::new();
-        let mut exclude_keywords = filters.exclude_keywords.clone();
         if let Some(rules) = &filters.matching {
             target_roles.extend(rules.target_roles.iter().cloned());
             if let Some(kw) = &rules.keywords {
                 any_keywords.extend(kw.any.iter().cloned());
                 all_keywords.extend(kw.all.iter().cloned());
-                exclude_keywords.extend(kw.exclude.iter().cloned());
             }
         }
         Self {
             target_roles,
             any_keywords,
             all_keywords,
-            exclude_keywords,
         }
     }
 }
@@ -54,13 +50,6 @@ pub fn score_crawl_link(url: &Url, anchor_text: &str, terms: &CrawlSearchTerms) 
     let path_lower = url.path().to_ascii_lowercase();
     let text_lower = anchor_text.to_ascii_lowercase();
     let mut score = 0i32;
-
-    for exclude in &terms.exclude_keywords {
-        let ex = exclude.trim().to_ascii_lowercase();
-        if !ex.is_empty() && (text_lower.contains(&ex) || path_lower.contains(&ex)) {
-            return -30;
-        }
-    }
 
     if path_lower.contains("/privacy")
         || path_lower.contains("/terms")
@@ -135,7 +124,7 @@ pub(crate) struct SelectorSession {
     page: SelectorPage,
     visited: HashSet<String>,
     crawl_origin: Option<Url>,
-    frontier: VecDeque<(Url, u32)>,
+    frontier: VecDeque<(Url, u32, i32)>,
     queued: HashSet<String>,
     crawl_bound_reached: bool,
     crawl_depth: u32,
@@ -153,6 +142,9 @@ pub(crate) struct SelectorSession {
     exhausted: bool,
     pending: VecDeque<(WorkerEvent, Option<MatchingEvidence>)>,
     crawl_terms: CrawlSearchTerms,
+    current_html: Option<(String, Url)>,
+    hydrated_jobs: HashMap<String, WorkerEvent>,
+    priority_ready: bool,
 }
 impl SelectorSession {
     pub async fn new(
@@ -236,7 +228,12 @@ impl SelectorSession {
                 let scoped_client = client.for_static_source(&config);
                 if config.crawl.is_some() {
                     scoped_client
-                        .fetch_text_same_origin_at(url.as_str(), &url, true)
+                        .fetch_text_same_origin_at(
+                            url.as_str(),
+                            &url,
+                            HttpClient::crawl_path_prefix(&url),
+                            true,
+                        )
                         .await
                 } else {
                     scoped_client.fetch_text_at(url.as_str(), true).await
@@ -278,6 +275,14 @@ impl SelectorSession {
         let mut visited = HashSet::new();
         visited.insert(url.to_string());
         visited.insert(actual.to_string());
+        visited.insert(
+            scrape_core::identity::normalized_detail_url(url.as_str())
+                .map_err(ClientError::Configuration)?,
+        );
+        visited.insert(
+            scrape_core::identity::normalized_detail_url(actual.as_str())
+                .map_err(ClientError::Configuration)?,
+        );
         // Redirect aliases must also prevent loops, without counting as another page.
         let crawl_origin = config.crawl.as_ref().map(|_| url.clone());
         let mut session = Self {
@@ -306,9 +311,14 @@ impl SelectorSession {
             exhausted: false,
             pending: VecDeque::new(),
             crawl_terms: CrawlSearchTerms::from_filters(filters),
+            current_html: None,
+            hydrated_jobs: HashMap::new(),
+            priority_ready: false,
         };
         session.enqueue_links(&html, &actual, 0);
-        if session.config.crawl.is_some() && session.config.has_details() {
+        if session.config.is_public_html_crawl() {
+            session.current_html = Some((html, actual));
+        } else if session.config.crawl.is_some() && session.config.has_details() {
             session
                 .crawl_cache
                 .insert(url.to_string(), (html, actual.to_string()));
@@ -333,6 +343,28 @@ impl SelectorSession {
         }
         if Instant::now() >= self.source_deadline {
             return Ok(self.stop("Static source duration limit reached; remaining candidates/pages were not examined", CoverageTermination::TimeLimit));
+        }
+        if self.config.is_public_html_crawl() && !self.priority_ready {
+            let matcher = MatchingEvaluator::new(filters).map_err(ClientError::Configuration)?;
+            let mut ranked = self
+                .page
+                .candidates
+                .drain(..)
+                .map(|candidate| {
+                    let event = candidate.clone().event(&self.source);
+                    let key = matcher.discovery_priority(
+                        &event,
+                        started,
+                        &MatchingEvidence::from_event(&event, false),
+                    );
+                    (key, candidate)
+                })
+                .collect::<Vec<_>>();
+            ranked.sort_by_key(|(key, _)| std::cmp::Reverse(*key));
+            self.page
+                .candidates
+                .extend(ranked.into_iter().map(|(_, candidate)| candidate));
+            self.priority_ready = true;
         }
         let candidate = if let Some(candidate) = self.page.candidates.pop_front() {
             candidate
@@ -461,6 +493,11 @@ impl SelectorSession {
                 None => return Ok(SelectorStep::Yield),
             }
         };
+        if self.config.is_public_html_crawl() {
+            return self
+                .public_html_candidate(client, candidate, filters, started)
+                .await;
+        }
         let mut posting = match candidate {
             SelectorCandidate::Posting(posting) => *posting,
             SelectorCandidate::Extracted(event) => {
@@ -552,7 +589,12 @@ impl SelectorSession {
                 } else {
                     if let Some(origin) = &self.crawl_origin {
                         scoped_client
-                            .fetch_text_same_origin_at(&url, origin, true)
+                            .fetch_text_same_origin_at(
+                                &url,
+                                origin,
+                                HttpClient::crawl_path_prefix(origin),
+                                true,
+                            )
                             .await
                     } else {
                         scoped_client.fetch_text_at(&url, true).await
@@ -601,12 +643,13 @@ impl SelectorSession {
                     warning = Some((format!("Static detail {url} unavailable: {e}"), termination))
                 }
                 Err(_) => {
-                    self.detail_budget = Duration::ZERO;
-                    self.detail_bound_reported = true;
                     if self.config.crawl.is_some() {
                         self.visited.insert(url.clone());
                     }
-                    warning=Some((format!("Static detail {url} reached its time limit; missing evidence remains unknown"),Some(CoverageTermination::TimeLimit)));
+                    warning = Some((
+                        format!("Static detail {url} reached its time limit; missing evidence remains unknown"),
+                        Some(CoverageTermination::TimeLimit),
+                    ));
                 }
             }
         } else {
@@ -617,7 +660,7 @@ impl SelectorSession {
             ));
         }
         let event = posting.event(&self.source);
-        evidence = evidence_for_final(&event, self.config.is_public_html_crawl());
+        evidence = MatchingEvidence::from_event(&event, true);
         let assessment = matcher.assess(&event, started, &evidence);
         let incomplete = assessment.rejected.is_empty() && !assessment.unresolved.is_empty();
         if detail_received && incomplete {
@@ -638,6 +681,164 @@ impl SelectorSession {
         }
         Ok(SelectorStep::Event(Box::new((event, Some(evidence)))))
     }
+    async fn public_html_candidate(
+        &mut self,
+        client: &HttpClient,
+        candidate: SelectorCandidate,
+        filters: &WorkerFilters,
+        started: DateTime<Utc>,
+    ) -> Result<SelectorStep, ClientError> {
+        let mut event = candidate.event(&self.source);
+        let WorkerEvent::Job { url, .. } = &event else {
+            return Ok(SelectorStep::Event(Box::new((event, None))));
+        };
+        let destination = Url::parse(url)?;
+        let origin = self.crawl_origin.as_ref().expect("crawl origin");
+        if !HttpClient::crawl_scope(origin, &destination, HttpClient::crawl_path_prefix(origin)) {
+            return Ok(SelectorStep::Yield);
+        }
+        let identity = scrape_core::identity::normalized_detail_url(url)
+            .map_err(ClientError::Configuration)?;
+        let matcher = MatchingEvaluator::new(filters).map_err(ClientError::Configuration)?;
+        let preliminary = MatchingEvidence::from_event(&event, false);
+        if !matcher
+            .assess(&event, started, &preliminary)
+            .rejected
+            .is_empty()
+        {
+            return Ok(SelectorStep::Event(Box::new((event, Some(preliminary)))));
+        }
+        let mut warning = None;
+        let on_current_page = self.current_html.as_ref().is_some_and(|(_, actual)| {
+            scrape_core::identity::normalized_detail_url(actual.as_str())
+                .ok()
+                .as_ref()
+                == Some(&identity)
+        });
+        if on_current_page {
+            let (html, actual) = self.current_html.as_ref().unwrap();
+            if let Err(error) =
+                super::selector::hydrate_public_html_job(&mut event, html, actual, &self.source)
+            {
+                warning = Some((error.to_string(), None));
+            }
+        } else if let Some(cached) = self.hydrated_jobs.get(&identity) {
+            super::selector::merge_normalized_job(&mut event, cached.clone());
+        } else {
+            if Instant::now() >= self.source_deadline {
+                return Ok(self.stop(
+                    "Website detail crawl bound reached; remaining candidates were not examined",
+                    CoverageTermination::TimeLimit,
+                ));
+            }
+            if self.pages_visited >= self.config.max_pages
+                || self
+                    .config
+                    .crawl
+                    .as_ref()
+                    .is_some_and(|crawl| self.crawl_depth >= crawl.max_depth)
+            {
+                return Ok(self.stop(
+                    "Website detail crawl bound reached; remaining candidates were not examined",
+                    CoverageTermination::PageLimit,
+                ));
+            }
+            let enrichment_bound = if self.detail_budget.is_zero() {
+                Some(CoverageTermination::TimeLimit)
+            } else if self.detail_requests >= self.detail_limit {
+                Some(CoverageTermination::RequestLimit)
+            } else {
+                None
+            };
+            if let Some(bound) = enrichment_bound {
+                if !self.detail_bound_reported {
+                    warning = Some((
+                        "Website detail crawl bound reached; missing evidence remains unknown"
+                            .to_string(),
+                        Some(bound),
+                    ));
+                    self.detail_bound_reported = true;
+                }
+            } else {
+                self.detail_requests += 1;
+                self.pages_visited += 1;
+                let scoped = client.for_static_source(&self.config);
+                let call_started = Instant::now();
+                let deadline = self
+                    .source_deadline
+                    .min(call_started + self.detail_budget)
+                    .min(call_started + self.navigation_timeout);
+                let result = timeout_at(
+                    deadline,
+                    scoped.fetch_text_same_origin_at(
+                        destination.as_str(),
+                        origin,
+                        HttpClient::crawl_path_prefix(origin),
+                        true,
+                    ),
+                )
+                .await;
+                self.detail_budget = self.detail_budget.saturating_sub(call_started.elapsed());
+                self.visited.insert(identity.clone());
+                self.visited.insert(destination.to_string());
+                match result {
+                    Ok(Ok((html, actual))) => {
+                        let actual = Url::parse(&actual)?;
+                        self.visited.insert(actual.to_string());
+                        if let Err(error) = super::selector::hydrate_public_html_job(
+                            &mut event,
+                            &html,
+                            &actual,
+                            &self.source,
+                        ) {
+                            warning = Some((error.to_string(), None));
+                        }
+                    }
+                    Ok(Err(error)) => {
+                        let termination = match &error {
+                            ClientError::NeedsLogin(_) => CoverageTermination::NeedsLogin,
+                            ClientError::TimeLimit(_) => CoverageTermination::TimeLimit,
+                            _ => CoverageTermination::Failed,
+                        };
+                        warning = Some((
+                            format!("Website detail {destination} unavailable: {error}"),
+                            Some(termination),
+                        ));
+                    }
+                    Err(_) => {
+                        warning = Some((
+                            format!("Website detail {destination} reached its time limit"),
+                            Some(CoverageTermination::TimeLimit),
+                        ));
+                    }
+                }
+                self.hydrated_jobs.insert(identity, event.clone());
+            }
+        }
+        if self.page.candidates.is_empty() {
+            self.current_html = None;
+        }
+        let evidence = MatchingEvidence::from_event(&event, true);
+        let assessment = matcher.assess(&event, started, &evidence);
+        let incomplete = assessment.rejected.is_empty() && !assessment.unresolved.is_empty();
+        if incomplete && warning.is_none() {
+            warning = Some(("Website detail did not supply required eligibility evidence; missing fields remain unknown".into(), None));
+        }
+        if let Some((message, termination)) = warning {
+            self.pending.push_back((event, Some(evidence)));
+            return Ok(SelectorStep::Event(Box::new((
+                WorkerEvent::Warning {
+                    source_id: self.source.id.clone(),
+                    message,
+                    eligibility_incomplete: incomplete,
+                    termination,
+                },
+                None,
+            ))));
+        }
+        Ok(SelectorStep::Event(Box::new((event, Some(evidence)))))
+    }
+
     pub fn has_pending(&self) -> bool {
         !self.pending.is_empty()
     }
@@ -662,7 +863,22 @@ impl SelectorSession {
         let document = Html::parse_document(html);
         let base = super::selector::resolve_document_base(&document, actual);
         let anchors = scraper::Selector::parse("a[href]").expect("constant anchor selector");
-        let mut candidates = Vec::new();
+        let visited = &self.visited;
+        let mut candidates: Vec<_> = self
+            .frontier
+            .drain(..)
+            .filter(|(url, _, _)| {
+                !visited.contains(url.as_str())
+                    && !scrape_core::identity::normalized_detail_url(url.as_str())
+                        .is_ok_and(|key| visited.contains(&key))
+            })
+            .collect();
+        let mut destinations: HashSet<_> = candidates
+            .iter()
+            .filter_map(|(url, _, _)| {
+                scrape_core::identity::normalized_detail_url(url.as_str()).ok()
+            })
+            .collect();
         for anchor in document.select(&anchors) {
             let Some(raw) = anchor.value().attr("href") else {
                 continue;
@@ -670,9 +886,12 @@ impl SelectorSession {
             let Ok(url) = page_url(&base, raw) else {
                 continue;
             };
-            if url.origin() != origin.origin()
+            let key = scrape_core::identity::normalized_detail_url(url.as_str())
+                .unwrap_or_else(|_| url.to_string());
+            if !HttpClient::crawl_scope(origin, &url, HttpClient::crawl_path_prefix(origin))
                 || self.visited.contains(url.as_str())
-                || self.queued.contains(url.as_str())
+                || self.visited.contains(&key)
+                || !destinations.insert(key)
             {
                 continue;
             }
@@ -682,34 +901,44 @@ impl SelectorSession {
             }
             let text = anchor.text().collect::<Vec<_>>().join(" ");
             let score = score_crawl_link(&url, &text, &self.crawl_terms);
-            if score <= -30 {
-                continue;
-            }
-            candidates.push((url, score));
+            candidates.push((url, depth + 1, score));
         }
 
-        candidates.sort_by_key(|(_, score)| std::cmp::Reverse(*score));
-
-        for (url, _) in candidates {
-            if self.frontier.len() as u32 > self.config.max_pages.saturating_sub(self.pages_visited)
-            {
+        candidates.sort_by_key(|(_, _, score)| std::cmp::Reverse(*score));
+        let capacity = self.config.max_pages.saturating_sub(self.pages_visited) as usize;
+        self.queued.clear();
+        for (url, next_depth, score) in candidates {
+            if self.frontier.len() >= capacity {
                 self.crawl_bound_reached = true;
                 continue;
             }
-            self.queued.insert(url.to_string());
-            self.frontier.push_back((url, depth + 1));
+            self.queued.insert(
+                scrape_core::identity::normalized_detail_url(url.as_str())
+                    .unwrap_or_else(|_| url.to_string()),
+            );
+            self.frontier.push_back((url, next_depth, score));
         }
     }
 
     async fn advance_crawl(&mut self, client: &HttpClient) -> Result<SelectorStep, ClientError> {
-        let Some((url, depth)) = self.frontier.pop_front() else {
+        let Some((url, depth, _)) = self.frontier.pop_front() else {
             if self.crawl_bound_reached {
                 return Ok(self.stop("Website crawl page/depth limit reached; remaining same-origin pages were not visited", CoverageTermination::PageLimit));
             }
             self.exhausted = true;
             return Ok(SelectorStep::Exhausted);
         };
-        if self.visited.contains(url.as_str()) {
+        self.queued.remove(
+            &scrape_core::identity::normalized_detail_url(url.as_str())
+                .unwrap_or_else(|_| url.to_string()),
+        );
+        self.current_html = None;
+        if self.visited.contains(url.as_str())
+            || self.visited.contains(
+                &scrape_core::identity::normalized_detail_url(url.as_str())
+                    .map_err(ClientError::Configuration)?,
+            )
+        {
             return Ok(SelectorStep::Yield);
         }
         let cached = self.crawl_cache.remove(url.as_str());
@@ -734,6 +963,7 @@ impl SelectorSession {
                 scoped_client.fetch_text_same_origin_at(
                     url.as_str(),
                     self.crawl_origin.as_ref().unwrap(),
+                    HttpClient::crawl_path_prefix(self.crawl_origin.as_ref().unwrap()),
                     true,
                 ),
             )
@@ -774,6 +1004,14 @@ impl SelectorSession {
             return Ok(SelectorStep::Yield);
         }
         self.visited.insert(actual.to_string());
+        self.visited.insert(
+            scrape_core::identity::normalized_detail_url(url.as_str())
+                .map_err(ClientError::Configuration)?,
+        );
+        self.visited.insert(
+            scrape_core::identity::normalized_detail_url(actual.as_str())
+                .map_err(ClientError::Configuration)?,
+        );
         self.page = match extract_page(&html, &actual, &self.source, &self.config) {
             Ok(page) => page,
             Err(ClientError::NeedsLogin(message)) => {
@@ -800,7 +1038,10 @@ impl SelectorSession {
         }
         self.enqueue_links(&html, &actual, depth);
         self.crawl_depth = depth;
-        if self.config.has_details() {
+        if self.config.is_public_html_crawl() {
+            self.current_html = Some((html, actual));
+            self.priority_ready = false;
+        } else if self.config.has_details() {
             self.crawl_cache
                 .insert(url.to_string(), (html, actual.to_string()));
         }
@@ -823,12 +1064,6 @@ impl SelectorSession {
 fn evidence(event: &WorkerEvent) -> MatchingEvidence {
     MatchingEvidence::from_event(event, false)
 }
-fn evidence_for_final(event: &WorkerEvent, is_crawl: bool) -> MatchingEvidence {
-    let mut result = evidence(event);
-    result.opportunity_exhausted = true;
-    result.heuristic_crawl = is_crawl;
-    result
-}
 fn merge_detail(
     posting: &mut SelectorPosting,
     html: &str,
@@ -836,9 +1071,6 @@ fn merge_detail(
     config: &StaticSourceConfig,
     source: &WorkerSource,
 ) -> Result<(), ClientError> {
-    if config.detail_fields.is_empty() && config.is_public_html_crawl() {
-        return merge_heuristic_detail(posting, html, actual, source);
-    }
     let document = Html::parse_document(html);
     let container = config
         .detail_container
@@ -888,112 +1120,6 @@ fn merge_detail(
             }
         });
     }
-    let actual_url = Url::parse(actual).map_err(|e| ClientError::Extraction(e.to_string()))?;
-    let detail_base = super::selector::resolve_document_base(&document, &actual_url);
-    let detail_logo = super::branding::resolve_document_with_base(
-        &document,
-        actual,
-        detail_base.as_str(),
-        &super::branding::employer_name(source),
-        source.config.get("employer_logo").and_then(|v| v.as_str()),
-    );
-    if detail_logo.as_ref().is_some_and(|logo| {
-        posting
-            .company_logo
-            .as_ref()
-            .is_none_or(|current| logo.method < current.method)
-    }) {
-        posting.company_logo = detail_logo;
-    }
-
-    Ok(())
-}
-
-fn merge_heuristic_detail(
-    posting: &mut SelectorPosting,
-    html: &str,
-    actual: &str,
-    source: &WorkerSource,
-) -> Result<(), ClientError> {
-    let document = Html::parse_document(html);
-
-    if posting.description_source.is_none() {
-        for selector_str in [
-            "main",
-            "article",
-            "[role='main']",
-            "[class*='description']",
-            "[class*='job-content']",
-            "[class*='job-detail']",
-            "[class*='job-body']",
-            "#job-description",
-            ".job-description",
-            "body",
-        ] {
-            if let Ok(sel) = scraper::Selector::parse(selector_str) {
-                if let Some(elem) = document.select(&sel).next() {
-                    let text = elem.text().collect::<Vec<_>>().join(" ");
-                    if text.trim().len() >= 80 {
-                        posting.description_source = Some(elem.html());
-                        posting.description_format =
-                            Some(scrape_core::enrich::DescriptionFormat::Html);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    if posting.location.is_empty() {
-        for selector_str in [
-            "[class*='location']",
-            "[data-testid*='location']",
-            ".location",
-        ] {
-            if let Ok(sel) = scraper::Selector::parse(selector_str) {
-                if let Some(elem) = document.select(&sel).next() {
-                    let text = elem.text().collect::<Vec<_>>().join(" ").trim().to_string();
-                    if !text.is_empty() && text.len() <= 80 {
-                        posting.location = text;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    if posting.salary_text.is_none() {
-        for selector_str in [
-            "[class*='salary']",
-            "[class*='compensation']",
-            "[class*='pay']",
-            ".salary",
-            ".compensation",
-        ] {
-            if let Ok(sel) = scraper::Selector::parse(selector_str) {
-                if let Some(elem) = document.select(&sel).next() {
-                    let text = elem.text().collect::<Vec<_>>().join(" ").trim().to_string();
-                    if !text.is_empty() && text.len() <= 60 {
-                        posting.salary_text = Some(text);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    if posting.date_posted.is_none() {
-        if let Ok(sel) = scraper::Selector::parse("time[datetime]") {
-            if let Some(elem) = document.select(&sel).next() {
-                if let Some(raw) = elem.value().attr("datetime") {
-                    if scrape_core::posting_date::posting_instant(raw, "UTC").is_some() {
-                        posting.date_posted = Some(raw.to_string());
-                    }
-                }
-            }
-        }
-    }
-
     let actual_url = Url::parse(actual).map_err(|e| ClientError::Extraction(e.to_string()))?;
     let detail_base = super::selector::resolve_document_base(&document, &actual_url);
     let detail_logo = super::branding::resolve_document_with_base(
@@ -1089,6 +1215,9 @@ mod tests {
             exhausted: false,
             pending: VecDeque::new(),
             crawl_terms: CrawlSearchTerms::default(),
+            current_html: None,
+            hydrated_jobs: HashMap::new(),
+            priority_ready: false,
         };
         let client = HttpClient::new(1, 0);
         let SelectorStep::Event(event) = session

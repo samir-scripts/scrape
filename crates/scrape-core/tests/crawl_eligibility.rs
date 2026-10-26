@@ -26,10 +26,9 @@ fn rules() -> Value {
     }})
 }
 
-fn assess(filters: Value, event: &WorkerEvent, heuristic: bool) -> MatchingAssessment {
+fn assess(filters: Value, event: &WorkerEvent) -> MatchingAssessment {
     let filters: WorkerFilters = serde_json::from_value(filters).unwrap();
-    let mut evidence = MatchingEvidence::from_event(event, true);
-    evidence.heuristic_crawl = heuristic;
+    let evidence = MatchingEvidence::from_event(event, true);
     MatchingEvaluator::new(&filters).unwrap().assess(
         event,
         "2026-10-16T00:00:00Z".parse::<DateTime<Utc>>().unwrap(),
@@ -38,7 +37,7 @@ fn assess(filters: Value, event: &WorkerEvent, heuristic: bool) -> MatchingAsses
 }
 
 #[test]
-fn majority_cannot_waive_mandatory_date_or_geography() {
+fn original_date_and_geography_are_mandatory() {
     for (date, country, reason) in [
         (
             Some("2026-10-14T23:59:59.999Z"),
@@ -64,18 +63,18 @@ fn majority_cannot_waive_mandatory_date_or_geography() {
         ),
     ] {
         let event = candidate(date, country);
-        for heuristic in [false, true] {
-            let result = assess(rules(), &event, heuristic);
-            assert!(result.rejected.contains(&reason) || result.unresolved.contains(&reason),
-                "mandatory {reason:?} waived: date={date:?}, country={country:?}, heuristic={heuristic}, {result:?}");
-        }
+        let result = assess(rules(), &event);
+        assert!(
+            result.rejected.contains(&reason) || result.unresolved.contains(&reason),
+            "mandatory {reason:?} waived: date={date:?}, country={country:?}, {result:?}"
+        );
     }
 }
 
 #[test]
 fn recent_us_and_exact_lower_boundary_are_eligible() {
     for date in ["2026-10-15T00:00:00Z", "2026-10-15T23:59:59Z"] {
-        let result = assess(rules(), &candidate(Some(date), Some("US")), true);
+        let result = assess(rules(), &candidate(Some(date), Some("US")));
         assert_eq!(result, MatchingAssessment::default());
     }
 }
@@ -86,13 +85,13 @@ fn explicit_unknown_inclusion_is_still_honored() {
     filters["matching"]["posting_date"]["include_unknown"] = json!(true);
     filters["matching"]["location_include_unknown"] = json!(true);
     assert_eq!(
-        assess(filters, &candidate(None, None), true),
+        assess(filters, &candidate(None, None)),
         MatchingAssessment::default()
     );
 }
 
 #[test]
-fn majority_still_relaxes_nonmandatory_requirements_without_date_or_geography_rules() {
+fn crawl_requires_every_active_requirement_without_date_or_geography_rules() {
     let mut filters = rules();
     filters["matching"]
         .as_object_mut()
@@ -101,7 +100,86 @@ fn majority_still_relaxes_nonmandatory_requirements_without_date_or_geography_ru
     filters["matching"]["countries"] = json!([]);
     filters["matching"]["workplaces"] = json!(["onsite"]);
     let event = candidate(None, None);
-    let strict = assess(filters.clone(), &event, false);
-    assert!(strict.unresolved.contains(&RejectionReason::Workplace));
-    assert_eq!(assess(filters, &event, true), MatchingAssessment::default());
+    let strict = assess(filters, &event);
+    assert_eq!(strict.unresolved, vec![RejectionReason::Workplace]);
+    assert!(strict.rejected.is_empty());
+}
+
+#[test]
+fn every_active_group_remains_strict() {
+    for (field, value, reason) in [
+        (
+            "keywords",
+            json!({"all":["Rust","missing"],"fields":["description"]}),
+            RejectionReason::KeywordAll,
+        ),
+        ("workplaces", json!(["onsite"]), RejectionReason::Workplace),
+        ("experience_min", json!(5), RejectionReason::Experience),
+        (
+            "compensation",
+            json!({"min_minor":20000000,"currency":"USD"}),
+            RejectionReason::Compensation,
+        ),
+    ] {
+        let mut filters = rules();
+        filters["matching"][field] = value;
+        let result = assess(
+            filters,
+            &candidate(Some("2026-10-15T12:00:00Z"), Some("US")),
+        );
+        assert!(
+            result.rejected.contains(&reason) || result.unresolved.contains(&reason),
+            "{reason:?}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn priority_places_geography_before_date_and_date_before_relevance() {
+    let filters: WorkerFilters = serde_json::from_value(rules()).unwrap();
+    let evaluator = MatchingEvaluator::new(&filters).unwrap();
+    let started = "2026-10-16T00:00:00Z".parse().unwrap();
+    let priority = |event: &WorkerEvent| {
+        evaluator.discovery_priority(event, started, &MatchingEvidence::from_event(event, false))
+    };
+    assert!(
+        priority(&candidate(None, Some("US")))
+            > priority(&candidate(Some("2026-10-15T12:00:00Z"), None))
+    );
+    let older = candidate(Some("2026-10-15T01:00:00Z"), Some("US"));
+    let mut newer =
+        serde_json::to_value(candidate(Some("2026-10-15T12:00:00Z"), Some("US"))).unwrap();
+    newer["title"] = json!("Other occupation");
+    let newer: WorkerEvent = serde_json::from_value(newer).unwrap();
+    assert!(priority(&newer) > priority(&older));
+    let wrong_country = candidate(Some("2026-10-15T23:59:00Z"), Some("CA"));
+    assert!(priority(&older) > priority(&wrong_country));
+}
+
+#[test]
+fn priority_counts_satisfied_categories_and_ignores_dates_without_date_rules() {
+    let filters: WorkerFilters = serde_json::from_value(
+        json!({"matching":{"keywords":{"any":["Rust","Python"],"fields":["description"]}}}),
+    )
+    .unwrap();
+    let evaluator = MatchingEvaluator::new(&filters).unwrap();
+    let started = "2026-10-16T00:00:00Z".parse().unwrap();
+    let relevant = candidate(None, None);
+    let mut irrelevant =
+        serde_json::to_value(candidate(Some("2026-10-15T12:00:00Z"), None)).unwrap();
+    irrelevant["description_text"] = json!("Unrelated work");
+    let irrelevant: WorkerEvent = serde_json::from_value(irrelevant).unwrap();
+    let key = |event: &WorkerEvent| {
+        evaluator.discovery_priority(event, started, &MatchingEvidence::from_event(event, false))
+    };
+    assert!(key(&relevant) > key(&irrelevant));
+    assert_eq!(key(&relevant).2, key(&irrelevant).2);
+    assert!(!evaluator
+        .assess(
+            &irrelevant,
+            started,
+            &MatchingEvidence::from_event(&irrelevant, true)
+        )
+        .rejected
+        .is_empty());
 }

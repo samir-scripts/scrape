@@ -9,7 +9,7 @@
       "seed": true,
       "legacy_identifier": "software-engineering-last-12-hours",
       "spec": {
-        "version": 9,
+        "version": 10,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Software Engineering & Related — Past 12 Hours",
@@ -303,7 +303,7 @@
       "seed": true,
       "legacy_identifier": "cherry-hill-fast-food-last-month",
       "spec": {
-        "version": 9,
+        "version": 10,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Fast Food — Cherry Hill, NJ — Past 30 Days",
@@ -469,7 +469,7 @@
       "seed": true,
       "legacy_identifier": "remote-usd-over-60000",
       "spec": {
-        "version": 9,
+        "version": 10,
         "max_jobs_per_run": 20,
         "metadata": {
           "name": "Remote — Advertised Annual USD Pay Over $60,000",

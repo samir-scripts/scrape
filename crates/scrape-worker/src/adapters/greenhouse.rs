@@ -313,7 +313,6 @@ impl GreenhouseJob {
                 vec![]
             },
             opportunity_exhausted: false,
-            heuristic_crawl: false,
         }
     }
     pub(crate) fn event(&self, source: &WorkerSource) -> Result<WorkerEvent, ClientError> {

@@ -4913,13 +4913,33 @@ async fn imported_software_engineering_crawler_yaml_caps_persisted_discoveries_a
         let mut links = Vec::new();
         for n in 0..23 {
             let id = format!("{prefix}-{n:02}");
-            links.push(format!(
-                "<article><a href='/{slug}/jobs/{id}'>Software Engineer</a></article>"
-            ));
-            details.insert(
-                format!("/jobs.lever.co/{slug}/jobs/{id}"),
-                "<html><h1>Software Engineer</h1><main><div class='job-description'><p>Build dependable software systems and distributed platform services.</p></div><div class='location'>Austin, TX</div><time datetime='2026-10-26T10:00:00Z'>Today</time></main></html>".to_string(),
-            );
+            if n == 0 {
+                links.push(format!(
+                    "<article><a href='/{slug}/jobs/{id}'>Software Engineer</a></article>"
+                ));
+                details.insert(
+                    format!("/jobs.lever.co/{slug}/jobs/{id}"),
+                    format!(
+                        r#"<!DOCTYPE html><html><head><script type="application/ld+json">{{"@context":"https://schema.org","@type":"JobPosting","title":"Software Engineer","hiringOrganization":{{"name":"{prefix}"}},"datePosted":"2026-10-26T10:00:00Z","jobLocation":{{"address":{{"addressCountry":"US","addressLocality":"Austin"}}}},"description":"Build dependable distributed software systems."}}</script></head><body><h1>Software Engineer</h1></body></html>"#
+                    ),
+                );
+            } else if n == 1 {
+                links.push(format!(
+                    r#"<div class="posting"><a class="posting-title" href="/{slug}/jobs/{id}"><h5>Software Engineer</h5></a></div>"#
+                ));
+                details.insert(
+                    format!("/jobs.lever.co/{slug}/jobs/{id}"),
+                    "<html><h1>Software Engineer</h1><main><div class='job-description'><p>Build dependable software systems and distributed platform services.</p></div><div class='location'>Austin, TX</div><time datetime='2026-10-26T10:00:00Z' itemprop='datePosted'>Posted today</time></main></html>".to_string(),
+                );
+            } else {
+                links.push(format!(
+                    "<article><a href='/{slug}/jobs/{id}'>Software Engineer</a></article>"
+                ));
+                details.insert(
+                    format!("/jobs.lever.co/{slug}/jobs/{id}"),
+                    "<html><h1>Software Engineer</h1><main><div class='job-description'><p>Build dependable software systems and distributed platform services.</p></div><div class='location'>Austin, TX</div><time datetime='2026-10-26T10:00:00Z' itemprop='datePosted'>Posted today</time></main></html>".to_string(),
+                );
+            }
         }
         if slug == "palantir" {
             for (id, title, location, date) in [
@@ -4953,7 +4973,11 @@ async fn imported_software_engineering_crawler_yaml_caps_persisted_discoveries_a
                     "<article><a href='/palantir/jobs/{id}'>{title}</a></article>"
                 ));
                 let date = date
-                    .map(|value| format!("<time datetime='{value}'>Today</time>"))
+                    .map(|value| {
+                        format!(
+                            "<time datetime='{value}' itemprop='datePosted'>Posted today</time>"
+                        )
+                    })
                     .unwrap_or_default();
                 details.insert(
                     format!("/jobs.lever.co/palantir/jobs/{id}"),
@@ -5027,7 +5051,7 @@ async fn imported_software_engineering_crawler_yaml_caps_persisted_discoveries_a
     assert_eq!(config.max_jobs_per_run, Some(40));
     assert_eq!(config.sources.len(), 2);
     let mut preview = config.clone();
-    execution_diagnostics::cap_public_html_preview_pages(&mut preview.sources);
+    execution_diagnostics::cap_preview_crawl_pages(&mut preview.sources);
     for source in &preview.sources {
         assert_eq!(source.config["crawl"]["max_pages"], json!(6));
     }
@@ -5183,7 +5207,7 @@ async fn imported_software_engineering_crawler_yaml_caps_persisted_discoveries_a
 
 #[test]
 fn public_html_preview_cap_preserves_smaller_and_unrelated_sources() {
-    use scrape_lib::services::execution_diagnostics::cap_public_html_preview_pages;
+    use scrape_lib::services::execution_diagnostics::cap_preview_crawl_pages;
     use serde_json::json;
     let make = |kind, config| WorkerSource {
         id: "preview-fixture".into(),
@@ -5214,13 +5238,28 @@ fn public_html_preview_cap_preserves_smaller_and_unrelated_sources() {
             json!({"crawl":{"extraction":"public_html","max_pages":50}}),
         ),
         make(SourceKind::Selector, json!({"container":".job"})),
+        make(
+            SourceKind::Search,
+            json!({"follow_detail": true, "max_pages": 50}),
+        ),
+        make(
+            SourceKind::Search,
+            json!({"follow_detail": true, "max_pages": 3}),
+        ),
+        make(
+            SourceKind::Search,
+            json!({"follow_detail": false, "max_pages": 50}),
+        ),
     ];
     let original = sources.clone();
-    cap_public_html_preview_pages(&mut sources);
+    cap_preview_crawl_pages(&mut sources);
     assert_eq!(sources[0].config["crawl"]["max_pages"], json!(6));
     assert_eq!(sources[1].config["crawl"]["max_pages"], json!(2));
     assert_eq!(sources[2].config["crawl"]["max_pages"], json!(6));
-    for index in 3..sources.len() {
+    assert_eq!(sources[6].config["max_pages"], json!(6));
+    assert_eq!(sources[7].config["max_pages"], json!(3));
+    assert_eq!(sources[8].config["max_pages"], json!(50));
+    for index in [3, 4, 5, 8] {
         assert_eq!(sources[index].config, original[index].config);
     }
     assert_eq!(original[0].config["crawl"]["max_pages"], json!(50));
@@ -5256,5 +5295,207 @@ fn preview_scan_summary_distinguishes_coverage_limits_and_unresolved_evidence() 
     assert_eq!(
         preview_scan_summary(&unresolved).error.as_deref(),
         Some("Source could not complete usable processing. Inspect diagnostics and retry.")
+    );
+}
+
+#[tokio::test]
+async fn imported_software_engineering_discovery_yaml_persists_discoveries_to_sqlite() {
+    use scrape_lib::services::{execution_diagnostics, workflow};
+    use serde_json::json;
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    };
+
+    const STARTED: &str = "2026-10-26T16:00:00Z";
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap();
+    let parse_script = r#"import fs from "node:fs"; import { parse } from "yaml"; console.log(JSON.stringify(parse(fs.readFileSync("workflows/software-engineering-discovery-test.yaml", "utf8"))));"#;
+    let parsed_yaml = Command::new("node")
+        .current_dir(repo)
+        .args(["--input-type=module", "-e", parse_script])
+        .output()
+        .unwrap();
+    assert!(
+        parsed_yaml.status.success(),
+        "discovery workflow YAML parser failed: {}",
+        String::from_utf8_lossy(&parsed_yaml.stderr)
+    );
+    let yaml_value: serde_json::Value = serde_json::from_slice(&parsed_yaml.stdout).unwrap();
+    let spec = workflow::validate(yaml_value, "America/New_York").unwrap();
+    assert_eq!(spec.version, 10);
+    assert_eq!(spec.sources.len(), 1);
+    assert_eq!(spec.sources[0].extractor.kind, SourceKind::Search);
+    assert_eq!(
+        spec.sources[0]
+            .extractor
+            .source_config
+            .as_ref()
+            .and_then(|c| c.get("follow_detail"))
+            .and_then(|v| v.as_bool()),
+        Some(true)
+    );
+    assert_eq!(
+        spec.sources[0]
+            .extractor
+            .source_config
+            .as_ref()
+            .and_then(|c| c.get("max_pages"))
+            .and_then(|v| v.as_u64()),
+        Some(50)
+    );
+    assert!(spec
+        .filters
+        .as_ref()
+        .unwrap()
+        .matching
+        .as_ref()
+        .unwrap()
+        .companies
+        .is_empty());
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    listener.set_nonblocking(true).unwrap();
+    let stopped = Arc::new(AtomicBool::new(false));
+    let stop_server = Arc::clone(&stopped);
+    let requests = Arc::new(Mutex::new(Vec::<String>::new()));
+    let server_requests = Arc::clone(&requests);
+
+    let server = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(60);
+        while !stop_server.load(Ordering::SeqCst) && Instant::now() < deadline {
+            let Ok((mut stream, _)) = listener.accept() else {
+                std::thread::sleep(Duration::from_millis(2));
+                continue;
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut buffer = [0; 8192];
+            let count = stream.read(&mut buffer).unwrap();
+            let request = String::from_utf8_lossy(&buffer[..count]);
+            let path = request.split_whitespace().nth(1).unwrap().to_string();
+            server_requests.lock().unwrap().push(path.clone());
+            let (status, body) = if path.ends_with("/robots.txt") {
+                ("200 OK", "User-agent: *\nAllow: /\n".to_string())
+            } else if path.starts_with("/www.themuse.com/api/public/jobs") {
+                ("200 OK", json!({
+                    "page": 0, "page_count": 1,
+                    "results": [
+                        {
+                            "id": 901, "name": "Software Engineer", "company": {"name": "Discovered Corp"},
+                            "refs": {"landing_page": "https://www.themuse.com/jobs/discovered/901"},
+                            "contents": "<p>Engineering role</p>",
+                            "publication_date": "2026-10-26T10:00:00Z",
+                            "locations": [{"name": "Austin, TX"}]
+                        }
+                    ]
+                }).to_string())
+            } else if path == "/www.themuse.com/jobs/discovered/901" {
+                ("200 OK", r#"<!DOCTYPE html><html><head><script type="application/ld+json">{"@context":"https://schema.org","@type":"JobPosting","title":"Software Engineer","hiringOrganization":{"name":"Discovered Corp"},"datePosted":"2026-10-26T10:00:00Z","jobLocation":{"address":{"addressCountry":"US","addressLocality":"Austin"}},"description":"Build distributed software systems"}</script></head><body><h1>Software Engineer</h1></body></html>"#.to_string())
+            } else {
+                ("404 Not Found", "not found".to_string())
+            };
+            let _ = write!(
+                stream,
+                "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+        }
+    });
+
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("discovery-workflow.db");
+    let pool = scrape_lib::db::init_db(&database).await.unwrap();
+    let saved = workflow::persist(&pool, spec, None, true, "America/New_York")
+        .await
+        .unwrap();
+    let saved = SourcesRepo::get(&pool, &saved.id).await.unwrap();
+    let mut config = execution_diagnostics::prepare(&saved, "America/New_York", STARTED).unwrap();
+    assert_eq!(config.max_jobs_per_run, Some(40));
+
+    let mut preview = config.clone();
+    execution_diagnostics::cap_preview_crawl_pages(&mut preview.sources);
+    assert_eq!(preview.sources[0].config["max_pages"], json!(6));
+
+    let full_run = execution_diagnostics::prepare(&saved, "America/New_York", STARTED).unwrap();
+    assert_eq!(full_run.sources[0].config["max_pages"], json!(50));
+
+    config.limits.per_host_delay_ms = 0;
+    config.limits.request_timeout_s = 5;
+    let events = invoke_replay(&config, false, Some(&origin));
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, WorkerEvent::Error { .. })),
+        "errors: {events:?}"
+    );
+    let jobs: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e, WorkerEvent::Job { .. }))
+        .cloned()
+        .map(|e| scraped_job_from_event(e).unwrap())
+        .collect();
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].company, "Discovered Corp");
+    assert_eq!(jobs[0].date_posted.as_deref(), Some("2026-10-26T10:00:00Z"));
+
+    JobsRepo::upsert_scraped(&pool, &jobs).await.unwrap();
+    let discovered = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
+    assert_eq!(discovered.total, 1);
+    assert_eq!(discovered.items[0].company, "Discovered Corp");
+
+    stopped.store(true, Ordering::SeqCst);
+    server.join().unwrap();
+}
+
+#[test]
+fn version_ten_compatibility_and_worker_protocol_twelve_enforcement() {
+    use scrape_lib::services::workflow;
+    use serde_json::json;
+
+    // v9 converts to v10 without changing filters or opting into detail crawling
+    let v9 = json!({
+        "version": 9,
+        "metadata": {"name": "V9 Compatibility"},
+        "sources": [{
+            "id": "s1", "label": "Search", "enabled": true,
+            "extractor": {"kind": "search", "url": "themuse"}
+        }],
+        "filters": {"role_types": []}
+    });
+    let spec = workflow::validate(v9, "UTC").unwrap();
+    assert_eq!(spec.version, 10);
+    assert!(spec.sources[0].extractor.source_config.is_none());
+
+    // Worker rejects protocol 11 payload with explicit error
+    let mut child = Command::new(worker())
+        .arg("--stdin")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    let old_protocol_config = json!({
+        "version": 11,
+        "sources": [],
+        "limits": { "per_host_delay_ms": 0, "request_timeout_s": 5 }
+    });
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(&serde_json::to_vec(&old_protocol_config).unwrap())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Unsupported protocol version: expected 12, got 11"),
+        "unexpected stderr: {stderr}"
     );
 }

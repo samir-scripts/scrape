@@ -138,9 +138,9 @@ export function validateWorkflowYaml(
   }
 
   // Version check
-  if (json.version !== undefined && ![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(json.version)) {
+  if (json.version !== undefined && ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(json.version)) {
     errors.push({
-      message: `Unsupported workflow version ${json.version}. Expected supported versions: 1–9`,
+      message: `Unsupported workflow version ${json.version}. Expected supported versions: 1–10`,
     });
   }
 
@@ -504,7 +504,7 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
 
   return {
     ...snapshot,
-    version: snapshot?.version ?? 9,
+    version: snapshot?.version ?? 10,
     max_jobs_per_run: snapshot?.max_jobs_per_run ?? INGESTION_LIMITS.default,
     metadata: {
       ...snapshot?.metadata,

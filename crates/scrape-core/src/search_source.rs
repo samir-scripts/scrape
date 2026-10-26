@@ -123,6 +123,8 @@ fn validate(config: &Value, runtime: bool) -> Result<(), String> {
             "query" | "location" | "what_or" | "where" if value.is_string() => {}
             "companies" | "target_roles" if value.as_array().is_some_and(|items| items.iter().all(|item| item.as_str().is_some_and(|s| !s.trim().is_empty()))) => {}
             "max_days_old" if value.as_u64().is_some() => {}
+            "follow_detail" if value.is_boolean() => {}
+            "follow_detail" => return Err("extractor.source_config.follow_detail: expected boolean".into()),
             _ => return Err(format!("extractor.source_config.{key}: unsupported field or invalid search configuration value")),
         }
     }
@@ -161,7 +163,8 @@ mod tests {
         ] {
             assert!(validate_config(&config).is_err(), "{config}");
         }
-        validate_config(&json!({"url":"arbeitnow","endpoint":"https://fixture.test/feed?page=1","max_pages":2,"companies":["Google"],"target_roles":["Engineer"],"max_days_old":7})).unwrap();
+        validate_config(&json!({"url":"arbeitnow","endpoint":"https://fixture.test/feed?page=1","max_pages":2,"companies":["Google"],"target_roles":["Engineer"],"max_days_old":7,"follow_detail":true})).unwrap();
+        assert!(validate_config(&json!({"url":"themuse","follow_detail":"yes"})).is_err());
     }
 
     #[test]

@@ -26,6 +26,122 @@ async function toSchedule(user: UserEvent) {
   await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
   await user.click(screen.getByRole("button", { name: "Continue to Review" }));
 }
+describe("Preview readiness and current-revision saving", () => {
+  it.each([
+    { sampled: false, heading: "Preview complete — 0 eligible postings found" },
+    { sampled: true, heading: "Preview sampled — coverage incomplete" },
+  ])("allows a $sampled sampled zero-match result to save only while its revision is current", async ({ sampled, heading }) => {
+    const user = userEvent.setup();
+    const save = vi.spyOn(api, "saveWorkflow").mockResolvedValue(SAMPLE_ENGINEERING_SOURCE);
+    const run = vi.spyOn(api, "runSourceNow");
+    const extract = vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => ({
+      ...preview(spec),
+      sampled,
+      warnings: sampled ? ["Preview reached the page budget."] : [],
+      sources: [{
+        source_id: "fixture-company",
+        limit: 10,
+        examined: 3,
+        matched: 0,
+        accepted: 0,
+        blocked: 0,
+        rejected: 3,
+        duplicates: 0,
+        invalid: 0,
+        unresolved: 0,
+        limit_reached: false,
+        provider_total: null,
+        enrichment_warnings: 0,
+        termination: sampled ? "page_limit" : "exhausted",
+        outcome: sampled ? "partial" : "success",
+        rejections: [{ reason: "posting_date", count: 3 }],
+        rejection_examples: [],
+      }],
+    }));
+    render(<AddSourceModal isOpen initialSource={SAMPLE_ENGINEERING_SOURCE} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
+    await toSchedule(user);
+    expect((screen.getByRole("button", { name: "Save workflow" }) as HTMLButtonElement).disabled).toBe(true);
+    await user.click(screen.getByRole("button", { name: "Preview matches" }));
+    await screen.findByRole("heading", { name: heading });
+    expect((screen.getByRole("button", { name: "Save workflow" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText(/3 examined candidates did not satisfy the configured criteria/)).toBeTruthy();
+    expect(screen.getByText("Posting date: 3")).toBeTruthy();
+    expect(screen.getByText("Preview breakdown").closest("details")?.open).toBe(true);
+    if (sampled) {
+      expect(screen.getByText(/Configuration is ready to save with coverage warnings/)).toBeTruthy();
+      expect(screen.queryByText(/Preview complete/)).toBeNull();
+      expect(screen.getByText(/Coverage is incomplete, so this is not an exhaustive result/)).toBeTruthy();
+    } else {
+      expect(screen.getByText("Configuration is ready to save.")).toBeTruthy();
+    }
+    expect(save).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Criteria" }));
+    await user.click(screen.getByRole("button", { name: "Date posted range", expanded: false }));
+    await user.click(screen.getByRole("option", { name: "Past 12 hours" }));
+    const limit = screen.getByRole("textbox", { name: "Maximum matching jobs per run" });
+    await user.clear(limit);
+    await user.type(limit, "7");
+    await toSchedule(user);
+    expect((screen.getByRole("button", { name: "Save workflow" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("region", { name: "Preview results" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Preview matches" }));
+    await screen.findByRole("heading", { name: heading });
+    await user.click(screen.getByRole("button", { name: "Save workflow" }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(extract).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[0][0].max_jobs_per_run).toBe(7);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { message: "Source processing incomplete: 1 candidates need eligibility evidence.", unresolved: 1, termination: "exhausted" as const, outcome: "partial" as const },
+    { message: "Source could not complete usable processing.", unresolved: 0, termination: "failed" as const, outcome: "failed" as const },
+  ])("blocks saving when Preview reports $outcome processing with $unresolved unresolved candidates", async ({ message, unresolved, termination, outcome }) => {
+    const user = userEvent.setup();
+    const save = vi.spyOn(api, "saveWorkflow");
+    vi.spyOn(api, "previewWorkflow").mockImplementation(async spec => ({
+      ...preview(spec),
+      fetched: unresolved,
+      rejected: 0,
+      errors: [message],
+      sources: [{
+        source_id: "fixture-company",
+        limit: 10,
+        examined: unresolved,
+        matched: 0,
+        accepted: 0,
+        blocked: 0,
+        rejected: 0,
+        duplicates: 0,
+        invalid: 0,
+        unresolved,
+        limit_reached: false,
+        provider_total: null,
+        enrichment_warnings: 0,
+        termination,
+        outcome,
+        rejections: [],
+        rejection_examples: [],
+      }],
+    }));
+    render(<AddSourceModal isOpen initialSource={SAMPLE_ENGINEERING_SOURCE} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
+    await toSchedule(user);
+    await user.click(screen.getByRole("button", { name: "Preview matches" }));
+    await screen.findByRole("heading", { name: "Preview needs attention" });
+    expect(screen.getByRole("alert").textContent).toContain(message);
+    expect(screen.getByText("Preview breakdown").closest("details")?.open).toBe(true);
+    const button = screen.getByRole("button", { name: "Save workflow" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    await user.click(button);
+    expect(save).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Configuration is ready to save/)).toBeNull();
+    expect(screen.queryByText(/A preview with zero matches can be saved/)).toBeNull();
+  });
+});
+
 describe("role-first workflow boundaries", () => {
   it.each([
     { roles: "Software Engineer", companies: "Cloudflare,Linear", date: "Past 12 hours", preset: "past_12h" },
@@ -46,11 +162,11 @@ describe("role-first workflow boundaries", () => {
     await toSchedule(user);
     expect((screen.getByRole("button", { name: "Save workflow" }) as HTMLButtonElement).disabled).toBe(true);
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
-    await screen.findByText(/3 examined/);
+    await screen.findByText(/3 examined · 0 matched/);
     await user.click(screen.getByRole("button", { name: "Save workflow" }));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     const spec = save.mock.calls[0][0];
-    expect(spec.version).toBe(9);
+    expect(spec.version).toBe(10);
     expect(spec.sources).toHaveLength((companies ? companies.split(",").length : 0) + 2);
     expect(spec.sources.filter(source => source.extractor.kind === "search")).toHaveLength(2);
     expect(spec.sources.filter(source => source.extractor.kind === "search").map(source => source.extractor.url)).toEqual(["themuse", "arbeitnow"]);
@@ -84,7 +200,7 @@ describe("role-first workflow boundaries", () => {
     expect((limit as HTMLInputElement).value).toBe("20");
     await toSchedule(user);
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
-    await screen.findByText(/3 examined/);
+    await screen.findByText(/3 examined · 0 matched/);
     await user.click(screen.getByRole("button", { name: "Criteria" }));
     for (const invalid of ["0", "1.5", "10001", "abc"]) {
       await user.clear(limit); await user.type(limit, invalid);
@@ -101,7 +217,7 @@ describe("role-first workflow boundaries", () => {
     await toSchedule(user);
     expect((screen.getByRole("button", { name: "Save workflow" }) as HTMLButtonElement).disabled).toBe(true);
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
-    await screen.findByText(/3 examined/);
+    await screen.findByText(/3 examined · 0 matched/);
     await user.click(screen.getByRole("button", { name: "Save workflow" }));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0][0].max_jobs_per_run).toBe(7);
@@ -125,7 +241,7 @@ describe("role-first workflow boundaries", () => {
     await user.tab();
     await toSchedule(user);
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
-    await screen.findByText(/3 examined/);
+    await screen.findByText(/3 examined · 0 matched/);
     expect(extract.mock.calls[0][0].filters?.matching?.posting_date).toEqual(spec.filters?.matching?.posting_date);
     expect(extract.mock.calls[0][0].filters?.matching?.compensation).toEqual({ ...spec.filters?.matching?.compensation, min_minor: 5100 });
     expect(extract.mock.calls[0][0].sources).toEqual(spec.sources);
@@ -155,10 +271,10 @@ describe("role-first workflow boundaries", () => {
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
     await user.click(screen.getByRole("button", { name: "Cancel preview" }));
     finish(preview(extract.mock.calls[0][0]));
-    await waitFor(() => expect(screen.queryByText(/3 examined/)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/3 examined · 0 matched/)).toBeNull());
     expect(cancel).toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
-    await screen.findByText(/3 examined/);
+    await screen.findByText(/3 examined · 0 matched/);
     await user.click(screen.getByRole("button", { name: "Schedule" }));
     await user.click(screen.getByRole("button", { name: "Schedule", expanded: false }));
     expect(screen.queryByRole("option", { name: "global" })).toBeNull();
@@ -188,12 +304,12 @@ describe("role-first workflow boundaries", () => {
     await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
     await user.click(screen.getByRole("button", { name: "Continue to Review" }));
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
-    await screen.findByText(/3 examined/);
+    await screen.findByText(/3 examined · 0 matched/);
     expect(detect).toHaveBeenCalledTimes(2);
     expect(extract.mock.calls[0][0].sources[0].extractor.kind).toBe("greenhouse");
     expect(extract.mock.calls[0][0].filters?.matching?.keywords?.any).toEqual(["Engineer"]);
     finish({ kind: "lever", identifier: "stale", name: "Stale" });
-    await waitFor(() => expect(screen.getByText(/3 examined/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/3 examined · 0 matched/)).toBeTruthy());
     expect(screen.queryByText("Stale")).toBeNull();
   });
   it("keeps the populated workflow draft across mode switches and exposes Review as the final step", async () => {
@@ -230,7 +346,7 @@ describe("role-first workflow boundaries", () => {
     await user.click(screen.getByRole("button", { name: "Continue to Review" }));
     expect(screen.getByText(/daily 09:01/)).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Preview matches" }));
-    await screen.findByText(/3 examined/);
+    await screen.findByText(/3 examined · 0 matched/);
     await user.click(screen.getByRole("button", { name: "Save workflow" }));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(extract.mock.calls[0][0].schedule?.time).toBe("09:01");

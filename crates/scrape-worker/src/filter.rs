@@ -201,7 +201,7 @@ impl<'a> PostingGate<'a> {
                     });
                 }
             };
-            if !self.seen.insert(identity.clone()) {
+            if self.seen.contains(&identity) {
                 self.summary.duplicates += 1;
                 return None;
             }
@@ -252,6 +252,7 @@ impl<'a> PostingGate<'a> {
                 }
                 return None;
             }
+            self.seen.insert(identity.clone());
             self.summary.matched += 1;
             if self.blocked.contains(&identity)
                 || self
@@ -389,5 +390,61 @@ mod missing_evidence_diagnostics_tests {
         assert_eq!(gate.summary.unresolved, 7);
         assert_eq!(gate.summary.accepted, 0);
         assert_eq!(gate.summary.enrichment_warnings, 0);
+    }
+
+    #[test]
+    fn incomplete_observations_do_not_reserve_accepted_or_blocked_identity() {
+        let source = scrape_core::WorkerSource {
+            id: "fixture".into(),
+            kind: scrape_core::SourceKind::Selector,
+            name: "Fixture".into(),
+            identifier: "https://fixture.test/jobs".into(),
+            config: serde_json::Value::Null,
+        };
+        let filters: WorkerFilters = serde_json::from_value(serde_json::json!({
+            "matching": {"countries": ["US"], "location_include_unknown": false}
+        }))
+        .unwrap();
+        let incomplete: WorkerEvent = serde_json::from_value(serde_json::json!({
+            "type": "job", "source_id": "fixture", "external_id": "same",
+            "title": "Software Engineer", "company": "Fixture",
+            "url": "https://fixture.test/jobs/same", "location": "",
+            "role_type": "full_time"
+        }))
+        .unwrap();
+        let mut complete = serde_json::to_value(&incomplete).unwrap();
+        complete["location"] = serde_json::json!("US");
+        complete["location_data_complete"] = serde_json::json!(true);
+        complete["locations"] =
+            serde_json::json!([{"raw":"US","country_code":"US","is_remote":false}]);
+        let complete: WorkerEvent = serde_json::from_value(complete).unwrap();
+        for blocked_identity in [false, true] {
+            let mut blocked = std::collections::HashSet::new();
+            if blocked_identity {
+                blocked.insert("fixture:same".to_string());
+            }
+            let mut gate =
+                PostingGate::new(&source, &filters, &blocked, chrono::Utc::now(), false).unwrap();
+            let observe = |gate: &mut PostingGate<'_>, event: WorkerEvent| {
+                let evidence = scrape_core::matching::MatchingEvidence::from_event(&event, true);
+                gate.accept_with_evidence(event, Some(evidence))
+            };
+            assert!(matches!(
+                observe(&mut gate, incomplete.clone()),
+                Some(WorkerEvent::Warning { .. })
+            ));
+            assert_eq!(gate.summary.unresolved, 1);
+            let accepted = observe(&mut gate, complete.clone());
+            assert_eq!(
+                matches!(accepted, Some(WorkerEvent::Job { .. })),
+                !blocked_identity
+            );
+            assert!(observe(&mut gate, complete.clone()).is_none());
+            assert_eq!(gate.summary.examined, 3);
+            assert_eq!(gate.summary.matched, 1);
+            assert_eq!(gate.summary.duplicates, 1);
+            assert_eq!(gate.summary.accepted, u64::from(!blocked_identity));
+            assert_eq!(gate.summary.blocked, u64::from(blocked_identity));
+        }
     }
 }

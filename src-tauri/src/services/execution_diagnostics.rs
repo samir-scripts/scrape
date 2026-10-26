@@ -10,25 +10,32 @@ use scrape_core::{WorkerConfig, WorkerLimits, WorkerSource, PROTOCOL_VERSION};
 use serde_json::{json, Value};
 use sqlx::{Row, SqlitePool};
 
-pub const PREVIEW_MAX_PUBLIC_HTML_PAGES_PER_SOURCE: u64 = 6;
+pub const PREVIEW_MAX_CRAWL_PAGES_PER_SOURCE: u64 = 6;
 
 /// Bound only the transient Preview copy; saved execution keeps its crawl budget.
-pub fn cap_public_html_preview_pages(sources: &mut [WorkerSource]) {
+pub fn cap_preview_crawl_pages(sources: &mut [WorkerSource]) {
     for source in sources {
-        if source.kind != scrape_core::SourceKind::Selector
-            || source
-                .config
-                .pointer("/crawl/extraction")
-                .and_then(Value::as_str)
-                != Some("public_html")
-        {
-            continue;
-        }
-        let crawl = &mut source.config["crawl"];
-        let pages = crawl["max_pages"]
+        let config = match source.kind {
+            scrape_core::SourceKind::Selector
+                if source
+                    .config
+                    .pointer("/crawl/extraction")
+                    .and_then(Value::as_str)
+                    == Some("public_html") =>
+            {
+                &mut source.config["crawl"]
+            }
+            scrape_core::SourceKind::Search
+                if source.config.get("follow_detail").and_then(Value::as_bool) == Some(true) =>
+            {
+                &mut source.config
+            }
+            _ => continue,
+        };
+        let pages = config["max_pages"]
             .as_u64()
-            .unwrap_or(PREVIEW_MAX_PUBLIC_HTML_PAGES_PER_SOURCE);
-        crawl["max_pages"] = json!(pages.min(PREVIEW_MAX_PUBLIC_HTML_PAGES_PER_SOURCE));
+            .unwrap_or(PREVIEW_MAX_CRAWL_PAGES_PER_SOURCE);
+        config["max_pages"] = json!(pages.min(PREVIEW_MAX_CRAWL_PAGES_PER_SOURCE));
     }
 }
 #[derive(Debug, PartialEq, Eq)]
@@ -50,7 +57,7 @@ pub fn preview_scan_summary(scan: &scrape_core::protocol::SourceScanStats) -> Pr
         Some(ScanOutcome::Failed) => Some(
             "Source could not complete usable processing. Inspect diagnostics and retry.".into(),
         ),
-        Some(ScanOutcome::Partial) if scan.unresolved > 0 => Some(format!(
+        _ if scan.unresolved > 0 => Some(format!(
             "Source processing incomplete: {} candidates need eligibility evidence. Inspect scan details and retry.",
             scan.unresolved
         )),
@@ -454,6 +461,109 @@ mod tests {
     use super::*;
     use crate::db::{init_memory_db, runs::TriggerType, sources::SourcesRepo};
     use crate::services::{ingestion::scraped_job_from_event, sample_workflows};
+
+    #[test]
+    fn preview_caps_only_transient_html_and_opted_in_search_crawls() {
+        use scrape_core::SourceKind;
+        let source = |kind, config| WorkerSource {
+            id: "preview-source".into(),
+            kind,
+            name: "Preview source".into(),
+            identifier: "https://example.com/jobs".into(),
+            config,
+        };
+        let saved = vec![
+            source(
+                SourceKind::Selector,
+                json!({"crawl": {"extraction": "public_html", "max_pages": 50}}),
+            ),
+            source(
+                SourceKind::Selector,
+                json!({"crawl": {"extraction": "public_html", "max_pages": 2}}),
+            ),
+            source(
+                SourceKind::Search,
+                json!({"follow_detail": true, "max_pages": 50}),
+            ),
+            source(
+                SourceKind::Search,
+                json!({"follow_detail": true, "max_pages": 3}),
+            ),
+            source(SourceKind::Search, json!({"follow_detail": true})),
+            source(SourceKind::Search, json!({"max_pages": 50})),
+            source(
+                SourceKind::Search,
+                json!({"follow_detail": false, "max_pages": 50}),
+            ),
+            source(
+                SourceKind::Selector,
+                json!({"crawl": {"extraction": "selectors", "max_pages": 50}}),
+            ),
+        ];
+        let mut preview = saved.clone();
+        cap_preview_crawl_pages(&mut preview);
+        assert_eq!(preview[0].config["crawl"]["max_pages"], 6);
+        assert_eq!(preview[1].config["crawl"]["max_pages"], 2);
+        assert_eq!(preview[2].config["max_pages"], 6);
+        assert_eq!(preview[3].config["max_pages"], 3);
+        assert_eq!(preview[4].config["max_pages"], 6);
+        for index in 5..saved.len() {
+            assert_eq!(preview[index].config, saved[index].config);
+        }
+        assert_eq!(saved[0].config["crawl"]["max_pages"], 50);
+        assert_eq!(saved[2].config["max_pages"], 50);
+        assert!(saved[4].config.get("max_pages").is_none());
+    }
+
+    #[test]
+    fn sampled_preview_does_not_hide_fetched_missing_evidence_or_failed_processing() {
+        use scrape_core::protocol::{CoverageTermination, ScanOutcome, SourceScanStats};
+        let mut scan = SourceScanStats {
+            source_id: "preview-source".into(),
+            limit: 10,
+            outcome: Some(ScanOutcome::Partial),
+            ..Default::default()
+        };
+        for termination in [
+            CoverageTermination::PageLimit,
+            CoverageTermination::RequestLimit,
+            CoverageTermination::TimeLimit,
+        ] {
+            scan.termination = termination;
+            assert_eq!(
+                preview_scan_summary(&scan),
+                PreviewScanSummary {
+                    sampled: true,
+                    error: None
+                }
+            );
+            scan.examined = 1;
+            scan.unresolved = 1;
+            let summary = preview_scan_summary(&scan);
+            assert!(summary.sampled);
+            assert!(summary
+                .error
+                .unwrap()
+                .contains("1 candidates need eligibility evidence"));
+            scan.examined = 0;
+            scan.unresolved = 0;
+        }
+        scan.termination = CoverageTermination::Exhausted;
+        scan.outcome = Some(ScanOutcome::Success);
+        assert_eq!(
+            preview_scan_summary(&scan),
+            PreviewScanSummary {
+                sampled: false,
+                error: None
+            }
+        );
+        scan.outcome = Some(ScanOutcome::Failed);
+        assert!(preview_scan_summary(&scan).error.is_some());
+        scan.outcome = None;
+        scan.examined = 1;
+        scan.unresolved = 1;
+        assert!(preview_scan_summary(&scan).error.is_some());
+    }
 
     #[tokio::test]
     async fn real_seed_service_context_retains_each_workflow_and_observed_ownership() {

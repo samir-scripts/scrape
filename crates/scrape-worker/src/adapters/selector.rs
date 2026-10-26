@@ -1,11 +1,15 @@
 use crate::client::{ClientError, HttpClient};
+use chrono::{DateTime, Utc};
 use scrape_core::enrich::{
     classify_clearance, classify_sponsorship, classify_work_auth, classify_workplace,
     extract_experience, location as loc_enrich, normalize_description_with_format,
     DescriptionFormat, Salary,
 };
 use scrape_core::locator::{FieldLocator, QueryEngine};
-use scrape_core::{RoleType, TriState, WorkerEvent, WorkerSource};
+use scrape_core::{
+    matching::MatchingEvidence, protocol::EnrichmentLimits, RoleType, TriState, WorkerEvent,
+    WorkerFilters, WorkerSource,
+};
 use scraper::Html;
 use url::Url;
 
@@ -14,17 +18,27 @@ pub async fn scrape_selector(
     source: &WorkerSource,
 ) -> Result<Vec<WorkerEvent>, ClientError> {
     let mut events = Vec::new();
-    scrape_selector_with(client, source, &mut |event| {
-        events.push(event);
-        true
-    })
+    scrape_selector_with(
+        client,
+        source,
+        &WorkerFilters::default(),
+        Utc::now(),
+        &EnrichmentLimits::default(),
+        &mut |event, _| {
+            events.push(event);
+            true
+        },
+    )
     .await?;
     Ok(events)
 }
 pub async fn scrape_selector_with(
     client: &HttpClient,
     source: &WorkerSource,
-    sink: &mut dyn FnMut(WorkerEvent) -> bool,
+    filters: &WorkerFilters,
+    started: DateTime<Utc>,
+    enrichment: &EnrichmentLimits,
+    sink: &mut dyn FnMut(WorkerEvent, Option<MatchingEvidence>) -> bool,
 ) -> Result<(), ClientError> {
     let browser = Some(std::sync::Arc::new(crate::browser::BrowserPool::new(2)));
     let mut session = super::selector_session::SelectorSession::new(
@@ -32,20 +46,16 @@ pub async fn scrape_selector_with(
         browser,
         source,
         &scrape_core::WorkerLimits::default(),
-        &scrape_core::protocol::EnrichmentLimits::default(),
+        enrichment,
         tokio::time::Instant::now()
             + std::time::Duration::from_secs(scrape_core::protocol::DEFAULT_WORKFLOW_DURATION_S),
-        &scrape_core::WorkerFilters::default(),
+        filters,
     )
     .await?;
-    let started = chrono::Utc::now();
     loop {
-        match session
-            .next(client, &scrape_core::WorkerFilters::default(), started)
-            .await?
-        {
+        match session.next(client, filters, started).await? {
             super::selector_session::SelectorStep::Event(event) => {
-                if !sink(event.0) {
+                if !sink(event.0, event.1) {
                     break;
                 }
             }
@@ -176,8 +186,12 @@ pub fn resolve_document_base(document: &Html, response_url: &Url) -> Url {
                         && resolved.host_str().is_some()
                         && resolved.username().is_empty()
                         && resolved.password().is_none()
-                        && resolved.host_str() == response_url.host_str()
-                        && resolved.port() == response_url.port()
+                        && HttpClient::crawl_scope(
+                            response_url,
+                            &resolved,
+                            HttpClient::crawl_path_prefix(response_url),
+                        )
+                        && !HttpClient::encoded_path_escape(trimmed)
                     {
                         resolved.set_fragment(None);
                         return resolved;
@@ -301,6 +315,11 @@ pub fn extract_page(
 }
 
 pub fn page_url(base: &Url, raw: &str) -> Result<Url, ClientError> {
+    if HttpClient::encoded_path_escape(raw) {
+        return Err(ClientError::Extraction(
+            "Encoded path separators or dot segments are not crawl destinations".into(),
+        ));
+    }
     let mut url = base.join(raw)?;
     if !scrape_core::branding::http_url(url.as_str()) {
         return Err(ClientError::Extraction(
@@ -448,7 +467,7 @@ fn extract_candidates(
             }
             continue;
         };
-        let job_url = match base_url.join(&clean_href) {
+        let job_url = match page_url(base_url, &clean_href) {
             Ok(mut u) if matches!(u.scheme(), "http" | "https") => {
                 u.set_fragment(None);
                 u.to_string()
@@ -577,6 +596,8 @@ pub(crate) fn extract_heuristic_candidates(
 
     let mut heuristic_found = false;
     let mut seen_urls = std::collections::HashSet::new();
+    let configured_date = FieldLocator::from_config(&source.config, "date", None)
+        .map_err(ClientError::Configuration)?;
 
     for anchor in document.select(&anchor_sel) {
         let Some(href) = anchor.value().attr("href") else {
@@ -597,11 +618,22 @@ pub(crate) fn extract_heuristic_candidates(
             || href_lower.contains("gh_jid=")
             || href_lower.contains("lever-");
 
-        if !is_job_link {
+        let credible_card = anchor
+            .ancestors()
+            .filter_map(scraper::ElementRef::wrap)
+            .take(4)
+            .any(|node| {
+                let class = node.value().attr("class").unwrap_or("");
+                matches!(node.value().name(), "article" | "li" | "tr")
+                    || class
+                        .split_whitespace()
+                        .any(|c| c == "posting" || c.contains("card") || c.contains("job-item"))
+            });
+        if !is_job_link && !credible_card {
             continue;
         }
 
-        let Ok(mut job_url) = base_url.join(href) else {
+        let Ok(mut job_url) = page_url(base_url, href) else {
             continue;
         };
         if !matches!(job_url.scheme(), "http" | "https") {
@@ -610,17 +642,16 @@ pub(crate) fn extract_heuristic_candidates(
         job_url.set_fragment(None);
         let job_url_str = job_url.to_string();
 
-        if !seen_urls.insert(job_url_str.clone()) {
-            continue;
-        }
         if !patterns.matches(&job_url_str) {
             continue;
         }
 
+        let heading = scraper::Selector::parse("h2, h3, h4, h5, [class*='job-title']").unwrap();
         let raw_title = anchor
-            .text()
-            .collect::<Vec<_>>()
-            .join(" ")
+            .select(&heading)
+            .next()
+            .map(|node| node.text().collect::<Vec<_>>().join(" "))
+            .unwrap_or_else(|| anchor.text().collect::<Vec<_>>().join(" "))
             .trim()
             .to_string();
         if raw_title.is_empty() || raw_title.len() < 3 || raw_title.len() > 120 {
@@ -648,6 +679,12 @@ pub(crate) fn extract_heuristic_candidates(
                 | "home"
                 | "privacy policy"
                 | "terms of service"
+        ) {
+            continue;
+        }
+        if !seen_urls.insert(
+            scrape_core::identity::normalized_detail_url(&job_url_str)
+                .unwrap_or_else(|_| job_url_str.clone()),
         ) {
             continue;
         }
@@ -706,15 +743,13 @@ pub(crate) fn extract_heuristic_candidates(
                     }
                 }
             }
-            if let Ok(date_sel) = scraper::Selector::parse("time[datetime]") {
-                if let Some(time_el) = card.select(&date_sel).next() {
-                    if let Some(raw) = time_el.value().attr("datetime") {
-                        if scrape_core::posting_date::posting_instant(raw, "UTC").is_some() {
-                            date_posted = Some(raw.to_string());
-                        }
-                    }
-                }
-            }
+            date_posted = if let Some(locator) = &configured_date {
+                locator
+                    .extract(document, Some(card), "date")
+                    .filter(|raw| scrape_core::posting_date::posting_instant(raw, "UTC").is_some())
+            } else {
+                publication_date(card)
+            };
         }
 
         heuristic_found = true;
@@ -738,7 +773,9 @@ pub(crate) fn extract_heuristic_candidates(
         }
     }
     if seen_urls.is_empty() {
-        if let Ok(h1_sel) = scraper::Selector::parse("h1, [class*='job-title']") {
+        if let Ok(h1_sel) = scraper::Selector::parse(
+            "h1, .posting-headline h2, [class*='job-title'], main h2, article h2",
+        ) {
             if let Some(h1) = document.select(&h1_sel).next() {
                 let h1_title = h1.text().collect::<Vec<_>>().join(" ").trim().to_string();
                 if h1_title.len() >= 3 && h1_title.len() <= 120 {
@@ -748,9 +785,18 @@ pub(crate) fn extract_heuristic_candidates(
                         || lower.contains("qualifications")
                         || lower.contains("requirements")
                         || lower.contains("experience")
-                        || lower.contains("about the role");
+                        || lower.contains("about the role")
+                        || scraper::Selector::parse(
+                            ".job-description, [itemprop='description'], [class*='job-content']",
+                        )
+                        .ok()
+                        .is_some_and(|selector| {
+                            document
+                                .select(&selector)
+                                .any(|node| node.text().collect::<String>().trim().len() >= 80)
+                        });
                     if has_job_cues && body_text.len() >= 150 {
-                        let self_url = base_url.to_string();
+                        let self_url = evidence_page_url.to_string();
                         let posting = SelectorCandidate::Posting(Box::new(SelectorPosting {
                             title: h1_title,
                             url: self_url.clone(),
@@ -785,6 +831,358 @@ pub(crate) struct UrlPatterns {
     include: Vec<regex::Regex>,
     exclude: Vec<regex::Regex>,
 }
+fn publication_date(root: scraper::ElementRef<'_>) -> Option<String> {
+    let selector = scraper::Selector::parse("time[datetime]").unwrap();
+    root.select(&selector).find_map(|time| {
+        let attributes = ["itemprop", "class", "id", "aria-label"]
+            .iter()
+            .filter_map(|key| time.value().attr(key))
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_ascii_lowercase();
+        let text = time.text().collect::<String>().to_ascii_lowercase();
+        let local_label = time
+            .parent()
+            .and_then(scraper::ElementRef::wrap)
+            .map(|node| node.text().collect::<String>().to_ascii_lowercase())
+            .unwrap_or_default();
+        if attributes.contains("modified")
+            || attributes.contains("updated")
+            || text.contains("updated")
+        {
+            return None;
+        }
+        let identified = attributes.contains("dateposted")
+            || attributes.contains("posted")
+            || attributes.contains("published")
+            || text.contains("posted")
+            || text.contains("published")
+            || (local_label.len() < 160
+                && (local_label.contains("posted") || local_label.contains("published")));
+        let raw = time.value().attr("datetime")?;
+        (identified && scrape_core::posting_date::posting_instant(raw, "UTC").is_some())
+            .then(|| raw.to_string())
+    })
+}
+
+/// Merge only evidence belonging to this destination, retaining listing provenance.
+pub(crate) fn hydrate_public_html_job(
+    job: &mut WorkerEvent,
+    html: &str,
+    actual_url: &Url,
+    source: &WorkerSource,
+) -> Result<(), ClientError> {
+    let WorkerEvent::Job { url, title, .. } = job else {
+        return Ok(());
+    };
+    let identity =
+        scrape_core::identity::normalized_detail_url(url).map_err(ClientError::Extraction)?;
+    let actual_identity = scrape_core::identity::normalized_detail_url(actual_url.as_str())
+        .map_err(ClientError::Extraction)?;
+    let mut structured = Vec::new();
+    super::jsonld::extract_detail_job_postings_with(
+        html,
+        actual_url.as_str(),
+        source,
+        &mut |event| {
+            if let WorkerEvent::Job { url, .. } = &event {
+                if scrape_core::identity::normalized_detail_url(url)
+                    .ok()
+                    .is_some_and(|key| key == identity || key == actual_identity)
+                {
+                    structured.push(event);
+                }
+            }
+            true
+        },
+    );
+    if structured.len() > 1 {
+        macro_rules! field {
+            ($event:expr, $field:ident) => {
+                match $event {
+                    WorkerEvent::Job { $field, .. } => $field,
+                    _ => unreachable!(),
+                }
+            };
+        }
+        macro_rules! option_conflict {
+            ($left:expr, $right:expr, $field:ident) => {
+                match (field!($left, $field), field!($right, $field)) {
+                    (Some(left), Some(right)) => left != right,
+                    _ => false,
+                }
+            };
+        }
+        macro_rules! classification_conflict {
+            ($left:expr, $right:expr, $field:ident, $unknown:expr) => {
+                match (field!($left, $field), field!($right, $field)) {
+                    (Some(left), Some(right)) => {
+                        left.value != $unknown
+                            && right.value != $unknown
+                            && left.value != right.value
+                    }
+                    _ => false,
+                }
+            };
+        }
+        let conflict = structured.iter().enumerate().any(|(index, left)| {
+            structured.iter().skip(index + 1).any(|right| {
+                let left_date = field!(left, date_posted)
+                    .as_deref()
+                    .and_then(|raw| scrape_core::posting_date::posting_instant(raw, "UTC"));
+                let right_date = field!(right, date_posted)
+                    .as_deref()
+                    .and_then(|raw| scrape_core::posting_date::posting_instant(raw, "UTC"));
+                (left_date.is_some() && right_date.is_some() && left_date != right_date)
+                    || option_conflict!(left, right, salary)
+                    || (*field!(left, location_data_complete)
+                        && *field!(right, location_data_complete)
+                        && field!(left, locations) != field!(right, locations))
+                    || (*field!(left, workplace_type) != scrape_core::WorkplaceType::Unknown
+                        && *field!(right, workplace_type) != scrape_core::WorkplaceType::Unknown
+                        && field!(left, workplace_type) != field!(right, workplace_type))
+                    || (*field!(left, role_type) != RoleType::Unknown
+                        && *field!(right, role_type) != RoleType::Unknown
+                        && field!(left, role_type) != field!(right, role_type))
+                    || classification_conflict!(left, right, sponsorship, TriState::Unknown)
+                    || classification_conflict!(left, right, clearance, TriState::Unknown)
+                    || classification_conflict!(
+                        left,
+                        right,
+                        work_auth,
+                        scrape_core::WorkAuthRequirement::Unknown
+                    )
+                    || (*field!(left, is_new_grad) != TriState::Unknown
+                        && *field!(right, is_new_grad) != TriState::Unknown
+                        && field!(left, is_new_grad) != field!(right, is_new_grad))
+                    || match (field!(left, experience), field!(right, experience)) {
+                        (Some(left), Some(right)) => {
+                            (left.min_years.is_some()
+                                && right.min_years.is_some()
+                                && left.min_years != right.min_years)
+                                || (left.max_years.is_some()
+                                    && right.max_years.is_some()
+                                    && left.max_years != right.max_years)
+                        }
+                        _ => false,
+                    }
+            })
+        });
+        if conflict {
+            let message =
+                format!("Conflicting JobPosting eligibility evidence for {url} on {actual_url}");
+            if let WorkerEvent::Job {
+                date_posted,
+                salary,
+                locations,
+                location,
+                role_type,
+                location_data_complete,
+                workplace_type,
+                sponsorship,
+                work_auth,
+                clearance,
+                experience,
+                is_new_grad,
+                ..
+            } = job
+            {
+                *date_posted = None;
+                *salary = None;
+                locations.clear();
+                *location_data_complete = false;
+                location.clear();
+                *role_type = RoleType::Unknown;
+                *workplace_type = scrape_core::WorkplaceType::Unknown;
+                *sponsorship = None;
+                *work_auth = None;
+                *clearance = None;
+                *experience = None;
+                *is_new_grad = TriState::Unknown;
+            }
+            return Err(ClientError::Extraction(message));
+        }
+    }
+    let document = Html::parse_document(html);
+    let text_at = |selector: &str| {
+        scraper::Selector::parse(selector)
+            .ok()
+            .and_then(|selector| {
+                document
+                    .select(&selector)
+                    .next()
+                    .map(|node| node.text().collect::<Vec<_>>().join(" ").trim().to_string())
+            })
+    };
+    let description = [
+        "[class*='description']",
+        "[class*='job-content']",
+        "main",
+        "article",
+        "[role='main']",
+        "body",
+    ]
+    .iter()
+    .find_map(|selector| {
+        scraper::Selector::parse(selector)
+            .ok()
+            .and_then(|selector| {
+                document
+                    .select(&selector)
+                    .find(|node| node.text().collect::<String>().trim().len() >= 80)
+                    .map(|node| node.html())
+            })
+    });
+    let (config, listing_date) = if source.kind == scrape_core::SourceKind::Selector {
+        let cfg = scrape_core::static_source::StaticSourceConfig::parse(
+            &source.config,
+            &scrape_core::WorkerLimits::default(),
+        )
+        .map_err(ClientError::Configuration)?;
+        let date = FieldLocator::from_config(&source.config, "date", None)
+            .map_err(ClientError::Configuration)?;
+        (Some(cfg), date)
+    } else {
+        (None, None)
+    };
+    let configured_date = config
+        .as_ref()
+        .and_then(|c| c.detail_fields.get("date"))
+        .or(listing_date.as_ref());
+    let date_posted = if let Some(locator) = configured_date {
+        locator
+            .extract(&document, None, "date")
+            .filter(|raw| scrape_core::posting_date::posting_instant(raw, "UTC").is_some())
+    } else {
+        publication_date(document.root_element())
+    };
+    let dom = SelectorPosting {
+        title: title.clone(),
+        url: url.clone(),
+        external_id: url.clone(),
+        location: text_at("[class*='location'], [data-testid*='location']").unwrap_or_default(),
+        salary_text: text_at("[class*='salary'], [class*='compensation']"),
+        description_source: description,
+        description_format: Some(DescriptionFormat::Html),
+        date_posted,
+        company_logo: None,
+        detail_url: None,
+    }
+    .event(source);
+    for record in structured.into_iter().chain(std::iter::once(dom)) {
+        merge_normalized_job(job, record);
+    }
+    Ok(())
+}
+
+pub(crate) fn merge_normalized_job(target: &mut WorkerEvent, incoming: WorkerEvent) {
+    if let (
+        WorkerEvent::Job {
+            date_posted,
+            salary,
+            locations,
+            location_data_complete,
+            location,
+            workplace_type,
+            role_type,
+            sponsorship,
+            work_auth,
+            clearance,
+            experience,
+            is_new_grad,
+            description_text,
+            description,
+            description_source,
+            description_format,
+            ..
+        },
+        WorkerEvent::Job {
+            date_posted: next_date,
+            salary: next_salary,
+            locations: next_locations,
+            location_data_complete: next_complete,
+            location: next_location,
+            workplace_type: next_workplace,
+            role_type: next_role,
+            sponsorship: next_sponsorship,
+            work_auth: next_auth,
+            clearance: next_clearance,
+            experience: next_experience,
+            is_new_grad: next_grad,
+            description_text: next_text,
+            description: next_description,
+            description_source: next_source,
+            description_format: next_format,
+            ..
+        },
+    ) = (target, incoming)
+    {
+        if date_posted.is_none() {
+            *date_posted = next_date;
+        }
+        if salary.is_none() {
+            *salary = next_salary;
+        }
+        let remote_requirements = next_locations
+            .iter()
+            .any(|item| item.raw.starts_with("applicantLocationRequirements:"));
+        let stronger_remote = remote_requirements
+            && !locations
+                .iter()
+                .any(|item| item.raw.starts_with("applicantLocationRequirements:"));
+        if !*location_data_complete || stronger_remote {
+            *locations = next_locations;
+            *location_data_complete = next_complete;
+        }
+        if location.is_empty() {
+            *location = next_location;
+        }
+        if *workplace_type == scrape_core::WorkplaceType::Unknown || stronger_remote {
+            *workplace_type = next_workplace;
+        }
+        if *role_type == RoleType::Unknown {
+            *role_type = next_role;
+        }
+        if sponsorship
+            .as_ref()
+            .is_none_or(|item| item.value == TriState::Unknown)
+        {
+            *sponsorship = next_sponsorship;
+        }
+        if work_auth
+            .as_ref()
+            .is_none_or(|item| item.value == scrape_core::WorkAuthRequirement::Unknown)
+        {
+            *work_auth = next_auth;
+        }
+        if clearance
+            .as_ref()
+            .is_none_or(|item| item.value == TriState::Unknown)
+        {
+            *clearance = next_clearance;
+        }
+        if experience
+            .as_ref()
+            .is_none_or(|item| item.min_years.is_none() && item.max_years.is_none())
+        {
+            *experience = next_experience;
+        }
+        if *is_new_grad == TriState::Unknown {
+            *is_new_grad = next_grad;
+        }
+        if description_text.is_none() {
+            *description_text = next_text;
+        }
+        if description.is_none() {
+            *description = next_description;
+        }
+        if description_source.is_none() {
+            *description_source = next_source;
+            *description_format = next_format;
+        }
+    }
+}
+
 impl UrlPatterns {
     pub(crate) fn parse(config: &serde_json::Value) -> Result<Self, ClientError> {
         let mut include = Vec::new();

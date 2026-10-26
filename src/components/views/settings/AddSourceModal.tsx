@@ -153,9 +153,9 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
           <section aria-label="Workflow readiness" aria-live="polite"
             className={`grid gap-2 border-l-4 p-4 bg-[var(--color-surface-raised)] ${model.canSave ? "border-[var(--color-success)]" : "border-[var(--color-warning)]"}`}>
             <h3 className={`font-semibold ${model.canSave ? "text-[var(--color-success)]" : "text-[var(--color-warning)]"}`}>
-              {model.operation === "preview" ? "Preview in progress…" : model.canSave ? `Preview complete — ${preview!.matched - preview!.blocked} eligible postings found` : preview?.errors.length ? "Preview needs attention" : "Preview required before saving"}
+              {model.operation === "preview" ? "Preview in progress…" : model.canSave ? preview!.sampled ? "Preview sampled — coverage incomplete" : `Preview complete — ${preview!.matched - preview!.blocked} eligible postings found` : preview?.errors.length ? "Preview needs attention" : "Preview required before saving"}
             </h3>
-            <p>{model.canSave ? "Configuration is ready to save." : isDemoMode() ? "Example preview only; no live source is contacted." : "Preview checks the current workflow and does not save jobs."}</p>
+            <p>{model.canSave ? preview!.sampled ? "Configuration is ready to save with coverage warnings; Preview did not examine all available postings." : "Configuration is ready to save." : isDemoMode() ? "Example preview only; no live source is contacted." : "Preview checks the current workflow and does not save jobs."}</p>
             {!model.canSave && <div><Button variant="inverted" disabled={busy || locked || yaml != null || isRecordedMode()} onClick={() => void model.runPreview()}>Run Preview</Button></div>}
             {hasScripts && <>
               <p>Custom scripts require local review and trust. Save disabled, then reopen to review each script; trust does not enable the workflow.</p>

@@ -59,6 +59,7 @@ impl CoordinatorSession {
         dry_run: bool,
         workflow_cap: u32,
         workflow_deadline: Instant,
+        started: DateTime<Utc>,
     ) -> Result<Self, ClientError> {
         if source.config.get("crawl").is_some() {
             if source.kind != SourceKind::Selector {
@@ -285,7 +286,10 @@ impl CoordinatorSession {
                 session.search_session = Some(crate::adapters::search::SearchSession::new(
                     &session.source,
                     extraction_limits,
+                    &enrichment_limits,
                     workflow_deadline,
+                    &session.filters,
+                    started,
                 )?);
             }
         }
@@ -877,6 +881,7 @@ impl SourceCoordinator {
                         self.dry_run,
                         self.max_jobs_per_run,
                         workflow_deadline,
+                        self.started,
                     ),
                 )
                 .await
@@ -1056,8 +1061,6 @@ impl SourceCoordinator {
                                             // Duplicate: continue candidate traversal to find a unique job!
                                             continue;
                                         }
-                                        workflow_seen_identities.insert(identity.clone());
-                                        workflow_seen_urls.insert(normalized_url);
 
                                         // Matching assessment
                                         let matcher = MatchingEvaluator::new(&session.filters)
@@ -1097,6 +1100,8 @@ impl SourceCoordinator {
                                             continue;
                                         }
 
+                                        workflow_seen_identities.insert(identity.clone());
+                                        workflow_seen_urls.insert(normalized_url);
                                         session.stats.matched += 1;
 
                                         if self.blocked.contains(&identity)

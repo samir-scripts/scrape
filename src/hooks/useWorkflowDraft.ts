@@ -29,7 +29,7 @@ const appendCompanyBoards = (sources: WorkflowSourceSpec[], companyIds: readonly
   return next;
 };
 const newDraft = (): WorkflowSpec => ({
-  version: 9, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true },
+  version: 10, max_jobs_per_run: INGESTION_LIMITS.default, metadata: { name: "", enabled: true },
   sources: [
     { id: "source-1", label: "Cross-Company Search", enabled: true, extractor: { kind: "search", url: "themuse" } },
     { id: "source-2", label: "Arbeitnow — Germany-focused listings", enabled: true, extractor: { kind: "search", url: "arbeitnow" } },

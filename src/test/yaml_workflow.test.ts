@@ -260,7 +260,7 @@ retention:
     };
 
     const spec = sourceToWorkflowSpec(source);
-    expect(spec.version).toBe(9);
+    expect(spec.version).toBe(10);
     expect(spec.metadata.name).toBe("Ramp");
     expect(spec.sources[0].extractor.kind).toBe("ashby");
     expect(spec.sources[0].extractor.url).toBe("https://jobs.ashbyhq.com/ramp");

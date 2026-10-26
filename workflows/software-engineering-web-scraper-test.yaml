@@ -1,6 +1,6 @@
 # Development/test-only workflow for exercising bounded public-HTML crawling and automatic page scraping.
 # This intentionally ignores robots.txt; do not copy that setting into ordinary user workflows.
-version: 9
+version: 10
 max_jobs_per_run: 40
 metadata:
   name: Software Engineering & Related — US · Past 24 Hours · Crawler Test
@@ -80,7 +80,9 @@ filters:
       - iOS Engineer
       - Android Engineer
       - Web Developer
-    companies: []
+    companies:
+      - Palantir
+      - SEP
     keywords: null
     posting_date:
       preset: past_24h

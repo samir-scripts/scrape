@@ -46,8 +46,6 @@ pub struct MatchingEvidence {
     pub known: Vec<RejectionReason>,
     /// A failed/exhausted opportunity can use explicitly permitted unknown values.
     pub opportunity_exhausted: bool,
-    /// Crawled public HTML pages allow majority-requirement acceptance after detail hydration.
-    pub heuristic_crawl: bool,
 }
 impl MatchingEvidence {
     pub fn complete() -> Self {
@@ -63,7 +61,6 @@ impl MatchingEvidence {
             compensation: true,
             known: vec![RejectionReason::Workplace, RejectionReason::Geography],
             opportunity_exhausted: true,
-            heuristic_crawl: false,
         }
     }
     pub fn from_event(event: &WorkerEvent, opportunity_exhausted: bool) -> Self {
@@ -138,7 +135,6 @@ impl MatchingEvidence {
             posting_date: date_posted.is_some(),
             compensation: salary.is_some(),
             opportunity_exhausted,
-            heuristic_crawl: false,
         }
     }
     fn knows(&self, reason: RejectionReason) -> bool {
@@ -285,224 +281,111 @@ impl<'a> MatchingEvaluator<'a> {
         assessment
             .unresolved
             .retain(|reason| !assessment.rejected.contains(reason));
-        if evidence.heuristic_crawl && evidence.opportunity_exhausted {
-            self.apply_crawl_majority(&context, evidence, &mut assessment);
-        }
         assessment
     }
-    fn apply_crawl_majority(
+    /// Descending, stable discovery ordering; acceptance still requires every active group.
+    pub fn discovery_priority(
         &self,
-        context: &JobFilterContext,
+        event: &WorkerEvent,
+        started: chrono::DateTime<chrono::Utc>,
         evidence: &MatchingEvidence,
-        assessment: &mut MatchingAssessment,
-    ) {
-        if assessment
-            .rejected
-            .iter()
-            .chain(&assessment.unresolved)
-            .any(|reason| {
-                matches!(
-                    reason,
-                    RejectionReason::PostingDate | RejectionReason::Geography
-                )
-            })
-        {
-            return;
-        }
-        if assessment.rejected.iter().any(|reason| {
-            matches!(
-                reason,
-                RejectionReason::InvalidCandidate
-                    | RejectionReason::KeywordExclusion
-                    | RejectionReason::LegacyExclusion
-                    | RejectionReason::Company
-                    | RejectionReason::Query
-                    | RejectionReason::Policy
-            )
-        }) {
-            return;
-        }
-        let rules = self.filters.matching.as_ref();
-        let has_target_roles = rules.is_some_and(|r| !r.target_roles.is_empty());
-        let target_role_matched =
-            rules.is_some_and(|r| PostingRules::contains_choice(context.title, &r.target_roles));
-        if has_target_roles && !target_role_matched {
-            return;
-        }
-        if !self.filters.include_keywords.is_empty()
-            && (assessment
-                .rejected
-                .contains(&RejectionReason::LegacyKeywords)
-                || assessment
-                    .unresolved
-                    .contains(&RejectionReason::LegacyKeywords))
-        {
-            return;
-        }
-        if !has_target_roles && self.filters.include_keywords.is_empty() {
-            if let Some(kw) = rules.and_then(|r| r.keywords.as_ref()) {
-                if !kw.any.is_empty()
-                    && (assessment.rejected.contains(&RejectionReason::KeywordAny)
-                        || assessment.unresolved.contains(&RejectionReason::KeywordAny))
-                {
-                    return;
-                }
-                if kw.any.is_empty() && !kw.all.is_empty() {
-                    let fields = kw.fields();
-                    let any_all_matched = kw.all.iter().any(|word| {
-                        fields.iter().any(|field| {
-                            evidence.fields.contains(field)
-                                && context
-                                    .get_field_str(*field)
-                                    .to_ascii_lowercase()
-                                    .contains(&word.to_ascii_lowercase())
-                        })
-                    });
-                    if !any_all_matched {
-                        return;
-                    }
-                }
+    ) -> (u8, u8, i64, u16, u16) {
+        use RejectionReason::*;
+        let assessment = self.assess(event, started, evidence);
+        let compatibility = |reasons: &[RejectionReason]| {
+            if reasons.iter().any(|r| assessment.rejected.contains(r)) {
+                0
+            } else if reasons.iter().any(|r| assessment.unresolved.contains(r)) {
+                1
+            } else {
+                2
             }
-        }
-
-        let mut total_active = 0usize;
-        let mut satisfied = 0usize;
-        fn check_status(
-            reason: RejectionReason,
-            assessment: &MatchingAssessment,
-            total_active: &mut usize,
-            satisfied: &mut usize,
-        ) {
-            *total_active += 1;
-            if !assessment.rejected.contains(&reason) && !assessment.unresolved.contains(&reason) {
-                *satisfied += 1;
-            }
-        }
-
-        if !self.filters.include_keywords.is_empty() {
-            check_status(
-                RejectionReason::LegacyKeywords,
-                assessment,
-                &mut total_active,
-                &mut satisfied,
-            );
-        }
-        if !self.filters.locations.is_empty() {
-            check_status(
-                RejectionReason::LegacyLocation,
-                assessment,
-                &mut total_active,
-                &mut satisfied,
-            );
-        }
-        if !self.filters.role_types.is_empty() {
-            check_status(
-                RejectionReason::LegacyRoleType,
-                assessment,
-                &mut total_active,
-                &mut satisfied,
-            );
+        };
+        let mut active = [None; RejectionReason::InvalidCandidate as usize + 1];
+        for (reason, _) in &self.predicates {
+            active[*reason as usize] = Some(*reason);
         }
         if self.filters.compensation.is_some() {
-            check_status(
-                RejectionReason::Compensation,
-                assessment,
-                &mut total_active,
-                &mut satisfied,
-            );
+            active[Compensation as usize] = Some(Compensation);
         }
+        let rules = self.filters.matching.as_ref();
         if let Some(rules) = rules {
-            if !rules.target_roles.is_empty() {
-                total_active += 1;
-                if target_role_matched {
-                    satisfied += 1;
-                }
-            }
-            if !rules.role_types.is_empty() {
-                total_active += 1;
-                if rules.role_types.contains(&context.role_type) {
-                    satisfied += 1;
-                }
-            }
-            if let Some(kw) = &rules.keywords {
-                if !kw.any.is_empty() {
-                    check_status(
-                        RejectionReason::KeywordAny,
-                        assessment,
-                        &mut total_active,
-                        &mut satisfied,
-                    );
-                }
-                let fields = kw.fields();
-                for word in &kw.all {
-                    total_active += 1;
-                    if fields.iter().any(|field| {
-                        evidence.fields.contains(field)
-                            && context
-                                .get_field_str(*field)
-                                .to_ascii_lowercase()
-                                .contains(&word.to_ascii_lowercase())
-                    }) {
-                        satisfied += 1;
-                    }
-                }
-            }
-            for (reason, active) in [
-                (RejectionReason::PostingDate, rules.posting_date.is_some()),
+            for (reason, enabled) in [
                 (
-                    RejectionReason::Compensation,
-                    rules.compensation.is_some() && self.filters.compensation.is_none(),
+                    RoleType,
+                    !rules.target_roles.is_empty() || !rules.role_types.is_empty(),
                 ),
-                (RejectionReason::Company, !rules.companies.is_empty()),
-                (RejectionReason::Workplace, !rules.workplaces.is_empty()),
+                (Company, !rules.companies.is_empty()),
+                (PostingDate, rules.posting_date.is_some()),
+                (Compensation, rules.compensation.is_some()),
+                (Workplace, !rules.workplaces.is_empty()),
                 (
-                    RejectionReason::Experience,
+                    Experience,
                     rules.experience_min.is_some() || rules.experience_max.is_some(),
                 ),
                 (
-                    RejectionReason::NewGrad,
+                    NewGrad,
                     matches!(rules.new_grad.as_deref(), Some("only" | "exclude")),
                 ),
-                (RejectionReason::Sponsorship, !rules.sponsorship.is_empty()),
+                (Sponsorship, !rules.sponsorship.is_empty()),
+                (WorkAuthorization, !rules.work_auth.is_empty()),
+                (Clearance, !rules.clearance.is_empty()),
                 (
-                    RejectionReason::WorkAuthorization,
-                    !rules.work_auth.is_empty(),
-                ),
-                (RejectionReason::Clearance, !rules.clearance.is_empty()),
-                (
-                    RejectionReason::Geography,
+                    Geography,
                     !rules.countries.is_empty()
                         || !rules.regions.is_empty()
                         || !rules.cities.is_empty(),
                 ),
             ] {
-                if active {
-                    check_status(reason, assessment, &mut total_active, &mut satisfied);
+                if enabled {
+                    active[reason as usize] = Some(reason);
+                }
+            }
+            if let Some(keywords) = &rules.keywords {
+                for (reason, enabled) in [
+                    (KeywordAny, !keywords.any.is_empty()),
+                    (KeywordAll, !keywords.all.is_empty()),
+                    (KeywordExclusion, !keywords.exclude.is_empty()),
+                ] {
+                    if enabled {
+                        active[reason as usize] = Some(reason);
+                    }
                 }
             }
         }
-
-        let majority_met = total_active > 0
-            && (satisfied * 2 > total_active
-                || (satisfied * 2 >= total_active && assessment.rejected.is_empty()));
-        if majority_met {
-            assessment.unresolved.clear();
-            assessment.rejected.retain(|reason| {
-                !matches!(
-                    reason,
-                    RejectionReason::KeywordAll
-                        | RejectionReason::Compensation
-                        | RejectionReason::Workplace
-                        | RejectionReason::Experience
-                        | RejectionReason::NewGrad
-                        | RejectionReason::Sponsorship
-                        | RejectionReason::WorkAuthorization
-                        | RejectionReason::Clearance
-                        | RejectionReason::RoleType
-                        | RejectionReason::LegacyRoleType
-                )
-            });
+        let date_rule = rules.and_then(|r| r.posting_date.as_ref());
+        let publication = match (date_rule, event) {
+            (
+                Some(rule),
+                WorkerEvent::Job {
+                    date_posted: Some(date),
+                    ..
+                },
+            ) => crate::posting_date::posting_instant(date, &rule.timezone)
+                .map_or(i64::MIN, |date| date.timestamp_millis()),
+            (Some(_), _) => i64::MIN,
+            (None, _) => 0,
+        };
+        let mut role_keywords = 0;
+        let mut other = 0;
+        for reason in active.into_iter().flatten() {
+            if compatibility(&[reason]) != 2 {
+                continue;
+            }
+            match reason {
+                Geography | LegacyLocation | PostingDate => {}
+                RoleType | LegacyRoleType | KeywordAny | KeywordAll | KeywordExclusion
+                | LegacyKeywords | LegacyExclusion => role_keywords += 1,
+                _ => other += 1,
+            }
         }
+        (
+            compatibility(&[Geography, LegacyLocation]),
+            compatibility(&[PostingDate]),
+            publication,
+            role_keywords,
+            other,
+        )
     }
     pub fn matches_at(&self, event: &WorkerEvent, started: chrono::DateTime<chrono::Utc>) -> bool {
         self.rejection_reasons(event, started).is_empty()

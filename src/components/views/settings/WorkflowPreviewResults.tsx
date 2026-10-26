@@ -4,6 +4,18 @@ import type { WorkflowPreview } from "../../../bindings/WorkflowPreview";
 import { openPostingUrl } from "../../../lib/postingUrl";
 import { CompanyLogo } from "../../ui/CompanyLogo";
 export function WorkflowPreviewResults({ preview, draft, setError }: { preview: WorkflowPreview | null; draft: WorkflowSpec; setError: (message: string) => void }) {
+  const unresolved = preview?.sources?.reduce((count, source) => count + source.unresolved, 0) ?? 0;
+  const emptyExplanation = !preview ? "" : preview.errors.length
+    ? `Preview could not establish a usable result: ${preview.errors.join(" ")}`
+    : unresolved > 0
+      ? `${unresolved} examined candidates still need required eligibility evidence. Resolve the missing evidence before saving.`
+      : preview.matched > 0 && preview.blocked >= preview.matched
+        ? "All eligible postings were blocked. No unblocked eligible postings remain."
+        : preview.fetched > 0
+          ? preview.rejected > 0
+            ? `${preview.rejected} examined candidates did not satisfy the configured criteria. Review the rejection reasons in Preview breakdown.`
+            : "No examined candidates produced an unblocked eligible posting. Review Preview breakdown for invalid or incomplete observations."
+          : "No posting candidates were extracted from the visited pages. This does not establish that no jobs exist.";
   return <>{preview ? (
     <section
       aria-label="Preview results"
@@ -12,7 +24,7 @@ export function WorkflowPreviewResults({ preview, draft, setError }: { preview: 
       <h3 className="text-base font-bold">
         {preview.matched - preview.blocked} eligible matches
       </h3>
-      <details className="border border-[var(--color-border)] p-2 bg-[var(--color-surface)]">
+      <details open={!preview.jobs.length || preview.sampled || preview.errors.length > 0} className="border border-[var(--color-border)] p-2 bg-[var(--color-surface)]">
         <summary className="cursor-pointer min-h-8 font-semibold text-xs uppercase">
           Preview breakdown
         </summary>
@@ -37,14 +49,13 @@ export function WorkflowPreviewResults({ preview, draft, setError }: { preview: 
       ))}
       {!preview.jobs.length && (
         <p className="text-xs text-[var(--color-text-muted)] p-3 border border-[var(--color-border)] bg-[var(--color-surface)]">
-          No eligible postings. The source may be empty, rules may
-          exclude all postings, or postings may be blocked. You may
-          save a successful preview with zero matches.
+          {emptyExplanation}
+          {!preview.errors.length && unresolved === 0 && " A preview with zero matches can be saved."}
         </p>
       )}
       {preview.sampled && (
         <p className="text-xs text-[var(--color-text-muted)]">
-          Preview stopped at its page, time, request, or result limit. Counts cover examined postings only; more jobs may exist.
+          Preview stopped at its page, time, request, or result limit. Coverage is incomplete, so this is not an exhaustive result. Counts cover examined postings only; more jobs may exist.
           Preview-only limits do not change saved source limits.
         </p>
       )}

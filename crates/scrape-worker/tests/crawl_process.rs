@@ -136,8 +136,20 @@ fn run(sources: Vec<Value>, cap: u32) -> Vec<WorkerEvent> {
     run_with_request_timeout(sources, cap, 3)
 }
 fn run_with_filters(sources: Vec<Value>, cap: u32, filters: Value) -> Vec<WorkerEvent> {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
-        .arg("--stdin")
+    run_with_replay(sources, cap, filters, None)
+}
+fn run_with_replay(
+    sources: Vec<Value>,
+    cap: u32,
+    filters: Value,
+    replay: Option<&str>,
+) -> Vec<WorkerEvent> {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_scrape-worker"));
+    command.arg("--stdin");
+    if let Some(origin) = replay {
+        command.args(["--replay-origin", origin]);
+    }
+    let mut child = command
         .env_remove("SCRAPE_CDP_WS_URL")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -184,6 +196,18 @@ fn run_with_limits(
     request_timeout_s: u64,
     max_source_duration_s: Option<u64>,
 ) -> Vec<WorkerEvent> {
+    let mut limits = json!({"per_host_delay_ms":0,"request_timeout_s":request_timeout_s});
+    if let Some(duration) = max_source_duration_s {
+        limits["max_source_duration_s"] = json!(duration);
+    }
+    run_with_custom_limits(sources, cap, json!({}), limits)
+}
+fn run_with_custom_limits(
+    sources: Vec<Value>,
+    cap: u32,
+    filters: Value,
+    limits: Value,
+) -> Vec<WorkerEvent> {
     let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
         .arg("--stdin")
         .env_remove("SCRAPE_CDP_WS_URL")
@@ -192,11 +216,7 @@ fn run_with_limits(
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    let mut limits = json!({"per_host_delay_ms":0,"request_timeout_s":request_timeout_s});
-    if let Some(duration) = max_source_duration_s {
-        limits["max_source_duration_s"] = json!(duration);
-    }
-    let config = json!({"version":PROTOCOL_VERSION,"sources":sources,"max_jobs_per_run":cap,"run_started_at":"2026-10-16T00:00:00Z","limits":limits});
+    let config = json!({"version":PROTOCOL_VERSION,"sources":sources,"filters":filters,"max_jobs_per_run":cap,"run_started_at":"2026-10-16T00:00:00Z","limits":limits});
     child
         .stdin
         .take()
@@ -1029,5 +1049,480 @@ fn role_and_keyword_guided_crawl_prioritizes_relevant_links_and_scrapes_majority
     assert!(
         paths.contains(&"/jobs/software-engineer".to_string()),
         "The prioritized software engineering detail page must have been visited; paths={paths:?}"
+    );
+}
+
+#[test]
+fn opaque_posting_card_with_lever_heading_is_extracted() {
+    let server = Server::new(|path| {
+        match path {
+        "/careers" => Response::html(
+            "<div class='posting'><a class='posting-title' href='/employer/7bc9'><h5>Software Engineer</h5></a><span class='location'>Austin, TX</span></div>",
+        ),
+        "/employer/7bc9" => Response::html(
+            "<main><div class='posting-headline'><h2>Software Engineer</h2></div><div class='location'>Austin, TX</div><time itemprop='datePosted' datetime='2026-10-15T12:00:00Z'>Posted October 15</time><div class='job-description'>Responsibilities include building reliable distributed software systems and developing engineering infrastructure.</div></main>",
+        ),
+        other => panic!("unexpected request {other}"),
+    }
+    });
+    let events = run_with_filters(
+        vec![source(&server, "opaque", "/careers", regression_crawl())],
+        10,
+        regression_filters(),
+    );
+    assert_eq!(jobs(&events).len(), 1, "{events:?}");
+    assert_eq!(server.paths(), ["/careers", "/employer/7bc9"]);
+}
+
+#[test]
+fn apply_anchor_does_not_consume_later_meaningful_title() {
+    let server = Server::new(|path| {
+        match path {
+        "/careers" => Response::html("<article><a href='/jobs/123'>Apply</a><a href='/jobs/123'>Software Engineer</a></article>"),
+        "/jobs/123" => Response::html(plain_html_detail("Software Engineer", Some("Austin, TX"), Some("2026-10-15T12:00:00Z"))),
+        other => panic!("unexpected request {other}"),
+    }
+    });
+    let events = run_with_filters(
+        vec![source(&server, "apply", "/careers", regression_crawl())],
+        10,
+        regression_filters(),
+    );
+    assert_eq!(jobs(&events).len(), 1, "{events:?}");
+    assert_eq!(server.paths(), ["/careers", "/jobs/123"]);
+}
+
+#[test]
+fn detail_structured_date_and_geography_are_preserved() {
+    let server = Server::new(|path| match path {
+        "/careers" => {
+            Response::html("<article><a href='/jobs/123'>Software Engineer</a></article>")
+        }
+        "/jobs/123" => Response::html(
+            r#"<main><h1>Software Engineer</h1><script type="application/ld+json">{"@type":"JobPosting","title":"Software Engineer","url":"/jobs/123","datePosted":"2026-10-15T12:00:00Z","hiringOrganization":{"name":"Fixture Employer"},"jobLocation":{"@type":"Place","address":{"@type":"PostalAddress","addressLocality":"Austin","addressRegion":"TX","addressCountry":"US"}},"description":"Build reliable distributed software systems."}</script></main>"#,
+        ),
+        other => panic!("unexpected request {other}"),
+    });
+    let events = run_with_filters(
+        vec![source(
+            &server,
+            "structured",
+            "/careers",
+            regression_crawl(),
+        )],
+        10,
+        regression_filters(),
+    );
+    assert_eq!(jobs(&events).len(), 1, "{events:?}");
+    assert_eq!(server.paths(), ["/careers", "/jobs/123"]);
+}
+
+fn regression_crawl() -> Value {
+    json!({"crawl":{"max_pages":6,"max_depth":2,"extraction":"public_html"},"ignore_robots":true,"per_host_delay_ms":0,"jitter_ms":0})
+}
+
+fn regression_filters() -> Value {
+    json!({"matching":{"target_roles":["Software Engineer"],"countries":["US"],"location_include_unknown":false,"posting_date":{"preset":"past_24h","timezone":"UTC","include_unknown":false}}})
+}
+
+#[test]
+fn structured_detail_requires_original_date_and_same_job_geography() {
+    for (name, evidence, expected) in [
+        (
+            "single-no-url",
+            json!({"datePosted":"2026-10-15T12:00:00Z","jobLocation":{"address":{"addressCountry":"US"}}}),
+            1,
+        ),
+        (
+            "old",
+            json!({"datePosted":"2026-10-14T12:00:00Z","jobLocation":{"address":{"addressCountry":"US"}}}),
+            0,
+        ),
+        (
+            "missing-date",
+            json!({"jobLocation":{"address":{"addressCountry":"US"}}}),
+            0,
+        ),
+        (
+            "wrong-country",
+            json!({"datePosted":"2026-10-15T12:00:00Z","jobLocation":{"address":{"addressCountry":"CA"}}}),
+            0,
+        ),
+        (
+            "updated-only",
+            json!({"dateModified":"2026-10-15T12:00:00Z","jobLocation":{"address":{"addressCountry":"US"}}}),
+            0,
+        ),
+    ] {
+        let mut record = evidence;
+        record["@type"] = json!("JobPosting");
+        record["title"] = json!("Software Engineer");
+        record["description"] = json!("Responsibilities include building reliable distributed software services and maintaining production engineering infrastructure.");
+        let detail = format!("<main><h1>Software Engineer</h1><script type='application/ld+json'>{record}</script><time datetime='2026-10-15T12:00:00Z'>Updated</time></main>");
+        let server = Server::new(move |path| match path {
+            "/careers" => {
+                Response::html("<article><a href='/jobs/123'>Software Engineer</a></article>")
+            }
+            "/jobs/123" => Response::html(detail.clone()),
+            other => panic!("unexpected request {other}"),
+        });
+        let events = run_with_filters(
+            vec![source(&server, name, "/careers", regression_crawl())],
+            10,
+            regression_filters(),
+        );
+        assert_eq!(jobs(&events).len(), expected, "{name}: {events:?}");
+        assert_eq!(server.paths(), ["/careers", "/jobs/123"], "{name}");
+    }
+}
+
+#[test]
+fn unrelated_or_conflicting_structured_posting_cannot_repair_target() {
+    for conflicting in [false, true] {
+        let other_url = if conflicting {
+            "/jobs/123"
+        } else {
+            "/jobs/456"
+        };
+        let target_date = if conflicting {
+            r#","datePosted":"2026-10-14T12:00:00Z""#
+        } else {
+            ""
+        };
+        let detail = format!(
+            r#"<main><h1>Software Engineer</h1><script type="application/ld+json">[
+            {{"@type":"JobPosting","title":"Software Engineer","url":"/jobs/123","description":"Responsibilities include maintaining reliable distributed software systems and engineering infrastructure."{target_date}}},
+            {{"@type":"JobPosting","title":"Software Engineer","url":"{other_url}","datePosted":"2026-10-15T12:00:00Z","jobLocation":{{"address":{{"addressCountry":"US"}}}}}}
+        ]</script></main>"#
+        );
+        let server = Server::new(move |path| match path {
+            "/careers" => {
+                Response::html("<article><a href='/jobs/123'>Software Engineer</a></article>")
+            }
+            "/jobs/123" => Response::html(detail.clone()),
+            other => panic!("unexpected request {other}"),
+        });
+        let events = run_with_filters(
+            vec![source(&server, "unrelated", "/careers", regression_crawl())],
+            10,
+            regression_filters(),
+        );
+        assert!(jobs(&events).is_empty(), "{events:?}");
+        assert_eq!(stats(&events)[0].unresolved, 1, "{events:?}");
+        assert_eq!(server.paths(), ["/careers", "/jobs/123"]);
+    }
+}
+
+#[test]
+fn self_contained_detail_uses_current_html_without_refetch_or_warning() {
+    let server = Server::new(|path| match path {
+        "/jobs/123" => Response::html(plain_html_detail(
+            "Software Engineer",
+            Some("Austin, TX"),
+            Some("2026-10-15T12:00:00Z"),
+        )),
+        other => panic!("unexpected request {other}"),
+    });
+    let events = run_with_filters(
+        vec![source(&server, "self", "/jobs/123", regression_crawl())],
+        10,
+        regression_filters(),
+    );
+    assert_eq!(jobs(&events).len(), 1, "{events:?}");
+    assert_eq!(server.paths(), ["/jobs/123"]);
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, WorkerEvent::Warning { .. })),
+        "{events:?}"
+    );
+}
+
+#[test]
+fn six_navigation_bound_preserves_jobs_and_leaves_unvisited_candidates_unexamined() {
+    let server = Server::new(|path| {
+        if path == "/careers" {
+            return Response::html((0..9).map(|id| format!("<article><a href='/jobs/{id}'>Software Engineer</a><a href='/jobs/{id}#apply'>Apply</a></article>")).collect::<String>());
+        }
+        if path.starts_with("/jobs/") {
+            return Response::html(plain_html_detail(
+                "Software Engineer",
+                Some("Austin, TX"),
+                Some("2026-10-15T12:00:00Z"),
+            ));
+        }
+        panic!("unexpected request {path}");
+    });
+    let events = run_with_filters(
+        vec![source(&server, "bounded", "/careers", regression_crawl())],
+        40,
+        regression_filters(),
+    );
+    assert_eq!(jobs(&events).len(), 5, "{events:?}");
+    assert_eq!(stats(&events)[0].examined, 5, "{events:?}");
+    assert_eq!(stats(&events)[0].unresolved, 0, "{events:?}");
+    assert_eq!(server.paths().len(), 6);
+    assert!(
+        events.iter().any(|event| matches!(
+            event,
+            WorkerEvent::Warning {
+                termination: Some(CoverageTermination::PageLimit),
+                ..
+            }
+        )),
+        "{events:?}"
+    );
+}
+
+#[test]
+fn lever_tenant_scope_rejects_sibling_redirect_base_and_encoded_escapes() {
+    let server = Server::new(|path| match path {
+        "/jobs.lever.co/palantir" => Response::html(
+            r#"<base href="https://jobs.lever.co/sibling/"><div class="posting"><a class="posting-title" href="palantir/opaque"><h5>Software Engineer</h5></a></div><article><a href="/sibling/jobs/999">Software Engineer</a></article><article><a href="/palantir/%2e%2e/sibling/jobs/escape">Software Engineer</a></article><article><a href="/palantir/jobs/redirect">Software Engineer</a></article>"#,
+        ),
+        "/jobs.lever.co/palantir/opaque" => Response::html(plain_html_detail(
+            "Software Engineer",
+            Some("Austin, TX"),
+            Some("2026-10-15T12:00:00Z"),
+        )),
+        "/jobs.lever.co/palantir/jobs/redirect" => Response {
+            status: "302 Found",
+            headers: "Location: https://jobs.lever.co/sibling/jobs/redirected\r\n".into(),
+            body: String::new(),
+        },
+        other => panic!("out-of-scope request {other}"),
+    });
+    let config = regression_crawl();
+    let sources = vec![
+        json!({"id":"scoped","name":"Palantir","kind":"selector","identifier":"https://jobs.lever.co/palantir","config":config}),
+    ];
+    let events = run_with_replay(sources, 10, regression_filters(), Some(&server.origin));
+    assert_eq!(jobs(&events).len(), 1, "{events:?}");
+    let paths = server.paths();
+    assert_eq!(paths.len(), 3, "{paths:?}");
+    assert!(paths.contains(&"/jobs.lever.co/palantir/opaque".into()));
+    assert!(paths.contains(&"/jobs.lever.co/palantir/jobs/redirect".into()));
+    assert!(!paths.iter().any(|path| path.contains("/sibling")));
+}
+
+#[test]
+fn excluded_url_word_is_not_a_keyword_field_rejection() {
+    let server = Server::new(|path| match path {
+        "/careers" => Response::html(
+            "<article><a href='/jobs/recruiter-platform'>Software Engineer</a></article>",
+        ),
+        "/jobs/recruiter-platform" => Response::html(plain_html_detail(
+            "Software Engineer",
+            Some("Austin, TX"),
+            Some("2026-10-15T12:00:00Z"),
+        )),
+        other => panic!("unexpected request {other}"),
+    });
+    let mut filters = regression_filters();
+    filters["matching"]["keywords"] =
+        json!({"any":[],"all":[],"exclude":["recruiter"],"fields":["title","description"]});
+    let events = run_with_filters(
+        vec![source(&server, "url-only", "/careers", regression_crawl())],
+        10,
+        filters,
+    );
+    assert_eq!(jobs(&events).len(), 1, "{events:?}");
+    assert_eq!(server.paths(), ["/careers", "/jobs/recruiter-platform"]);
+}
+
+#[test]
+fn later_relevant_link_replaces_low_priority_unvisited_frontier_entry() {
+    let server = Server::new(|path| {
+        match path {
+        "/seed" => Response::html("<a href='/directory'>Software Engineer openings</a><a href='/noise'>About our organization</a>"),
+        "/directory" => Response::html("<a href='/engineering'>Software Engineer careers</a>"),
+        "/engineering" => Response::html("<main><h1>Software Engineer</h1><div class='location'>Austin, TX</div><time itemprop='datePosted' datetime='2026-10-15T12:00:00Z'>Posted</time><div class='job-description'>Responsibilities include building reliable distributed software systems and maintaining production infrastructure for customers.</div></main>"),
+        other => panic!("low-priority or unexpected request {other}"),
+    }
+    });
+    let mut config = regression_crawl();
+    config["crawl"]["max_pages"] = json!(3);
+    config["crawl"]["max_depth"] = json!(3);
+    let events = run_with_filters(
+        vec![source(&server, "frontier", "/seed", config)],
+        10,
+        regression_filters(),
+    );
+    assert_eq!(jobs(&events).len(), 1, "{events:?}");
+    assert_eq!(server.paths(), ["/seed", "/directory", "/engineering"]);
+}
+
+#[test]
+fn html_candidate_priority_puts_known_geography_before_known_date() {
+    let server = Server::new(|path| match path {
+        "/careers" => Response::html(
+            r#"<script type="application/ld+json">[
+            {"@type":"JobPosting","title":"Software Engineer","url":"/jobs/unknown-geography","datePosted":"2026-10-15T12:00:00Z"},
+            {"@type":"JobPosting","title":"Software Engineer","url":"/jobs/unknown-date","jobLocation":{"address":{"addressCountry":"US"}}}
+        ]</script>"#,
+        ),
+        "/jobs/unknown-date" | "/jobs/unknown-geography" => Response::html(plain_html_detail(
+            "Software Engineer",
+            Some("Austin, TX"),
+            Some("2026-10-15T12:00:00Z"),
+        )),
+        other => panic!("unexpected request {other}"),
+    });
+    let events = run_with_filters(
+        vec![source(&server, "priority", "/careers", regression_crawl())],
+        10,
+        regression_filters(),
+    );
+    assert_eq!(jobs(&events).len(), 2, "{events:?}");
+    assert_eq!(
+        server.paths(),
+        ["/careers", "/jobs/unknown-date", "/jobs/unknown-geography"]
+    );
+}
+
+#[test]
+fn structured_remote_eligibility_and_native_salary_survive_html_hydration() {
+    let server = Server::new(|path| {
+        match path {
+        "/careers" => Response::html("<article><a href='/jobs/remote'>Software Engineer</a><div class='location'>New York, NY</div></article>"),
+        "/jobs/remote" => Response::html(r#"<script type="application/ld+json">{"@type":"JobPosting","title":"Software Engineer","url":"/jobs/remote","datePosted":"2026-10-15T12:00:00Z","jobLocationType":"TELECOMMUTE","jobLocation":{"address":{"addressCountry":"CA"}},"applicantLocationRequirements":{"@type":"Country","name":"United States"},"baseSalary":{"@type":"MonetaryAmount","currency":"USD","value":{"@type":"QuantitativeValue","minValue":55,"maxValue":75,"unitText":"HOUR"}},"description":"Responsibilities include building reliable distributed software systems."}</script>"#),
+        other => panic!("unexpected request {other}"),
+    }
+    });
+    let events = run_with_filters(
+        vec![source(
+            &server,
+            "remote-native",
+            "/careers",
+            regression_crawl(),
+        )],
+        10,
+        regression_filters(),
+    );
+    let accepted = jobs(&events);
+    assert_eq!(accepted.len(), 1, "{events:?}");
+    let WorkerEvent::Job {
+        salary: Some(salary),
+        locations,
+        workplace_type,
+        ..
+    } = accepted[0]
+    else {
+        panic!("{events:?}");
+    };
+    assert_eq!(*workplace_type, scrape_core::WorkplaceType::Remote);
+    assert!(locations
+        .iter()
+        .all(|location| location.raw.starts_with("applicantLocationRequirements:")));
+    assert_eq!(salary.ranges.len(), 1);
+    assert_eq!(salary.ranges[0].min_minor, Some(5500));
+    assert_eq!(salary.ranges[0].max_minor, Some(7500));
+    assert_eq!(salary.ranges[0].currency.as_deref(), Some("USD"));
+    assert_eq!(
+        salary.ranges[0].interval,
+        Some(scrape_core::SalaryInterval::Hour)
+    );
+}
+
+#[test]
+fn generic_time_is_not_original_publication_evidence() {
+    let server = Server::new(|path| {
+        match path {
+        "/careers" => Response::html("<article><a href='/jobs/undated'>Software Engineer</a></article>"),
+        "/jobs/undated" => Response::html("<main><h1>Software Engineer</h1><div class='location'>Austin, TX</div><time datetime='2026-10-15T12:00:00Z'>October 15</time><div class='job-description'>Responsibilities include building reliable distributed software systems and maintaining production engineering infrastructure.</div></main>"),
+        other => panic!("unexpected request {other}"),
+    }
+    });
+    let events = run_with_filters(
+        vec![source(
+            &server,
+            "generic-time",
+            "/careers",
+            regression_crawl(),
+        )],
+        10,
+        regression_filters(),
+    );
+    assert!(jobs(&events).is_empty(), "{events:?}");
+    assert_eq!(stats(&events)[0].unresolved, 1, "{events:?}");
+}
+
+#[test]
+fn public_html_crawl_detail_request_bound_preserves_remaining_candidates() {
+    let server = Server::new(|path| match path {
+        "/careers" => Response::html(
+            "<article><a href='/jobs/1'>Software Engineer 1</a></article>\
+             <article><a href='/jobs/2'>Software Engineer 2</a></article>\
+             <article><a href='/jobs/3'>Software Engineer 3</a></article>",
+        ),
+        "/jobs/1" => Response::html(
+            r#"<main><h1>Software Engineer 1</h1><script type="application/ld+json">{"@type":"JobPosting","title":"Software Engineer 1","url":"/jobs/1","datePosted":"2026-10-15T12:00:00Z","hiringOrganization":{"name":"Fixture Employer"},"jobLocation":{"@type":"Place","address":{"@type":"PostalAddress","addressCountry":"US"}},"description":"Hydrated role 1"}</script></main>"#,
+        ),
+        "/jobs/2" | "/jobs/3" => Response::html("<html>No LD+JSON</html>"),
+        other => panic!("unexpected request {other}"),
+    });
+    let crawl_config = regression_crawl();
+    let events = run_with_custom_limits(
+        vec![source(&server, "bound-test", "/careers", crawl_config)],
+        10,
+        regression_filters(),
+        json!({
+            "per_host_delay_ms": 0,
+            "request_timeout_s": 5,
+            "enrichment": { "timeout_ms": 10000, "max_requests": 1 }
+        }),
+    );
+    assert_eq!(stats(&events)[0].examined, 3, "{events:?}");
+    assert_eq!(stats(&events)[0].accepted, 1, "{events:?}");
+    assert_eq!(stats(&events)[0].unresolved, 2, "{events:?}");
+    assert!(
+        events.iter().any(|event| matches!(
+            event,
+            WorkerEvent::Warning {
+                termination: Some(CoverageTermination::RequestLimit),
+                ..
+            }
+        )),
+        "{events:?}"
+    );
+}
+#[test]
+fn public_html_crawl_detail_timeout_preserves_remaining_candidates() {
+    let server = Server::new(|path| match path {
+        "/careers" => Response::html(
+            "<article><a href='/jobs/1'>Software Engineer 1</a></article>\
+             <article><a href='/jobs/2'>Software Engineer 2</a></article>",
+        ),
+        "/jobs/1" => {
+            thread::sleep(Duration::from_millis(500));
+            Response::html("<html>Late detail</html>")
+        }
+        "/jobs/2" => Response::html(
+            r#"<main><h1>Software Engineer 2</h1><script type="application/ld+json">{"@type":"JobPosting","title":"Software Engineer 2","url":"/jobs/2","datePosted":"2026-10-15T12:00:00Z","hiringOrganization":{"name":"Fixture Employer"},"jobLocation":{"@type":"Place","address":{"@type":"PostalAddress","addressCountry":"US"}},"description":"Hydrated role 2"}</script></main>"#,
+        ),
+        other => panic!("unexpected request {other}"),
+    });
+    let crawl_config = regression_crawl();
+    let events = run_with_custom_limits(
+        vec![source(&server, "timeout-test", "/careers", crawl_config)],
+        10,
+        regression_filters(),
+        json!({
+            "per_host_delay_ms": 0,
+            "request_timeout_s": 5,
+            "enrichment": { "timeout_ms": 300, "max_requests": 10 }
+        }),
+    );
+    assert_eq!(stats(&events)[0].examined, 3, "{events:?}");
+    assert_eq!(stats(&events)[0].unresolved, 2, "{events:?}");
+    assert!(
+        events.iter().any(|event| matches!(
+            event,
+            WorkerEvent::Warning {
+                termination: Some(CoverageTermination::TimeLimit),
+                ..
+            }
+        )),
+        "{events:?}"
     );
 }

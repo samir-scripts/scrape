@@ -7,7 +7,7 @@ use scrape_core::{RoleType, SourceCadence, SourceKind, WorkerFilters};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
-pub const WORKFLOW_SPEC_VERSION: u32 = 9;
+pub const WORKFLOW_SPEC_VERSION: u32 = 10;
 
 macro_rules! optional_fields {
     ($name:ident { $($field:ident: $kind:ty),* $(,)? }) => {
@@ -335,11 +335,11 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
             }
         }
         value = serde_json::json!({"version":3,"metadata":{"name":value.get("company"),"company":value.get("company")},"extractor":extractor,"schedule":{"cadence":value.pointer("/cadence/type").cloned().unwrap_or(Value::String("global".into())),"cron":value.pointer("/cadence/cron")}});
-    } else if matches!(version, 2..=9) {
+    } else if matches!(version, 2..=10) {
         // Legacy extractor roots become source collections before decoding.
     } else {
         return Err(AppError::Validation(format!(
-            "version: unsupported workflow version {version}; supported versions are 1–9"
+            "version: unsupported workflow version {version}; supported versions are 1–10"
         )));
     }
     if submitted_version <= 4 && value.get("sources").is_none() {
@@ -1262,8 +1262,8 @@ mod tests {
     fn compensation_modes_upgrade_without_changing_saved_overlap_rules() {
         use scrape_core::enrich::{CompensationMatchMode, Salary};
 
-        assert_eq!(WORKFLOW_SPEC_VERSION, 9);
-        assert_eq!(scrape_core::PROTOCOL_VERSION, 11);
+        assert_eq!(WORKFLOW_SPEC_VERSION, 10);
+        assert_eq!(scrape_core::PROTOCOL_VERSION, 12);
         let v1 = validate(
             serde_json::json!({
                 "version": 1, "company": "Legacy", "url": "https://boards.greenhouse.io/fixture",
@@ -1272,14 +1272,14 @@ mod tests {
             "UTC",
         )
         .unwrap();
-        assert_eq!(v1.version, 9);
+        assert_eq!(v1.version, 10);
         assert!(v1
             .filters
             .as_ref()
             .is_none_or(|filters| filters.compensation.is_none()));
         let lower =
             Salary::from_structured(Some(50000.0), None, Some("USD"), Some("year"), None).unwrap();
-        for version in 2..=9 {
+        for version in 2..=10 {
             let mut value = serde_json::json!({
                 "version": version, "metadata": {"name": "Saved native pay"},
                 "sources": [{"id": "fixture", "label": "Fixture",
@@ -1297,7 +1297,7 @@ mod tests {
                         Value::String("range_overlap".into());
                 }
                 let spec = validate(value.clone(), "UTC").unwrap();
-                assert_eq!(spec.version, 9);
+                assert_eq!(spec.version, 10);
                 let reopened = validate(serde_json::to_value(&spec).unwrap(), "UTC").unwrap();
                 assert_eq!(spec.filters, reopened.filters);
                 let filters = reopened.filters.unwrap();
@@ -1315,7 +1315,7 @@ mod tests {
             }
         }
         let spec = validate(serde_json::json!({
-            "version": 9, "metadata": {"name": "Advertised pay"},
+            "version": 10, "metadata": {"name": "Advertised pay"},
             "sources": [{"id": "fixture", "label": "Fixture",
                 "extractor": {"kind": "greenhouse", "url": "https://boards.greenhouse.io/fixture"}}],
             "filters": {"matching": {"compensation": {

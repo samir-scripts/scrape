@@ -2,16 +2,20 @@
 
 use super::search_cache::SearchCache;
 use crate::client::{ClientError, HttpClient};
+use chrono::{DateTime, Utc};
 use scrape_core::enrich::{
     classify_clearance, classify_sponsorship, classify_work_auth, classify_workplace,
     extract_experience, location as loc_enrich, normalize_description_with_format,
     DescriptionFormat, Salary,
 };
-use scrape_core::protocol::CoverageTermination;
-use scrape_core::{RoleType, WorkerEvent, WorkerLimits, WorkerSource, WorkplaceType};
+use scrape_core::matching::{MatchingEvaluator, MatchingEvidence};
+use scrape_core::protocol::{CoverageTermination, EnrichmentLimits};
+use scrape_core::{
+    RoleType, WorkerEvent, WorkerFilters, WorkerLimits, WorkerSource, WorkplaceType,
+};
 use serde::Deserialize;
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use tokio::time::{timeout_at, Duration, Instant};
 use url::Url;
 
@@ -398,12 +402,14 @@ pub(crate) enum SearchStep {
 }
 
 pub(crate) struct SearchSession {
+    source: WorkerSource,
     source_id: String,
     provider: Provider,
     endpoint: Url,
     current: Url,
     next: Option<String>,
     candidates: std::vec::IntoIter<Value>,
+    pending_candidates: VecDeque<WorkerEvent>,
     visited: HashSet<String>,
     pages: u32,
     max_pages: u32,
@@ -411,13 +417,22 @@ pub(crate) struct SearchSession {
     exhausted: bool,
     cache: Option<SearchCache>,
     pending_error: Option<String>,
+    pending_warning: Option<WorkerEvent>,
+    follow_detail: bool,
+    filters: WorkerFilters,
+    started: DateTime<Utc>,
+    enrichment_limits: EnrichmentLimits,
+    detail_requests: u32,
+    detail_deadline: Instant,
 }
-
 impl SearchSession {
     pub fn new(
         source: &WorkerSource,
         limits: &WorkerLimits,
+        enrichment: &EnrichmentLimits,
         workflow_deadline: Instant,
+        filters: &WorkerFilters,
+        started: DateTime<Utc>,
     ) -> Result<Self, ClientError> {
         let identifier = scrape_core::search_source::identifier(&source.identifier)
             .map_err(ClientError::Configuration)?;
@@ -498,13 +513,21 @@ impl SearchSession {
             .max_workflow_duration_s
             .min(limits.max_workflow_duration_s);
         let now = Instant::now();
+        let follow_detail = source
+            .config
+            .get("follow_detail")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let detail_deadline = now + Duration::from_millis(enrichment.timeout_ms);
         Ok(Self {
+            source: source.clone(),
             source_id: source.id.clone(),
             provider,
             current: endpoint.clone(),
             next: Some(endpoint.to_string()),
             endpoint,
             candidates: Vec::new().into_iter(),
+            pending_candidates: VecDeque::new(),
             visited: HashSet::new(),
             pages: 0,
             max_pages: max_pages.min(limits.max_pages_per_source),
@@ -514,6 +537,13 @@ impl SearchSession {
             exhausted: false,
             cache,
             pending_error: None,
+            pending_warning: None,
+            follow_detail,
+            filters: filters.clone(),
+            started,
+            enrichment_limits: enrichment.clone(),
+            detail_requests: 0,
+            detail_deadline,
         })
     }
 
@@ -522,12 +552,15 @@ impl SearchSession {
             || (self.pages > 0
                 && self.next.is_none()
                 && self.candidates.len() == 0
-                && self.pending_error.is_none())
+                && self.pending_candidates.is_empty()
+                && self.pending_error.is_none()
+                && self.pending_warning.is_none())
     }
 
     fn stop(&mut self, termination: CoverageTermination, message: &str) -> SearchStep {
         self.exhausted = true;
         self.candidates = Vec::new().into_iter();
+        self.pending_candidates.clear();
         SearchStep::Event(Box::new(WorkerEvent::Warning {
             source_id: self.source_id.clone(),
             message: message.into(),
@@ -598,7 +631,117 @@ impl SearchSession {
                 "Search source/workflow time limit reached; feed coverage is incomplete",
             ));
         }
-        if let Some(value) = self.candidates.next() {
+        if let Some(event) = self.pending_warning.take() {
+            return Ok(SearchStep::Event(Box::new(event)));
+        }
+        if self.follow_detail {
+            if let Some(mut candidate) = self.pending_candidates.pop_front() {
+                if let WorkerEvent::Job { .. } = &candidate {
+                    let evaluator = MatchingEvaluator::new(&self.filters)
+                        .map_err(ClientError::Configuration)?;
+                    let preliminary_evidence = MatchingEvidence::from_event(&candidate, false);
+                    let assessment =
+                        evaluator.assess(&candidate, self.started, &preliminary_evidence);
+                    if !assessment.rejected.is_empty() {
+                        return Ok(SearchStep::Event(Box::new(candidate)));
+                    }
+                    let bound = if Instant::now() >= self.deadline
+                        || Instant::now() >= self.detail_deadline
+                    {
+                        Some(CoverageTermination::TimeLimit)
+                    } else if self.detail_requests >= self.enrichment_limits.max_requests {
+                        Some(CoverageTermination::RequestLimit)
+                    } else {
+                        None
+                    };
+                    if let Some(bound) = bound {
+                        if self.pending_warning.is_none() {
+                            self.pending_warning = Some(WorkerEvent::Warning {
+                                source_id: self.source_id.clone(),
+                                message: format!(
+                                    "Search detail enrichment reached its {} bound; missing evidence remains unknown",
+                                    if bound == CoverageTermination::TimeLimit {
+                                        "time"
+                                    } else {
+                                        "request"
+                                    }
+                                ),
+                                eligibility_incomplete: true,
+                                termination: Some(bound),
+                            });
+                        }
+                        return Ok(SearchStep::Event(Box::new(candidate)));
+                    }
+                    self.detail_requests += 1;
+                    let job_url = match &candidate {
+                        WorkerEvent::Job { url, .. } => url.clone(),
+                        _ => unreachable!(),
+                    };
+                    let target_url = match http_url(job_url.trim()) {
+                        Ok(u) => u,
+                        Err(e) => {
+                            return Ok(SearchStep::Event(Box::new(WorkerEvent::Error {
+                                source_id: self.source_id.clone(),
+                                message: format!("Invalid candidate destination: {e}"),
+                                retryable: false,
+                                invalid_posting: Some(true),
+                            })));
+                        }
+                    };
+                    let detail_timeout = self
+                        .deadline
+                        .min(self.detail_deadline)
+                        .min(Instant::now() + Duration::from_secs(15));
+                    let fetch_result = timeout_at(
+                        detail_timeout,
+                        client.fetch_text_at(target_url.as_str(), true),
+                    )
+                    .await;
+                    match fetch_result {
+                        Ok(Ok((body, actual))) => {
+                            let actual_url =
+                                Url::parse(&actual).unwrap_or_else(|_| target_url.clone());
+                            let _ = crate::adapters::selector::hydrate_public_html_job(
+                                &mut candidate,
+                                &body,
+                                &actual_url,
+                                &self.source,
+                            );
+                            return Ok(SearchStep::Event(Box::new(candidate)));
+                        }
+                        Ok(Err(client_err)) => {
+                            if assessment.unresolved.is_empty() {
+                                self.pending_warning = Some(WorkerEvent::Warning {
+                                    source_id: self.source_id.clone(),
+                                    message: format!(
+                                        "Optional posting page {} was unavailable: {}",
+                                        target_url, client_err
+                                    ),
+                                    eligibility_incomplete: false,
+                                    termination: None,
+                                });
+                            }
+                            return Ok(SearchStep::Event(Box::new(candidate)));
+                        }
+                        Err(_) => {
+                            if self.pending_warning.is_none() {
+                                self.pending_warning = Some(WorkerEvent::Warning {
+                                    source_id: self.source_id.clone(),
+                                    message:
+                                        "Search detail fetch timed out; coverage is incomplete"
+                                            .into(),
+                                    eligibility_incomplete: true,
+                                    termination: Some(CoverageTermination::TimeLimit),
+                                });
+                            }
+                            return Ok(SearchStep::Event(Box::new(candidate)));
+                        }
+                    }
+                } else {
+                    return Ok(SearchStep::Event(Box::new(candidate)));
+                }
+            }
+        } else if let Some(value) = self.candidates.next() {
             let posting = match self.provider {
                 Provider::Arbeitnow => serde_json::from_value::<SearchItem>(value)
                     .map(SearchItem::posting)
@@ -785,7 +928,57 @@ impl SearchSession {
         self.pages += 1;
         self.current = url;
         self.next = next;
-        self.candidates = candidates.into_iter();
+        if self.follow_detail {
+            let evaluator =
+                MatchingEvaluator::new(&self.filters).map_err(ClientError::Configuration)?;
+            let mut jobs_with_priority = Vec::new();
+            let mut errors = Vec::new();
+            for (index, value) in candidates.into_iter().enumerate() {
+                let posting = match self.provider {
+                    Provider::Arbeitnow => serde_json::from_value::<SearchItem>(value)
+                        .map(SearchItem::posting)
+                        .map_err(|error| format!("Invalid Arbeitnow posting: {error}")),
+                    Provider::Muse => serde_json::from_value::<MuseItem>(value)
+                        .map_err(|error| format!("Invalid Muse posting: {error}"))
+                        .and_then(MuseItem::posting),
+                    Provider::Adzuna => {
+                        adzuna_posting(value).map_err(|_| "Invalid Adzuna posting".into())
+                    }
+                    Provider::Jobicy => jobicy_posting(value),
+                };
+                let event = posting
+                    .and_then(|posting| posting.event(&self.source_id))
+                    .unwrap_or_else(|message| WorkerEvent::Error {
+                        source_id: self.source_id.clone(),
+                        message,
+                        retryable: false,
+                        invalid_posting: Some(true),
+                    });
+                match event {
+                    WorkerEvent::Job { .. } => {
+                        let evidence = MatchingEvidence::from_event(&event, false);
+                        let priority =
+                            evaluator.discovery_priority(&event, self.started, &evidence);
+                        jobs_with_priority.push((event, priority, index));
+                    }
+                    _ => {
+                        errors.push((event, index));
+                    }
+                }
+            }
+            jobs_with_priority.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.2.cmp(&b.2)));
+            let mut sorted = VecDeque::new();
+            for (job, _, _) in jobs_with_priority {
+                sorted.push_back(job);
+            }
+            for (err, _) in errors {
+                sorted.push_back(err);
+            }
+            self.pending_candidates = sorted;
+            self.candidates = Vec::new().into_iter();
+        } else {
+            self.candidates = candidates.into_iter();
+        }
         // A page request is a turn of its own, even if it contains no candidates.
         Ok(SearchStep::Yield)
     }
@@ -875,13 +1068,19 @@ impl Posting {
 pub async fn scrape_search_with(
     client: &HttpClient,
     source: &WorkerSource,
+    filters: &WorkerFilters,
+    started: DateTime<Utc>,
+    enrichment: &EnrichmentLimits,
     sink: &mut dyn FnMut(WorkerEvent) -> bool,
 ) -> Result<(), ClientError> {
     let limits = WorkerLimits::default();
     let mut session = SearchSession::new(
         source,
         &limits,
+        enrichment,
         Instant::now() + Duration::from_secs(limits.max_workflow_duration_s),
+        filters,
+        started,
     )?;
     loop {
         match session.next(client).await? {

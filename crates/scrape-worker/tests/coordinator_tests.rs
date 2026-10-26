@@ -511,6 +511,48 @@ fn workflow_wide_canonical_deduplication_does_not_count_duplicate_towards_round_
 }
 
 #[test]
+fn richer_search_observation_can_qualify_after_unresolved_identity() {
+    let server = Server::new(|path| {
+        match path {
+        "/www.themuse.com/api/public/jobs?page=0" => json!({
+            "page": 0, "page_count": 3,
+            "results": [muse_job(701, "Software Engineer", "Fixture", Value::Null)]
+        }).to_string(),
+        "/www.themuse.com/api/public/jobs?page=1" |
+        "/www.themuse.com/api/public/jobs?page=2" => json!({
+            "page": if path.ends_with("=1") { 1 } else { 2 }, "page_count": 3,
+            "results": [muse_job(701, "Software Engineer", "Fixture", json!("2026-10-15T12:00:00Z"))]
+        }).to_string(),
+        _ => panic!("unexpected request {path}"),
+    }
+    });
+    let events = run_worker_config(
+        &server,
+        vec![search_source("themuse", json!({}))],
+        json!({"matching": {"posting_date": {
+            "preset": "past_24h", "timezone": "UTC", "include_unknown": false
+        }}}),
+        10,
+        0,
+        false,
+        worker_limits(),
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event, WorkerEvent::Job { .. }))
+            .count(),
+        1
+    );
+    let scan = &scans(&events)[0];
+    assert_eq!(scan.examined, 3);
+    assert_eq!(scan.unresolved, 1);
+    assert_eq!(scan.accepted, 1);
+    assert_eq!(scan.duplicates, 1);
+    assert_eq!(scan.matched, 1);
+}
+
+#[test]
 fn healthy_paginated_and_single_page_sources_keep_round_robin_7_7_6_distribution() {
     verify_paginated_fairness(false);
 }
@@ -1927,4 +1969,277 @@ fn multi_source_enrichment_budget_and_turn_yielding_prevent_non_jobicy_starvatio
         accepted_by_source.get("nvidia").copied().unwrap_or(0) >= 1,
         "NVIDIA must emit remote jobs: {accepted_by_source:?}"
     );
+}
+
+#[test]
+fn no_company_heuristic_discovery_orders_abdc_and_skips_unqualified_details() {
+    let detail_html = |title: &str, company: &str, loc: &str, date: &str| {
+        format!(
+            r#"<!DOCTYPE html><html><head><script type="application/ld+json">{{"@context":"https://schema.org","@type":"JobPosting","title":"{title}","hiringOrganization":{{"name":"{company}"}},"datePosted":"{date}","jobLocation":{{"address":{{"addressCountry":"US","addressLocality":"{loc}"}}}},"description":"Engineering role"}}</script></head><body><h1>{title}</h1></body></html>"#
+        )
+    };
+
+    let server = Server::new(move |path| {
+        match path {
+        "/www.themuse.com/api/public/jobs?page=0" => json!({
+            "page": 0, "page_count": 1,
+            "results": [
+                muse_item_custom(101, "Software Engineer", "Global A", Some("2026-10-15T12:00:00Z"), vec!["Toronto, Canada"]),
+                muse_item_custom(102, "Software Engineer", "Stale B", Some("2026-10-14T12:00:00Z"), vec!["Austin, TX"]),
+                muse_item_custom(103, "Accountant", "Finance C", Some("2026-10-15T12:00:00Z"), vec!["Austin, TX"]),
+                muse_item_custom(104, "Software Engineer", "Employer A", Some("2026-10-15T12:00:00Z"), vec!["Austin, TX"]),
+                muse_item_custom(105, "Data Engineer", "Employer B", Some("2026-10-15T12:00:00Z"), vec!["New York, NY"]),
+                muse_item_custom(106, "Software Engineer", "Employer C", Some("2026-10-15T12:00:00Z"), vec![]),
+                muse_item_custom(107, "Software Engineer", "Employer D", None, vec!["Austin, TX"]),
+            ]
+        }).to_string(),
+        "/www.themuse.com/jobs/employer/104" => detail_html("Software Engineer", "Employer A", "Austin", "2026-10-15T12:00:00Z"),
+        "/www.themuse.com/jobs/employer/105" => detail_html("Data Engineer", "Employer B", "New York", "2026-10-15T12:00:00Z"),
+        "/www.themuse.com/jobs/employer/106" => detail_html("Software Engineer", "Employer C", "Austin", "2026-10-15T12:00:00Z"),
+        "/www.themuse.com/jobs/employer/107" => detail_html("Software Engineer", "Employer D", "Austin", "2026-10-15T12:00:00Z"),
+        other => panic!("unexpected request {other}"),
+    }
+    });
+
+    let filters = json!({
+        "matching": {
+            "target_roles": ["Software Engineer", "Data Engineer"],
+            "countries": ["US"],
+            "location_include_unknown": false,
+            "posting_date": {
+                "preset": "past_24h",
+                "timezone": "America/New_York",
+                "include_unknown": false
+            }
+        }
+    });
+
+    let events = run_worker_config(
+        &server,
+        vec![search_source(
+            "themuse",
+            json!({"follow_detail": true, "max_pages": 10}),
+        )],
+        filters.clone(),
+        10,
+        0,
+        false,
+        worker_limits(),
+    );
+
+    let accepted: Vec<String> = events
+        .iter()
+        .filter_map(|e| match e {
+            WorkerEvent::Job { company, .. } => Some(company.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        accepted,
+        vec!["Employer A", "Employer B", "Employer D", "Employer C"]
+    );
+
+    let paths = feed_requests(&server);
+    assert_eq!(
+        paths,
+        vec![
+            "/www.themuse.com/api/public/jobs?page=0",
+            "/www.themuse.com/jobs/employer/104",
+            "/www.themuse.com/jobs/employer/105",
+            "/www.themuse.com/jobs/employer/107",
+            "/www.themuse.com/jobs/employer/106",
+        ]
+    );
+
+    // With cap 1, only A is emitted and no later detail request starts
+    let server2 = Server::new(move |path| {
+        match path {
+        "/www.themuse.com/api/public/jobs?page=0" => json!({
+            "page": 0, "page_count": 1,
+            "results": [
+                muse_item_custom(101, "Software Engineer", "Global A", Some("2026-10-15T12:00:00Z"), vec!["Toronto, Canada"]),
+                muse_item_custom(102, "Software Engineer", "Stale B", Some("2026-10-14T12:00:00Z"), vec!["Austin, TX"]),
+                muse_item_custom(103, "Accountant", "Finance C", Some("2026-10-15T12:00:00Z"), vec!["Austin, TX"]),
+                muse_item_custom(104, "Software Engineer", "Employer A", Some("2026-10-15T12:00:00Z"), vec!["Austin, TX"]),
+                muse_item_custom(105, "Data Engineer", "Employer B", Some("2026-10-15T12:00:00Z"), vec!["New York, NY"]),
+                muse_item_custom(106, "Software Engineer", "Employer C", Some("2026-10-15T12:00:00Z"), vec![]),
+                muse_item_custom(107, "Software Engineer", "Employer D", None, vec!["Austin, TX"]),
+            ]
+        }).to_string(),
+        "/www.themuse.com/jobs/employer/104" => detail_html("Software Engineer", "Employer A", "Austin", "2026-10-15T12:00:00Z"),
+        other => panic!("unexpected request {other} with cap 1"),
+    }
+    });
+
+    let events2 = run_worker_config(
+        &server2,
+        vec![search_source(
+            "themuse",
+            json!({"follow_detail": true, "max_pages": 10}),
+        )],
+        filters,
+        1,
+        0,
+        false,
+        worker_limits(),
+    );
+
+    let accepted2: Vec<String> = events2
+        .iter()
+        .filter_map(|e| match e {
+            WorkerEvent::Job { company, .. } => Some(company.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(accepted2, vec!["Employer A"]);
+    let paths2 = feed_requests(&server2);
+    assert_eq!(
+        paths2,
+        vec![
+            "/www.themuse.com/api/public/jobs?page=0",
+            "/www.themuse.com/jobs/employer/104",
+        ]
+    );
+}
+
+fn muse_item_custom(
+    id: u64,
+    title: &str,
+    company: &str,
+    publication: Option<&str>,
+    locations: Vec<&str>,
+) -> Value {
+    json!({
+        "id": id, "name": title, "company": {"name": company},
+        "refs": {"landing_page": format!("https://www.themuse.com/jobs/employer/{id}")},
+        "contents": "<p>Fictional description.</p>",
+        "publication_date": publication,
+        "locations": locations.into_iter().map(|name| json!({"name": name})).collect::<Vec<_>>(),
+    })
+}
+
+#[test]
+fn search_detail_timeout_does_not_abort_session_or_drop_subsequent_candidates() {
+    use scrape_core::protocol::CoverageTermination;
+
+    let server = Server::new(|path| {
+        match path {
+        "/www.themuse.com/api/public/jobs?page=0" => json!({
+            "page": 0, "page_count": 1,
+            "results": (1..=3).map(|id| muse_item_custom(
+                id, "Software Engineer", "Fixture Employer",
+                Some("2026-10-15T12:00:00Z"), vec!["Austin, TX"]
+            )).collect::<Vec<_>>()
+        }).to_string(),
+        "/www.themuse.com/jobs/employer/1" => {
+            thread::sleep(Duration::from_secs(16));
+            "<html>Late detail</html>".into()
+        }
+        "/www.themuse.com/jobs/employer/2" => r#"<script type="application/ld+json">{"@context":"https://schema.org","@type":"JobPosting","title":"Software Engineer","baseSalary":{"@type":"MonetaryAmount","currency":"USD","value":{"@type":"QuantitativeValue","value":160000,"unitText":"YEAR"}}}</script>"#.into(),
+        "/www.themuse.com/jobs/employer/3" => "<html>No additional evidence</html>".into(),
+        other => panic!("unexpected request {other}"),
+    }
+    });
+    let events = run_worker_config(
+        &server,
+        vec![search_source(
+            "themuse",
+            json!({"follow_detail":true,"max_pages":1}),
+        )],
+        json!({"matching":{"target_roles":["Software Engineer"],"countries":["US"],
+            "location_include_unknown":false,
+            "posting_date":{"preset":"past_24h","timezone":"UTC","include_unknown":false}}}),
+        40,
+        0,
+        false,
+        json!({"per_host_delay_ms":0,"request_timeout_s":20,
+            "enrichment":{"timeout_ms":30000,"max_requests":10}}),
+    );
+    assert_eq!(scans(&events)[0].examined, 3, "{events:?}");
+    assert_eq!(scans(&events)[0].accepted, 3, "{events:?}");
+    assert!(
+        events.iter().any(|event| matches!(
+            event,
+            WorkerEvent::Warning {
+                termination: Some(CoverageTermination::TimeLimit),
+                ..
+            }
+        )),
+        "{events:?}"
+    );
+    assert!(
+        events.iter().any(|event| matches!(event,
+            WorkerEvent::Job { url, salary: Some(_), .. }
+            if url.ends_with("/2")
+        )),
+        "{events:?}"
+    );
+    assert_eq!(
+        feed_requests(&server),
+        [
+            "/www.themuse.com/api/public/jobs?page=0",
+            "/www.themuse.com/jobs/employer/1",
+            "/www.themuse.com/jobs/employer/2",
+            "/www.themuse.com/jobs/employer/3",
+        ]
+    );
+}
+
+#[test]
+fn search_detail_bounds_preserve_feed_evidence_and_strict_matching() {
+    use scrape_core::protocol::CoverageTermination;
+
+    for time_bound in [false, true] {
+        let server = Server::new(move |path| {
+            match path {
+            "/www.themuse.com/api/public/jobs?page=0" => json!({
+                "page":0,"page_count":1,"results": [
+                    muse_item_custom(1,"Software Engineer","Fixture Employer",Some("2026-10-15T12:00:00Z"),vec!["Austin, TX"]),
+                    muse_item_custom(2,"Software Engineer","Fixture Employer",Some("2026-10-15T12:00:00Z"),vec!["Austin, TX"]),
+                    muse_item_custom(3,"Software Engineer","Fixture Employer",None,vec!["Austin, TX"])
+                ]
+            }).to_string(),
+            "/www.themuse.com/jobs/employer/1" => {
+                if time_bound {
+                    thread::sleep(Duration::from_millis(300));
+                }
+                "<html>No additional evidence</html>".into()
+            }
+            other => panic!("unexpected request {other}"),
+        }
+        });
+        let events = run_worker_config(
+            &server,
+            vec![search_source(
+                "themuse",
+                json!({"follow_detail":true,"max_pages":1}),
+            )],
+            json!({"matching":{"target_roles":["Software Engineer"],"countries":["US"],
+                "location_include_unknown":false,
+                "posting_date":{"preset":"past_24h","timezone":"UTC","include_unknown":false}}}),
+            40,
+            0,
+            false,
+            json!({"per_host_delay_ms":0,"request_timeout_s":3,
+                "enrichment":{"timeout_ms":if time_bound {200} else {5000},"max_requests":1}}),
+        );
+        assert_eq!(scans(&events)[0].examined, 3, "{events:?}");
+        assert_eq!(scans(&events)[0].accepted, 2, "{events:?}");
+        assert_eq!(scans(&events)[0].unresolved, 1, "{events:?}");
+        let expected = if time_bound {
+            CoverageTermination::TimeLimit
+        } else {
+            CoverageTermination::RequestLimit
+        };
+        assert!(events.iter().any(|event| matches!(event,
+            WorkerEvent::Warning { termination: Some(termination), .. } if *termination == expected
+        )), "{events:?}");
+        assert_eq!(
+            feed_requests(&server),
+            [
+                "/www.themuse.com/api/public/jobs?page=0",
+                "/www.themuse.com/jobs/employer/1",
+            ]
+        );
+    }
 }

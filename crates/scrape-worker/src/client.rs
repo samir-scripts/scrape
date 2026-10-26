@@ -180,16 +180,17 @@ impl HttpClient {
         }
     }
 
-    /// Fetch a static page while refusing to follow redirects outside its origin.
-    /// Each hop is independently checked against robots and destination pacing.
+    /// Fetch a static page within the configured origin and optional tenant path.
+    /// Each redirect hop is checked before requesting it, including robots and pacing.
     pub async fn fetch_text_same_origin_at(
         &self,
         url: &str,
         origin: &Url,
+        path_prefix: Option<&str>,
         check_robots: bool,
     ) -> Result<(String, String), ClientError> {
         let mut requested = Url::parse(url)?;
-        if !Self::same_origin(origin, &requested) {
+        if !Self::crawl_scope(origin, &requested, path_prefix) || Self::encoded_path_escape(url) {
             return Err(ClientError::Configuration(
                 "Crawl destination is outside the seed origin".into(),
             ));
@@ -226,7 +227,9 @@ impl HttpClient {
                 let next = requested.join(location).map_err(|_| {
                     ClientError::Extraction("Crawl redirect destination was invalid".into())
                 })?;
-                if !Self::same_origin(origin, &next) {
+                if !Self::crawl_scope(origin, &next, path_prefix)
+                    || Self::encoded_path_escape(location)
+                {
                     return Err(ClientError::Configuration(
                         "Crawl redirect was outside the seed origin".into(),
                     ));
@@ -280,6 +283,49 @@ impl HttpClient {
         } else {
             Ok(parsed)
         }
+    }
+
+    pub(crate) fn encoded_path_escape(raw: &str) -> bool {
+        let path = raw
+            .split(['?', '#'])
+            .next()
+            .unwrap_or(raw)
+            .to_ascii_lowercase();
+        path.contains("%2f")
+            || path.contains("%5c")
+            || path.contains("%2e")
+            || path.contains("%25")
+            || path.contains('\\')
+    }
+
+    pub(crate) fn crawl_scope(origin: &Url, destination: &Url, path_prefix: Option<&str>) -> bool {
+        Self::same_origin(origin, destination)
+            && destination.username().is_empty()
+            && destination.password().is_none()
+            && !Self::encoded_path_escape(destination.as_str())
+            && path_prefix.is_none_or(|prefix| {
+                destination.path() == prefix
+                    || destination
+                        .path()
+                        .strip_prefix(prefix)
+                        .is_some_and(|rest| rest.starts_with('/'))
+            })
+    }
+
+    pub(crate) fn crawl_path_prefix(seed: &Url) -> Option<&str> {
+        if seed.host_str() != Some("jobs.lever.co") {
+            return None;
+        }
+        let path = seed.path().trim_end_matches('/');
+        let tenant = path.strip_prefix('/')?;
+        if tenant.is_empty() {
+            return None;
+        }
+        let end = tenant
+            .find('/')
+            .map(|index| index + 1)
+            .unwrap_or(path.len());
+        Some(&path[..end])
     }
 
     fn same_origin(left: &Url, right: &Url) -> bool {
@@ -779,7 +825,7 @@ mod proxy_tests {
         let client = HttpClient::new(2, 0).with_proxy(Some(&proxy)).unwrap();
         let origin = Url::parse("http://jobs.example.test/").unwrap();
         let (body, actual) = client
-            .fetch_text_same_origin_at("http://jobs.example.test/list", &origin, false)
+            .fetch_text_same_origin_at("http://jobs.example.test/list", &origin, None, false)
             .await
             .unwrap();
         let request = server.join().unwrap();
@@ -830,7 +876,7 @@ mod proxy_tests {
         });
         let origin = Url::parse(&format!("{seed_endpoint}/")).unwrap();
         let result = HttpClient::new(2, 0)
-            .fetch_text_same_origin_at(&format!("{seed_endpoint}/"), &origin, false)
+            .fetch_text_same_origin_at(&format!("{seed_endpoint}/"), &origin, None, false)
             .await;
         assert!(result.is_err());
         seed_server.join().unwrap();
@@ -859,7 +905,7 @@ mod proxy_tests {
         let error = HttpClient::new(2, 0)
             .with_proxy(Some(&proxy))
             .unwrap()
-            .fetch_text_same_origin_at(origin.as_str(), &origin, false)
+            .fetch_text_same_origin_at(origin.as_str(), &origin, None, false)
             .await
             .unwrap_err()
             .to_string();
@@ -917,5 +963,39 @@ mod proxy_tests {
             let _g2 = client.rate_limit("test-host").await;
         }
         assert!(start.elapsed() >= Duration::from_millis(5));
+    }
+    #[test]
+    fn lever_scope_is_an_exact_tenant_boundary() {
+        let seed = Url::parse("https://jobs.lever.co/palantir").unwrap();
+        let prefix = HttpClient::crawl_path_prefix(&seed);
+        assert_eq!(prefix, Some("/palantir"));
+        for destination in [
+            "https://jobs.lever.co/palantir",
+            "https://jobs.lever.co/palantir/opaque",
+        ] {
+            assert!(HttpClient::crawl_scope(
+                &seed,
+                &Url::parse(destination).unwrap(),
+                prefix
+            ));
+        }
+        for destination in [
+            "https://jobs.lever.co/sep/opaque",
+            "https://jobs.lever.co/palantir-other/opaque",
+            "https://jobs.lever.co/palantir%2f..%2fsep/opaque",
+            "https://jobs.lever.co/palantir/%252e%252e/sep",
+            "https://other.test/palantir/opaque",
+            "http://jobs.lever.co/palantir/opaque",
+        ] {
+            assert!(
+                !HttpClient::crawl_scope(&seed, &Url::parse(destination).unwrap(), prefix),
+                "{destination}"
+            );
+        }
+        assert_eq!(
+            HttpClient::crawl_path_prefix(&Url::parse("https://jobs.lever.co/").unwrap()),
+            None
+        );
+        assert!(HttpClient::encoded_path_escape("/palantir/%2e%2e/sep"));
     }
 }

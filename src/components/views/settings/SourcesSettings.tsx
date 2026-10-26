@@ -819,7 +819,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       {ev.salary?.raw ? ` · ${ev.salary.raw}` : ""}
                     </span>
                   ) : ev.type === "warning" ? (
-                    <span className="text-[var(--color-warning)]">{ev.eligibility_incomplete ? "INCOMPLETE ELIGIBILITY" : "WARNING"}: {ev.message}</span>
+                    <span className="text-[var(--color-warning)]">{ev.termination === "page_limit" || ev.termination === "request_limit" || ev.termination === "time_limit" ? "INCOMPLETE COVERAGE" : ev.eligibility_incomplete ? "INCOMPLETE ELIGIBILITY" : "WARNING"}: {ev.message}</span>
                   ) : ev.type === "error" ? (
                     <span className="text-[var(--color-danger)]">
                       ERROR: {ev.message}

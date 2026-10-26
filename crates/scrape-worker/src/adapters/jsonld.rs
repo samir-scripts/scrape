@@ -104,28 +104,66 @@ pub(crate) fn extract_job_postings_with(
     let selector = Selector::parse(r#"script[type="application/ld+json"]"#).unwrap();
     for script in document.select(&selector) {
         if let Ok(value) = serde_json::from_str::<Value>(&script.text().collect::<String>()) {
-            if !extract_job_postings_from_value(&value, page_url, source, &mut |mut event| {
-                if let WorkerEvent::Job {
-                    company,
-                    company_logo,
-                    company_icon_url,
-                    ..
-                } = &mut event
-                {
-                    if company_logo.is_none() {
-                        *company_logo = super::branding::resolve_page(
-                            html_text,
-                            page_url,
-                            company,
-                            source.config.get("employer_logo").and_then(Value::as_str),
-                        );
-                        *company_icon_url = company_logo.as_ref().map(|e| e.url.clone());
+            if !extract_job_postings_from_value(
+                &value,
+                page_url,
+                source,
+                false,
+                &mut |mut event| {
+                    if let WorkerEvent::Job {
+                        company,
+                        company_logo,
+                        company_icon_url,
+                        ..
+                    } = &mut event
+                    {
+                        if company_logo.is_none() {
+                            *company_logo = super::branding::resolve_page(
+                                html_text,
+                                page_url,
+                                company,
+                                source.config.get("employer_logo").and_then(Value::as_str),
+                            );
+                            *company_icon_url = company_logo.as_ref().map(|e| e.url.clone());
+                        }
                     }
-                }
-                sink(event)
-            }) {
+                    sink(event)
+                },
+            ) {
                 return false;
             }
+        }
+    }
+    true
+}
+
+/// A missing destination is safe only for a single posting on a detail page.
+pub(crate) fn extract_detail_job_postings_with(
+    html_text: &str,
+    page_url: &str,
+    source: &WorkerSource,
+    sink: &mut dyn FnMut(WorkerEvent) -> bool,
+) -> bool {
+    let document = Html::parse_document(html_text);
+    let selector = Selector::parse(r#"script[type="application/ld+json"]"#).unwrap();
+    fn count(value: &Value) -> usize {
+        match value {
+            Value::Object(map) => {
+                usize::from(is_job_posting(map.get("@type")))
+                    + map.get("@graph").map(count).unwrap_or(0)
+            }
+            Value::Array(items) => items.iter().map(count).sum(),
+            _ => 0,
+        }
+    }
+    let values: Vec<Value> = document
+        .select(&selector)
+        .filter_map(|script| serde_json::from_str(&script.text().collect::<String>()).ok())
+        .collect();
+    let single = values.iter().map(count).sum::<usize>() == 1;
+    for value in &values {
+        if !extract_job_postings_from_value(value, page_url, source, single, sink) {
+            return false;
         }
     }
     true
@@ -135,24 +173,51 @@ fn extract_job_postings_from_value(
     value: &Value,
     page_url: &str,
     source: &WorkerSource,
+    missing_url_fallback: bool,
     sink: &mut dyn FnMut(WorkerEvent) -> bool,
 ) -> bool {
     match value {
         Value::Object(map) => {
             if is_job_posting(map.get("@type")) {
-                if let Some(event) = parse_job_posting_map(map, page_url, source) {
+                let fallback;
+                let record = if missing_url_fallback
+                    && map
+                        .get("url")
+                        .and_then(Value::as_str)
+                        .is_none_or(|url| url.trim().is_empty())
+                {
+                    let mut with_url = map.clone();
+                    with_url.insert("url".into(), Value::String(page_url.into()));
+                    fallback = with_url;
+                    &fallback
+                } else {
+                    map
+                };
+                if let Some(event) = parse_job_posting_map(record, page_url, source) {
                     if !sink(event) {
                         return false;
                     }
                 }
             }
             if let Some(graph) = map.get("@graph") {
-                return extract_job_postings_from_value(graph, page_url, source, sink);
+                return extract_job_postings_from_value(
+                    graph,
+                    page_url,
+                    source,
+                    missing_url_fallback,
+                    sink,
+                );
             }
         }
         Value::Array(items) => {
             for item in items {
-                if !extract_job_postings_from_value(item, page_url, source, sink) {
+                if !extract_job_postings_from_value(
+                    item,
+                    page_url,
+                    source,
+                    missing_url_fallback,
+                    sink,
+                ) {
                     return false;
                 }
             }
@@ -214,23 +279,14 @@ fn parse_job_posting_map(
     let location = extract_location(map.get("jobLocation"));
 
     let raw_url = map.get("url").and_then(|value| value.as_str());
-    let public_html_crawl = source
-        .config
-        .pointer("/crawl/extraction")
-        .and_then(Value::as_str)
-        == Some("public_html");
     let job_url = raw_url
-        .filter(|s| !s.trim().is_empty())
+        .filter(|s| !s.trim().is_empty() && !HttpClient::encoded_path_escape(s))
         .and_then(|s| Url::parse(page_url).ok()?.join(s).ok())
-        .or_else(|| {
-            if !public_html_crawl {
-                return None;
-            }
-            Url::parse(page_url)
-                .ok()
-                .filter(|url| matches!(url.scheme(), "http" | "https"))
-        })
-        .filter(|u| matches!(u.scheme(), "http" | "https"));
+        .filter(|u| {
+            matches!(u.scheme(), "http" | "https")
+                && u.username().is_empty()
+                && u.password().is_none()
+        });
     let Some(job_url) = job_url else {
         return Some(WorkerEvent::Error {
             invalid_posting: Some(true),
