@@ -20,6 +20,107 @@ use std::{
 use tokio::time::{timeout_at, Instant};
 use url::Url;
 
+#[derive(Debug, Clone, Default)]
+pub struct CrawlSearchTerms {
+    pub target_roles: Vec<String>,
+    pub any_keywords: Vec<String>,
+    pub all_keywords: Vec<String>,
+    pub exclude_keywords: Vec<String>,
+}
+impl CrawlSearchTerms {
+    pub fn from_filters(filters: &WorkerFilters) -> Self {
+        let mut target_roles = Vec::new();
+        let mut any_keywords = filters.include_keywords.clone();
+        let mut all_keywords = Vec::new();
+        let mut exclude_keywords = filters.exclude_keywords.clone();
+        if let Some(rules) = &filters.matching {
+            target_roles.extend(rules.target_roles.iter().cloned());
+            if let Some(kw) = &rules.keywords {
+                any_keywords.extend(kw.any.iter().cloned());
+                all_keywords.extend(kw.all.iter().cloned());
+                exclude_keywords.extend(kw.exclude.iter().cloned());
+            }
+        }
+        Self {
+            target_roles,
+            any_keywords,
+            all_keywords,
+            exclude_keywords,
+        }
+    }
+}
+
+pub fn score_crawl_link(url: &Url, anchor_text: &str, terms: &CrawlSearchTerms) -> i32 {
+    let path_lower = url.path().to_ascii_lowercase();
+    let text_lower = anchor_text.to_ascii_lowercase();
+    let mut score = 0i32;
+
+    for exclude in &terms.exclude_keywords {
+        let ex = exclude.trim().to_ascii_lowercase();
+        if !ex.is_empty() && (text_lower.contains(&ex) || path_lower.contains(&ex)) {
+            return -30;
+        }
+    }
+
+    if path_lower.contains("/privacy")
+        || path_lower.contains("/terms")
+        || path_lower.contains("/cookie")
+        || path_lower.contains("/press")
+        || path_lower.contains("/blog")
+        || path_lower.contains("/news")
+        || path_lower.contains("/legal")
+        || path_lower.contains("/security")
+        || path_lower.contains("/faq")
+        || path_lower.contains("/help")
+    {
+        score -= 5;
+    }
+
+    if path_lower.contains("/job/")
+        || path_lower.contains("/jobs/")
+        || path_lower.contains("/career/")
+        || path_lower.contains("/careers/")
+        || path_lower.contains("/position/")
+        || path_lower.contains("/positions/")
+        || path_lower.contains("/opening/")
+        || path_lower.contains("/openings/")
+        || path_lower.contains("/vacancy/")
+        || path_lower.contains("/vacancies/")
+        || path_lower.contains("/roles/")
+        || url.query().is_some_and(|q| {
+            q.contains("gh_jid=") || q.contains("lever-") || q.contains("ashby_jid=")
+        })
+    {
+        score += 5;
+    }
+
+    for role in &terms.target_roles {
+        let r = role.trim().to_ascii_lowercase();
+        if !r.is_empty() && (text_lower.contains(&r) || path_lower.contains(&r)) {
+            score += 15;
+            break;
+        }
+    }
+
+    for kw in &terms.any_keywords {
+        let k = kw.trim().to_ascii_lowercase();
+        if !k.is_empty() && (text_lower.contains(&k) || path_lower.contains(&k)) {
+            score += 8;
+            break;
+        }
+    }
+
+    for kw in &terms.all_keywords {
+        let k = kw.trim().to_ascii_lowercase();
+        if !k.is_empty() && (text_lower.contains(&k) || path_lower.contains(&k)) {
+            score += 8;
+            break;
+        }
+    }
+
+    score
+}
+
 pub(crate) enum SelectorStep {
     Event(Box<(WorkerEvent, Option<MatchingEvidence>)>),
     Yield,
@@ -51,6 +152,7 @@ pub(crate) struct SelectorSession {
     detail_bound_reported: bool,
     exhausted: bool,
     pending: VecDeque<(WorkerEvent, Option<MatchingEvidence>)>,
+    crawl_terms: CrawlSearchTerms,
 }
 impl SelectorSession {
     pub async fn new(
@@ -60,6 +162,7 @@ impl SelectorSession {
         limits: &WorkerLimits,
         enrichment: &EnrichmentLimits,
         workflow_deadline: Instant,
+        filters: &WorkerFilters,
     ) -> Result<Self, ClientError> {
         let mode =
             scrape_core::extraction::mode(&source.config).map_err(ClientError::Configuration)?;
@@ -202,6 +305,7 @@ impl SelectorSession {
             detail_bound_reported: false,
             exhausted: false,
             pending: VecDeque::new(),
+            crawl_terms: CrawlSearchTerms::from_filters(filters),
         };
         session.enqueue_links(&html, &actual, 0);
         if session.config.crawl.is_some() && session.config.has_details() {
@@ -367,7 +471,7 @@ impl SelectorSession {
             }
         };
         let candidate = posting.clone().event(&self.source);
-        if !self.config.has_details() {
+        if !self.config.has_details() && !self.config.is_public_html_crawl() {
             return Ok(SelectorStep::Event(Box::new((candidate, None))));
         }
         let matcher = MatchingEvaluator::new(filters).map_err(ClientError::Configuration)?;
@@ -471,6 +575,7 @@ impl SelectorSession {
                         }
                     }
                     if self.config.crawl.is_some() {
+                        self.visited.insert(url.clone());
                         self.crawl_cache.insert(url, (html, actual));
                     }
                 }
@@ -509,7 +614,7 @@ impl SelectorSession {
             ));
         }
         let event = posting.event(&self.source);
-        evidence = evidence_for_final(&event);
+        evidence = evidence_for_final(&event, self.config.is_public_html_crawl());
         let assessment = matcher.assess(&event, started, &evidence);
         let incomplete = assessment.rejected.is_empty() && !assessment.unresolved.is_empty();
         if detail_received && incomplete {
@@ -554,6 +659,7 @@ impl SelectorSession {
         let document = Html::parse_document(html);
         let base = super::selector::resolve_document_base(&document, actual);
         let anchors = scraper::Selector::parse("a[href]").expect("constant anchor selector");
+        let mut candidates = Vec::new();
         for anchor in document.select(&anchors) {
             let Some(raw) = anchor.value().attr("href") else {
                 continue;
@@ -571,7 +677,17 @@ impl SelectorSession {
                 self.crawl_bound_reached = true;
                 continue;
             }
-            // Only one extra destination is needed to prove incomplete coverage.
+            let text = anchor.text().collect::<Vec<_>>().join(" ");
+            let score = score_crawl_link(&url, &text, &self.crawl_terms);
+            if score <= -30 {
+                continue;
+            }
+            candidates.push((url, score));
+        }
+
+        candidates.sort_by_key(|(_, score)| std::cmp::Reverse(*score));
+
+        for (url, _) in candidates {
             if self.frontier.len() as u32 > self.config.max_pages.saturating_sub(self.pages_visited)
             {
                 self.crawl_bound_reached = true;
@@ -699,9 +815,10 @@ impl SelectorSession {
 fn evidence(event: &WorkerEvent) -> MatchingEvidence {
     MatchingEvidence::from_event(event, false)
 }
-fn evidence_for_final(event: &WorkerEvent) -> MatchingEvidence {
+fn evidence_for_final(event: &WorkerEvent, is_crawl: bool) -> MatchingEvidence {
     let mut result = evidence(event);
     result.opportunity_exhausted = true;
+    result.heuristic_crawl = is_crawl;
     result
 }
 fn merge_detail(
@@ -711,6 +828,9 @@ fn merge_detail(
     config: &StaticSourceConfig,
     source: &WorkerSource,
 ) -> Result<(), ClientError> {
+    if config.detail_fields.is_empty() && config.is_public_html_crawl() {
+        return merge_heuristic_detail(posting, html, actual, source);
+    }
     let document = Html::parse_document(html);
     let container = config
         .detail_container
@@ -760,6 +880,112 @@ fn merge_detail(
             }
         });
     }
+    let actual_url = Url::parse(actual).map_err(|e| ClientError::Extraction(e.to_string()))?;
+    let detail_base = super::selector::resolve_document_base(&document, &actual_url);
+    let detail_logo = super::branding::resolve_document_with_base(
+        &document,
+        actual,
+        detail_base.as_str(),
+        &super::branding::employer_name(source),
+        source.config.get("employer_logo").and_then(|v| v.as_str()),
+    );
+    if detail_logo.as_ref().is_some_and(|logo| {
+        posting
+            .company_logo
+            .as_ref()
+            .is_none_or(|current| logo.method < current.method)
+    }) {
+        posting.company_logo = detail_logo;
+    }
+
+    Ok(())
+}
+
+fn merge_heuristic_detail(
+    posting: &mut SelectorPosting,
+    html: &str,
+    actual: &str,
+    source: &WorkerSource,
+) -> Result<(), ClientError> {
+    let document = Html::parse_document(html);
+
+    if posting.description_source.is_none() {
+        for selector_str in [
+            "main",
+            "article",
+            "[role='main']",
+            "[class*='description']",
+            "[class*='job-content']",
+            "[class*='job-detail']",
+            "[class*='job-body']",
+            "#job-description",
+            ".job-description",
+            "body",
+        ] {
+            if let Ok(sel) = scraper::Selector::parse(selector_str) {
+                if let Some(elem) = document.select(&sel).next() {
+                    let text = elem.text().collect::<Vec<_>>().join(" ");
+                    if text.trim().len() >= 80 {
+                        posting.description_source = Some(elem.html());
+                        posting.description_format =
+                            Some(scrape_core::enrich::DescriptionFormat::Html);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if posting.location.is_empty() {
+        for selector_str in [
+            "[class*='location']",
+            "[data-testid*='location']",
+            ".location",
+        ] {
+            if let Ok(sel) = scraper::Selector::parse(selector_str) {
+                if let Some(elem) = document.select(&sel).next() {
+                    let text = elem.text().collect::<Vec<_>>().join(" ").trim().to_string();
+                    if !text.is_empty() && text.len() <= 80 {
+                        posting.location = text;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if posting.salary_text.is_none() {
+        for selector_str in [
+            "[class*='salary']",
+            "[class*='compensation']",
+            "[class*='pay']",
+            ".salary",
+            ".compensation",
+        ] {
+            if let Ok(sel) = scraper::Selector::parse(selector_str) {
+                if let Some(elem) = document.select(&sel).next() {
+                    let text = elem.text().collect::<Vec<_>>().join(" ").trim().to_string();
+                    if !text.is_empty() && text.len() <= 60 {
+                        posting.salary_text = Some(text);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if posting.date_posted.is_none() {
+        if let Ok(sel) = scraper::Selector::parse("time[datetime]") {
+            if let Some(elem) = document.select(&sel).next() {
+                if let Some(raw) = elem.value().attr("datetime") {
+                    if scrape_core::posting_date::posting_instant(raw, "UTC").is_some() {
+                        posting.date_posted = Some(raw.to_string());
+                    }
+                }
+            }
+        }
+    }
+
     let actual_url = Url::parse(actual).map_err(|e| ClientError::Extraction(e.to_string()))?;
     let detail_base = super::selector::resolve_document_base(&document, &actual_url);
     let detail_logo = super::branding::resolve_document_with_base(
@@ -854,6 +1080,7 @@ mod tests {
             detail_bound_reported: false,
             exhausted: false,
             pending: VecDeque::new(),
+            crawl_terms: CrawlSearchTerms::default(),
         };
         let client = HttpClient::new(1, 0);
         let SelectorStep::Event(event) = session

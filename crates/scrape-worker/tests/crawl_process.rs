@@ -56,6 +56,7 @@ impl Server {
             while !stopping.load(Ordering::SeqCst) {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
+                        stream.set_nonblocking(false).unwrap();
                         stream
                             .set_read_timeout(Some(Duration::from_secs(3)))
                             .unwrap();
@@ -125,6 +126,41 @@ fn source(server: &Server, id: &str, seed: &str, config: Value) -> Value {
 }
 fn run(sources: Vec<Value>, cap: u32) -> Vec<WorkerEvent> {
     run_with_request_timeout(sources, cap, 3)
+}
+fn run_with_filters(sources: Vec<Value>, cap: u32, filters: Value) -> Vec<WorkerEvent> {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+        .arg("--stdin")
+        .env_remove("SCRAPE_CDP_WS_URL")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let config = json!({
+        "version": PROTOCOL_VERSION,
+        "sources": sources,
+        "filters": filters,
+        "max_jobs_per_run": cap,
+        "run_started_at": "2026-10-16T00:00:00Z",
+        "limits": { "per_host_delay_ms": 0, "request_timeout_s": 5 }
+    });
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(&serde_json::to_vec(&config).unwrap())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
 }
 
 fn run_with_request_timeout(
@@ -517,4 +553,134 @@ fn crawl_reuses_fetched_html_for_explicit_detail_enrichment_within_page_caps() {
             }
         );
     }
+}
+
+#[test]
+fn role_and_keyword_guided_crawl_prioritizes_relevant_links_and_scrapes_majority_requirements() {
+    let server = Server::new(|path| match path {
+        "/robots.txt" => allow(),
+        "/careers" => Response::html(
+            r#"
+            <html>
+            <body>
+                <div class="header">
+                    <a href="/privacy">Privacy Policy</a>
+                    <a href="/terms">Terms of Service</a>
+                    <a href="/about">About Our Company</a>
+                </div>
+                <div class="jobs">
+                    <div class="job-card">
+                        <a href="/jobs/sales-intern">Sales Intern</a>
+                        <span class="location">Remote</span>
+                    </div>
+                    <div class="job-card">
+                        <a href="/jobs/lead-recruiter">Lead Recruiter</a>
+                        <span class="location">New York, NY</span>
+                    </div>
+                    <div class="job-card">
+                        <a href="/jobs/software-engineer">Senior Software Engineer</a>
+                        <span class="location">Austin, TX</span>
+                    </div>
+                </div>
+            </body>
+            </html>
+        "#,
+        ),
+        "/jobs/software-engineer" => Response::html(
+            r#"
+            <html>
+            <body>
+                <main>
+                    <h1>Senior Software Engineer</h1>
+                    <div class="location">Austin, TX</div>
+                    <div class="salary">$160,000 - $200,000 per year</div>
+                    <div class="job-description">
+                        <p>We are looking for a Senior Software Engineer to build distributed Rust database platforms.</p>
+                        <p>Responsibilities include designing high-throughput ingestion pipelines and microservices.</p>
+                    </div>
+                </main>
+            </body>
+            </html>
+        "#,
+        ),
+        "/jobs/sales-intern" => Response::html(
+            r#"
+            <html><body><h1>Sales Intern</h1><p>Cold outreach and lead qualification.</p></body></html>
+        "#,
+        ),
+        "/jobs/lead-recruiter" => Response::html(
+            r#"
+            <html><body><h1>Lead Recruiter</h1><p>Source candidates and manage pipelines.</p></body></html>
+        "#,
+        ),
+        "/privacy" | "/terms" | "/about" => Response::html("<html><body>Boilerplate</body></html>"),
+        other => panic!("Unexpected request: {other}"),
+    });
+
+    let crawl_cfg = json!({
+        "crawl": {
+            "max_pages": 4,
+            "max_depth": 2,
+            "extraction": "public_html"
+        }
+    });
+
+    let filters = json!({
+        "matching": {
+            "target_roles": ["Software Engineer"],
+            "keywords": {
+                "any": ["Rust", "Distributed"],
+                "all": [],
+                "exclude": ["Recruiter"],
+                "fields": ["title", "description"]
+            },
+            "countries": ["US"],
+            "posting_date": {
+                "preset": "past_24h",
+                "timezone": "America/New_York",
+                "include_unknown": false
+            }
+        }
+    });
+
+    let events = run_with_filters(
+        vec![source(&server, "html-crawl", "/careers", crawl_cfg)],
+        10,
+        filters,
+    );
+
+    let matched_jobs = jobs(&events);
+    assert_eq!(
+        matched_jobs.len(),
+        1,
+        "Expected exactly 1 job meeting majority requirements; events={events:?}"
+    );
+
+    let WorkerEvent::Job {
+        title,
+        url,
+        location,
+        description_text,
+        salary,
+        ..
+    } = matched_jobs[0]
+    else {
+        panic!("Expected Job event");
+    };
+
+    assert_eq!(title, "Senior Software Engineer");
+    assert!(url.ends_with("/jobs/software-engineer"));
+    assert_eq!(location, "Austin, TX");
+    assert!(description_text
+        .as_deref()
+        .unwrap_or("")
+        .contains("distributed Rust"));
+    assert!(salary.is_some());
+
+    // Verify link prioritization: /jobs/software-engineer was visited before boilerplate
+    let paths = server.paths();
+    assert!(
+        paths.contains(&"/jobs/software-engineer".to_string()),
+        "The prioritized software engineering job must have been visited; paths={paths:?}"
+    );
 }

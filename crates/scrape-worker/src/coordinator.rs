@@ -252,6 +252,7 @@ impl CoordinatorSession {
                             extraction_limits,
                             &enrichment_limits,
                             workflow_deadline,
+                            &session.filters,
                         )
                         .await?,
                     );

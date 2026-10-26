@@ -46,6 +46,8 @@ pub struct MatchingEvidence {
     pub known: Vec<RejectionReason>,
     /// A failed/exhausted opportunity can use explicitly permitted unknown values.
     pub opportunity_exhausted: bool,
+    /// Crawled public HTML pages allow majority-requirement acceptance after detail hydration.
+    pub heuristic_crawl: bool,
 }
 impl MatchingEvidence {
     pub fn complete() -> Self {
@@ -61,6 +63,7 @@ impl MatchingEvidence {
             compensation: true,
             known: vec![RejectionReason::Workplace, RejectionReason::Geography],
             opportunity_exhausted: true,
+            heuristic_crawl: false,
         }
     }
     pub fn from_event(event: &WorkerEvent, opportunity_exhausted: bool) -> Self {
@@ -135,6 +138,7 @@ impl MatchingEvidence {
             posting_date: date_posted.is_some(),
             compensation: salary.is_some(),
             opportunity_exhausted,
+            heuristic_crawl: false,
         }
     }
     fn knows(&self, reason: RejectionReason) -> bool {
@@ -281,7 +285,212 @@ impl<'a> MatchingEvaluator<'a> {
         assessment
             .unresolved
             .retain(|reason| !assessment.rejected.contains(reason));
+        if evidence.heuristic_crawl && evidence.opportunity_exhausted {
+            self.apply_crawl_majority(&context, evidence, &mut assessment);
+        }
         assessment
+    }
+    fn apply_crawl_majority(
+        &self,
+        context: &JobFilterContext,
+        evidence: &MatchingEvidence,
+        assessment: &mut MatchingAssessment,
+    ) {
+        if assessment.rejected.iter().any(|reason| {
+            matches!(
+                reason,
+                RejectionReason::InvalidCandidate
+                    | RejectionReason::KeywordExclusion
+                    | RejectionReason::LegacyExclusion
+                    | RejectionReason::Company
+                    | RejectionReason::Query
+                    | RejectionReason::Policy
+            )
+        }) {
+            return;
+        }
+        let rules = self.filters.matching.as_ref();
+        let has_target_roles = rules.is_some_and(|r| !r.target_roles.is_empty());
+        let target_role_matched =
+            rules.is_some_and(|r| PostingRules::contains_choice(context.title, &r.target_roles));
+        if has_target_roles && !target_role_matched {
+            return;
+        }
+        if !self.filters.include_keywords.is_empty()
+            && (assessment
+                .rejected
+                .contains(&RejectionReason::LegacyKeywords)
+                || assessment
+                    .unresolved
+                    .contains(&RejectionReason::LegacyKeywords))
+        {
+            return;
+        }
+        if !has_target_roles && self.filters.include_keywords.is_empty() {
+            if let Some(kw) = rules.and_then(|r| r.keywords.as_ref()) {
+                if !kw.any.is_empty()
+                    && (assessment.rejected.contains(&RejectionReason::KeywordAny)
+                        || assessment.unresolved.contains(&RejectionReason::KeywordAny))
+                {
+                    return;
+                }
+                if kw.any.is_empty() && !kw.all.is_empty() {
+                    let fields = kw.fields();
+                    let any_all_matched = kw.all.iter().any(|word| {
+                        fields.iter().any(|field| {
+                            evidence.fields.contains(field)
+                                && context
+                                    .get_field_str(*field)
+                                    .to_ascii_lowercase()
+                                    .contains(&word.to_ascii_lowercase())
+                        })
+                    });
+                    if !any_all_matched {
+                        return;
+                    }
+                }
+            }
+        }
+
+        let mut total_active = 0usize;
+        let mut satisfied = 0usize;
+        fn check_status(
+            reason: RejectionReason,
+            assessment: &MatchingAssessment,
+            total_active: &mut usize,
+            satisfied: &mut usize,
+        ) {
+            *total_active += 1;
+            if !assessment.rejected.contains(&reason) && !assessment.unresolved.contains(&reason) {
+                *satisfied += 1;
+            }
+        }
+
+        if !self.filters.include_keywords.is_empty() {
+            check_status(
+                RejectionReason::LegacyKeywords,
+                assessment,
+                &mut total_active,
+                &mut satisfied,
+            );
+        }
+        if !self.filters.locations.is_empty() {
+            check_status(
+                RejectionReason::LegacyLocation,
+                assessment,
+                &mut total_active,
+                &mut satisfied,
+            );
+        }
+        if !self.filters.role_types.is_empty() {
+            check_status(
+                RejectionReason::LegacyRoleType,
+                assessment,
+                &mut total_active,
+                &mut satisfied,
+            );
+        }
+        if self.filters.compensation.is_some() {
+            check_status(
+                RejectionReason::Compensation,
+                assessment,
+                &mut total_active,
+                &mut satisfied,
+            );
+        }
+        if let Some(rules) = rules {
+            if !rules.target_roles.is_empty() {
+                total_active += 1;
+                if target_role_matched {
+                    satisfied += 1;
+                }
+            }
+            if !rules.role_types.is_empty() {
+                total_active += 1;
+                if rules.role_types.contains(&context.role_type) {
+                    satisfied += 1;
+                }
+            }
+            if let Some(kw) = &rules.keywords {
+                if !kw.any.is_empty() {
+                    check_status(
+                        RejectionReason::KeywordAny,
+                        assessment,
+                        &mut total_active,
+                        &mut satisfied,
+                    );
+                }
+                let fields = kw.fields();
+                for word in &kw.all {
+                    total_active += 1;
+                    if fields.iter().any(|field| {
+                        evidence.fields.contains(field)
+                            && context
+                                .get_field_str(*field)
+                                .to_ascii_lowercase()
+                                .contains(&word.to_ascii_lowercase())
+                    }) {
+                        satisfied += 1;
+                    }
+                }
+            }
+            for (reason, active) in [
+                (RejectionReason::PostingDate, rules.posting_date.is_some()),
+                (
+                    RejectionReason::Compensation,
+                    rules.compensation.is_some() && self.filters.compensation.is_none(),
+                ),
+                (RejectionReason::Company, !rules.companies.is_empty()),
+                (RejectionReason::Workplace, !rules.workplaces.is_empty()),
+                (
+                    RejectionReason::Experience,
+                    rules.experience_min.is_some() || rules.experience_max.is_some(),
+                ),
+                (
+                    RejectionReason::NewGrad,
+                    matches!(rules.new_grad.as_deref(), Some("only" | "exclude")),
+                ),
+                (RejectionReason::Sponsorship, !rules.sponsorship.is_empty()),
+                (
+                    RejectionReason::WorkAuthorization,
+                    !rules.work_auth.is_empty(),
+                ),
+                (RejectionReason::Clearance, !rules.clearance.is_empty()),
+                (
+                    RejectionReason::Geography,
+                    !rules.countries.is_empty()
+                        || !rules.regions.is_empty()
+                        || !rules.cities.is_empty(),
+                ),
+            ] {
+                if active {
+                    check_status(reason, assessment, &mut total_active, &mut satisfied);
+                }
+            }
+        }
+
+        let majority_met = total_active > 0
+            && (satisfied * 2 > total_active
+                || (satisfied * 2 >= total_active && assessment.rejected.is_empty()));
+        if majority_met {
+            assessment.unresolved.clear();
+            assessment.rejected.retain(|reason| {
+                !matches!(
+                    reason,
+                    RejectionReason::KeywordAll
+                        | RejectionReason::PostingDate
+                        | RejectionReason::Compensation
+                        | RejectionReason::Workplace
+                        | RejectionReason::Experience
+                        | RejectionReason::NewGrad
+                        | RejectionReason::Sponsorship
+                        | RejectionReason::WorkAuthorization
+                        | RejectionReason::Clearance
+                        | RejectionReason::RoleType
+                        | RejectionReason::LegacyRoleType
+                )
+            });
+        }
     }
     pub fn matches_at(&self, event: &WorkerEvent, started: chrono::DateTime<chrono::Utc>) -> bool {
         self.rejection_reasons(event, started).is_empty()

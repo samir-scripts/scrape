@@ -35,6 +35,7 @@ pub async fn scrape_selector_with(
         &scrape_core::protocol::EnrichmentLimits::default(),
         tokio::time::Instant::now()
             + std::time::Duration::from_secs(scrape_core::protocol::DEFAULT_WORKFLOW_DURATION_S),
+        &scrape_core::WorkerFilters::default(),
     )
     .await?;
     let started = chrono::Utc::now();
@@ -641,22 +642,121 @@ pub(crate) fn extract_heuristic_candidates(
         ) {
             continue;
         }
+        let mut location = String::new();
+        let mut salary_text = None;
+        let mut date_posted = None;
+        if let Some(parent) = anchor.parent().and_then(scraper::ElementRef::wrap) {
+            let card = if scraper::Selector::parse("[class*='location'], [class*='salary']")
+                .ok()
+                .and_then(|sel| parent.select(&sel).next())
+                .is_some()
+            {
+                parent
+            } else if let Some(grandparent) = parent.parent().and_then(scraper::ElementRef::wrap) {
+                let tag = grandparent.value().name();
+                let class = grandparent.value().attr("class").unwrap_or("");
+                if matches!(tag, "article" | "li" | "tr")
+                    || class.contains("card")
+                    || class.contains("job-item")
+                    || class.contains("posting")
+                {
+                    grandparent
+                } else {
+                    parent
+                }
+            } else {
+                parent
+            };
+            if let Ok(loc_sel) = scraper::Selector::parse(
+                "[class*='location'], [data-testid*='location'], .location",
+            ) {
+                if let Some(loc_el) = card.select(&loc_sel).next() {
+                    let text = loc_el
+                        .text()
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                        .trim()
+                        .to_string();
+                    if !text.is_empty() && text.len() <= 80 {
+                        location = text;
+                    }
+                }
+            }
+            if let Ok(sal_sel) = scraper::Selector::parse(
+                "[class*='salary'], [class*='compensation'], [class*='pay'], .salary",
+            ) {
+                if let Some(sal_el) = card.select(&sal_sel).next() {
+                    let text = sal_el
+                        .text()
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                        .trim()
+                        .to_string();
+                    if !text.is_empty() && text.len() <= 60 {
+                        salary_text = Some(text);
+                    }
+                }
+            }
+            if let Ok(date_sel) = scraper::Selector::parse("time[datetime]") {
+                if let Some(time_el) = card.select(&date_sel).next() {
+                    if let Some(raw) = time_el.value().attr("datetime") {
+                        if scrape_core::posting_date::posting_instant(raw, "UTC").is_some() {
+                            date_posted = Some(raw.to_string());
+                        }
+                    }
+                }
+            }
+        }
 
         let posting = SelectorCandidate::Posting(Box::new(SelectorPosting {
             title: raw_title,
             url: job_url_str.clone(),
             external_id: job_url_str.clone(),
-            location: String::new(),
-            salary_text: None,
+            location,
+            salary_text,
             description_source: None,
             description_format: Some(DescriptionFormat::PlainText),
-            date_posted: None,
+            date_posted,
             company_logo: company_logo.clone(),
-            detail_url: (config.follow_detail || config.has_details()).then_some(job_url_str),
+            detail_url: (config.follow_detail
+                || config.has_details()
+                || config.is_public_html_crawl())
+            .then_some(job_url_str),
         }));
-
         if !sink(posting) {
             break;
+        }
+    }
+    if seen_urls.is_empty() {
+        if let Ok(h1_sel) = scraper::Selector::parse("h1, [class*='job-title']") {
+            if let Some(h1) = document.select(&h1_sel).next() {
+                let h1_title = h1.text().collect::<Vec<_>>().join(" ").trim().to_string();
+                if h1_title.len() >= 3 && h1_title.len() <= 120 {
+                    let body_text = document.root_element().text().collect::<Vec<_>>().join(" ");
+                    let lower = body_text.to_ascii_lowercase();
+                    let has_job_cues = lower.contains("responsibilities")
+                        || lower.contains("qualifications")
+                        || lower.contains("requirements")
+                        || lower.contains("experience")
+                        || lower.contains("about the role");
+                    if has_job_cues && body_text.len() >= 150 {
+                        let self_url = base_url.to_string();
+                        let posting = SelectorCandidate::Posting(Box::new(SelectorPosting {
+                            title: h1_title,
+                            url: self_url.clone(),
+                            external_id: self_url.clone(),
+                            location: String::new(),
+                            salary_text: None,
+                            description_source: Some(document.html()),
+                            description_format: Some(DescriptionFormat::Html),
+                            date_posted: None,
+                            company_logo: company_logo.clone(),
+                            detail_url: None,
+                        }));
+                        let _ = sink(posting);
+                    }
+                }
+            }
         }
     }
 

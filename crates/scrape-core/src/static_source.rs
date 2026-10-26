@@ -226,6 +226,11 @@ impl StaticSourceConfig {
     pub fn has_details(&self) -> bool {
         self.follow_detail || self.detail_link.is_some()
     }
+    pub fn is_public_html_crawl(&self) -> bool {
+        self.crawl
+            .as_ref()
+            .is_some_and(|crawl| crawl.extraction == CrawlExtraction::PublicHtml)
+    }
 }
 
 #[cfg(test)]
