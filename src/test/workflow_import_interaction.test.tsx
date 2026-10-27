@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AddSourceModal } from "../components/views/settings/AddSourceModal";
 import { SourcesSettings } from "../components/views/settings/SourcesSettings";
@@ -11,6 +11,11 @@ import { workflowSpecToYaml, sourceToWorkflowSpec } from "../lib/yamlWorkflow";
 import { useToastStore } from "../lib/toast";
 const spec = { ...sourceToWorkflowSpec(SAMPLE_ENGINEERING_SOURCE), metadata: { name: "Imported board", enabled: true }, filters: { include_keywords: [], exclude_keywords: [], locations: [] }, schedule: { cadence: "manual" as const, timezone: "UTC" } };
 function file(text: string, name = 'workflow.yaml') { const result = new File([text], name, { type: 'text/yaml' }); Object.defineProperty(result, 'text', { value: async () => text }); return result; }
+async function requestWorkflowDeletion(user: UserEvent, source = SAMPLE_ENGINEERING_SOURCE) {
+ await user.click(await screen.findByRole('button', { name: `More actions for ${source.name}` }));
+ await user.click(screen.getByRole('menuitem', { name: 'Delete workflow' }));
+ return screen.findByRole('dialog', { name: 'Delete workflow' });
+}
 beforeAll(() => { HTMLDialogElement.prototype.showModal = function() { this.setAttribute('open',''); }; HTMLDialogElement.prototype.close = function() { this.removeAttribute('open'); }; });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); useToastStore.getState().clearAll(); });
 it('imports only after validation, confirms replacement, preserves the old draft on failure, and reselects the same file', async () => {
@@ -70,10 +75,9 @@ it('shows cancellation while Run all is pending and refreshes after controlled c
  expect(useToastStore.getState().toasts.some(toast => toast.title === 'RUN CANCELLED')).toBe(true);
 });
 
-it('consolidates contextual actions and reports delete failure from the menu', async () => {
+it('consolidates contextual actions and retains the workflow dialog after a readable native delete failure', async () => {
  vi.spyOn(api, 'listSources').mockResolvedValue([SAMPLE_ENGINEERING_SOURCE]);
- const remove = vi.spyOn(api, 'deleteSource').mockRejectedValue(new Error('database unavailable'));
- const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+ const remove = vi.spyOn(api, 'deleteSource').mockRejectedValue({ kind: 'database', message: 'database unavailable' });
  const queryClient = new QueryClient();
  render(<QueryClientProvider client={queryClient}><SourcesSettings settings={DEFAULT_SETTINGS} /><ToastContainer /></QueryClientProvider>);
  const user = userEvent.setup();
@@ -84,9 +88,124 @@ it('consolidates contextual actions and reports delete failure from the menu', a
  expect(labels.findIndex(button => button.textContent === 'Edit workflow')).toBeLessThan(labels.findIndex(button => button.textContent === 'Preview matches'));
  expect(screen.getByRole('menuitem', { name: 'View run history' })).toBeTruthy();
  await user.click(screen.getByRole('menuitem', { name: 'Delete workflow' }));
+ const dialog = await screen.findByRole('dialog', { name: 'Delete workflow' });
+ expect(within(dialog).getByText(SAMPLE_ENGINEERING_SOURCE.name)).toBeTruthy();
+ expect(within(dialog).getByText(/Saved jobs, tracking, notes and run history will be kept/)).toBeTruthy();
+ expect(remove).not.toHaveBeenCalled();
+ const cancel = within(dialog).getByRole('button', { name: 'Cancel' }) as HTMLButtonElement;
+ await waitFor(() => expect(document.activeElement).toBe(cancel));
+ await user.click(within(dialog).getByRole('button', { name: 'Delete workflow' }));
  await waitFor(() => expect(remove).toHaveBeenCalledWith(SAMPLE_ENGINEERING_SOURCE.id));
- expect(confirm).toHaveBeenCalledWith(`DELETE WORKFLOW ${SAMPLE_ENGINEERING_SOURCE.name.toUpperCase()}?`);
- expect((await screen.findByRole("alert")).textContent).toContain("database unavailable");
+ expect(remove).toHaveBeenCalledTimes(1);
+ const alert = await screen.findByRole('alert');
+ expect(alert.textContent).toContain('WORKFLOW DELETE FAILED');
+ expect(alert.textContent).toContain('database unavailable');
+ expect(alert.textContent).not.toContain('[object Object]');
+ expect(screen.getByRole('dialog', { name: 'Delete workflow' })).toBe(dialog);
+ expect(screen.getByRole('button', { name: `Edit workflow ${SAMPLE_ENGINEERING_SOURCE.name}` })).toBeTruthy();
+ expect(cancel.disabled).toBe(false);
+ expect((within(dialog).getByRole('button', { name: 'Delete workflow' }) as HTMLButtonElement).disabled).toBe(false);
+ await user.click(cancel);
+ await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete workflow' })).toBeNull());
+ await waitFor(() => expect(document.activeElement).toBe(menu));
+});
+
+it('focuses Cancel after the menu frame and dismisses without deleting or refreshing', async () => {
+ const list = vi.spyOn(api, 'listSources').mockResolvedValue([SAMPLE_ENGINEERING_SOURCE]);
+ const remove = vi.spyOn(api, 'deleteSource').mockResolvedValue(undefined);
+ render(<QueryClientProvider client={new QueryClient()}><SourcesSettings settings={DEFAULT_SETTINGS} /></QueryClientProvider>);
+ const user = userEvent.setup();
+ const menu = await screen.findByRole('button', { name: `More actions for ${SAMPLE_ENGINEERING_SOURCE.name}` });
+ for (const dismissal of ['cancel', 'escape', 'header', 'backdrop'] as const) {
+  const dialog = await requestWorkflowDeletion(user);
+  const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
+  await waitFor(() => expect(document.activeElement).toBe(cancel));
+  expect(remove).not.toHaveBeenCalled();
+  if (dismissal === 'cancel') await user.click(cancel);
+  else if (dismissal === 'escape') await user.keyboard('{Escape}');
+  else if (dismissal === 'header') await user.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
+  else await user.click(dialog);
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete workflow' })).toBeNull());
+  await waitFor(() => expect(document.activeElement).toBe(menu));
+ }
+ expect(remove).not.toHaveBeenCalled();
+ expect(list).toHaveBeenCalledTimes(1);
+ expect(screen.getByRole('button', { name: `Edit workflow ${SAMPLE_ENGINEERING_SOURCE.name}` })).toBeTruthy();
+});
+
+it.each(['deleted', 'surviving'] as const)('deletes the captured workflow, refreshes the list and preserves inspection with the %s workflow selected', async inspectedWorkflow => {
+ const remaining = { ...SAMPLE_ENGINEERING_SOURCE, id: 'remaining-workflow', name: 'Remaining workflow' };
+ const list = vi.spyOn(api, 'listSources').mockResolvedValueOnce([SAMPLE_ENGINEERING_SOURCE, remaining]).mockResolvedValue([remaining]);
+ const runs = vi.spyOn(api, 'listSourceRuns').mockResolvedValue([]);
+ const remove = vi.spyOn(api, 'deleteSource').mockResolvedValue(undefined);
+ render(<QueryClientProvider client={new QueryClient()}><SourcesSettings settings={DEFAULT_SETTINGS} /></QueryClientProvider>);
+ const user = userEvent.setup();
+ const inspected = inspectedWorkflow === 'deleted' ? SAMPLE_ENGINEERING_SOURCE : remaining;
+ await user.click(await screen.findByRole('button', { name: `More actions for ${inspected.name}` }));
+ await user.click(screen.getByRole('menuitem', { name: 'View run history' }));
+ expect(await screen.findByText(`${inspected.name} // WORKFLOW OBSERVABILITY & EXECUTION LOGS`)).toBeTruthy();
+ const dialog = await requestWorkflowDeletion(user);
+ expect(remove).not.toHaveBeenCalled();
+ await user.click(within(dialog).getByRole('button', { name: 'Delete workflow' }));
+ await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+ await waitFor(() => expect(screen.queryByRole('button', { name: `Edit workflow ${SAMPLE_ENGINEERING_SOURCE.name}` })).toBeNull());
+ expect(remove).toHaveBeenCalledTimes(1);
+ expect(remove).toHaveBeenCalledWith(SAMPLE_ENGINEERING_SOURCE.id);
+ expect(screen.queryByRole('dialog', { name: 'Delete workflow' })).toBeNull();
+ expect(screen.getByRole('button', { name: `Edit workflow ${remaining.name}` })).toBeTruthy();
+ expect(await screen.findByText(`${remaining.name} // WORKFLOW OBSERVABILITY & EXECUTION LOGS`)).toBeTruthy();
+ expect(runs).toHaveBeenCalledWith(remaining.id, 10);
+ expect(useToastStore.getState().toasts.some(toast => toast.message === `Deleted workflow ${SAMPLE_ENGINEERING_SOURCE.name}`)).toBe(true);
+ await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add workflow' })));
+});
+
+it('blocks duplicate deletion and every dismissal path until the pending deletion completes', async () => {
+ const remaining = { ...SAMPLE_ENGINEERING_SOURCE, id: 'remaining-workflow', name: 'Remaining workflow' };
+ const list = vi.spyOn(api, 'listSources').mockResolvedValueOnce([SAMPLE_ENGINEERING_SOURCE, remaining]).mockResolvedValue([remaining]);
+ let finish!: () => void;
+ const remove = vi.spyOn(api, 'deleteSource').mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+ render(<QueryClientProvider client={new QueryClient()}><SourcesSettings settings={DEFAULT_SETTINGS} /></QueryClientProvider>);
+ const user = userEvent.setup();
+ const dialog = await requestWorkflowDeletion(user);
+ const confirm = within(dialog).getByRole('button', { name: 'Delete workflow' }) as HTMLButtonElement;
+ const cancel = within(dialog).getByRole('button', { name: 'Cancel' }) as HTMLButtonElement;
+ await user.dblClick(confirm);
+ expect(remove).toHaveBeenCalledTimes(1);
+ expect(remove).toHaveBeenCalledWith(SAMPLE_ENGINEERING_SOURCE.id);
+ expect(confirm.disabled).toBe(true);
+ expect(cancel.disabled).toBe(true);
+ expect(within(dialog).getByRole('status').textContent).toContain('Deleting workflow');
+ await user.keyboard('{Escape}');
+ await user.click(dialog);
+ await user.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
+ const nativeCancel = new Event('cancel', { cancelable: true });
+ fireEvent(dialog, nativeCancel);
+ expect(nativeCancel.defaultPrevented).toBe(true);
+ expect(screen.getByRole('dialog', { name: 'Delete workflow' })).toBe(dialog);
+ expect(screen.getByRole('button', { name: `Edit workflow ${SAMPLE_ENGINEERING_SOURCE.name}` })).toBeTruthy();
+ expect(remove).toHaveBeenCalledTimes(1);
+ expect(list).toHaveBeenCalledTimes(1);
+ await act(async () => { finish(); });
+ await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete workflow' })).toBeNull());
+ await waitFor(() => expect(screen.queryByRole('button', { name: `Edit workflow ${SAMPLE_ENGINEERING_SOURCE.name}` })).toBeNull());
+ expect(screen.getByRole('button', { name: `Edit workflow ${remaining.name}` })).toBeTruthy();
+ expect(list).toHaveBeenCalledTimes(2);
+ await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add workflow' })));
+});
+
+it('closes after a successful delete and reports refresh failure through the existing load-error UI', async () => {
+ vi.spyOn(api, 'listSources').mockResolvedValueOnce([SAMPLE_ENGINEERING_SOURCE]).mockRejectedValue(new Error('refresh unavailable'));
+ const remove = vi.spyOn(api, 'deleteSource').mockResolvedValue(undefined);
+ render(<QueryClientProvider client={new QueryClient()}><SourcesSettings settings={DEFAULT_SETTINGS} /></QueryClientProvider>);
+ const user = userEvent.setup();
+ const dialog = await requestWorkflowDeletion(user);
+ await user.click(within(dialog).getByRole('button', { name: 'Delete workflow' }));
+ expect((await screen.findByRole('alert')).textContent).toContain('Could not load workflows: Error: refresh unavailable');
+ expect(screen.getByRole('button', { name: 'Retry loading workflows' })).toBeTruthy();
+ expect(screen.queryByRole('dialog', { name: 'Delete workflow' })).toBeNull();
+ expect(remove).toHaveBeenCalledWith(SAMPLE_ENGINEERING_SOURCE.id);
+ expect(useToastStore.getState().toasts.some(toast => toast.title === 'WORKFLOW DELETE FAILED')).toBe(false);
+ await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add workflow' })));
 });
 
 it('opens workflow configuration from its name and exposes preview and run history in More actions', async () => {

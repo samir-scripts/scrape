@@ -1060,6 +1060,7 @@ const apiImplementation = {
   deleteSource: (id: string) => {
     if (!isTauri()) {
       devSources = devSources.filter((s) => s.id !== id);
+      saveDevSources();
       return Promise.resolve();
     }
     return invoke<void>("delete_source", { id });

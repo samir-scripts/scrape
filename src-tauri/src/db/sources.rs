@@ -487,22 +487,27 @@ impl SourcesRepo {
     }
 
     pub async fn delete(pool: &SqlitePool, id: &str) -> Result<()> {
+        let mut tx = pool.begin().await?;
         let wf_affected = sqlx::query("DELETE FROM workflows WHERE id = ?")
             .bind(id)
-            .execute(pool)
-            .await
-            .map(|r| r.rows_affected())
-            .unwrap_or(0);
-        let src_affected = sqlx::query("DELETE FROM sources WHERE id = ?")
-            .bind(id)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?
             .rows_affected();
+        let src_affected = if wf_affected == 0 {
+            sqlx::query("DELETE FROM sources WHERE id = ? AND workflow_id IS NULL")
+                .bind(id)
+                .execute(&mut *tx)
+                .await?
+                .rows_affected()
+        } else {
+            0
+        };
 
         if wf_affected == 0 && src_affected == 0 {
             return Err(AppError::NotFound(format!("Source {} not found", id)));
         }
 
+        tx.commit().await?;
         Ok(())
     }
 
@@ -622,6 +627,190 @@ impl SourcesRepo {
 mod tests {
     use super::*;
     use crate::db::init_memory_db;
+
+    async fn deletion_fixture(pool: &SqlitePool) {
+        for id in ["delete-parent", "unrelated-parent"] {
+            sqlx::query("INSERT INTO workflows(id,name,cadence,created_at) VALUES(?,?,'manual','2026-10-23T12:00:00Z')")
+                .bind(id).bind(id).execute(pool).await.unwrap();
+        }
+        for (id, owner, enabled) in [
+            ("delete-parent", "delete-parent", true),
+            ("enabled-child", "delete-parent", true),
+            ("disabled-child", "delete-parent", false),
+            ("unrelated-parent", "unrelated-parent", true),
+        ] {
+            sqlx::query("INSERT INTO sources(id,workflow_id,kind,name,identifier,enabled,cadence,created_at) VALUES(?,?,'greenhouse',?,?,?,'manual','2026-10-23T12:00:00Z')")
+                .bind(id).bind(owner).bind(id).bind(id).bind(enabled)
+                .execute(pool).await.unwrap();
+            sqlx::query("INSERT INTO jobs(id,dedupe_key,source_id,workflow_id,title,company,url,date_added,last_seen_at,status,status_changed_at,notes,favorited,favorited_at,source_name_snapshot) VALUES(?,?,?,?,'Saved engineer','Example','https://fixture.invalid/job','2026-10-23','2026-10-23','applied','2026-10-23','Preserved notes',1,'2026-10-23',?)")
+                .bind(id).bind(format!("identity:{id}")).bind(id).bind(owner).bind(id)
+                .execute(pool).await.unwrap();
+            sqlx::query("INSERT INTO job_status_events(job_id,from_status,to_status,changed_at) VALUES(?,'viewed','applied','2026-10-23')")
+                .bind(id).execute(pool).await.unwrap();
+            sqlx::query("INSERT INTO scrape_runs(id,source_id,workflow_id,trigger,status,started_at,finished_at,jobs_found,jobs_new) VALUES(?,?,?,'single_source','success','2026-10-23T12:00:00Z','2026-10-23T12:01:00Z',3,1)")
+                .bind(id).bind(id).bind(owner).execute(pool).await.unwrap();
+            sqlx::query("INSERT INTO scrape_logs(id,run_id,timestamp,level,source_id,message) VALUES(?,?,'2026-10-23T12:00:30Z','info',?,'Preserved run history')")
+                .bind(id).bind(id).bind(id).execute(pool).await.unwrap();
+        }
+    }
+
+    // Relationship columns are checked separately; all saved content must survive deletion.
+    async fn saved_deletion_state(pool: &SqlitePool) -> Vec<String> {
+        let mut state = Vec::new();
+        for query in [
+            "SELECT json_array(id,dedupe_key,title,company,url,date_added,last_seen_at,status,status_changed_at,notes,favorited,favorited_at,source_name_snapshot) FROM jobs ORDER BY id",
+            "SELECT json_array(id,job_id,from_status,to_status,changed_at) FROM job_status_events ORDER BY id",
+            "SELECT json_array(id,trigger,status,started_at,finished_at,jobs_found,jobs_new,error) FROM scrape_runs ORDER BY id",
+            "SELECT json_array(id,run_id,timestamp,level,source_id,message) FROM scrape_logs ORDER BY id",
+        ] {
+            state.extend(
+                sqlx::query_scalar::<_, String>(query)
+                    .fetch_all(pool)
+                    .await
+                    .unwrap(),
+            );
+        }
+        state
+    }
+
+    async fn deletion_links(pool: &SqlitePool) -> Vec<(String, Option<String>, Option<String>)> {
+        let mut links = Vec::new();
+        for query in [
+            "SELECT id,source_id,workflow_id FROM jobs ORDER BY id",
+            "SELECT id,source_id,workflow_id FROM scrape_runs ORDER BY id",
+        ] {
+            links.extend(sqlx::query_as(query).fetch_all(pool).await.unwrap());
+        }
+        links
+    }
+
+    async fn assert_workflow_deleted(pool: &SqlitePool, saved: &[String]) {
+        assert_eq!(saved_deletion_state(pool).await, saved);
+        let owners: Vec<(String, String)> =
+            sqlx::query_as("SELECT id,workflow_id FROM sources ORDER BY id")
+                .fetch_all(pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            owners,
+            vec![("unrelated-parent".into(), "unrelated-parent".into())]
+        );
+        let workflows: Vec<String> = sqlx::query_scalar("SELECT id FROM workflows ORDER BY id")
+            .fetch_all(pool)
+            .await
+            .unwrap();
+        assert_eq!(workflows, vec!["unrelated-parent"]);
+        for (id, source, workflow) in deletion_links(pool).await {
+            if id == "unrelated-parent" {
+                assert_eq!(source.as_deref(), Some("unrelated-parent"));
+                assert_eq!(workflow.as_deref(), Some("unrelated-parent"));
+            } else {
+                assert_eq!(source, None);
+                assert_eq!(workflow, None);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn delete_workflow_cascades_all_owned_sources_and_preserves_saved_history() {
+        let pool = init_memory_db().await.unwrap();
+        deletion_fixture(&pool).await;
+        let saved = saved_deletion_state(&pool).await;
+        let unrelated = SourcesRepo::get(&pool, "unrelated-parent").await.unwrap();
+
+        SourcesRepo::delete(&pool, "delete-parent").await.unwrap();
+
+        assert_workflow_deleted(&pool, &saved).await;
+        assert_eq!(
+            SourcesRepo::get(&pool, "unrelated-parent").await.unwrap(),
+            unrelated
+        );
+    }
+
+    #[tokio::test]
+    async fn delete_workflow_propagates_database_failure_rolls_back_and_can_retry() {
+        let pool = init_memory_db().await.unwrap();
+        deletion_fixture(&pool).await;
+        let saved = saved_deletion_state(&pool).await;
+        let links = deletion_links(&pool).await;
+        let mut sources = Vec::new();
+        for id in [
+            "delete-parent",
+            "enabled-child",
+            "disabled-child",
+            "unrelated-parent",
+        ] {
+            sources.push(SourcesRepo::get(&pool, id).await.unwrap());
+        }
+        let workflows: Vec<(String, String)> =
+            sqlx::query_as("SELECT id,name FROM workflows ORDER BY id")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        sqlx::query("CREATE TRIGGER fail_workflow_delete BEFORE DELETE ON workflows WHEN OLD.id='delete-parent' BEGIN SELECT RAISE(ABORT,'injected workflow delete failure'); END;")
+            .execute(&pool).await.unwrap();
+
+        let error = SourcesRepo::delete(&pool, "delete-parent")
+            .await
+            .unwrap_err();
+        assert!(matches!(&error, AppError::Database(_)));
+        assert!(error.to_string().contains("injected workflow delete failure"));
+        assert_eq!(saved_deletion_state(&pool).await, saved);
+        assert_eq!(deletion_links(&pool).await, links);
+        for source in sources {
+            assert_eq!(SourcesRepo::get(&pool, &source.id).await.unwrap(), source);
+        }
+        assert_eq!(
+            sqlx::query_as::<_, (String, String)>("SELECT id,name FROM workflows ORDER BY id")
+                .fetch_all(&pool)
+                .await
+                .unwrap(),
+            workflows
+        );
+
+        sqlx::query("DROP TRIGGER fail_workflow_delete")
+            .execute(&pool)
+            .await
+            .unwrap();
+        SourcesRepo::delete(&pool, "delete-parent").await.unwrap();
+        assert_workflow_deleted(&pool, &saved).await;
+    }
+
+    #[tokio::test]
+    async fn delete_rejects_owned_children_and_missing_ids_but_accepts_unowned_legacy_source() {
+        let pool = init_memory_db().await.unwrap();
+        deletion_fixture(&pool).await;
+        let saved = saved_deletion_state(&pool).await;
+        let links = deletion_links(&pool).await;
+        for id in ["enabled-child", "disabled-child", "missing"] {
+            assert!(matches!(
+                SourcesRepo::delete(&pool, id).await,
+                Err(AppError::NotFound(message)) if message == format!("Source {id} not found")
+            ));
+        }
+        assert_eq!(saved_deletion_state(&pool).await, saved);
+        assert_eq!(deletion_links(&pool).await, links);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM sources")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            4
+        );
+        sqlx::query("INSERT INTO sources(id,kind,name,identifier,created_at) VALUES('legacy','greenhouse','Legacy','legacy','2026-10-23T12:00:00Z')")
+            .execute(&pool).await.unwrap();
+        SourcesRepo::delete(&pool, "legacy").await.unwrap();
+        assert!(matches!(
+            SourcesRepo::get(&pool, "legacy").await,
+            Err(AppError::NotFound(_))
+        ));
+        assert!(matches!(
+            SourcesRepo::delete(&pool, "legacy").await,
+            Err(AppError::NotFound(_))
+        ));
+        assert_eq!(saved_deletion_state(&pool).await, saved);
+        assert_eq!(deletion_links(&pool).await, links);
+    }
 
     #[tokio::test]
     async fn invalid_stored_rules_fail_and_legacy_selectors_migrate_explicitly() {

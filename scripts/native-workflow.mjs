@@ -235,6 +235,25 @@ export async function checkNativeWorkflow(origin) {
  assert(discoveredSearch.total === 2 && discoveredSearch.items.map(job => job.external_id).sort().join() === '9001,9002',
    'Real role-first search did not reach Discovered query');
  assert((await invoke('list_source_runs', { sourceId: publicSearch.id, limit: 10 })).length === 1, 'One search Run now gesture launched multiple executions');
+ await mark('Confirming native workflow deletion');
+ (await wait(() => button('WORKFLOWS'), 'workflow registry for deletion')).click();
+ const openDelete = async () => {
+  const row = await getRow();
+  const more = row.querySelector(`button[aria-label="More actions for ${saved.name}"]`);
+  assert(more, 'Workflow actions are missing');
+  more.click();
+  (await wait(() => [...document.querySelectorAll('[role="menuitem"]')].find(item => item.textContent.trim() === 'Delete workflow'), 'delete workflow action')).click();
+  return await wait(() => document.querySelector('dialog[aria-label="Delete workflow"][open]'), 'workflow deletion confirmation');
+ };
+ let confirmation = await openDelete();
+ [...confirmation.querySelectorAll('button')].find(element => element.textContent.trim() === 'Cancel').click();
+ await wait(() => !document.querySelector('dialog[aria-label="Delete workflow"][open]'), 'cancelled workflow deletion');
+ assert((await invoke('list_sources')).some(source => source.id === saved.id), 'Cancelling deleted workflow');
+ confirmation = await openDelete();
+ [...confirmation.querySelectorAll('button')].find(element => element.textContent.trim() === 'Delete workflow').click();
+ await wait(async () => !(await invoke('list_sources')).some(source => source.id === saved.id), 'deleted workflow in SQLite');
+ await wait(() => ![...document.querySelectorAll('tr')].some(row => row.textContent.includes(saved.name)), 'deleted workflow removed from registry');
+ assert((await invoke('get_job', { id: job.id })).status === 'applied', 'Deleting workflow lost tracked job');
  await mark('Native workflows complete: board refresh and role-first search preview/save/run verified');
  return {
    source: saved.name, cadence: saved.cadence,

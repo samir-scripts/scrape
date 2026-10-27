@@ -120,3 +120,26 @@ test("workflow registry consolidates actions while keeping execution and import 
   await page.getByRole("menuitem", { name: "Preview matches" }).click();
   await expect(page.getByText("DRY-RUN EXTRACTION PREVIEW (FIRST 10 JOBS)")).toBeVisible();
 });
+
+test("workflow deletion is confirmed and remains deleted after reload", async ({ page }) => {
+  await page.goto("/?demo=1&fixtures=1");
+  await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
+  const name = "Software Engineering & Related — Past 12 Hours";
+  const row = page.getByRole("row").filter({ hasText: name });
+  const remove = async () => {
+    await row.getByRole("button", { name: /More actions for/ }).click();
+    await page.getByRole("menuitem", { name: "Delete workflow" }).click();
+  };
+  await remove();
+  const confirmation = page.getByRole("dialog", { name: "Delete workflow" });
+  await expect(confirmation).toBeVisible();
+  await confirmation.getByRole("button", { name: "Cancel" }).click();
+  await expect(row).toBeVisible();
+  await remove();
+  await confirmation.getByRole("button", { name: "Delete workflow" }).click();
+  await expect(row).toHaveCount(0);
+  await page.reload();
+  await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
+  await expect(row).toHaveCount(0);
+  await expect(page.getByRole("row").filter({ hasText: "Fast Food — Cherry Hill, NJ — Past 30 Days" })).toBeVisible();
+});

@@ -6,7 +6,7 @@ import { WorkflowImportButton } from "./WorkflowImportButton";
 import { IconButton } from "../../ui/IconButton";
 import { Icon } from "../../ui/Icon";
 import { isRecordedMode } from "../../../lib/runtime";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import type { WorkflowReplacementPreview } from "../../../bindings/WorkflowReplacementPreview";
 import type { WorkflowReplacementSelection } from "../../../bindings/WorkflowReplacementSelection";
 import type { WorkflowReplacementReport } from "../../../bindings/WorkflowReplacementReport";
@@ -18,6 +18,7 @@ import type { ScrapeLogEntry } from "../../../bindings/ScrapeLogEntry";
 import type { WorkerEvent } from "../../../bindings/WorkerEvent";
 import type { Settings } from "../../../bindings/Settings";
 import { api } from "../../../lib/api";
+import { errorMessage } from "../../../lib/errors";
 import { listen } from "@tauri-apps/api/event";
 import { useUIStore } from "../../../lib/store";
 import { formatDateTime, formatTime } from "../../../lib/formatters";
@@ -63,6 +64,13 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   // Modals & drawers
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<Source | null>(null);
+  const [sourceToDelete, setSourceToDelete] = useState<Source | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const deletePending = useRef(false);
+  const deleteActionsRef = useRef<HTMLDivElement>(null);
+  const deleteSourceActionsRef = useRef<HTMLDivElement>(null);
+  const deleteReturnFocus = useRef<HTMLButtonElement | null>(null);
+  const workflowControlsRef = useRef<HTMLDivElement>(null);
   const [importedSpec, setImportedSpec] = useState<WorkflowSpec | null>(null);
   const [runningAll, setRunningAll] = useState(false);
   const [replacementPreview, setReplacementPreview] = useState<WorkflowReplacementPreview | null>(null);
@@ -95,6 +103,22 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   useEffect(() => {
     fetchSources();
   }, []);
+
+  useEffect(() => {
+    if (!sourceToDelete) {
+      deleteReturnFocus.current?.focus({ preventScroll: true });
+      deleteReturnFocus.current = null;
+      return;
+    }
+    deleteReturnFocus.current = deleteSourceActionsRef.current?.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ?? null;
+    // ActionMenu restores its trigger on the next frame; focus Cancel after that.
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        deleteActionsRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [sourceToDelete]);
 
   const refreshInspectedRunsAndLogs = async (sourceId: string) => {
     try {
@@ -183,18 +207,27 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
     catch (error) { notifyError(String(error), "WORKFLOW UPDATE FAILED"); }
   };
 
-  const handleDeleteSource = async (source: Source) => {
-    if (!window.confirm(`DELETE WORKFLOW ${source.name.toUpperCase()}?`)) return;
+  const closeDeleteSource = () => {
+    if (!deletePending.current) setSourceToDelete(null);
+  };
+
+  const handleDeleteSource = async () => {
+    if (!sourceToDelete || deletePending.current) return;
+    const source = sourceToDelete;
+    deletePending.current = true;
+    setDeleteBusy(true);
     try {
       await api.deleteSource(source.id);
+      deleteReturnFocus.current = workflowControlsRef.current?.querySelector<HTMLButtonElement>('button[aria-label="Add workflow"]') ?? null;
+      setSourceToDelete(null);
       fetchSources();
       notifySuccess(`Deleted workflow ${source.name}`);
-      if (inspectedSourceId === source.id) {
-        const remaining = sources.filter(s => s.id !== source.id);
-        setInspectedSourceId(remaining[0]?.id ?? null);
-      }
+      setInspectedSourceId(current => current === source.id ? sources.find(candidate => candidate.id !== source.id)?.id ?? null : current);
     } catch (error) {
-      notifyError(String(error), "WORKFLOW DELETE FAILED");
+      notifyError(errorMessage(error), "WORKFLOW DELETE FAILED");
+    } finally {
+      deletePending.current = false;
+      setDeleteBusy(false);
     }
   };
 
@@ -365,7 +398,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           <h2 className="text-base font-bold text-[var(--color-ink)]">Workflows ({sources.length})</h2>
           <p className="text-xs text-[var(--color-ink-mute)]">Sources, schedules and recent results</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div ref={workflowControlsRef} className="flex flex-wrap items-center gap-2">
           <Tooltip content="Configure a careers source and review its matches before saving">
             <Button
               variant="inverted"
@@ -557,7 +590,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1.5">
+                    <div ref={sourceToDelete?.id === s.id ? deleteSourceActionsRef : undefined} className="flex items-center gap-1.5">
                       <Tooltip content={workflowHasRunnableSources(s) ? "Run this workflow immediately into database" : "Workflow or all child sources are disabled. Open workflow editor to enable them before running."}>
                         <button
                           onClick={() => handleRunSourceNow(s)}
@@ -572,7 +605,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                         { label: "Edit workflow", onSelect: () => { setImportedSpec(null); setEditingSource(s); setIsAddModalOpen(true); } },
                         { label: isTesting ? "Previewing matches…" : "Preview matches", disabled: isRecordedMode() || isTesting || activeRun || s.needs_review, onSelect: () => void handleTestSource(s.id) },
                         { label: "View run history", onSelect: () => setInspectedSourceId(s.id) },
-                        { label: "Delete workflow", danger: true, dividerBefore: true, onSelect: () => void handleDeleteSource(s) },
+                        { label: "Delete workflow", danger: true, dividerBefore: true, onSelect: () => setSourceToDelete(s) },
                       ]} />
                     </div>
                   </TableCell>
@@ -836,6 +869,26 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           <ScanDiagnostics sources={testEvents.find(event => event.type === "done")?.stats.sources} />
         </div>
       )}
+
+      <Modal
+        isOpen={sourceToDelete !== null}
+        onClose={closeDeleteSource}
+        title="Delete workflow"
+        footer={
+          <div ref={deleteActionsRef} className="flex justify-end gap-2">
+            <Button variant="ghost" disabled={deleteBusy} onClick={closeDeleteSource}>Cancel</Button>
+            <Button variant="danger" disabled={deleteBusy} onClick={() => void handleDeleteSource()}>
+              <Icon name="trash" /> Delete workflow
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3 text-sm" aria-busy={deleteBusy}>
+          <p>Permanently delete <strong>{sourceToDelete?.name}</strong> and all of its sources?</p>
+          <p>Saved jobs, tracking, notes and run history will be kept. This cannot be undone.</p>
+          {deleteBusy && <p role="status">Deleting workflow…</p>}
+        </div>
+      </Modal>
 
       <Modal
         isOpen={replacementPreview !== null}
