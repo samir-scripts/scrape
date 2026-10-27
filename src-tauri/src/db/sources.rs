@@ -754,7 +754,9 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(&error, AppError::Database(_)));
-        assert!(error.to_string().contains("injected workflow delete failure"));
+        assert!(error
+            .to_string()
+            .contains("injected workflow delete failure"));
         assert_eq!(saved_deletion_state(&pool).await, saved);
         assert_eq!(deletion_links(&pool).await, links);
         for source in sources {
