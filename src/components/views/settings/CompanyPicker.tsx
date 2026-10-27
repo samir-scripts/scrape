@@ -29,9 +29,9 @@ export function CompanyPicker({ value, onChange, onCustom, disabled, logo }: {
   const restore = () => setQuery(selected?.company.name ?? "");
   return <div className="grid min-w-0 gap-2">
     <div className="flex justify-end">
-      <Button type="button" size="sm" disabled={disabled} onClick={onCustom}>Enter a custom careers URL</Button>
+      <Button data-control-action="workflow.company_custom_url" type="button" size="sm" disabled={disabled} onClick={onCustom}>Enter a custom careers URL</Button>
     </div>
-    <SearchCombobox aria-label="Search companies" value={value ?? ""} query={query}
+    <SearchCombobox actionId="workflow.company_search" aria-label="Search companies" value={value ?? ""} query={query}
       placeholder="Search company, provider or board domain" disabled={disabled}
       options={companyOptions.map(({company, source, domain}) => ({ value: company.id, label: company.name,
         searchText: `${company.name} ${source.extractor.kind} ${domain} ${company.readiness}` }))}

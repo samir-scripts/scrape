@@ -30,6 +30,7 @@ export async function checkNativeWorkflow(origin) {
  await mark('Verifying native role-title autocomplete');
  (await wait(() => button('WORKFLOWS'), 'role-search Workflows navigation')).click();
  (await wait(() => [...document.querySelectorAll('button')].find(element => element.textContent.includes('ADD WORKFLOW')), 'new role-search workflow')).click();
+ await wait(() => document.querySelector('dialog[aria-label="Create workflow"][open]'), 'opened role-search workflow');
  const nativeRoleInput = await wait(() => field('Target roles'), 'native role picker');
  change(nativeRoleInput, 'Software Engineer');
  const roleOption = await wait(() => [...document.querySelectorAll('[role="option"]')].find(option => option.textContent.trim().startsWith('Software Engineer') && !option.textContent.includes('Use “')), 'indexed O*NET Software Engineer suggestion');
@@ -81,10 +82,13 @@ export async function checkNativeWorkflow(origin) {
  button('Continue to Sources').click(); await wait(() => button('+ Add source'), 'sources step');
  assert(!field('Source URL or board identifier'), 'Default public search must not require a careers URL');
  document.querySelector('button[aria-label="Add source"]').click();
- await wait(() => field('Source 2 URL or board identifier'), 'optional direct board slot');
+ await wait(() => field('Source 3 URL or board identifier'), 'optional direct board slot');
  document.querySelector('button[aria-label="Remove source Cross-Company Search"]').click();
+ await wait(() => !document.querySelector('button[aria-label="Remove source Cross-Company Search"]'), 'removed public search source');
+ document.querySelector('button[aria-label="Remove source Arbeitnow — Germany-focused listings"]').click();
+ await wait(() => !document.querySelector('button[aria-label="Remove source Arbeitnow — Germany-focused listings"]'), 'removed second public search source');
  const company = await wait(() => document.querySelector("[data-source-index='0'] [aria-label='Search companies']"), 'company picker in attached source slot');
- change(company, 'cloud flare');
+ change(company, 'Cloudflare');
  await settle('Company query');
  const option = await wait(() => [...document.querySelectorAll('[role=option]')].find(option => option.textContent.includes('Cloudflare')), 'Cloudflare catalog option');
  option.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
@@ -271,4 +275,38 @@ export async function checkNativeWorkflow(origin) {
      previewMatched: 2, inserted: 2, rejected: 3, workflowRuns: [searchRun.id], careerUrlRequired: false },
    input: 'authored local fixtures, actual WKWebView wizard/Run/Discovered controls, packaged worker and isolated SQLite; not live provider, verified-logo rendering or physical pointer/native file-chooser acceptance',
  };
+}
+
+// Isolated populated historical fixture: exercise deletion without depending on the wizard.
+export async function checkNativeWorkflowDeletion() {
+ const invoke = window.__TAURI_INTERNALS__.invoke;
+ const wait = async (read, label) => {
+  const end = Date.now() + 20000;
+  while (Date.now() < end) {
+   const value = await read();
+   if (value) return value;
+   await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  throw new Error('Native deletion deadline: ' + label);
+ };
+ const assert = (value, message) => { if (!value) throw new Error(message); };
+ const saved = await invoke('get_job', { id: 'saved' });
+ assert(saved.status === 'applied' && saved.favorited && saved.notes === 'Fixture saved note', 'Fixture state is not populated');
+ (await wait(() => [...document.querySelectorAll('button')].find(button => button.textContent.trim() === 'WORKFLOWS'), 'Workflows navigation')).click();
+ const open = async () => {
+  const more = await wait(() => document.querySelector('button[aria-label="More actions for Fixture Co"]'), 'fixture actions');
+  more.click();
+  (await wait(() => [...document.querySelectorAll('[role="menuitem"]')].find(item => item.textContent.trim() === 'Delete workflow'), 'delete menu action')).click();
+  return await wait(() => document.querySelector('dialog[aria-label="Delete workflow"][open]'), 'delete confirmation');
+ };
+ let dialog = await open();
+ [...dialog.querySelectorAll('button')].find(button => button.textContent.trim() === 'Cancel').click();
+ await wait(() => !document.querySelector('dialog[aria-label="Delete workflow"][open]'), 'cancelled confirmation');
+ assert((await invoke('list_sources')).some(source => source.id === 'fixture'), 'Cancel deleted workflow');
+ dialog = await open();
+ [...dialog.querySelectorAll('button')].find(button => button.textContent.trim() === 'Delete workflow').click();
+ await wait(async () => !(await invoke('list_sources')).some(source => source.id === 'fixture'), 'persisted workflow deletion');
+ const after = await invoke('get_job', { id: 'saved' });
+ assert(after.status === 'applied' && after.favorited && after.notes === 'Fixture saved note' && after.source_id === null, 'Deletion changed saved job state');
+ return { deleted: 'fixture', preserved: 'saved' };
 }

@@ -18,7 +18,7 @@ export function JobLimitInput({
   const valid = parse(text) != null;
   return <div className="grid gap-2 text-sm">
     <label htmlFor={id}>{label}</label>
-    <Input id={id} inputMode="numeric" value={text} aria-invalid={!valid} aria-describedby={`${id}-help`}
+    <Input data-control-action="workflow.job_limit" id={id} inputMode="numeric" value={text} aria-invalid={!valid} aria-describedby={`${id}-help`}
       onChange={event => {
         const next = event.target.value;
         setText(next);

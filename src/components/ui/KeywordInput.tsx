@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { Button } from "./Button";
 import { Input } from "./Input";
 import { PopupPosition, positionOptions } from "./Select";
+import { recordControlAction } from "../../lib/controlActivity";
 // An editor action flushes every mounted input synchronously before reading its draft.
 export const COMMIT_KEYWORDS = "scrape:commit-keywords";
 export function keywordTerms(existing: readonly string[], text: string): string[] {
@@ -16,8 +17,8 @@ export function keywordTerms(existing: readonly string[], text: string): string[
   });
 }
 
-export function KeywordInput({ label, value, onChange, onDraftChange, suggestions }: {
-  label: string; value: string[]; onChange: (terms: string[]) => void; onDraftChange: () => void; suggestions?: readonly string[];
+export function KeywordInput({ label, value, onChange, onDraftChange, suggestions, actionId }: {
+  label: string; value: string[]; onChange: (terms: string[]) => void; onDraftChange: () => void; suggestions?: readonly string[]; actionId?: string;
 }) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -46,19 +47,20 @@ export function KeywordInput({ label, value, onChange, onDraftChange, suggestion
     requestAnimationFrame(() => input.current?.focus());
   };
   const updateText = (next: string) => { pending.current = next; setText(next); };
-  const add = (next: string) => {
+  const add = (next: string, userAction = true) => {
     if (!next.trim()) return;
     const terms = keywordTerms(current.current.value, next);
     if (JSON.stringify(terms) !== JSON.stringify(current.current.value)) {
+      if (userAction && actionId) recordControlAction(actionId, "change");
       current.current.value = terms;
       current.current.onChange(terms);
     }
   };
-  const commit = () => { add(pending.current); updateText(""); };
+  const commit = (userAction = true) => { add(pending.current, userAction); updateText(""); };
   const commitRef = useRef(commit); commitRef.current = commit;
   useEffect(() => {
     const field = input.current;
-    const flush = () => commitRef.current();
+    const flush = () => commitRef.current(false);
     field?.addEventListener(COMMIT_KEYWORDS, flush);
     return () => field?.removeEventListener(COMMIT_KEYWORDS, flush);
   }, []);
@@ -72,6 +74,7 @@ export function KeywordInput({ label, value, onChange, onDraftChange, suggestion
   };
   const remove = (index: number) => {
     const next = current.current.value.filter((_, position) => position !== index);
+    if (actionId) recordControlAction(actionId, "change");
     current.current.value = next;
     current.current.onChange(next);
     requestAnimationFrame(() => (removers.current[index - 1] || input.current)?.focus());
@@ -82,7 +85,7 @@ export function KeywordInput({ label, value, onChange, onDraftChange, suggestion
     {!!value.length && <ul aria-label={`${label} terms`} className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
       {value.map((term, index) => <li key={`${index}:${term}`} className="inline-flex max-w-full items-center gap-1 border bg-[var(--color-paper-2)] pl-2 text-sm">
         <span className="break-words min-w-0 normal-case">{term}</span>
-        <button type="button" ref={node => { removers.current[index] = node; }}
+        <button type="button" data-control-action={actionId} data-control-semantic ref={node => { removers.current[index] = node; }}
           aria-label={`Remove ${term} from ${label}`} className="min-h-8 min-w-8 shrink-0 cursor-pointer"
           onClick={() => remove(index)} onKeyDown={event => {
             if (event.key === "Backspace" || event.key === "Delete") { event.preventDefault(); remove(index); }
@@ -93,7 +96,7 @@ export function KeywordInput({ label, value, onChange, onDraftChange, suggestion
     </ul>}
     <PopupPosition root={root} open={open && !!suggestions?.length} onTarget={setPopupTarget}>
       <div ref={root} className="flex min-w-0 items-start gap-2">
-        <Input ref={input} id={id} data-keyword-input aria-label={label} value={text} placeholder="Type a phrase"
+        <Input ref={input} id={id} data-keyword-input data-control-action={actionId} data-control-semantic aria-label={label} value={text} placeholder="Type a phrase"
           role={suggestions ? "combobox" : undefined} aria-autocomplete={suggestions ? "list" : undefined}
           aria-expanded={suggestions ? open && !!matchingSuggestions.length : undefined}
           aria-controls={suggestions ? `${id}-suggestions` : undefined}
@@ -125,12 +128,12 @@ export function KeywordInput({ label, value, onChange, onDraftChange, suggestion
             }
           }} />
         {popupTarget && suggestions && open && matchingSuggestions.length > 0 && createPortal(
-          <ul id={`${id}-suggestions`} role="listbox" className="fixed z-[100] max-h-60 overflow-auto border border-[var(--color-ink)] bg-[var(--color-paper)] p-1 text-[var(--color-ink)]" style={positionOptions(root.current)}>
+          <ul id={`${id}-suggestions`} role="listbox" data-control-action={actionId} data-control-semantic className="fixed z-[100] max-h-60 overflow-auto border border-[var(--color-ink)] bg-[var(--color-paper)] p-1 text-[var(--color-ink)]" style={positionOptions(root.current)}>
             {matchingSuggestions.map((term, index) => <li id={`${id}-suggestion-${index}`} key={term} role="option" aria-selected={active === index}
               className={`cursor-pointer px-2 py-2 text-sm normal-case ${active === index ? "bg-[var(--color-paper-2)]" : ""}`}
               onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActive(index)} onClick={() => complete(term)}>{term}</li>)}
           </ul>, popupTarget)}
-        <Button type="button" aria-label={`Add keyword to ${label}`} onMouseDown={event => event.preventDefault()} onClick={() => { commit(); setOpen(false); input.current?.focus(); }}>Add</Button>
+        <Button type="button" data-control-action={actionId} data-control-semantic aria-label={`Add keyword to ${label}`} onMouseDown={event => event.preventDefault()} onClick={() => { commit(); setOpen(false); input.current?.focus(); }}>Add</Button>
       </div>
     </PopupPosition>
   </div>;

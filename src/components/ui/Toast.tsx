@@ -53,14 +53,14 @@ function ToastItem({
           <span className={markerColor}>■</span>
           <span className="text-[var(--color-ink)]">{toast.title ?? (isError ? "ERROR" : isSuccess ? "SUCCESS" : "INFO")}</span>
         </div>
-        <IconButton label="Dismiss notification" onClick={() => onDismiss(toast.id)}>
+        <IconButton label="Dismiss notification" data-control-action="notification.dismiss" onClick={() => onDismiss(toast.id)}>
           <Icon name="close" />
         </IconButton>
       </div>
       <div className="text-[var(--color-ink)] select-text break-words whitespace-pre-wrap leading-relaxed font-mono">
         {toast.message}
       </div>
-      {toast.action && <button type="button" className="mt-3 border px-3 py-2 text-sm" onClick={() => { toast.action?.run(); onDismiss(toast.id); }}>{toast.action.label}</button>}
+      {toast.action && <button type="button" data-control-action="notification.action" className="mt-3 border px-3 py-2 text-sm" onClick={() => { toast.action?.run(); onDismiss(toast.id); }}>{toast.action.label}</button>}
     </div>
   );
 }

@@ -30,7 +30,7 @@ The `src-tauri/src/services` directory contains long-running background tasks, p
 | [`http_proxy.rs`](http_proxy.rs) | Optional User-Supplied Proxy | Serialized OS-keyring storage (`scrape.network` / `http-proxy`), credential-free status/set/clear IPC, debug-native isolated storage, and execution-only hydration after diagnostic snapshots. Rejects script and externally managed browser routes when a proxy is configured; no direct fallback or bundled endpoint. |
 | [`startup.rs`](startup.rs) | Safe Database Startup | Coordinates pre-migration read-only history checks, `VACUUM INTO` backups, and migration execution during host initialization. |
 | [`tray.rs`](tray.rs) | System Tray Integration | Manages the native OS menu bar / taskbar tray icon, context menus, and window visibility toggling. |
-| [`system.rs`](system.rs) | OS Interop & Notifications | Manages desktop system notifications via `tauri-plugin-notification` and coordinates external URL navigation via `tauri-plugin-opener`. |
+| [`system.rs`](system.rs) | OS Interop & Console | Launches the local terminal stream and serializes scrape cards and validated, content-free UI interaction records to `scrape.log`. |
 | [`native_smoke.rs`](native_smoke.rs) | Debug-Only Native Test Harness | Provides isolated temporary-profile IPC, sidecar, window-resize, and startup smoke verification hooks (compiled/enabled only for explicit debug smoke runs, never affecting release builds or user data). |
 
 ---

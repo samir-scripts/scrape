@@ -245,6 +245,7 @@ pub fn run() {
             commands::notifications::check_app_update,
             commands::notifications::install_app_update,
             commands::scrape::open_terminal_console,
+            commands::scrape::log_control_interaction,
         ])
         .run(tauri::generate_context!());
     if let Err(error) = outcome {

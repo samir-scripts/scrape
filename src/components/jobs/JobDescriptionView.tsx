@@ -31,7 +31,7 @@ function inlineNodes(
       case "link": {
         const url = httpUrl(node.url);
         return url ? (
-          <a
+          <a data-control-action="job.description.link"
             key={key}
             href={url}
             className="underline underline-offset-2"

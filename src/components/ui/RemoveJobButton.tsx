@@ -9,7 +9,7 @@ export function RemoveJobButton({ title, company, label, variant = "danger", onC
   variant?: "danger" | "ghost-danger";
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
-  return <IconButton label={`Remove ${title} at ${company}`} title="Remove saved job" variant={variant} onClick={onClick}>
+  return <IconButton data-control-action="job.delete.request" label={`Remove ${title} at ${company}`} title="Remove saved job" variant={variant} onClick={onClick}>
     <Icon name="trash" />
     {label && <span className="text-xs">{label}</span>}
   </IconButton>;

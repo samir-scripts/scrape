@@ -4,6 +4,7 @@ import { Group } from "@visx/group";
 import { Bar } from "@visx/shape";
 import { ParentSize } from "@visx/responsive";
 import type { MetricsSeriesBucket } from "../../../bindings/MetricsSeriesBucket";
+import { recordControlAction } from "../../../lib/controlActivity";
 
 interface ApplicationsChartProps {
   series: MetricsSeriesBucket[];
@@ -225,12 +226,14 @@ export function ApplicationsChart({
     if (series.length === 0) return;
     if (e.key === "ArrowLeft") {
       e.preventDefault();
+      recordControlAction("metrics.applications.navigate", "shortcut");
       setSelectedIndex((prev) => {
         const cur = prev !== null ? prev : series.length - 1;
         return Math.max(0, cur - 1);
       });
     } else if (e.key === "ArrowRight") {
       e.preventDefault();
+      recordControlAction("metrics.applications.navigate", "shortcut");
       setSelectedIndex((prev) => {
         const cur = prev !== null ? prev : series.length - 1;
         return Math.min(series.length - 1, cur + 1);
@@ -269,7 +272,7 @@ export function ApplicationsChart({
           <div className="inline-flex border border-[var(--color-ink)]">
             <button
               type="button"
-              onClick={() => onGranularityChange("week")}
+              data-control-action="metrics.applications.granularity" onClick={() => onGranularityChange("week")}
               className={`px-2 py-0.5 font-mono text-xs font-bold uppercase transition-none cursor-pointer ${
                 granularity === "week"
                   ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
@@ -280,7 +283,7 @@ export function ApplicationsChart({
             </button>
             <button
               type="button"
-              onClick={() => onGranularityChange("month")}
+              data-control-action="metrics.applications.granularity" onClick={() => onGranularityChange("month")}
               className={`px-2 py-0.5 font-mono text-xs font-bold uppercase transition-none border-l border-[var(--color-ink)] cursor-pointer ${
                 granularity === "month"
                   ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
@@ -295,7 +298,7 @@ export function ApplicationsChart({
           <div className="inline-flex border border-[var(--color-ink)]">
             <button
               type="button"
-              onClick={() => onPeriodsChange(12)}
+              data-control-action="metrics.applications.periods" onClick={() => onPeriodsChange(12)}
               className={`px-2 py-0.5 font-mono text-xs font-bold uppercase transition-none cursor-pointer ${
                 periods === 12
                   ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
@@ -306,7 +309,7 @@ export function ApplicationsChart({
             </button>
             <button
               type="button"
-              onClick={() => onPeriodsChange(24)}
+              data-control-action="metrics.applications.periods" onClick={() => onPeriodsChange(24)}
               className={`px-2 py-0.5 font-mono text-xs font-bold uppercase transition-none border-l border-[var(--color-ink)] cursor-pointer ${
                 periods === 24
                   ? "bg-[var(--color-ink)] text-[var(--color-paper)]"

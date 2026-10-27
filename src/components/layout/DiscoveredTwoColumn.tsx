@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
+import { recordControlAction } from "../../lib/controlActivity";
 
 interface DiscoveredTwoColumnProps {
   left: ReactNode;
@@ -67,6 +68,7 @@ export function DiscoveredTwoColumn({
       };
 
       const onPointerUp = (ev: PointerEvent) => {
+        recordControlAction(ev.type === "pointercancel" ? "layout.discovered.cancel" : "layout.discovered.resize", "resize");
         setIsDragging(false);
         try {
           target.releasePointerCapture(ev.pointerId);
@@ -85,11 +87,13 @@ export function DiscoveredTwoColumn({
 
   // Double-click to reset width to default
   const handleDoubleClick = () => {
+    recordControlAction("layout.discovered.reset", "resize");
     setLeftWidth(initialLeftWidth);
   };
 
   // Keyboard navigation for separator
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) recordControlAction("layout.discovered.resize", "resize");
     if (e.key === "ArrowLeft") {
       e.preventDefault();
       setLeftWidth((w) => Math.max(minLeftWidth, w - 20));
@@ -140,6 +144,8 @@ export function DiscoveredTwoColumn({
       {/* Interactive Resizable Divider */}
       <div
         role="separator"
+        data-control-action="layout.discovered.resize"
+        data-control-semantic
         tabIndex={0}
         aria-orientation="vertical"
         aria-label="Resize job window"

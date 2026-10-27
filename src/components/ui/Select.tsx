@@ -3,6 +3,7 @@ import { Icon } from "./Icon";
 import { createPortal } from "react-dom";
 import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, RefObject, ReactNode, KeyboardEventHandler } from "react";
+import { recordControlAction } from "../../lib/controlActivity";
 
 interface SelectProps {
   "aria-label": string;
@@ -11,6 +12,7 @@ interface SelectProps {
   disabled?: boolean;
   className?: string;
   options: { value: string; label: string; disabled?: boolean }[];
+  actionId?: string;
 }
 
 export function Select({ options, className = "", ...props }: SelectProps) {
@@ -18,15 +20,15 @@ export function Select({ options, className = "", ...props }: SelectProps) {
   const [popupTarget, setPopupTarget] = useState<HTMLElement | null>(null);
   const selected = options.find((option) => option.value === props.value);
   return (
-    <Listbox value={props.value} onChange={props.onChange} disabled={props.disabled}>
+    <Listbox value={props.value} onChange={value => { if (props.actionId) recordControlAction(props.actionId, "change"); props.onChange(value); }} disabled={props.disabled}>
       {({ open }) => <PopupPosition root={root} open={open} onTarget={setPopupTarget}>
         <div className="relative inline-block w-full text-sm">
-          <ListboxButton aria-label={props["aria-label"]}
+          <ListboxButton aria-label={props["aria-label"]} data-control-action={props.actionId}
             className={`flex min-h-[var(--control-height-sm)] w-full items-center justify-between gap-3 border border-[var(--color-ink)] bg-[var(--color-paper)] px-2.5 py-1.5 text-left text-xs font-mono uppercase text-[var(--color-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-signal)] disabled:cursor-not-allowed disabled:opacity-60 ${className}`}>
             <span className="truncate">{selected?.label ?? props.value}</span><Icon name="down" size="sm" />
           </ListboxButton>
           {popupTarget && createPortal(
-            <ListboxOptions portal={false} modal={false} data-select-popup
+            <ListboxOptions portal={false} modal={false} data-select-popup data-control-action={props.actionId} data-control-semantic
               className="fixed z-[100] max-h-60 overflow-auto border border-[var(--color-ink)] bg-[var(--color-paper)] p-1 text-[var(--color-ink)] shadow-none focus:outline-none"
               style={positionOptions(root.current)}>
               {options.map((option) => (
@@ -80,7 +82,7 @@ export function PopupPosition({ root, open, onTarget, children }: {
 
 export function SearchCombobox({
   id, "aria-label": label, value, query, options, onChange, onQueryChange,
-  onBlur, onFocus, onKeyDown, placeholder, disabled, invalid, describedBy, renderOption,
+  onBlur, onFocus, onKeyDown, placeholder, disabled, invalid, describedBy, renderOption, actionId,
 }: {
   "aria-label": string;
   id?: string;
@@ -97,6 +99,7 @@ export function SearchCombobox({
   disabled?: boolean;
   invalid?: boolean;
   renderOption?: (option: { value: string; label: string; disabled?: boolean; searchText?: string }) => ReactNode;
+  actionId?: string;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [popupTarget, setPopupTarget] = useState<HTMLElement | null>(null);
@@ -107,14 +110,14 @@ export function SearchCombobox({
       .toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
     return queryTokens.every(query => searchTokens.some(token => token.startsWith(query)));
   });
-  return <HeadlessCombobox value={value || null} onChange={selected => onChange(selected ?? "")} disabled={disabled}>
+  return <HeadlessCombobox value={value || null} onChange={selected => { if (actionId) recordControlAction(actionId, "change"); onChange(selected ?? ""); }} disabled={disabled}>
     {({ open }) => <PopupPosition root={root} open={open} onTarget={setPopupTarget}>
-      <ComboboxInput id={id} aria-label={label} autoComplete="off" value={query}
+      <ComboboxInput id={id} aria-label={label} autoComplete="off" value={query} data-control-action={actionId}
         onChange={event => onQueryChange(event.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} onFocus={onFocus}
         aria-invalid={invalid} aria-describedby={describedBy} placeholder={placeholder}
         className="normal-case w-full min-h-[var(--control-height)] px-3 py-2 text-sm bg-[var(--color-paper)] text-[var(--color-ink)] border border-[var(--color-ink)] placeholder-[var(--color-ink-mute)] focus:bg-[var(--color-paper-2)] focus:outline-none focus:ring-1 focus:ring-[var(--color-ink)] font-sans disabled:opacity-60" />
       {popupTarget && createPortal(
-        <ComboboxOptions portal={false} modal={false} data-select-popup
+        <ComboboxOptions portal={false} modal={false} data-select-popup data-control-action={actionId} data-control-semantic
           className="fixed z-[100] max-h-60 overflow-auto border border-[var(--color-ink)] bg-[var(--color-paper)] p-1 text-[var(--color-ink)] focus:outline-none"
           style={positionOptions(root.current)}>
           {matches.map(option => <ComboboxOption key={option.value} value={option.value} disabled={option.disabled}

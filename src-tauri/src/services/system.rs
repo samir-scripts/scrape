@@ -7,6 +7,93 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 
+#[derive(Debug, Clone, Copy, serde::Deserialize, serde::Serialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ControlInteractionKind {
+    Activate,
+    Change,
+    Submit,
+    Resize,
+    Drag,
+    Shortcut,
+    Dismiss,
+}
+
+impl ControlInteractionKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Activate => "activate",
+            Self::Change => "change",
+            Self::Submit => "submit",
+            Self::Resize => "resize",
+            Self::Drag => "drag",
+            Self::Shortcut => "shortcut",
+            Self::Dismiss => "dismiss",
+        }
+    }
+}
+
+fn parse_control_catalog(
+    input: &str,
+) -> std::result::Result<std::collections::BTreeMap<String, String>, String> {
+    use serde::de::{MapAccess, Visitor};
+    struct CatalogVisitor;
+    impl<'de> Visitor<'de> for CatalogVisitor {
+        type Value = std::collections::BTreeMap<String, String>;
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("a map of unique control action identifiers and descriptions")
+        }
+        fn visit_map<M: MapAccess<'de>>(
+            self,
+            mut entries: M,
+        ) -> std::result::Result<Self::Value, M::Error> {
+            let mut result = std::collections::BTreeMap::new();
+            let pattern = regex::Regex::new(r"^[a-z][a-z0-9]*(\.[a-z][a-z0-9_]*)+$")
+                .expect("constant action pattern");
+            while let Some((key, value)) = entries.next_entry::<String, String>()? {
+                if !pattern.is_match(&key)
+                    || value.trim().is_empty()
+                    || result.insert(key, value).is_some()
+                {
+                    return Err(serde::de::Error::custom(
+                        "invalid or duplicate control action",
+                    ));
+                }
+            }
+            Ok(result)
+        }
+    }
+    let mut deserializer = serde_json::Deserializer::from_str(input);
+    let catalog = serde::de::Deserializer::deserialize_map(&mut deserializer, CatalogVisitor)
+        .map_err(|error| error.to_string())?;
+    deserializer.end().map_err(|error| error.to_string())?;
+    Ok(catalog)
+}
+
+static CONTROL_CATALOG: LazyLock<
+    std::result::Result<std::collections::BTreeMap<String, String>, String>,
+> = LazyLock::new(|| parse_control_catalog(include_str!("../../../src/lib/control-actions.json")));
+
+fn render_control_interaction(
+    now: &str,
+    action: &str,
+    kind: ControlInteractionKind,
+) -> Result<String> {
+    let catalog = CONTROL_CATALOG
+        .as_ref()
+        .map_err(|_| crate::error::AppError::Internal("Invalid control action catalog".into()))?;
+    let description = catalog
+        .get(action)
+        .ok_or_else(|| crate::error::AppError::Validation("Unknown control action".into()))?;
+    Ok(render_log(
+        now,
+        "UI",
+        None,
+        &format!("UI {} {}: {}", kind.as_str(), action, description),
+    ))
+}
+
 // Every scrape.log record, including ordinary logs, is appended under this lock.
 // A card is rendered first and then submitted in one write_all, never line by line.
 static CONSOLE_WRITE: Mutex<()> = Mutex::new(());
@@ -384,6 +471,16 @@ impl SystemService {
         }
     }
 
+    pub fn append_control_interaction(
+        app: &tauri::AppHandle,
+        action: &str,
+        kind: ControlInteractionKind,
+    ) -> Result<()> {
+        let record = render_control_interaction(&scrape_core::now_iso(), action, kind)?;
+        append_record(&Self::get_log_file_path(app), &record)?;
+        Ok(())
+    }
+
     /// Append one complete, safe scrolling card. The caller supplies the actual
     /// persistence outcome; an append failure must not imply a database rollback.
     pub fn append_candidate_card(
@@ -493,6 +590,60 @@ impl SystemService {
 mod tests {
     use super::*;
     use crate::db::init_memory_db;
+
+    #[test]
+    fn control_catalog_rejects_invalid_duplicate_and_unknown_actions() {
+        assert!(
+            parse_control_catalog(r#"{"workflow.delete":"Delete","workflow.delete":"Other"}"#)
+                .is_err()
+        );
+        assert!(parse_control_catalog(r#"{"Bad Key":"Delete"}"#).is_err());
+        assert!(parse_control_catalog(r#"{"workflow.delete":" "}"#).is_err());
+        assert!(serde_json::from_str::<ControlInteractionKind>(r#""unsafe""#).is_err());
+        assert!(render_control_interaction(
+            "fixed",
+            "secret user input",
+            ControlInteractionKind::Activate
+        )
+        .is_err());
+        let record = render_control_interaction(
+            "fixed",
+            "workflow.delete.request",
+            ControlInteractionKind::Activate,
+        )
+        .unwrap();
+        assert_eq!(
+            record,
+            "[fixed] [UI] UI activate workflow.delete.request: Request workflow deletion\n"
+        );
+    }
+
+    #[test]
+    fn control_records_append_atomically_without_user_content() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("scrape.log");
+        std::thread::scope(|scope| {
+            for _ in 0..2 {
+                let path = &path;
+                scope.spawn(move || {
+                    for _ in 0..100 {
+                        let record = render_control_interaction(
+                            "fixed",
+                            "workflow.delete.cancel",
+                            ControlInteractionKind::Activate,
+                        )
+                        .unwrap();
+                        append_record(path, &record).unwrap();
+                    }
+                });
+            }
+        });
+        let contents = std::fs::read_to_string(path).unwrap();
+        assert_eq!(contents.lines().count(), 200);
+        assert!(contents.lines().all(|line| line
+            == "[fixed] [UI] UI activate workflow.delete.cancel: Cancel workflow deletion"));
+        assert!(!contents.contains("secret user input"));
+    }
 
     fn candidate(sequence: u64, disposition: &str) -> CandidateEvaluation {
         serde_json::from_value(serde_json::json!({

@@ -1330,3 +1330,40 @@ Commands and results from this run:
 
 The fictional fixture distribution does not describe the other 999 decisions
 from the user's reported run. No live provider or user database was accessed.
+
+## Follow-up — workflow deletion and interaction console
+
+Deletion checkpoint: `fecf27e`. Workflow deletion now confirms in the app,
+persists browser-fixture deletions, and deletes parent and owned sources atomically
+without deleting saved jobs or tracking. The console additionally records
+allowlisted control actions without values or runtime-derived labels; logging
+failures do not block the action.
+
+Checks from this run:
+
+- `cargo test -p scrape db::sources::tests`: 7 passed. The populated fixture
+  includes owned children, retained jobs/history and an injected rollback.
+- `cargo test -p scrape services::system::tests`: 13 passed.
+- `npm run gen:types`, `npx tsc --noEmit`, `npm run build`,
+  `node scripts/check-style.mjs`, `cargo fmt --all --check` and
+  `cargo clippy -p scrape --all-targets -- -D warnings` passed. The production
+  build retained its large-chunk advisory.
+- `npx vitest run --maxWorkers=1`: 92 files, 574 tests passed; after adding one
+  additional control privacy test, the complete control module passed 4 tests.
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/scrape-playwright-browsers npx playwright test e2e/workflows.pw.ts --workers=1`:
+  4 passed. A separate browser session displayed the deletion confirmation,
+  deleted a fixture, verified it stayed absent after reload, and observed
+  content-free action messages.
+- `npm run build:sidecar` and `SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_DELETE=1 npm run test:native-startup`:
+  passed. Isolated artifacts:
+  `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-YNdP9w`.
+  Actual WKWebView controls deleted the fixture and preserved the Applied,
+  favorited job and notes; the isolated log contained request, cancel and confirm
+  action identifiers without the workflow name.
+- `SCRAPE_STARTUP_MODES=fresh SCRAPE_NATIVE_WORKFLOW=1 npm run test:native-startup`
+  did not pass: the full wizard journey timed out before reaching deletion,
+  first at an outdated source-slot expectation and later at role autocomplete.
+  The independent populated deletion journey above does not prove the full wizard.
+
+No live provider or user database was accessed. Native physical-pointer delivery,
+file chooser and native zoom/visual acceptance were not performed.

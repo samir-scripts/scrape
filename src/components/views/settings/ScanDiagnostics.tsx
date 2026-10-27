@@ -31,7 +31,7 @@ export function ScanDiagnostics({ sources }: { sources?: SourceScanStats[] | nul
         {source.rejections.map(({ reason, count }) => <li key={reason}>{reasons[reason]}: {count}</li>)}
       </ul>}
       {!!source.rejection_examples.length && <details>
-        <summary className="cursor-pointer min-h-8">Why representative postings were rejected</summary>
+        <summary data-control-action="workflow.rejection_details" className="cursor-pointer min-h-8">Why representative postings were rejected</summary>
         <p>Primary categories above count each rejection once. Conditions below overlap.</p>
         <ul className="list-disc pl-5">{source.rejection_examples.map((example, i) => <li key={i}>
           {example.title}: {reasons[example.primary]}. Failed conditions: {example.overlapping.map(reason => reasons[reason]).join(", ")}.

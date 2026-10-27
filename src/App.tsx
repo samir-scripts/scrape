@@ -338,6 +338,7 @@ export default function App() {
 
           <div>
             <button
+              data-control-action="app.initialization.retry"
               onClick={() => {
                 refetchSettings();
                 refetchJobs();
@@ -361,7 +362,7 @@ export default function App() {
       onJobSortReset={() => setFilterSpec(prev => ({ ...prev, sort: null }))}
     >
       {(view === "discovered" || view === "tracked") && <>
-        {jobsError && <div role="alert" className="p-4 text-sm">Could not load this page: {String(jobsError)} <button className="border px-3 py-1" onClick={() => refetchJobs()}>Retry loading page</button></div>}
+        {jobsError && <div role="alert" className="p-4 text-sm">Could not load this page: {String(jobsError)} <button data-control-action="app.jobs.retry" className="border px-3 py-1" onClick={() => refetchJobs()}>Retry loading page</button></div>}
         {jobsLoading && <div className="flex-1 grid place-items-center" aria-busy="true">Loading jobs…</div>}
       </>}
       {view === "discovered" && !jobsLoading && !jobsError && (

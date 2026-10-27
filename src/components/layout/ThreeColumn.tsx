@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
+import { recordControlAction } from "../../lib/controlActivity";
 
 interface ThreeColumnProps {
   left: ReactNode;
@@ -103,6 +104,7 @@ export function ThreeColumn({
       };
 
       const onPointerUp = (ev: PointerEvent) => {
+        recordControlAction(ev.type === "pointercancel" ? "layout.left.cancel" : "layout.left.resize", "resize");
         setIsDraggingLeft(false);
         try {
           target.releasePointerCapture(ev.pointerId);
@@ -136,6 +138,7 @@ export function ThreeColumn({
       };
 
       const onPointerUp = (ev: PointerEvent) => {
+        recordControlAction(ev.type === "pointercancel" ? "layout.right.cancel" : "layout.right.resize", "resize");
         setIsDraggingRight(false);
         try {
           target.releasePointerCapture(ev.pointerId);
@@ -154,16 +157,19 @@ export function ThreeColumn({
 
   // Reset widths on double click
   const handleLeftDoubleClick = useCallback(() => {
+    recordControlAction("layout.left.reset", "resize");
     setLeftWidth(initialLeftWidth);
   }, [initialLeftWidth]);
 
   const handleRightDoubleClick = useCallback(() => {
+    recordControlAction("layout.right.reset", "resize");
     setRightWidth(initialRightWidth);
   }, [initialRightWidth]);
 
   // Keyboard navigation for splitters
   const handleLeftKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) recordControlAction("layout.left.resize", "resize");
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         setLeftWidth((w) => Math.max(minLeftWidth, w - 10));
@@ -183,6 +189,7 @@ export function ThreeColumn({
 
   const handleRightKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) recordControlAction("layout.right.resize", "resize");
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         setRightWidth((w) => Math.min(maxRightWidth, w + 10));
@@ -220,6 +227,8 @@ export function ThreeColumn({
       {/* Left Resizer Handle */}
       <div
         role="separator"
+        data-control-action="layout.left.resize"
+        data-control-semantic
         tabIndex={0}
         aria-orientation="vertical"
         aria-label="Resize job list pane"
@@ -257,6 +266,8 @@ export function ThreeColumn({
       {/* Right Resizer Handle */}
       <div
         role="separator"
+        data-control-action="layout.right.resize"
+        data-control-semantic
         tabIndex={0}
         aria-orientation="vertical"
         aria-label="Resize metadata panel"

@@ -55,7 +55,7 @@ export function TriStateFilter({
         </label>
         {currentList.length > 0 && (
           <button
-            onClick={() => onChange(null)}
+            data-control-action="filters.category.clear" onClick={() => onChange(null)}
             className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-danger)] uppercase cursor-pointer"
           >
             [ANY]
@@ -74,7 +74,7 @@ export function TriStateFilter({
           const active = isSelected(opt.val);
           return (
             <button
-              key={opt.val}
+              data-control-action="filters.category.toggle" key={opt.val}
               type="button"
               onClick={() => handleToggle(opt.val)}
               className={`flex-1 py-1 px-2 text-xs font-bold uppercase tracking-wider border cursor-pointer ${

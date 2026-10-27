@@ -11,6 +11,7 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { needsDesktop } from "./lib/runtime";
+import { installControlActivity } from "./lib/controlActivity";
 import "./styles/index.css";
 
 const queryClient = new QueryClient({
@@ -22,6 +23,9 @@ const queryClient = new QueryClient({
   },
 });
 
+const disposeControlActivity = installControlActivity();
+if (import.meta.hot) import.meta.hot.dispose(disposeControlActivity);
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
@@ -29,7 +33,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         <main className="p-8 text-[var(--color-ink)] bg-[var(--color-paper)]">
           <h1 className="text-xl font-bold">Scrape</h1>
           <p className="my-4">Live scraping and saved jobs require the desktop application.</p>
-          <a className="underline" href="?demo=1">Explore recorded provider examples</a>
+          <a data-control-action="app.demo.open" className="underline" href="?demo=1">Explore recorded provider examples</a>
         </main>
       ) : <App />}
     </QueryClientProvider>

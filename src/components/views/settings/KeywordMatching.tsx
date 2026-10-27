@@ -21,7 +21,7 @@ export function KeywordMatching({ rules: postingRules, change }: { rules: Postin
       if (rules[group].some(existing => existing.toLocaleLowerCase() === key) || seen.has(key)) return false;
       seen.add(key); return true;
     });
-    return <KeywordInput label={label} value={rules[group]} suggestions={unique}
+    return <KeywordInput actionId="workflow.match_keywords" label={label} value={rules[group]} suggestions={unique}
       onChange={value => patch(current => ({ ...current, [group]: value }))}
       onDraftChange={() => change(current => ({ ...current }))} />;
   };
@@ -35,7 +35,7 @@ export function KeywordMatching({ rules: postingRules, change }: { rules: Postin
     <fieldset className="flex flex-wrap gap-3">
       <legend>Search in</legend>
       {fields.map(field => <label key={field} className="flex min-h-8 items-center gap-2 capitalize">
-        <input type="checkbox" checked={searchFields.includes(field)}
+        <input data-control-action="workflow.keyword_field" type="checkbox" checked={searchFields.includes(field)}
           disabled={searchFields.length === 1 && searchFields.includes(field)}
           onChange={event => {
             const checked = event.target.checked;

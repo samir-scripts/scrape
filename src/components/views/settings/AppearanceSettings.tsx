@@ -58,6 +58,7 @@ export function AppearanceSettings({
           {/* Paper Theme Card */}
           <div
             role="button"
+            data-control-action="settings.appearance.theme.paper"
             tabIndex={0}
             onClick={() => handleSelectTheme("paper")}
             onKeyDown={(e) => {
@@ -96,6 +97,7 @@ export function AppearanceSettings({
           {/* Parchment Theme Card (Classic) */}
           <div
             role="button"
+            data-control-action="settings.appearance.theme.parchment"
             tabIndex={0}
             onClick={() => handleSelectTheme("parchment")}
             onKeyDown={(e) => {
@@ -134,6 +136,7 @@ export function AppearanceSettings({
           {/* Obsidian Theme Card */}
           <div
             role="button"
+            data-control-action="settings.appearance.theme.obsidian"
             tabIndex={0}
             onClick={() => handleSelectTheme("obsidian")}
             onKeyDown={(e) => {
@@ -176,7 +179,7 @@ export function AppearanceSettings({
       <section className="grid gap-4" aria-label="Typography">
         <label className="grid gap-2 text-sm">
           Interface font
-          <Select aria-label="Interface font" value={currentFont} onChange={font => handleSelectFont(font as FontFamilyId)}
+          <Select actionId="settings.appearance.font" aria-label="Interface font" value={currentFont} onChange={font => handleSelectFont(font as FontFamilyId)}
             options={FONT_OPTIONS.map(font => ({ value: font.id, label: font.name }))} />
         </label>
         <p className="text-sm text-[var(--color-ink-mute)]">Applies throughout the application. YAML and code use a fixed-width font. All fonts are available offline.</p>
@@ -191,6 +194,7 @@ export function AppearanceSettings({
       {/* Interface & Motion Controls */}
       <div className="flex flex-col gap-4 p-4 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/30">
         <Toggle
+          actionId="settings.appearance.tooltips"
           checked={settings.ui_tooltips_enabled ?? true}
           onChange={handleToggleTooltips}
           label="GLOBAL TOOLTIPS"
@@ -200,6 +204,7 @@ export function AppearanceSettings({
         <div className="border-t border-[var(--color-ink)]/20" />
 
         <Toggle
+          actionId="settings.appearance.reduce_motion"
           checked={settings.ui_reduce_motion}
           onChange={handleToggleReduceMotion}
           label="REDUCE MOTION"

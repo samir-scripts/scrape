@@ -1,3 +1,5 @@
+import { recordControlAction } from "../../lib/controlActivity";
+
 interface ToggleProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
@@ -6,6 +8,7 @@ interface ToggleProps {
   disabled?: boolean;
   size?: "default" | "sm";
   className?: string;
+  actionId?: string;
 }
 
 export function Toggle({
@@ -16,20 +19,28 @@ export function Toggle({
   disabled = false,
   size = "default",
   className = "",
+  actionId,
 }: ToggleProps) {
   const isSm = size === "sm";
+  const toggle = () => {
+    if (disabled) return;
+    if (actionId) recordControlAction(actionId, "change");
+    onChange(!checked);
+  };
 
   return (
     <div
       role="switch"
+      data-control-action={actionId}
+      data-control-semantic
       aria-checked={checked}
       aria-disabled={disabled}
       tabIndex={disabled ? -1 : 0}
-      onClick={() => !disabled && onChange(!checked)}
+      onClick={toggle}
       onKeyDown={(e) => {
         if (!disabled && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
-          onChange(!checked);
+          toggle();
         }
       }}
       className={`inline-flex items-center gap-2.5 cursor-pointer select-none focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-ink)] ${

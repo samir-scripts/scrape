@@ -43,7 +43,7 @@ export function KanbanBoard({
       <div className="kanban-stage-header px-4 py-2 flex gap-4 items-center justify-end">
         <label className="kanban-stage-picker text-sm">
           Stage{" "}
-          <Select aria-label="Board stage" value={stage}
+          <Select aria-label="Board stage" actionId="kanban.stage.navigate" value={stage}
             onChange={(value) => { setStage(value as JobStatus); document.getElementById(`kanban-stage-${value}`)?.scrollIntoView({ block: "nearest", inline: "start" }); }}
             options={TRACKED_STAGES.map((value) => ({ value, label: value }))} />
         </label>

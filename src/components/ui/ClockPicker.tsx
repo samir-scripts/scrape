@@ -9,6 +9,7 @@ import {
   to24Hour,
   from24Hour,
 } from "../../lib/cronClock";
+import { recordControlAction } from "../../lib/controlActivity";
 
 export type ClockMode = "hours" | "minutes";
 
@@ -168,6 +169,7 @@ export function ClockPicker({
 
   const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!isDragging) return;
+    recordControlAction("clock.dial.commit", "change");
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {
@@ -315,6 +317,7 @@ export function ClockPicker({
         minuteInputRef.current?.select();
       }
     } else if (e.key === "ArrowUp") {
+      recordControlAction("clock.hour.adjust", "change");
       e.preventDefault();
       updateHourDraft(null);
       if (is24h) {
@@ -329,6 +332,7 @@ export function ClockPicker({
         notifyChange(next, minute, ampm, cadence);
       }
     } else if (e.key === "ArrowDown") {
+      recordControlAction("clock.hour.adjust", "change");
       e.preventDefault();
       updateHourDraft(null);
       if (is24h) {
@@ -403,12 +407,14 @@ export function ClockPicker({
       hourInputRef.current?.focus();
       hourInputRef.current?.select();
     } else if (e.key === "ArrowUp") {
+      recordControlAction("clock.minute.adjust", "change");
       e.preventDefault();
       updateMinuteDraft(null);
       const next = (minute + 1) % 60;
       setMinute(next);
       notifyChange(hour12, next, ampm, cadence);
     } else if (e.key === "ArrowDown") {
+      recordControlAction("clock.minute.adjust", "change");
       e.preventDefault();
       updateMinuteDraft(null);
       const prev = minute === 0 ? 59 : minute - 1;
@@ -485,6 +491,7 @@ export function ClockPicker({
         {/* HH : MM Controlled Numeric Inputs */}
         <div className="flex items-center gap-1.5 text-3xl font-black tracking-tight">
           <input
+            data-control-action="clock.hour.edit"
             ref={hourInputRef}
             type="text"
             inputMode="numeric"
@@ -512,6 +519,7 @@ export function ClockPicker({
           />
           <span className="text-[var(--color-ink)] opacity-70 animate-pulse font-bold">:</span>
           <input
+            data-control-action="clock.minute.edit"
             ref={minuteInputRef}
             type="text"
             inputMode="numeric"
@@ -543,6 +551,7 @@ export function ClockPicker({
         {!is24h ? (
           <div className="flex flex-col border border-[var(--color-ink)] text-xs font-bold">
             <button
+              data-control-action="clock.period.select"
               type="button"
               onClick={() => {
                 setAmPm("AM");
@@ -558,6 +567,7 @@ export function ClockPicker({
             </button>
             <div className="h-[1px] bg-[var(--color-ink)]" />
             <button
+              data-control-action="clock.period.select"
               type="button"
               onClick={() => {
                 setAmPm("PM");
@@ -588,6 +598,8 @@ export function ClockPicker({
         <div className="absolute bottom-0 right-0 w-2.5 h-2.5 border-b border-r border-[var(--color-ink)] pointer-events-none" />
 
         <svg
+          data-control-action="clock.dial.commit"
+          data-control-semantic
           ref={svgRef}
           viewBox={`0 0 ${VIEWBOX_SIZE} ${VIEWBOX_SIZE}`}
           className="w-64 h-64 select-none touch-none cursor-crosshair"
@@ -799,6 +811,7 @@ export function ClockPicker({
               const isSel = opt.id === cadence;
               return (
                 <button
+                  data-control-action="clock.cadence.select"
                   key={opt.id}
                   type="button"
                   onClick={() => {

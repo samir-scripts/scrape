@@ -32,8 +32,12 @@ The per-run target counts newly inserted Discovered jobs, not refreshes. Runs ca
 finish below target when sources exhaust or existing safety bounds are reached;
 Preview is a non-writing sample rather than a prediction of new discoveries.
 The Terminal console shows a scrolling card for each examined candidate, including
-matching reasons and the committed outcome. Cards are written to the local console
-log rather than the database; the log may grow substantially on large runs.
+matching reasons and the committed outcome. It also records application control
+interactions continuously, even when Terminal is closed, using static action names:
+interaction entries exclude entered values, record names, URLs, file names and
+credentials. They record attempts, not operation outcomes. Both are written to the
+local console log rather than the database; the log may grow substantially. Existing
+scrape cards have their own content and redaction rules.
 Custom workflows can also crawl explicitly supplied public HTML sites. The static
 crawler uses same-origin link traversal, `robots.txt` by default, a default 750 ms per-host
 delay, page/depth caps, and ordinary HTTP semantics; it does not search the web

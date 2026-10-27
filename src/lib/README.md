@@ -11,6 +11,7 @@ The `src/lib` directory contains the Tauri IPC client, Zustand UI state store, l
 | File | Purpose & Key Exports |
 |---|---|
 | [`api.ts`](api.ts) | **Tauri IPC Client**: Strongly-typed wrappers for backend commands, including native indexed role-title search (`searchRoleTitles`) and bounded company suggestions (`searchCompanies`); browser demonstration mode does not claim either native SQLite index is populated. |
+| [`controlActivity.ts`](controlActivity.ts), [`control-actions.json`](control-actions.json) | **Interaction Console**: Records allowlisted, content-free control actions to the desktop console using a bounded asynchronous queue; browser demonstrations use their browser console. |
 | [`companyLogoCache.ts`](companyLogoCache.ts) | **Local Logo Asset and Lookup Cache**: Coalesces local image reads, visible persisted-job lookups and recent negative lookup results by source/employer; demonstration mode never initiates lookup. |
 | [`constants.ts`](constants.ts) | **Application Constants**: Status display metadata (`STATUS_CONFIG`), tracked pipeline stages (`TRACKED_STAGES`), role metadata (`ROLE_CONFIG`), navigation tabs (`NAV_TABS`), and default filter initializers. |
 | [`cronClock.ts`](cronClock.ts) | **Cron & Clock Math**: Utilities converting 24-hour clock face coordinates into cron expressions and `HH:MM` time strings. |

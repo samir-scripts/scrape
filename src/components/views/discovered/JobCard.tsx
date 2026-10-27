@@ -65,7 +65,7 @@ export function JobCard({
       {/* Top Line: Title + Actions */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h2 className="text-base font-bold text-[var(--color-ink)] group-hover:underline leading-snug line-clamp-2">
-          <button type="button" onClick={onClick} className="normal-case text-left cursor-pointer" aria-label={`View ${job.title} at ${job.company}`}>
+          <button type="button" onClick={onClick} data-control-action="job.inspect" className="normal-case text-left cursor-pointer" aria-label={`View ${job.title} at ${job.company}`}>
             {job.status === "scraped" && (
               <span className="inline-flex w-3 mr-1 items-center justify-center align-middle text-[var(--color-unread)]" title="New discovery" aria-label="New discovery">
                 <svg aria-hidden="true" focusable="false" width="6" height="6" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" fill="currentColor" /></svg>

@@ -4,6 +4,7 @@ import { Group } from "@visx/group";
 import { ParentSize } from "@visx/responsive";
 import type { RoleTypeMetric } from "../../../bindings/RoleTypeMetric";
 import type { RoleType } from "../../../bindings/RoleType";
+import { recordControlAction } from "../../../lib/controlActivity";
 
 interface RoleTypeDonutProps {
   data: RoleTypeMetric[];
@@ -254,7 +255,7 @@ export function RoleTypeDonut({ data, className = "" }: RoleTypeDonutProps) {
           return (
             <div
               key={`legend-${item.role_type}`}
-              onClick={() => setSelectedRole(item.role_type)}
+              data-control-semantic onClick={() => { recordControlAction("metrics.role.select", "activate"); setSelectedRole(item.role_type); }}
               onMouseEnter={() => setSelectedRole(item.role_type)}
               className={`flex items-center justify-between px-1.5 py-0.5 cursor-pointer font-mono text-xs transition-none ${
                 isSelected

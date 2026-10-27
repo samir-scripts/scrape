@@ -207,6 +207,7 @@ export function SystemSettings({
         <h3 className="font-mono text-xs font-bold uppercase tracking-wider">Automatic scraping</h3>
         <p className="font-mono text-xs text-[var(--color-ink-mute)]">Pause or resume scheduled workflow runs. Manual runs remain available while paused.</p>
         <Toggle
+          actionId="settings.system.automatic_scraping"
           checked={settings.scraper_enabled}
           onChange={(enabled) => onUpdateSetting("scraper.enabled", enabled)}
           label="AUTOMATIC SCRAPING ENABLED"
@@ -225,6 +226,7 @@ export function SystemSettings({
         </p>
 
         <Toggle
+          actionId="settings.system.respect_robots"
           checked={settings.scraper_respect_robots ?? false}
           onChange={(checked) => onUpdateSetting("scraper.respect_robots", checked)}
           label="RESPECT ROBOTS.TXT"
@@ -239,6 +241,7 @@ export function SystemSettings({
           <label className="grid gap-1 text-xs text-[var(--color-ink-mute)]">
             DEFAULT MAX JOBS PER RUN
             <input
+              data-control-action="settings.system.max_jobs"
               type="number"
               min={1}
               max={10000}
@@ -250,6 +253,7 @@ export function SystemSettings({
           <label className="grid gap-1 text-xs text-[var(--color-ink-mute)]">
             BASE REQUEST DELAY (MS)
             <input
+              data-control-action="settings.system.request_delay"
               type="number"
               min={0}
               max={10000}
@@ -261,6 +265,7 @@ export function SystemSettings({
           <label className="grid gap-1 text-xs text-[var(--color-ink-mute)]">
             RANDOMIZED JITTER (MS)
             <input
+              data-control-action="settings.system.request_jitter"
               type="number"
               min={0}
               max={10000}
@@ -281,15 +286,15 @@ export function SystemSettings({
         <p role="status" className="font-mono text-xs">{adzunaConfigured ? "Adzuna credentials configured." : "Adzuna setup required."}</p>
         <label className="grid gap-2 text-xs text-[var(--color-ink-mute)]">
           App ID
-          <input autoComplete="off" value={adzunaAppId} onChange={(event) => setAdzunaAppId(event.target.value)} className="h-9 border border-[var(--color-ink)] bg-[var(--color-paper)] px-2 text-[var(--color-ink)]" />
+          <input data-control-action="settings.system.adzuna_app_id" autoComplete="off" value={adzunaAppId} onChange={(event) => setAdzunaAppId(event.target.value)} className="h-9 border border-[var(--color-ink)] bg-[var(--color-paper)] px-2 text-[var(--color-ink)]" />
         </label>
         <label className="grid gap-2 text-xs text-[var(--color-ink-mute)]">
           App key
-          <input type="password" autoComplete="new-password" value={adzunaAppKey} onChange={(event) => setAdzunaAppKey(event.target.value)} className="h-9 border border-[var(--color-ink)] bg-[var(--color-paper)] px-2 text-[var(--color-ink)]" />
+          <input data-control-action="settings.system.adzuna_app_key" type="password" autoComplete="new-password" value={adzunaAppKey} onChange={(event) => setAdzunaAppKey(event.target.value)} className="h-9 border border-[var(--color-ink)] bg-[var(--color-paper)] px-2 text-[var(--color-ink)]" />
         </label>
         <div className="flex flex-wrap gap-2">
-          <Button disabled={adzunaBusy || !adzunaAppId.trim() || !adzunaAppKey.trim() || !isTauri()} onClick={handleSaveAdzuna}>Save credentials</Button>
-          <Button variant="ghost" disabled={adzunaBusy || !adzunaConfigured || !isTauri()} onClick={handleClearAdzuna}>Clear credentials</Button>
+          <Button data-control-action="settings.system.save_adzuna" disabled={adzunaBusy || !adzunaAppId.trim() || !adzunaAppKey.trim() || !isTauri()} onClick={handleSaveAdzuna}>Save credentials</Button>
+          <Button data-control-action="settings.system.clear_adzuna" variant="ghost" disabled={adzunaBusy || !adzunaConfigured || !isTauri()} onClick={handleClearAdzuna}>Clear credentials</Button>
         </div>
         {adzunaStatus && <p role="status" className="font-mono text-xs">{adzunaStatus}</p>}
       </section>
@@ -300,18 +305,18 @@ export function SystemSettings({
         <p className="font-mono text-xs text-[var(--color-ink-mute)]">Basic credentials sent to an HTTP proxy are not transport-encrypted. Prefer an HTTPS proxy or a trusted local network.</p>
         <p className="font-mono text-xs">{!isTauri() ? "Desktop app required. Demo/recorded mode does not configure proxy routing." : proxy.configured ? `Configured: ${proxy.server}${proxy.authenticated ? " (authenticated)" : ""}` : "No proxy configured."}</p>
         <label className="grid gap-2 text-xs">Proxy endpoint
-          <Input autoComplete="off" placeholder="http://proxy.example:8080" value={proxyServer} onChange={event => setProxyServer(event.target.value)} />
+          <Input data-control-action="settings.system.proxy_endpoint" autoComplete="off" placeholder="http://proxy.example:8080" value={proxyServer} onChange={event => setProxyServer(event.target.value)} />
         </label>
         <label className="grid gap-2 text-xs">Proxy username (optional, write-only)
-          <Input type="password" autoComplete="new-password" value={proxyUsername} onChange={event => setProxyUsername(event.target.value)} />
+          <Input data-control-action="settings.system.proxy_username" type="password" autoComplete="new-password" value={proxyUsername} onChange={event => setProxyUsername(event.target.value)} />
         </label>
         <label className="grid gap-2 text-xs">Proxy password (optional, write-only)
-          <Input type="password" autoComplete="new-password" value={proxyPassword} onChange={event => setProxyPassword(event.target.value)} />
+          <Input data-control-action="settings.system.proxy_password" type="password" autoComplete="new-password" value={proxyPassword} onChange={event => setProxyPassword(event.target.value)} />
         </label>
         <p className="text-xs text-[var(--color-ink-mute)]">Use an endpoint with scheme, host and port, without embedded credentials. Supply both username and password or neither. Saved credentials are never loaded into these fields.</p>
         <div className="flex gap-2">
-          <Button disabled={proxyBusy || !isTauri() || !proxyServer.trim()} onClick={() => void changeProxy(false)}>Save proxy</Button>
-          <Button variant="ghost" disabled={proxyBusy || !isTauri() || !proxy.configured} onClick={() => void changeProxy(true)}>Clear proxy</Button>
+          <Button data-control-action="settings.system.save_proxy" disabled={proxyBusy || !isTauri() || !proxyServer.trim()} onClick={() => void changeProxy(false)}>Save proxy</Button>
+          <Button data-control-action="settings.system.clear_proxy" variant="ghost" disabled={proxyBusy || !isTauri() || !proxy.configured} onClick={() => void changeProxy(true)}>Clear proxy</Button>
         </div>
         {proxyMessage && <p role="alert" className="font-mono text-xs">{proxyMessage}</p>}
       </section>
@@ -359,7 +364,7 @@ export function SystemSettings({
         <div className="grid grid-cols-1 gap-4 pt-1 sm:grid-cols-2">
           <label className="grid gap-2 text-xs text-[var(--color-ink-mute)]">
             TIME FORMAT
-            <Select aria-label="Time format" value={settings.system_time_format}
+            <Select actionId="settings.system.time_format" aria-label="Time format" value={settings.system_time_format}
               options={[
                 { value: "12h", label: "12-hour · 3:25 PM" },
                 { value: "24h", label: "24-hour · 15:25" },
@@ -369,7 +374,7 @@ export function SystemSettings({
 
           <label className="grid gap-2 text-xs text-[var(--color-ink-mute)]">
             DATE FORMAT
-            <Select aria-label="Date format" value={settings.system_date_format}
+            <Select actionId="settings.system.date_format" aria-label="Date format" value={settings.system_date_format}
               options={(["MM/DD/YY", "DD/MM/YY", "MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"] as const).map((fmt) => ({
                 value: fmt,
                 label: `${fmt} · ${formatDate(new Date(2031, 10, 23), fmt)}`,
@@ -384,6 +389,7 @@ export function SystemSettings({
       {/* OS & Tray Integration Toggles */}
       <div className="flex flex-col gap-4 p-4 border border-[var(--color-ink)] bg-[var(--color-paper-2)]/30">
         <Toggle
+          actionId="settings.system.launch_at_login"
           checked={settings.app_launch_at_login}
           onChange={(checked) =>
             onUpdateSetting("app.launch_at_login", checked)
@@ -392,12 +398,14 @@ export function SystemSettings({
         />
 
         <Toggle
+          actionId="settings.system.start_hidden"
           checked={settings.app_start_hidden}
           onChange={(checked) => onUpdateSetting("app.start_hidden", checked)}
           label="START MINIMIZED TO TRAY"
         />
 
         <Toggle
+          actionId="settings.system.notifications"
           checked={settings.notifications_enabled}
           onChange={(checked) =>
             onUpdateSetting("notifications.enabled", checked)
@@ -417,6 +425,7 @@ export function SystemSettings({
         </label>
 
         <Toggle
+          actionId="settings.system.auto_update"
           checked={settings.app_auto_update ?? true}
           onChange={(checked) => onUpdateSetting("app.auto_update", checked)}
           label="CHECK FOR UPDATES AUTOMATICALLY ON STARTUP"
@@ -428,6 +437,7 @@ export function SystemSettings({
           </span>
           <div className="flex max-w-sm border border-[var(--color-ink)]">
             <button
+              data-control-action="settings.system.channel_stable"
               type="button"
               onClick={() => onUpdateSetting("app.update_channel", "stable")}
               className={`flex-1 py-1 text-center font-bold text-xs cursor-pointer ${
@@ -439,6 +449,7 @@ export function SystemSettings({
               STABLE (RECOMMENDED)
             </button>
             <button
+              data-control-action="settings.system.channel_nightly"
               type="button"
               onClick={() => onUpdateSetting("app.update_channel", "nightly")}
               className={`flex-1 py-1 text-center font-bold text-xs cursor-pointer ${
@@ -465,6 +476,7 @@ export function SystemSettings({
 
           <div className="flex items-center gap-3">
             <Button
+              data-control-action="settings.system.check_updates"
               variant="default"
               disabled={isCheckingUpdate}
               onClick={handleCheckUpdate}
@@ -488,13 +500,13 @@ export function SystemSettings({
           LOCAL DATA & EXPORT ENGINE
         </label>
         <div className="flex items-center gap-3">
-          <Button variant="default" onClick={handleExportJson}>
+          <Button data-control-action="settings.system.export_json" variant="default" onClick={handleExportJson}>
             EXPORT TO JSON
           </Button>
-          <Button variant="default" onClick={handleExportCsv}>
+          <Button data-control-action="settings.system.export_csv" variant="default" onClick={handleExportCsv}>
             EXPORT TO CSV
           </Button>
-          <Button variant="ghost" onClick={handleOpenDataFolder}>
+          <Button data-control-action="settings.system.open_folder" variant="ghost" onClick={handleOpenDataFolder}>
             OPEN PROJECT FOLDER <Icon name="external" size="sm" />
           </Button>
         </div>

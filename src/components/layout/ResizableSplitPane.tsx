@@ -1,4 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { recordControlAction } from "../../lib/controlActivity";
 
 const MIN_PRIMARY = 440, MIN_SECONDARY = 360, HANDLE = 12, DEFAULT_RATIO = 0.6;
 export const JOB_SPLIT_PREFERENCE = "scrape:job_split:v1";
@@ -37,11 +38,11 @@ export function ResizableSplitPane({ primary, secondary, preferenceKey = JOB_SPL
     preferredRef.current = next; setPreferred(next);
     try { localStorage.setItem(preferenceKey, JSON.stringify({ version: 1, ratio: next })); } catch { /* Resize still works in restricted storage. */ }
   };
-  const reset = () => persist(DEFAULT_RATIO);
-  const cancel = () => { if (dragging.current) { setPreferred(dragging.current.original); dragging.current = null; } };
+  const reset = () => { recordControlAction("layout.split.reset", "resize"); persist(DEFAULT_RATIO); };
+  const cancel = () => { if (dragging.current) { recordControlAction("layout.split.cancel", "resize"); setPreferred(dragging.current.original); dragging.current = null; } };
   return <div ref={root} data-resizable-split className="flex flex-1 min-h-0 min-w-0 overflow-hidden">
     <div id={id} role="region" aria-label="Job results" className="flex min-h-0 min-w-0" style={{ flex: secondary && inline ? `${ratio} 1 0` : "1 1 0" }}>{primary}</div>
-    <div ref={handle} role="separator" aria-label="Job results width" aria-controls={id} aria-orientation="vertical"
+    <div ref={handle} role="separator" data-control-action="layout.split.resize" data-control-semantic aria-label="Job results width" aria-controls={id} aria-orientation="vertical"
       aria-valuemin={value(min)} aria-valuemax={value(max)} aria-valuenow={value(ratio)} aria-valuetext={`${Math.round(ratio * 100)}% job results`}
       tabIndex={0} title="Drag to resize. Arrow keys resize; Home/End reach limits."
       className={`${secondary && inline ? "flex" : "hidden"} split-handle shrink-0 items-center justify-center cursor-col-resize touch-none select-none`}
@@ -60,6 +61,7 @@ export function ResizableSplitPane({ primary, secondary, preferenceKey = JOB_SPL
       }}
       onPointerUp={event => {
         if (dragging.current?.id !== event.pointerId) return;
+        recordControlAction("layout.split.resize", "resize");
         dragging.current = null; persist(preferredRef.current);
         event.currentTarget.releasePointerCapture(event.pointerId);
       }}
@@ -67,7 +69,7 @@ export function ResizableSplitPane({ primary, secondary, preferenceKey = JOB_SPL
       onKeyDown={event => {
         if (event.key === "Escape" && dragging.current) { event.preventDefault(); event.stopPropagation(); cancel(); return; }
         const next = event.key === "ArrowLeft" ? ratio - 0.02 : event.key === "ArrowRight" ? ratio + 0.02 : event.key === "Home" ? min : event.key === "End" ? max : undefined;
-        if (next !== undefined) { event.preventDefault(); event.stopPropagation(); persist(clamp(next)); }
+        if (next !== undefined) { event.preventDefault(); event.stopPropagation(); recordControlAction("layout.split.resize", "resize"); persist(clamp(next)); }
       }}><span aria-hidden="true" className="h-full border-l border-[var(--color-ink-mute)]" /></div>
     <div className="flex min-h-0 min-w-0" style={{ flex: secondary && inline ? `${1 - ratio} 1 0` : "0 0 0" }}>
       {secondary?.({ inline, reset })}

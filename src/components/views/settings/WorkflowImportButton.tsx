@@ -13,8 +13,8 @@ export function WorkflowImportButton({ onImport, disabled = false }: {
   useEffect(() => () => { revision.current++; }, []);
   useEffect(() => { if (disabled) { revision.current++; setBusy(false); } }, [disabled]);
   return <div className="grid gap-1">
-    <IconButton label="Import workflow YAML" disabled={disabled || busy} onClick={() => input.current?.click()}><Icon name="upload" /></IconButton>
-    <input ref={input} type="file" accept=".yaml,.yml" aria-label="Workflow YAML file" className="hidden" disabled={disabled || busy}
+    <IconButton data-control-action="workflow.import_yaml" label="Import workflow YAML" disabled={disabled || busy} onClick={() => input.current?.click()}><Icon name="upload" /></IconButton>
+    <input data-control-action="workflow.import_file" ref={input} type="file" accept=".yaml,.yml" aria-label="Workflow YAML file" className="hidden" disabled={disabled || busy}
       onChange={async event => {
         const file = event.target.files?.[0]; event.target.value = "";
         if (!file) return;

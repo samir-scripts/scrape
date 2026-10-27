@@ -43,6 +43,7 @@ export function NotificationBell() {
     <>
       <Tooltip content={tooltipText} position="bottom">
         <IconButton
+          data-control-action="notifications.panel.toggle"
           ref={buttonRef}
           id="notification-bell-btn"
           onClick={toggleNotificationOpen}

@@ -111,6 +111,7 @@ export function LogsSettings() {
           {/* Filter toggle */}
           <div className="flex border border-[var(--color-ink)] bg-[var(--color-paper)]">
             <button
+              data-control-action="settings.logs.filter_all"
               onClick={() => setFilterMode("all")}
               className={`px-2.5 py-1 text-xs font-bold uppercase cursor-pointer ${
                 filterMode === "all"
@@ -121,6 +122,7 @@ export function LogsSettings() {
               ALL RUNS ({sortedRuns.length})
             </button>
             <button
+              data-control-action="settings.logs.filter_errors"
               onClick={() => setFilterMode("errors")}
               className={`px-2.5 py-1 text-xs font-bold uppercase flex items-center gap-1.5 cursor-pointer ${
                 filterMode === "errors"
@@ -135,6 +137,7 @@ export function LogsSettings() {
 
           {/* Trigger Now button */}
           <button
+            data-control-action="settings.logs.run_all"
             onClick={() => runNowMutation.mutate()}
             disabled={runNowMutation.isPending}
             className="px-3 py-1 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-90 active:translate-y-[1px] text-xs font-bold uppercase cursor-pointer disabled:opacity-50"
@@ -171,6 +174,7 @@ export function LogsSettings() {
 
                 return (
                   <button
+                    data-control-action="settings.logs.select_run"
                     key={run.id}
                     onClick={() => setSelectedRunId(run.id)}
                     className={`w-full text-left p-3 flex flex-col gap-1 cursor-pointer transition-none ${
@@ -342,6 +346,7 @@ export function LogsSettings() {
                           {isError && log.source_id && (
                             <div className="mt-2 pt-1.5 border-t border-[var(--color-danger)] flex justify-end">
                               <button
+                                data-control-action="settings.logs.edit_source"
                                 onClick={() => {
                                   setView("scraper");
                                   setScraperCategory("sources");

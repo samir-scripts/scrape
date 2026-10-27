@@ -122,6 +122,8 @@ test("workflow registry consolidates actions while keeping execution and import 
 });
 
 test("workflow deletion is confirmed and remains deleted after reload", async ({ page }) => {
+  const interactions: string[] = [];
+  page.on("console", message => { if (message.text().startsWith("UI ")) interactions.push(message.text()); });
   await page.goto("/?demo=1&fixtures=1");
   await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
   const name = "Software Engineering & Related — Past 12 Hours";
@@ -142,4 +144,8 @@ test("workflow deletion is confirmed and remains deleted after reload", async ({
   await page.getByRole("button", { name: "WORKFLOWS", exact: true }).click();
   await expect(row).toHaveCount(0);
   await expect(page.getByRole("row").filter({ hasText: "Fast Food — Cherry Hill, NJ — Past 30 Days" })).toBeVisible();
+  expect(interactions.some(message => message.includes("workflow.delete.request"))).toBe(true);
+  expect(interactions.some(message => message.includes("workflow.delete.cancel"))).toBe(true);
+  expect(interactions.some(message => message.includes("workflow.delete.confirm"))).toBe(true);
+  expect(interactions.every(message => !message.includes(name))).toBe(true);
 });

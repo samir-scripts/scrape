@@ -52,7 +52,7 @@ export function RoleTypeFilter({ selected, onChange }: RoleTypeFilterProps) {
         </label>
         {currentList.length > 0 && (
           <button
-            onClick={() => onChange(null)}
+            data-control-action="filters.role.clear" onClick={() => onChange(null)}
             className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-danger)] uppercase cursor-pointer"
           >
             [ANY ROLE]
@@ -66,7 +66,7 @@ export function RoleTypeFilter({ selected, onChange }: RoleTypeFilterProps) {
           const label = ROLE_TYPE_LABELS[role] || role.toUpperCase();
           return (
             <button
-              key={role}
+              data-control-action="filters.role.toggle" key={role}
               type="button"
               onClick={() => handleToggle(role)}
               className={`py-1 px-2 text-xs font-bold uppercase tracking-wider border cursor-pointer truncate ${

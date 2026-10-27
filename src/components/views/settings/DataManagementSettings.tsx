@@ -73,7 +73,7 @@ export function DataManagementSettings() {
       {result.warnings.map(warning => <p key={warning} role="alert">{warning}</p>)}
       <p>Recovery backup: <span className="break-all">{result.backup_path}</span></p>
       <p>This action has no Undo. Restoring a backup replaces current data.</p>
-      <details><summary className="cursor-pointer underline">Recovery instructions</summary>
+      <details><summary data-control-action="settings.data.recovery_instructions" className="cursor-pointer underline">Recovery instructions</summary>
         <ol className="list-decimal pl-5 mt-2 space-y-2">
           <li>Quit Scrape completely, including its tray or menu-bar process.</li>
           <li>Find scrape_data.db beside the backups folder. Move the current database and its -wal and -shm files together to a safe location.</li>
@@ -85,14 +85,14 @@ export function DataManagementSettings() {
     <div className="divide-y border-y">
       {OPERATIONS.map(item => <div key={item.mode} className="py-4 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1 basis-80"><h2 className="font-bold">{item.title}</h2><p className="text-sm mt-1">{item.description}</p></div>
-        <Button variant="danger" disabled={!desktop || busy} onClick={() => {
+        <Button data-control-action="settings.data.review_cleanup" variant="danger" disabled={!desktop || busy} onClick={() => {
           setMode(item.mode); setConfirmation(""); setPause(true); void load(item.mode);
         }}>Review {item.mode === "reset_all" ? "reset" : item.mode === "all_jobs" ? "all jobs" : item.mode === "except_favorites" ? "keep favorites" : "keep tracked"}</Button>
       </div>)}
     </div>
     <Modal isOpen={mode !== null} onClose={close} title={operation?.title || "Confirm cleanup"} footer={<div className="flex flex-wrap justify-end gap-3">
-      <button ref={cancel} type="button" className="border px-3 py-2" disabled={busy} onClick={close}>Cancel</button>
-      <Button variant="danger" disabled={busy || loading || !preview || (mode === "reset_all" && confirmation !== "RESET")} onClick={() => void execute()}>{busy ? "Cleaning up…" : "Permanently delete"}</Button>
+      <button data-control-action="settings.data.cancel_cleanup" ref={cancel} type="button" className="border px-3 py-2" disabled={busy} onClick={close}>Cancel</button>
+      <Button data-control-action="settings.data.confirm_cleanup" variant="danger" disabled={busy || loading || !preview || (mode === "reset_all" && confirmation !== "RESET")} onClick={() => void execute()}>{busy ? "Cleaning up…" : "Permanently delete"}</Button>
     </div>}>
       <div className="space-y-4 text-sm">
         <p>{operation?.description}</p>
@@ -104,9 +104,9 @@ export function DataManagementSettings() {
           <p>{mode === "reset_all" ? "Delete" : "Keep"} {preview.workflows} workflows and {preview.blocks} suppression entries{mode !== "reset_all" && ", plus settings, run logs and notifications"}.</p>
         </div>}
         <p className="text-[var(--color-danger)]">Deletion is permanent. A recovery backup is required before deleting. Active scrapes will be stopped. Jobs may return in future scrapes unless already blocked.</p>
-        {mode === "reset_all" ? <><p>All blocks are cleared. Automatic scraping stays paused.</p><label className="flex flex-col gap-1">Type RESET to confirm<input autoComplete="off" value={confirmation} onChange={event => setConfirmation(event.target.value)} disabled={busy} className="border bg-[var(--color-paper)] p-2" /></label></> :
-          <label className="flex items-start gap-2"><input type="checkbox" checked={pause} onChange={event => setPause(event.target.checked)} disabled={busy} />Pause automatic scraping after cleanup</label>}
-        {error && <div role="alert"><p>{error}</p><button className="border px-3 py-2 mt-2" disabled={busy || loading} onClick={() => mode && void load(mode)}>Refresh cleanup counts</button></div>}
+        {mode === "reset_all" ? <><p>All blocks are cleared. Automatic scraping stays paused.</p><label className="flex flex-col gap-1">Type RESET to confirm<input data-control-action="settings.data.reset_confirmation" autoComplete="off" value={confirmation} onChange={event => setConfirmation(event.target.value)} disabled={busy} className="border bg-[var(--color-paper)] p-2" /></label></> :
+          <label className="flex items-start gap-2"><input data-control-action="settings.data.pause_after_cleanup" type="checkbox" checked={pause} onChange={event => setPause(event.target.checked)} disabled={busy} />Pause automatic scraping after cleanup</label>}
+        {error && <div role="alert"><p>{error}</p><button data-control-action="settings.data.refresh_counts" className="border px-3 py-2 mt-2" disabled={busy || loading} onClick={() => mode && void load(mode)}>Refresh cleanup counts</button></div>}
       </div>
     </Modal>
   </section>;

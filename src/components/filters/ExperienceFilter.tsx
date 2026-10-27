@@ -71,22 +71,22 @@ export function ExperienceFilter({ experienceMin, experienceMax, experienceMatch
     <div className="flex flex-col gap-3 font-mono text-xs">
       <div className="flex flex-wrap justify-between gap-2">
         <span className="font-bold">{overlap ? "Advertised range overlap (saved rule)" : "Minimum required experience"}</span>
-        {overlap && <button type="button" className={buttonClass} onClick={() => onChange({ ...values, experienceMatchMode: "required_minimum" })}>Use minimum required experience</button>}
+        {overlap && <button data-control-action="filters.experience.mode" type="button" className={buttonClass} onClick={() => onChange({ ...values, experienceMatchMode: "required_minimum" })}>Use minimum required experience</button>}
       </div>
       <div role="group" aria-label="Years of experience" className="flex flex-wrap gap-1.5">
-        {PRESETS.map(({ label, min, max }) => <button key={label} type="button" className={buttonClass} aria-pressed={valid && experienceMin === min && experienceMax === max} onClick={() => preset(min, max)}>{label}</button>)}
+        {PRESETS.map(({ label, min, max }) => <button key={label} data-control-action="filters.experience.preset" type="button" className={buttonClass} aria-pressed={valid && experienceMin === min && experienceMax === max} onClick={() => preset(min, max)}>{label}</button>)}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <span>Custom:</span>
-        <label>Min <input aria-label="Minimum experience (years)" aria-invalid={!minValid || !ordered} aria-describedby={!valid ? errorId : undefined} type="text" inputMode="numeric" value={minText} onChange={(event) => editBound("min", event.target.value)} className="w-16 border border-[var(--color-ink)] bg-[var(--color-paper)] p-1" /></label>
-        <label>Max <input aria-label="Maximum experience (years)" aria-invalid={!maxValid || !ordered} aria-describedby={!valid ? errorId : undefined} type="text" inputMode="numeric" value={maxText} onChange={(event) => editBound("max", event.target.value)} className="w-16 border border-[var(--color-ink)] bg-[var(--color-paper)] p-1" /></label>
+        <label>Min <input aria-label="Minimum experience (years)" data-control-action="filters.experience.minimum" aria-invalid={!minValid || !ordered} aria-describedby={!valid ? errorId : undefined} type="text" inputMode="numeric" value={minText} onChange={(event) => editBound("min", event.target.value)} className="w-16 border border-[var(--color-ink)] bg-[var(--color-paper)] p-1" /></label>
+        <label>Max <input aria-label="Maximum experience (years)" data-control-action="filters.experience.maximum" aria-invalid={!maxValid || !ordered} aria-describedby={!valid ? errorId : undefined} type="text" inputMode="numeric" value={maxText} onChange={(event) => editBound("max", event.target.value)} className="w-16 border border-[var(--color-ink)] bg-[var(--color-paper)] p-1" /></label>
         <span>years, inclusive</span>
         <p className="text-[var(--color-ink-mute)]">Leave either bound blank for no limit.</p>
       </div>
       {!valid && <p id={errorId} role="alert" className="text-[var(--color-danger)]">Enter non-negative whole years, with minimum no greater than maximum.</p>}
-      <label className="flex items-center gap-2"><input type="checkbox" checked={includeUnknown} onChange={(event) => onChange({ ...values, includeUnknown: event.target.checked })} />{overlap ? "Include jobs without stated experience" : "Include jobs with unknown required experience"}</label>
+      <label className="flex items-center gap-2"><input type="checkbox" data-control-action="filters.experience.unknown" checked={includeUnknown} onChange={(event) => onChange({ ...values, includeUnknown: event.target.checked })} />{overlap ? "Include jobs without stated experience" : "Include jobs with unknown required experience"}</label>
       <div role="group" aria-label="New Grad eligibility" className="flex flex-wrap gap-1.5">
-        {NEW_GRAD_OPTIONS.map(({ id, label }) => <button key={id} type="button" className={buttonClass} aria-pressed={(newGrad || "any") === id} onClick={() => onChange({ ...values, newGrad: id })}>{label}</button>)}
+        {NEW_GRAD_OPTIONS.map(({ id, label }) => <button key={id} data-control-action="filters.experience.graduate" type="button" className={buttonClass} aria-pressed={(newGrad || "any") === id} onClick={() => onChange({ ...values, newGrad: id })}>{label}</button>)}
       </div>
       <p className="text-[var(--color-ink-mute)]">New Grad eligibility is separate from numeric experience and must also match.</p>
     </div>

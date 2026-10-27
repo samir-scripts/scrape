@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { Icon } from "./Icon";
 import { PopupPosition, positionOptions } from "./Select";
+import { recordControlAction } from "../../lib/controlActivity";
 
 export interface MultiSelectOption {
   value: string;
@@ -13,11 +14,12 @@ export interface MultiSelectOption {
 
 const normalize = (value: string) => value.trim().toLocaleLowerCase();
 
-export function MultiSelectCombobox({ label, value, options, onChange, placeholder, allowCustom = false, disabled, describedBy, loadOptions }: {
+export function MultiSelectCombobox({ label, value, options, onChange, placeholder, allowCustom = false, disabled, describedBy, loadOptions, actionId }: {
   label: string; value: string[]; options: readonly MultiSelectOption[];
   onChange: (values: string[]) => void; placeholder?: string; allowCustom?: boolean;
   disabled?: boolean; describedBy?: string;
   loadOptions?: (query: string) => Promise<readonly MultiSelectOption[]>;
+  actionId?: string;
 }): React.JSX.Element {
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -71,6 +73,7 @@ export function MultiSelectCombobox({ label, value, options, onChange, placehold
       ? value.filter(current => normalize(current) !== normalize(item))
       : [...value, item];
     const seen = new Set<string>();
+    if (actionId) recordControlAction(actionId, "change");
     onChange(next.filter(current => { const key = normalize(current); if (!key || seen.has(key)) return false; seen.add(key); return true; }));
     updateQuery(""); setBatch(50); setActiveIndex(-1); setOpen(false);
   };
@@ -90,7 +93,7 @@ export function MultiSelectCombobox({ label, value, options, onChange, placehold
     <span className="sr-only" role="status" aria-live="polite">{searchError || (loading ? `Searching ${label.toLocaleLowerCase()}…` : `${value.length} ${label} selections. Showing ${Math.min(batch, matches.length)} of ${matches.length} results.`)}</span>
     <PopupPosition root={root} open={open} onTarget={setPopupTarget}>
       <div ref={root} className="flex min-w-0 gap-2">
-        <input ref={input} type="text" role="combobox" aria-label={label} aria-describedby={describedBy}
+        <input ref={input} type="text" role="combobox" aria-label={label} aria-describedby={describedBy} data-control-action={actionId}
           aria-expanded={open} aria-autocomplete="list" aria-controls={`${label.replace(/\W+/g, "-")}-options`}
           aria-busy={loading}
           aria-activedescendant={open && activeIndex >= 0 ? `${label.replace(/\W+/g, "-")}-option-${activeIndex}` : undefined}
@@ -98,12 +101,12 @@ export function MultiSelectCombobox({ label, value, options, onChange, placehold
           className="min-h-[var(--control-height)] min-w-0 flex-1 border border-[var(--color-ink)] bg-[var(--color-paper)] px-3 py-2 text-sm normal-case text-[var(--color-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-signal)] disabled:opacity-60"
           onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onChange={event => { updateQuery(event.target.value); setBatch(50); setActiveIndex(-1); setOpen(true); }}
           onKeyDown={handleKeyDown} onBlur={() => { if (!root.current?.contains(document.activeElement)) setOpen(false); }} />
-        <button type="button" aria-label={`Open ${label}`} disabled={disabled} aria-expanded={open}
+        <button type="button" aria-label={`Open ${label}`} disabled={disabled} aria-expanded={open} data-control-action={actionId}
           className="min-h-[var(--control-height)] min-w-9 border border-[var(--color-ink)] bg-[var(--color-paper)] px-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-signal)] disabled:opacity-60"
           onMouseDown={event => event.preventDefault()} onClick={() => { setOpen(current => !current); input.current?.focus(); }}><Icon name="down" size="sm" /></button>
-        {popupTarget && open && createPortal(<div data-select-popup className="fixed z-[100] border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] shadow-none" style={positionOptions(root.current)}>
+        {popupTarget && open && createPortal(<div data-select-popup data-control-action={actionId} className="fixed z-[100] border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] shadow-none" style={positionOptions(root.current)}>
           <ul id={`${label.replace(/\W+/g, "-")}-options`} role="listbox" aria-label={`${label} options`} aria-multiselectable="true" className="max-h-60 overflow-auto p-1 focus:outline-none">
-            {choices.map((option, index) => <li id={`${label.replace(/\W+/g, "-")}-option-${index}`} key={`${option.value}:${index}`} role="option"
+            {choices.map((option, index) => <li id={`${label.replace(/\W+/g, "-")}-option-${index}`} key={`${option.value}:${index}`} role="option" data-control-semantic
               aria-selected={selectedKeys.has(normalize(option.value))} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActiveIndex(index)} onClick={() => commit(option.value)}
               className={`flex cursor-pointer items-start gap-2 px-2 py-2 text-sm normal-case ${activeIndex === index ? "bg-[var(--color-paper-2)]" : ""}`}>
               <span aria-hidden="true" className="w-4 shrink-0">{selectedKeys.has(normalize(option.value)) ? "✓" : ""}</span>
@@ -117,7 +120,7 @@ export function MultiSelectCombobox({ label, value, options, onChange, placehold
     </PopupPosition>
     {!!value.length && <ul aria-label={`${label} selections`} className="grid max-h-40 min-w-0 gap-1 overflow-y-auto">
       {value.map((item, index) => <li key={`${index}:${item}`} className="flex min-w-0 items-center justify-between gap-2 border border-[var(--color-border)] bg-[var(--color-surface-raised)] pl-2 text-sm normal-case">
-        <span className="min-w-0 break-words py-1">{item}</span><button type="button" ref={node => { removers.current[index] = node; }} aria-label={`Remove ${item} from ${label}`} className="min-h-8 min-w-8 shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-signal)]" onClick={() => { onChange(value.filter((_, i) => i !== index)); requestAnimationFrame(() => (removers.current[Math.max(0, index - 1)] || input.current)?.focus()); }}>×</button>
+        <span className="min-w-0 break-words py-1">{item}</span><button type="button" data-control-action={actionId} data-control-semantic ref={node => { removers.current[index] = node; }} aria-label={`Remove ${item} from ${label}`} className="min-h-8 min-w-8 shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-signal)]" onClick={() => { if (actionId) recordControlAction(actionId, "change"); onChange(value.filter((_, i) => i !== index)); requestAnimationFrame(() => (removers.current[Math.max(0, index - 1)] || input.current)?.focus()); }}>×</button>
       </li>)}
     </ul>}
   </div>;

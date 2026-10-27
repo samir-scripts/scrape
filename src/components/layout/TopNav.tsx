@@ -21,6 +21,14 @@ const TAB_TOOLTIPS: Record<NavTabId, string> = {
   settings: "System preferences, appearance, and global options",
 };
 
+const TAB_ACTIONS: Record<NavTabId, string> = {
+  discovered: "navigation.discovered.open",
+  tracked: "navigation.tracked.open",
+  metrics: "navigation.metrics.open",
+  scraper: "navigation.workflows.open",
+  settings: "navigation.settings.open",
+};
+
 export function TopNav({
   discoveredCount = 0,
   trackedCount = 0,
@@ -46,6 +54,7 @@ export function TopNav({
                   className="flex items-stretch"
                 >
                   <button
+                    data-control-action={TAB_ACTIONS[tab.id as NavTabId]}
                     onClick={() => setView(tab.id as NavTabId)}
                     className={`px-2 sm:px-3 min-h-8 my-1.5 flex items-center justify-center font-mono text-xs font-bold tracking-wider transition-none cursor-pointer border ${
                       isActive
@@ -69,7 +78,7 @@ export function TopNav({
 
           {/* External Terminal Console Launcher */}
           <Tooltip content="Open Live System Console in Terminal.app">
-            <IconButton label="Open Terminal Console" id="terminal-console-btn" onClick={() => api.openTerminalConsole()}>
+            <IconButton data-control-action="console.open" label="Open Terminal Console" id="terminal-console-btn" onClick={() => api.openTerminalConsole()}>
               <Icon name="terminal" />
             </IconButton>
           </Tooltip>

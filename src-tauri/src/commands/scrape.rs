@@ -438,6 +438,21 @@ pub async fn open_terminal_console(app: AppHandle) -> Result<()> {
 }
 
 #[tauri::command]
+pub async fn log_control_interaction(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    action: String,
+    kind: crate::services::system::ControlInteractionKind,
+) -> Result<()> {
+    if window.label() != "main" {
+        return Err(AppError::Validation(
+            "Control interactions require the main window".into(),
+        ));
+    }
+    crate::services::system::SystemService::append_control_interaction(&app, &action, kind)
+}
+
+#[tauri::command]
 pub async fn validate_workflow(
     state: State<'_, AppState>,
     spec: serde_json::Value,

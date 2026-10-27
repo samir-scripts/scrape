@@ -140,6 +140,7 @@ export function WorkflowSections({
   const setSchedule = (patch: Partial<NonNullable<WorkflowSpec["schedule"]>>) =>
     change(current => ({ ...current, schedule: { ...current.schedule, ...patch } }));
   const field = (
+    actionId: string,
     label: string,
     value: string | number,
     set: (value: string) => void,
@@ -148,6 +149,7 @@ export function WorkflowSections({
     <label key={label} className="flex flex-col gap-1 text-sm">
       {label}
       <Input
+        data-control-action={actionId}
         aria-label={label}
         type={type}
         step={type === "number" ? "any" : undefined}
@@ -162,7 +164,7 @@ export function WorkflowSections({
         <section aria-label="Workflow identification" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
           <h4 className="font-bold text-sm">Workflow Name</h4>
           {field(
-            "Workflow name",
+            "workflow.name", "Workflow name",
             draft.metadata?.name || "",
             (name) => change(current => ({ ...current, metadata: { ...current.metadata, name } }))
           )}
@@ -173,22 +175,22 @@ export function WorkflowSections({
 
         <section aria-label="Target roles" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
           <h4 className="font-bold text-sm">Target Roles</h4>
-          <MultiSelectCombobox label="Target roles" value={rules.target_roles || []}
+          <MultiSelectCombobox actionId="workflow.target_roles" label="Target roles" value={rules.target_roles || []}
             options={[]} loadOptions={loadRoleOptions} allowCustom onChange={target_roles => setRules({ target_roles })} />
           <p className="text-xs text-[var(--color-ink-mute)]">
             Job titles must contain any selected text; matching is literal, not every title in an occupation. Choose alternate titles or add custom text as needed. Leave empty to match any role.
           </p>
           <details className="text-xs text-[var(--color-ink-mute)]">
-            <summary className="cursor-pointer underline">Role-title sources & attribution · O*NET 31.0</summary>
+            <summary data-control-action="workflow.role_attribution" className="cursor-pointer underline">Role-title sources & attribution · O*NET 31.0</summary>
             <p className="mt-2">
-              <a className="underline" href="https://www.onetcenter.org/database.html" target="_blank" rel="noreferrer">O*NET 31.0 database</a> · <a className="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0 license</a>. Suggestions combine canonical, reported and alternate titles; matching remains literal. Includes information from the O*NET 31.0 Database by USDOL/ETA. Scrape's derived catalog is not endorsed or tested by USDOL/ETA.
+              <a data-control-action="workflow.role_attribution_links" className="underline" href="https://www.onetcenter.org/database.html" target="_blank" rel="noreferrer">O*NET 31.0 database</a> · <a data-control-action="workflow.role_attribution_links" className="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0 license</a>. Suggestions combine canonical, reported and alternate titles; matching remains literal. Includes information from the O*NET 31.0 Database by USDOL/ETA. Scrape's derived catalog is not endorsed or tested by USDOL/ETA.
             </p>
           </details>
         </section>
 
         <section aria-label="Target companies" className="border border-[var(--color-border)] p-3 bg-[var(--color-surface)] grid gap-3">
           <h4 className="font-bold text-sm">Target Companies (Optional)</h4>
-          <MultiSelectCombobox label="Companies (Optional)" value={rules.companies || []}
+          <MultiSelectCombobox actionId="workflow.target_companies" label="Companies (Optional)" value={rules.companies || []}
             options={[]} loadOptions={loadCompanyOptions} allowCustom describedBy="company-coverage-help" onChange={setTargetCompanies} />
           <p id="company-coverage-help" className="text-xs text-[var(--color-ink-mute)]">
             Available career boards attach automatically when selected. Removing a company filter leaves its sources in Sources. Custom company filters restrict matching; public-feed coverage is not guaranteed.
@@ -236,7 +238,7 @@ export function WorkflowSections({
           if (alreadyAttached) return null;
           return <div key={targetCo} className="border border-[var(--color-border)] p-3 bg-[var(--color-surface-raised)] flex items-center justify-between gap-3 text-xs">
             <span>Career board for <strong>{match.company.name}</strong> · {match.company.readiness.replaceAll("_", " ")}. Setup-required, review and script sources attach disabled.</span>
-            <Button type="button" size="sm" aria-label={`Attach career board for ${match.company.name}`}
+            <Button data-control-action="workflow.attach_career_board" type="button" size="sm" aria-label={`Attach career board for ${match.company.name}`}
               onClick={() => attachCompanyBoard(match.company.id)}>Attach career board</Button>
           </div>;
         })}
@@ -247,7 +249,7 @@ export function WorkflowSections({
           <h4 className="font-bold text-sm">
             Sources ({draft.sources?.length ?? 0})
           </h4>
-          <Button
+          <Button data-control-action="workflow.add_source"
             type="button"
             size="sm"
             aria-label="Add source"
@@ -297,7 +299,7 @@ export function WorkflowSections({
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--color-border)] pb-2">
                 <div className="flex items-center gap-2">
                   <label className="flex items-center gap-1.5 text-xs font-semibold uppercase">
-                    <input
+                    <input data-control-action="workflow.enable_source"
                       type="checkbox"
                       aria-label={`Enable ${source.label || `Source ${index + 1}`}`}
                       checked={source.enabled}
@@ -314,7 +316,7 @@ export function WorkflowSections({
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button
+                  <Button data-control-action="workflow.move_source_up"
                     type="button"
                     size="sm"
                     aria-label={`Move source ${source.label || index + 1} up`}
@@ -329,7 +331,7 @@ export function WorkflowSections({
                   >
                     ↑
                   </Button>
-                  <Button
+                  <Button data-control-action="workflow.move_source_down"
                     type="button"
                     size="sm"
                     aria-label={`Move source ${source.label || index + 1} down`}
@@ -344,7 +346,7 @@ export function WorkflowSections({
                   >
                     ↓
                   </Button>
-                  <Button
+                  <Button data-control-action="workflow.remove_source"
                     type="button"
                     size="sm"
                     variant="danger"
@@ -369,7 +371,7 @@ export function WorkflowSections({
                 {source.extractor.kind !== "search" && <div className="flex flex-col gap-1 text-sm">
                   Source URL or board identifier
                   <div className="flex gap-2">
-                    <Input
+                    <Input data-control-action="workflow.source_url"
                       aria-label={index === 0 ? "Source URL or board identifier" : `Source ${index + 1} URL or board identifier`}
                       value={source.extractor.url}
                       placeholder="https://boards.greenhouse.io/company"
@@ -385,7 +387,7 @@ export function WorkflowSections({
                         change({ ...draft, sources: nextSources });
                       }}
                     />
-                    <Button
+                    <Button data-control-action="workflow.detect_source"
                       type="button"
                       size="sm"
                       tabIndex={-1}
@@ -397,7 +399,7 @@ export function WorkflowSections({
                   </div>
                 </div>}
                 {source.extractor.kind === "search" && <label className="grid gap-1 text-sm">Public listings provider
-                  <Select aria-label={`Source ${index + 1} search provider`}
+                  <Select actionId="workflow.source_provider" aria-label={`Source ${index + 1} search provider`}
                     value={!source.extractor.url || source.extractor.url === "default" ? "themuse" : source.extractor.url}
                     options={[
                       { value: "themuse", label: "The Muse — bounded worldwide listings" },
@@ -416,13 +418,13 @@ export function WorkflowSections({
                 </label>}
 
                 <details className="border-t border-[var(--color-border)] pt-2 text-xs">
-                  <summary className="cursor-pointer font-semibold uppercase text-[var(--color-text-muted)] hover:text-[var(--color-text)] py-1">
+                  <summary data-control-action="workflow.source_metadata" className="cursor-pointer font-semibold uppercase text-[var(--color-text-muted)] hover:text-[var(--color-text)] py-1">
                     Customize source labels and metadata
                   </summary>
                   <div className="grid gap-3 pt-2">
                     <label className="flex flex-col gap-1 text-sm">
                       Source label
-                      <Input
+                      <Input data-control-action="workflow.source_label"
                         aria-label={index === 0 ? "Source label" : `Source ${index + 1} label`}
                         value={source.label}
                         placeholder="e.g. Cloudflare Greenhouse"
@@ -436,7 +438,7 @@ export function WorkflowSections({
 
                     <label className="flex flex-col gap-1 text-sm">
                       Employer hint (used for branding if unlabelled)
-                      <Input
+                      <Input data-control-action="workflow.source_employer_hint"
                         aria-label={`Source ${index + 1} employer hint`}
                         value={source.employer_hint || ""}
                         placeholder="e.g. Acme Corp"
@@ -452,7 +454,7 @@ export function WorkflowSections({
                     </label>
 
                     {index === 0 && field(
-                      "Company hint (optional)",
+                      "workflow.company_hint", "Company hint (optional)",
                       draft.metadata.company || "",
                       (company) =>
                         change({
@@ -469,7 +471,7 @@ export function WorkflowSections({
                   <div className="grid gap-3 border-t border-[var(--color-border)] pt-2">
                     <label className="flex flex-col gap-1 text-sm">
                       Adapter
-                      <Select
+                      <Select actionId="workflow.source_adapter"
                         aria-label={`Source ${index + 1} adapter`}
                         value={source.extractor.kind}
                         options={[
@@ -508,22 +510,22 @@ export function WorkflowSections({
                       return <fieldset className="grid gap-3">
                         <legend className="text-sm font-semibold">Website crawl</legend>
                         <label className="flex items-center gap-2 text-sm">
-                          <input type="checkbox" aria-label={`Source ${index + 1} website crawl`} checked={!!crawl}
+                          <input data-control-action="workflow.enable_website_crawl" type="checkbox" aria-label={`Source ${index + 1} website crawl`} checked={!!crawl}
                             onChange={event => updateCrawl(event.target.checked ? { max_pages: 20, max_depth: 2, extraction: "jsonld" } : null)} />
                           Enable bounded website crawl using the source URL above
                         </label>
                         <p className="text-xs text-[var(--color-text-muted)]">Public career/job HTML on the supplied site only, not internet-wide search. Existing feeds and ATS remain available. Pages without supported job fields may yield no postings. Robots and access restrictions still apply.</p>
                         {crawl && <>
                           <label className="grid gap-1 text-sm">Page cap
-                            <Input aria-label={`Source ${index + 1} crawl page cap`} type="number" min={1} max={100} value={Number(crawl.max_pages ?? 20)}
+                            <Input data-control-action="workflow.crawl_page_cap" aria-label={`Source ${index + 1} crawl page cap`} type="number" min={1} max={100} value={Number(crawl.max_pages ?? 20)}
                               onChange={event => updateCrawl({ ...crawl, max_pages: Number(event.target.value) })} />
                           </label>
                           <label className="grid gap-1 text-sm">Maximum depth (seed is zero)
-                            <Input aria-label={`Source ${index + 1} crawl depth`} type="number" min={0} max={5} value={Number(crawl.max_depth ?? 2)}
+                            <Input data-control-action="workflow.crawl_depth" aria-label={`Source ${index + 1} crawl depth`} type="number" min={0} max={5} value={Number(crawl.max_depth ?? 2)}
                               onChange={event => updateCrawl({ ...crawl, max_depth: Number(event.target.value) })} />
                           </label>
                           <label className="grid gap-1 text-sm">Crawl extraction
-                            <Select aria-label={`Source ${index + 1} crawl extraction`} value={String(crawl.extraction ?? "jsonld")}
+                            <Select actionId="workflow.crawl_extraction" aria-label={`Source ${index + 1} crawl extraction`} value={String(crawl.extraction ?? "jsonld")}
                               options={[
                                 { value: "jsonld", label: "JobPosting JSON-LD" },
                                 { value: "public_html", label: "Public HTML (automatic link & card discovery)" },
@@ -565,7 +567,7 @@ export function WorkflowSections({
           <h4 className="font-bold text-sm">Date Posted Window</h4>
           <label className="flex flex-col gap-1 text-sm">
             Recency window
-            <Select
+            <Select actionId="workflow.posting_recency"
               aria-label="Date posted range"
               value={!rules.posting_date ? "any" : rules.posting_date.preset || (rules.posting_date.last_hours != null ? "hours" : "custom")}
               options={[
@@ -596,7 +598,7 @@ export function WorkflowSections({
               {!rules.posting_date.preset && rules.posting_date.last_hours == null && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {field(
-                    "Posted from",
+                    "workflow.posted_from", "Posted from",
                     rules.posting_date.from || "",
                     (value) =>
                       setRules({
@@ -609,7 +611,7 @@ export function WorkflowSections({
                     "date",
                   )}
                   {field(
-                    "Posted through",
+                    "workflow.posted_through", "Posted through",
                     rules.posting_date.through || "",
                     (value) =>
                       setRules({
@@ -624,14 +626,14 @@ export function WorkflowSections({
                 </div>
               )}
               {!rules.posting_date.preset && rules.posting_date.last_hours != null && field(
-                "Last N hours", rules.posting_date.last_hours,
+                "workflow.last_hours", "Last N hours", rules.posting_date.last_hours,
                 value => setRules({ posting_date: { ...rules.posting_date!, last_hours: Number(value) } }), "number",
               )}
               <p className="text-xs text-[var(--color-ink-mute)]">
                 Evaluated in {rules.posting_date.timezone}.
               </p>
               {rules.posting_date.preset !== "any" && <label className="flex items-center gap-2 text-sm">
-                <input
+                <input data-control-action="workflow.include_unknown_posting_date"
                   type="checkbox"
                   checked={rules.posting_date.include_unknown}
                   onChange={(e) =>
@@ -680,7 +682,7 @@ export function WorkflowSections({
               ] as const
             ).map(([value, label]) => (
               <label key={value} className="flex min-h-8 items-center gap-2">
-                <input
+                <input data-control-action="workflow.employment_type"
                   type="checkbox"
                   checked={rules.role_types.includes(value)}
                   onChange={(e) => {
@@ -704,7 +706,7 @@ export function WorkflowSections({
         </section>
             <label className="grid gap-2 border-t border-[var(--color-border)] pt-3 text-sm">
               Salary matching
-              <Select
+              <Select actionId="workflow.salary_match_mode"
                 aria-label="Salary matching"
                 value={compensationMatchMode}
                 options={[
@@ -789,7 +791,7 @@ export function WorkflowSections({
                   : ["yes", "no", "unknown"]
                 ).map((value) => (
                   <label key={value}>
-                    <input
+                    <input data-control-action="workflow.eligibility_filter"
                       type="checkbox"
                       checked={(rules[key] as string[]).includes(value)}
                       onChange={(e) =>
@@ -805,9 +807,9 @@ export function WorkflowSections({
                 ))}
               </fieldset>
             ))}
-            <details><summary className="cursor-pointer min-h-8">Expert geography codes</summary>
-            {field("Eligible countries (ISO codes)", rules.countries.join(", "), value => setRules({ countries: words(value).map(code => code.toUpperCase()) }))}
-            {field("Eligible regions (ISO codes)", rules.regions.join(", "), value => setRules({ regions: words(value).map(code => code.toUpperCase()) }))}
+            <details><summary data-control-action="workflow.expert_geography" className="cursor-pointer min-h-8">Expert geography codes</summary>
+            {field("workflow.eligible_countries", "Eligible countries (ISO codes)", rules.countries.join(", "), value => setRules({ countries: words(value).map(code => code.toUpperCase()) }))}
+            {field("workflow.eligible_regions", "Eligible regions (ISO codes)", rules.regions.join(", "), value => setRules({ regions: words(value).map(code => code.toUpperCase()) }))}
             </details>
           </>
         )}
@@ -821,7 +823,7 @@ export function WorkflowSections({
             <h4 className="font-bold text-sm">Automated Crawl Frequency</h4>
             <div className="flex flex-wrap gap-1.5 text-xs">
               <span className="text-[var(--color-text-muted)] font-semibold uppercase">Presets:</span>
-              <button
+              <button data-control-action="workflow.schedule_daily"
                 type="button"
                 aria-pressed={schedule.cadence === "daily" || !schedule.cadence}
                 className={`min-h-7 px-2 border text-xs font-semibold uppercase transition-colors ${(schedule.cadence === "daily" || !schedule.cadence) ? "bg-[var(--color-text)] text-[var(--color-surface)] border-[var(--color-border)]" : "border-[var(--color-border)] hover:bg-[var(--color-surface-raised)]"}`}
@@ -829,7 +831,7 @@ export function WorkflowSections({
               >
                 Daily
               </button>
-              <button
+              <button data-control-action="workflow.schedule_manual"
                 type="button"
                 aria-pressed={schedule.cadence === "manual"}
                 className={`min-h-7 px-2 border text-xs font-semibold uppercase transition-colors ${schedule.cadence === "manual" ? "bg-[var(--color-text)] text-[var(--color-surface)] border-[var(--color-border)]" : "border-[var(--color-border)] hover:bg-[var(--color-surface-raised)]"}`}
@@ -841,7 +843,7 @@ export function WorkflowSections({
           </div>
           <label className="flex flex-col gap-1 text-sm">
             Schedule
-            <Select
+            <Select actionId="workflow.schedule_cadence"
               aria-label="Schedule"
               value={schedule.cadence || "daily"}
               options={["daily", "weekly", "manual", "hourly", "every_6h", "every_12h", "cron"].map(value => ({ value, label: value }))}
@@ -871,7 +873,7 @@ export function WorkflowSections({
                 {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(
                   (day, i) => (
                     <label key={day}>
-                      <input
+                      <input data-control-action="workflow.schedule_weekday"
                         type="checkbox"
                         checked={(
                           schedule.weekdays ||
@@ -896,11 +898,11 @@ export function WorkflowSections({
           </>
         )}
         {schedule.cadence === "cron" &&
-          field("Cron expression", schedule.cron || "", (cron) =>
+          field("workflow.cron_expression", "Cron expression", schedule.cron || "", (cron) =>
             setSchedule({ cron }),
           )}
         {field(
-          "IANA timezone",
+          "workflow.timezone", "IANA timezone",
           schedule.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
           (timezone) => {
             const next = { ...draft, schedule: { ...schedule, timezone } };
@@ -916,7 +918,7 @@ export function WorkflowSections({
           },
         )}
         <label className="flex items-center gap-2">
-          <input
+          <input data-control-action="workflow.run_on_startup"
             type="checkbox"
             aria-label="Run this workflow when the app starts"
             checked={schedule.run_on_startup ?? false}
@@ -925,7 +927,7 @@ export function WorkflowSections({
           Run this workflow when the app starts
         </label>
         <label>
-          <input
+          <input data-control-action="workflow.workflow_enabled"
             type="checkbox"
             checked={draft.metadata.enabled ?? true}
             onChange={(e) =>
@@ -947,7 +949,7 @@ export function WorkflowSections({
   return (
     <div className="grid gap-3">
       {field(
-        "Retain untracked discoveries for days (0 keeps forever)",
+        "workflow.retention_days", "Retain untracked discoveries for days (0 keeps forever)",
         draft.retention?.days ?? 30,
         (value) =>
           change({

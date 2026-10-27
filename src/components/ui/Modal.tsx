@@ -1,14 +1,16 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode, type MouseEvent } from "react";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
+import { recordControlAction } from "../../lib/controlActivity";
 
 interface ModalProps {
   isOpen: boolean; onClose: () => void; title: string; children: ReactNode;
   width?: string; footer?: ReactNode; inline?: boolean; wideOnMobile?: boolean;
+  dismissDisabled?: boolean;
 }
 // A responsive inspector can switch modal/inline presentation without moving its children.
 // Other dialogs use the same focus, Escape, cancellation and restoration lifecycle.
-export function Modal({ isOpen, onClose, title, children, width = "max-w-lg", footer, inline = false, wideOnMobile = false }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, width = "max-w-lg", footer, inline = false, wideOnMobile = false, dismissDisabled = false }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null), scrollRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null), wasOpen = useRef(false);
   const previousInline = useRef<boolean | null>(null);
@@ -47,24 +49,28 @@ export function Modal({ isOpen, onClose, title, children, width = "max-w-lg", fo
       const dialog = dialogRef.current;
       if (dialog?.contains(document.activeElement) && dialog.querySelector('[aria-haspopup="listbox"][aria-expanded="true"], [aria-haspopup="menu"][aria-expanded="true"], [role="combobox"][aria-expanded="true"]')) return;
       if (inline && document.querySelector('dialog[open]:not([data-inline-dialog="true"])')) return;
+      if (dismissDisabled) { event.preventDefault(); event.stopPropagation(); return; }
+      recordControlAction("dialog.dismiss", "dismiss");
       event.preventDefault(); event.stopPropagation(); onClose();
     };
     window.addEventListener("keydown", escape, !inline);
     return () => window.removeEventListener("keydown", escape, !inline);
-  }, [isOpen, inline, onClose]);
-  const backdrop = (event: MouseEvent<HTMLDialogElement>) => { if (!inline && event.target === event.currentTarget) onClose(); };
+  }, [isOpen, inline, onClose, dismissDisabled]);
+  const backdrop = (event: MouseEvent<HTMLDialogElement>) => { if (!inline && event.target === event.currentTarget && !dismissDisabled) { recordControlAction("dialog.dismiss", "dismiss"); onClose(); } };
   return <dialog ref={dialogRef} role={inline ? "complementary" : undefined}
     aria-label={title} data-inline-dialog={inline ? "true" : undefined} onClick={backdrop}
     onCancel={event => {
       event.preventDefault();
       if (dialogRef.current?.querySelector('[aria-haspopup="listbox"][aria-expanded="true"], [aria-haspopup="menu"][aria-expanded="true"], [role="combobox"][aria-expanded="true"]')) return;
+      if (dismissDisabled) return;
+      recordControlAction("dialog.dismiss", "dismiss");
       onClose();
     }}
     className={`${inline ? "relative m-0 w-full h-full min-w-0" : `fixed inset-0 m-auto ${wideOnMobile ? `max-w-[calc(100vw-16px)] ${width}` : "max-w-[calc(100vw-32px)]"} max-h-[calc(100dvh-32px)] overflow-hidden backdrop:bg-black/50`} p-0 border-0 bg-transparent ${isOpen ? "block" : "hidden"}`}>
     <div className={`${inline ? "w-full h-full min-h-0" : `${wideOnMobile ? "" : "w-full"} ${width} border-2 border-[var(--color-ink)] max-h-[calc(100dvh-32px)] min-h-0 overflow-hidden`} bg-[var(--color-paper)] text-[var(--color-ink)] flex flex-col`}>
       <div className={`${inline ? "hidden" : "flex"} bg-[var(--color-ink)] text-[var(--color-paper)] px-4 py-3 shrink-0 items-center justify-between select-none`}>
         <h2 className="font-bold text-xs uppercase tracking-wider">{title}</h2>
-        <IconButton label="Close dialog" onClick={onClose} variant="inverse"><Icon name="close" /></IconButton>
+        <IconButton label="Close dialog" data-control-action="dialog.close" disabled={dismissDisabled} onClick={onClose} variant="inverse"><Icon name="close" /></IconButton>
       </div>
       <div key="content" ref={scrollRef} data-dialog-scroll className={`p-4 overflow-y-auto min-h-0 flex-1 ${inline ? "" : "overscroll-y-contain"}`}>{children}</div>
       {footer && <div className="p-4 border-t shrink-0 bg-[var(--color-paper)]">{footer}</div>}

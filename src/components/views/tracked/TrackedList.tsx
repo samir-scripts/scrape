@@ -122,7 +122,7 @@ export function TrackedList({
     <button
       type="button"
       className="cursor-pointer min-h-8 text-left"
-      onClick={() => handleSort(field)}
+      data-control-action="jobs.sort" onClick={() => handleSort(field)}
     >
       {label} {sortField === field ? (sortAsc ? "↑" : "↓") : ""}
     </button>
@@ -150,11 +150,11 @@ export function TrackedList({
   return (
     <div className="tracked-scroll flex-1 min-h-0 overflow-auto p-4 bg-[var(--color-paper)]">
       <details className="mb-3">
-        <summary className="cursor-pointer text-sm min-h-8">Columns</summary>
+        <summary className="cursor-pointer text-sm min-h-8" data-control-action="jobs.columns.open">Columns</summary>
         <div className="flex flex-wrap gap-4 py-3">
           {extraColumns.map((column) => (
             <label className="flex items-center gap-2 text-sm" key={column}>
-              <input
+              <input data-control-action="jobs.columns.toggle"
                 type="checkbox"
                 checked={columns.includes(column)}
                 onChange={(e) =>
@@ -171,7 +171,7 @@ export function TrackedList({
           <button
             type="button"
             className="underline cursor-pointer"
-            onClick={() => changeColumns([])}
+            data-control-action="jobs.columns.reset" onClick={() => changeColumns([])}
           >
             Reset columns
           </button>
@@ -225,7 +225,7 @@ export function TrackedList({
                       <button
                         type="button"
                         className="text-left normal-case font-bold underline cursor-pointer text-sm leading-snug"
-                        aria-label={`View ${job.title} at ${job.company}`}
+                        data-control-action="job.inspect" aria-label={`View ${job.title} at ${job.company}`}
                         onClick={() => onSelectJob(job)}
                       >
                         {job.title}

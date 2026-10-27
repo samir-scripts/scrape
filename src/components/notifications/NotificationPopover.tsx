@@ -6,6 +6,7 @@ import type { AppNotification } from "../../bindings/AppNotification";
 import type { NotificationKind } from "../../bindings/NotificationKind";
 import { api } from "../../lib/api";
 import { useUIStore } from "../../lib/store";
+import { recordControlAction } from "../../lib/controlActivity";
 import {
   calculateAnchoredPopoverCoordinates,
   type FilterDropdownCoordinates,
@@ -143,6 +144,7 @@ export function NotificationPopover({
         return;
       }
 
+      recordControlAction("notifications.panel.dismiss", "dismiss");
       onClose();
     };
 
@@ -159,6 +161,7 @@ export function NotificationPopover({
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
+        recordControlAction("notifications.panel.dismiss", "dismiss");
         onClose();
       }
     };
@@ -254,6 +257,7 @@ export function NotificationPopover({
         <div className="flex items-center gap-1.5">
           {unreadNotificationCount > 0 && (
             <button
+              data-control-action="notifications.read_all"
               onClick={handleMarkAllRead}
               className="px-1.5 py-0.5 text-xs uppercase font-bold border border-[var(--color-ink)] bg-transparent text-[var(--color-ink)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] cursor-pointer"
             >
@@ -263,6 +267,7 @@ export function NotificationPopover({
 
           {notifications.length > 0 && (
             <button
+              data-control-action="notifications.clear_all"
               onClick={handleClearAll}
               className="px-1.5 py-0.5 text-xs uppercase font-bold border border-[var(--color-ink-mute)] bg-transparent text-[var(--color-ink-mute)] hover:border-[var(--color-ink)] hover:text-[var(--color-ink)] cursor-pointer"
             >
@@ -270,7 +275,7 @@ export function NotificationPopover({
             </button>
           )}
 
-          <IconButton label="Close notifications" onClick={onClose}><Icon name="close" /></IconButton>
+          <IconButton data-control-action="notifications.panel.close" label="Close notifications" onClick={onClose}><Icon name="close" /></IconButton>
         </div>
       </div>
 
@@ -298,7 +303,7 @@ export function NotificationPopover({
             return (
               <div
                 key={item.id}
-                onClick={() => !item.read && handleMarkRead(item.id)}
+                onClick={() => { if (!item.read) { recordControlAction("notifications.read", "activate"); void handleMarkRead(item.id); } }}
                 className={`p-3 flex flex-col gap-1.5 transition-none ${
                   item.read
                     ? "bg-transparent opacity-75 hover:opacity-100"
@@ -354,6 +359,7 @@ export function NotificationPopover({
                       </span>
                     ) : (
                       <button
+                        data-control-action="notifications.update.install"
                         disabled={isUpdating}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -378,6 +384,7 @@ export function NotificationPopover({
           SCRAPE v0.1.0
         </span>
         <button
+          data-control-action="notifications.settings.open"
           onClick={handleOpenSettings}
           className="text-[var(--color-ink)] hover:underline cursor-pointer uppercase font-bold"
         >

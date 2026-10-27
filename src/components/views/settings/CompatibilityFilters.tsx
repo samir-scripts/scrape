@@ -36,21 +36,21 @@ export function CompatibilityFilters({ draft, change, advanced }: { draft: Workf
       ["exclude_keywords", "Legacy exclude keywords"],
       ["locations", "Legacy location terms"],
     ] as const).map(([key, label]) => !!filters[key]?.length && <div key={key} className="grid gap-1">
-      <KeywordInput label={label} value={filters[key] || []} onDraftChange={() => change(current => ({ ...current }))} onChange={terms => update({ [key]: terms })} />
+      <KeywordInput actionId="workflow.legacy_terms" label={label} value={filters[key] || []} onDraftChange={() => change(current => ({ ...current }))} onChange={terms => update({ [key]: terms })} />
       <p className="text-xs">{explain(key)}</p>
     </div>)}
     {!!filters.role_types?.length && <div className="grid gap-1">
       <p className="text-sm">Legacy role types: {filters.role_types.join(", ")}</p>
       <p className="text-xs">{explain("role_types")}</p>
-      <Button type="button" size="sm" onClick={() => update({ role_types: [] })}>Remove legacy role-type restriction</Button>
+      <Button data-control-action="workflow.remove_legacy_role_types" type="button" size="sm" onClick={() => update({ role_types: [] })}>Remove legacy role-type restriction</Button>
       <p className="text-xs">Edit individual legacy role types in YAML.</p>
     </div>}
     {(!!filters.query || advanced) && <label className="grid gap-1 text-sm">Expert query
-      <Input aria-label="Expert query" value={filters.query || ""} onChange={event => update({ query: event.target.value || null })} />
+      <Input data-control-action="workflow.expert_query" aria-label="Expert query" value={filters.query || ""} onChange={event => update({ query: event.target.value || null })} />
       <span className="text-xs">{explain("query")}</span>
     </label>}
     {(!!filters.policy || advanced) && <label className="grid gap-1 text-sm">Expert policy (JSON)
-      <Input aria-label="Expert policy (JSON)" value={typeof filters.policy === "string" ? filters.policy : filters.policy ? JSON.stringify(filters.policy) : ""} onChange={event => {
+      <Input data-control-action="workflow.expert_policy" aria-label="Expert policy (JSON)" value={typeof filters.policy === "string" ? filters.policy : filters.policy ? JSON.stringify(filters.policy) : ""} onChange={event => {
         const text = event.target.value;
         if (!text) { update({ policy: null }); return; }
         try { update({ policy: JSON.parse(text) }); }
@@ -61,7 +61,7 @@ export function CompatibilityFilters({ draft, change, advanced }: { draft: Workf
     {!!filters.compensation && <div className="grid gap-1 text-sm">
       <p>Legacy compensation: <code className="break-all">{JSON.stringify(filters.compensation)}</code></p>
       <p className="text-xs">{explain("compensation")} Edit this restriction in YAML.</p>
-      <Button type="button" size="sm" onClick={() => update({ compensation: null })}>Remove legacy compensation restriction</Button>
+      <Button data-control-action="workflow.remove_legacy_compensation" type="button" size="sm" onClick={() => update({ compensation: null })}>Remove legacy compensation restriction</Button>
     </div>}
   </section>;
 }

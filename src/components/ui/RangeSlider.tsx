@@ -8,6 +8,7 @@ export interface RangeSliderProps {
   onChange: (value: [number, number]) => void;
   className?: string;
   disabled?: boolean;
+  actionId?: string;
 }
 
 export function RangeSlider({
@@ -18,6 +19,7 @@ export function RangeSlider({
   onChange,
   className = "",
   disabled = false,
+  actionId,
 }: RangeSliderProps) {
   const [minVal, maxVal] = value;
   const minValRef = useRef(minVal);
@@ -64,6 +66,7 @@ export function RangeSlider({
 
       {/* Low Thumb Input: track is pointer-events-none, thumb is pointer-events-auto */}
       <input
+        data-control-action={actionId}
         type="range"
         min={min}
         max={max}
@@ -78,6 +81,7 @@ export function RangeSlider({
 
       {/* High Thumb Input: track is pointer-events-none, thumb is pointer-events-auto */}
       <input
+        data-control-action={actionId}
         type="range"
         min={min}
         max={max}

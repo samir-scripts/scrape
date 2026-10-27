@@ -72,7 +72,7 @@ export function KanbanColumn({
         ) : (
           jobs.map((job) => (
             <KanbanCard key={job.id} job={job} id={`kanban-card-${job.id}`} selected={job.id === selectedJobId} placeholder={job.id === draggingJobId}
-              title={<button
+              title={<button data-control-action="job.inspect"
                   type="button"
                   aria-label={`View ${job.title} at ${job.company}`}
                   className="normal-case text-left font-bold text-base leading-snug cursor-pointer line-clamp-2 underline"
@@ -81,7 +81,7 @@ export function KanbanColumn({
                 >
                   {job.title}
                 </button>}
-              actions={<IconButton data-drag-handle label={`Drag ${job.title} to another stage`}
+              actions={<IconButton data-control-semantic data-drag-handle label={`Drag ${job.title} to another stage`}
                   aria-describedby="kanban-drag-instructions" disabled={pendingIds?.has(job.id)}
                   className="cursor-grab touch-none select-none shrink-0"
                   {...handleProps(job)}><Icon name="drag" /></IconButton>}
@@ -95,7 +95,7 @@ export function KanbanColumn({
                 {onDelete && <RemoveJobButton title={job.title} company={job.company} onClick={() => onDelete(job)} />}
               </div>}>
               <label className="flex items-center gap-2 text-xs">Move to
-                <Select aria-label={`Move ${job.title} to`} value={job.status} disabled={pendingIds?.has(job.id)}
+                <Select actionId="job.stage.change" aria-label={`Move ${job.title} to`} value={job.status} disabled={pendingIds?.has(job.id)}
                   className="min-w-0 flex-1" onChange={value => { if (value !== job.status) onDropJob(job.id, value as JobStatus); }}
                   options={TRACKED_STAGES.map(stage => ({ value: stage, label: stage }))} />
               </label>

@@ -54,6 +54,7 @@ export function SettingsView({
                 className="w-full block"
               >
                 <button
+                  data-control-action="settings.category.select"
                   onClick={() => setSettingsCategory(cat.id)}
                   className={`w-full px-4 py-2.5 flex items-center justify-between text-xs font-mono uppercase tracking-wider cursor-pointer border-b border-[var(--color-ink)]/20 transition-none ${
                     isActive

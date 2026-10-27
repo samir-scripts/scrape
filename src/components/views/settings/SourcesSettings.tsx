@@ -391,7 +391,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
 
   return (
     <div className="flex flex-col gap-5 w-full select-text font-mono">
-      {sourceLoadError && <div role="alert" className="text-[var(--color-danger)]"><p>Could not load workflows: {sourceLoadError}</p><Button onClick={fetchSources}>Retry loading workflows</Button></div>}
+      {sourceLoadError && <div role="alert" className="text-[var(--color-danger)]"><p>Could not load workflows: {sourceLoadError}</p><Button data-control-action="workflow.load.retry" onClick={fetchSources}>Retry loading workflows</Button></div>}
       {/* Header */}
       <div className="flex flex-wrap gap-3 items-center justify-between">
         <div>
@@ -401,6 +401,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
         <div ref={workflowControlsRef} className="flex flex-wrap items-center gap-2">
           <Tooltip content="Configure a careers source and review its matches before saving">
             <Button
+              data-control-action="workflow.add.open"
               variant="inverted"
               disabled={isRecordedMode()}
               onClick={() => {
@@ -414,6 +415,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
             </Button>
           </Tooltip>
           <Button
+            data-control-action="workflow.replace.request"
             variant="default"
             disabled={isRecordedMode() || replacementBusy}
             onClick={() => void openReplacementPreview()}
@@ -423,8 +425,8 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           </Button>
           {activeRun ? <>
             <span role="status" className="max-w-48 truncate text-xs">{scanStatusText || "Running workflows…"}</span>
-            <Button variant="danger" onClick={() => api.cancelScrape().then(cancelled => notifyInfo(cancelled ? "Cancellation requested; committed results remain saved." : "No active run to cancel.")).catch(error => notifyError(String(error)))}>Cancel run</Button>
-          </> : <Button variant="default" disabled={isRecordedMode() || !sources.some(source => workflowHasRunnableSources(source) && !source.needs_review)} onClick={() => void handleRunAll()}>Run all</Button>}
+            <Button data-control-action="workflow.run.cancel" variant="danger" onClick={() => api.cancelScrape().then(cancelled => notifyInfo(cancelled ? "Cancellation requested; committed results remain saved." : "No active run to cancel.")).catch(error => notifyError(String(error)))}>Cancel run</Button>
+          </> : <Button data-control-action="workflow.run_all" variant="default" disabled={isRecordedMode() || !sources.some(source => workflowHasRunnableSources(source) && !source.needs_review)} onClick={() => void handleRunAll()}>Run all</Button>}
           <WorkflowImportButton disabled={isRecordedMode() || isAddModalOpen} onImport={spec => { setEditingSource(null); setImportedSpec(spec); setIsAddModalOpen(true); }} />
         </div>
       </div>
@@ -434,6 +436,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap gap-1">
           <button
+            data-control-action="workflow.filter.all"
             onClick={() => setActiveTab("all")}
             className={`px-3 py-1 text-xs uppercase tracking-wider font-bold cursor-pointer border ${
               activeTab === "all"
@@ -444,6 +447,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
             ALL ({counts.all})
           </button>
           <button
+            data-control-action="workflow.filter.ats"
             onClick={() => setActiveTab("ats")}
             className={`px-3 py-1 text-xs uppercase tracking-wider font-bold cursor-pointer border ${
               activeTab === "ats"
@@ -454,6 +458,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
             ATS ({counts.ats})
           </button>
           <button
+            data-control-action="workflow.filter.custom"
             onClick={() => setActiveTab("custom")}
             className={`px-3 py-1 text-xs uppercase tracking-wider font-bold cursor-pointer border ${
               activeTab === "custom"
@@ -464,6 +469,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
             CUSTOM ({counts.custom})
           </button>
           <button
+            data-control-action="workflow.filter.errors"
             onClick={() => setActiveTab("errors")}
             className={`px-3 py-1 text-xs uppercase tracking-wider font-bold cursor-pointer border ${
               activeTab === "errors"
@@ -477,6 +483,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
 
         <div className="w-64">
           <Input
+            data-control-action="workflow.search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="SEARCH WORKFLOWS..."
@@ -499,7 +506,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
               Add a careers URL or import workflow YAML to begin, or replace the test workflows with the three targeted searches.
             </span>
           </div>
-          <Button variant="inverted" disabled={isRecordedMode() || replacementBusy} onClick={() => void openReplacementPreview()}>
+          <Button data-control-action="workflow.replace.request" variant="inverted" disabled={isRecordedMode() || replacementBusy} onClick={() => void openReplacementPreview()}>
             REPLACE TEST WORKFLOWS
           </Button>
         </div>
@@ -548,6 +555,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                 >
                   <TableCell>
                     <Toggle
+                      actionId="workflow.enabled.change"
                       checked={s.enabled}
                       disabled={s.needs_review}
                       onChange={(checked) => handleToggleSource(s, checked)}
@@ -555,7 +563,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col items-start">
-                      <button type="button" aria-label={`Edit workflow ${s.name}`}
+                      <button data-control-action="workflow.edit" type="button" aria-label={`Edit workflow ${s.name}`}
                         onClick={() => { setImportedSpec(null); setEditingSource(s); setIsAddModalOpen(true); }}
                         className="font-bold tracking-tight text-left text-[var(--color-ink)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-signal)]">
                         {s.name}
@@ -582,7 +590,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                       <span className={`text-xs ${statusVisual.bulletClass}`}>
                         {statusVisual.bulletGlyph}
                       </span>
-                      {sourceNeedsAttention(s) && !s.needs_review ? <button type="button"
+                      {sourceNeedsAttention(s) && !s.needs_review ? <button data-control-action="workflow.history.open" type="button"
                         aria-label={`View failed run for ${s.name}`} onClick={() => setInspectedSourceId(s.id)}
                         className={`text-xs font-mono uppercase font-bold underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-signal)] ${statusVisual.colorClass}`}>
                         {statusVisual.label}
@@ -593,6 +601,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                     <div ref={sourceToDelete?.id === s.id ? deleteSourceActionsRef : undefined} className="flex items-center gap-1.5">
                       <Tooltip content={workflowHasRunnableSources(s) ? "Run this workflow immediately into database" : "Workflow or all child sources are disabled. Open workflow editor to enable them before running."}>
                         <button
+                          data-control-action="workflow.run"
                           onClick={() => handleRunSourceNow(s)}
                           disabled={isRecordedMode() || activeRun || s.needs_review || !workflowHasRunnableSources(s)}
                           className="px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-80 text-xs font-mono uppercase cursor-pointer disabled:opacity-50"
@@ -601,11 +610,11 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                         </button>
                       </Tooltip>
 
-                      <ActionMenu label={`More actions for ${s.name}`} items={[
-                        { label: "Edit workflow", onSelect: () => { setImportedSpec(null); setEditingSource(s); setIsAddModalOpen(true); } },
-                        { label: isTesting ? "Previewing matches…" : "Preview matches", disabled: isRecordedMode() || isTesting || activeRun || s.needs_review, onSelect: () => void handleTestSource(s.id) },
-                        { label: "View run history", onSelect: () => setInspectedSourceId(s.id) },
-                        { label: "Delete workflow", danger: true, dividerBefore: true, onSelect: () => setSourceToDelete(s) },
+                      <ActionMenu actionId="workflow.menu.open" label={`More actions for ${s.name}`} items={[
+                        { actionId: "workflow.edit", label: "Edit workflow", onSelect: () => { setImportedSpec(null); setEditingSource(s); setIsAddModalOpen(true); } },
+                        { actionId: "workflow.preview", label: isTesting ? "Previewing matches…" : "Preview matches", disabled: isRecordedMode() || isTesting || activeRun || s.needs_review, onSelect: () => void handleTestSource(s.id) },
+                        { actionId: "workflow.history.open", label: "View run history", onSelect: () => setInspectedSourceId(s.id) },
+                        { actionId: "workflow.delete.request", label: "Delete workflow", danger: true, dividerBefore: true, onSelect: () => setSourceToDelete(s) },
                       ]} />
                     </div>
                   </TableCell>
@@ -634,6 +643,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
+                data-control-action="workflow.run"
                 onClick={() => handleRunSourceNow(inspectedSource)}
                 disabled={isRecordedMode() || activeRun || inspectedSource.needs_review || !workflowHasRunnableSources(inspectedSource)}
                 title={workflowHasRunnableSources(inspectedSource) ? undefined : "Workflow or all child sources are disabled. Open workflow editor to enable them before running."}
@@ -642,12 +652,13 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                 {runningSourceId === inspectedSource.id ? "RUNNING WORKFLOW…" : "RUN WORKFLOW NOW"}
               </button>
               <button
+                data-control-action="workflow.inbox.open"
                 onClick={() => handleViewInInbox(inspectedSource)}
                 className="px-2.5 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-xs uppercase font-bold cursor-pointer inline-flex items-center gap-2"
               >
                 <span>VIEW JOBS IN INBOX</span><Icon name="right" />
               </button>
-              <IconButton label={`Close workflow logs for ${inspectedSource.name}`} onClick={() => setInspectedSourceId(null)} variant="danger">
+              <IconButton data-control-action="workflow.history.close" label={`Close workflow logs for ${inspectedSource.name}`} onClick={() => setInspectedSourceId(null)} variant="danger">
                 <Icon name="close" />
               </IconButton>
             </div>
@@ -656,7 +667,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           {!workflowHasRunnableSources(inspectedSource) && (
             <div role="alert" className="border border-[var(--color-warning)] p-2 text-xs text-[var(--color-warning)]">
               Workflow or all sources disabled. Enable the workflow and at least one source before running.{" "}
-              <button type="button" className="underline" onClick={() => { setImportedSpec(null); setEditingSource(inspectedSource); setIsAddModalOpen(true); }}>Edit workflow</button>
+              <button data-control-action="workflow.edit" type="button" className="underline" onClick={() => { setImportedSpec(null); setEditingSource(inspectedSource); setIsAddModalOpen(true); }}>Edit workflow</button>
             </div>
           )}
 
@@ -712,6 +723,8 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                     return (
                       <div
                         key={r.id}
+                        data-control-action="workflow.run_history.select"
+                        role="button"
                         onClick={() => setSelectedRunId(r.id)}
                         className={`p-2 flex flex-col gap-0.5 cursor-pointer text-xs transition-none ${
                           isSelected
@@ -767,7 +780,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
                   <span className="text-xs text-[var(--color-ink-mute)] font-mono uppercase">
                     FILTER:
                   </span>
-                  <Select aria-label="Filter execution logs" value={logFilter}
+                  <Select actionId="workflow.logs.filter" aria-label="Filter execution logs" value={logFilter}
                     onChange={value => setLogFilter(value as "all" | "successes" | "errors")}
                     options={[
                       { value: "all", label: `ALL LOGS (${logCounts.all})` },
@@ -832,6 +845,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           <div className="flex justify-between items-center font-bold">
             <span>DRY-RUN EXTRACTION PREVIEW (FIRST 10 JOBS)</span>
             <button
+              data-control-action="workflow.preview.close"
               onClick={() => setTestEvents(null)}
               className="text-xs hover:opacity-75 cursor-pointer"
             >
@@ -873,11 +887,12 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
       <Modal
         isOpen={sourceToDelete !== null}
         onClose={closeDeleteSource}
+        dismissDisabled={deleteBusy}
         title="Delete workflow"
         footer={
           <div ref={deleteActionsRef} className="flex justify-end gap-2">
-            <Button variant="ghost" disabled={deleteBusy} onClick={closeDeleteSource}>Cancel</Button>
-            <Button variant="danger" disabled={deleteBusy} onClick={() => void handleDeleteSource()}>
+            <Button data-control-action="workflow.delete.cancel" variant="ghost" disabled={deleteBusy} onClick={closeDeleteSource}>Cancel</Button>
+            <Button data-control-action="workflow.delete.confirm" variant="danger" disabled={deleteBusy} onClick={() => void handleDeleteSource()}>
               <Icon name="trash" /> Delete workflow
             </Button>
           </div>
@@ -897,8 +912,8 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
         width="max-w-2xl"
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" disabled={replacementBusy} onClick={closeReplacement}>Cancel</Button>
-            <Button variant="danger" disabled={replacementBusy} onClick={() => void confirmReplacement()}>
+            <Button data-control-action="workflow.replace.cancel" variant="ghost" disabled={replacementBusy} onClick={closeReplacement}>Cancel</Button>
+            <Button data-control-action="workflow.replace.confirm" variant="danger" disabled={replacementBusy} onClick={() => void confirmReplacement()}>
               <Icon name="trash" /> Replace selected workflows
             </Button>
           </div>
@@ -911,12 +926,12 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           <p className="text-[var(--color-ink-mute)]">Disabled sources, missing Adzuna credentials and provider limits may reduce coverage. Replacement does not scrape, enable sources, or grant script trust.</p>
           {replacementError && <p role="alert" className="text-[var(--color-danger)]">{replacementError}</p>}
           <ul className="space-y-2">{replacementPreview.candidates.filter(candidate => candidate.selected_by_default).map(candidate =>
-            <li key={candidate.id}><label className="flex gap-2"><input type="checkbox" checked={replacementSelection.has(candidate.id)} disabled={replacementBusy} onChange={event => setReplacementSelection(current => { const next = new Set(current); event.target.checked ? next.add(candidate.id) : next.delete(candidate.id); return next; })} /><span><strong>{candidate.name}</strong> — {candidate.reason} <span className="text-xs">(recognized)</span></span></label></li>
+            <li key={candidate.id}><label className="flex gap-2"><input data-control-action="workflow.replace.selection" type="checkbox" checked={replacementSelection.has(candidate.id)} disabled={replacementBusy} onChange={event => setReplacementSelection(current => { const next = new Set(current); event.target.checked ? next.add(candidate.id) : next.delete(candidate.id); return next; })} /><span><strong>{candidate.name}</strong> — {candidate.reason} <span className="text-xs">(recognized)</span></span></label></li>
           )}</ul>
           <details>
-            <summary className="cursor-pointer font-bold">Other workflows — preserved unless selected ({replacementPreview.candidates.filter(candidate => !candidate.selected_by_default).length})</summary>
+            <summary data-control-action="workflow.replace.other.expand" className="cursor-pointer font-bold">Other workflows — preserved unless selected ({replacementPreview.candidates.filter(candidate => !candidate.selected_by_default).length})</summary>
             <ul className="mt-2 space-y-2">{replacementPreview.candidates.filter(candidate => !candidate.selected_by_default).map(candidate =>
-              <li key={candidate.id}><label className="flex gap-2"><input type="checkbox" checked={replacementSelection.has(candidate.id)} disabled={replacementBusy} onChange={event => setReplacementSelection(current => { const next = new Set(current); event.target.checked ? next.add(candidate.id) : next.delete(candidate.id); return next; })} /><span><strong>{candidate.name}</strong> — {candidate.reason}</span></label></li>
+              <li key={candidate.id}><label className="flex gap-2"><input data-control-action="workflow.replace.selection" type="checkbox" checked={replacementSelection.has(candidate.id)} disabled={replacementBusy} onChange={event => setReplacementSelection(current => { const next = new Set(current); event.target.checked ? next.add(candidate.id) : next.delete(candidate.id); return next; })} /><span><strong>{candidate.name}</strong> — {candidate.reason}</span></label></li>
             )}</ul>
           </details>
           {replacementBusy && <p role="status">Replacing workflows…</p>}
@@ -929,7 +944,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           {replacementReport.backup_path && <p className="text-xs text-[var(--color-ink-mute)]">For recovery, close all Scrape processes first. Preserve the database and any WAL/SHM sidecars together; verify this snapshot separately before replacing the active database. Never restore a full snapshot over newer user data. See the database recovery instructions.</p>}
           {replacementReport.setup_required.length > 0 && <p>Setup required: {replacementReport.setup_required.join(", ")}</p>}
           <p>Saved jobs and tracking were kept.</p>
-          <Button onClick={() => setReplacementReportOpen(false)}>Close</Button>
+          <Button data-control-action="workflow.replace.report.close" onClick={() => setReplacementReportOpen(false)}>Close</Button>
         </div>}
       </Modal>
       <AddSourceModal

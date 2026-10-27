@@ -161,16 +161,16 @@ export function FilterChips({ filter, onUpdate, onClearAll, sort, defaultSort, o
           className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] text-xs font-mono font-bold uppercase tracking-wider"
         >
           <span>{chip.label}</span>
-          <IconButton label={`Remove filter ${chip.label}`} onClick={chip.onRemove}>
+          <IconButton data-control-action="filters.chip.remove" label={`Remove filter ${chip.label}`} onClick={chip.onRemove}>
             <Icon name="close" size="sm" />
           </IconButton>
         </span>
       ))}
       {showSort && <span className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-[var(--color-ink)] bg-[var(--color-paper)] text-[var(--color-ink)] text-xs font-mono font-bold uppercase tracking-wider">
         <span>SORT: {jobSortLabel(sort!)}</span>
-        <IconButton label="Reset sort" onClick={onResetSort!}><Icon name="close" size="sm" /></IconButton>
+        <IconButton label="Reset sort" data-control-action="filters.sort.reset" onClick={onResetSort!}><Icon name="close" size="sm" /></IconButton>
       </span>}
-      {chips.length > 0 && <button
+      {chips.length > 0 && <button data-control-action="filters.clear"
         type="button"
         onClick={onClearAll}
         className="px-2 py-0.5 text-xs font-mono uppercase text-[var(--color-ink-mute)] hover:text-[var(--color-danger)] underline cursor-pointer ml-1"

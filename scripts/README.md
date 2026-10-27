@@ -126,6 +126,17 @@ The HTTP server and process are owned and closed by the launcher. DOM/IPC
 automation does not establish physical typing/IME, native chooser gestures or
 native visual/zoom acceptance.
 
+Workflow deletion and private console records can also be checked independently
+against a populated historical fixture:
+
+```sh
+SCRAPE_STARTUP_MODES=current19 SCRAPE_NATIVE_DELETE=1 npm run test:native-startup
+```
+
+This exercises the WKWebView menu and confirmation, verifies saved job state via
+IPC, and checks the isolated `scrape.log` for content-free action records. It
+does not replace the full wizard journey or physical-pointer acceptance.
+
 Section 7 scheduling summary regression (isolated current migration-19 fixture):
 
 ```sh

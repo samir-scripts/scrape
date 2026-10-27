@@ -78,8 +78,9 @@ Test and transient-test APIs cannot manufacture scrape results in recorded mode.
 See [workflow refinement](../../../../plans/10-ui-workflow-refinement.md) for controls,
 YAML-only expert fields and legacy conversion. Native file-chooser gestures remain an
 acceptance gate even though browser file-chooser and native local-worker wizard
-checks are automated. Workflow deletion uses a named SVG trash action and reports
-persistence failures through the shared accessible toast.
+checks are automated. The workflow actions menu opens a confirmation before deleting
+a workflow and its owned sources; saved jobs and tracking remain. Errors remain
+visible in the shared accessible toast, and deletion is blocked while it is pending.
 
 
 ## Explicit bulk cleanup

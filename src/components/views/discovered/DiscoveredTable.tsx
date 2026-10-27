@@ -92,7 +92,7 @@ export function DiscoveredTable({
 
   const sortHeader = (field: DiscoveredSortField, label: string, className = "") => (
     <TableHeader className={className} aria-sort={sortField === field ? (sortAsc ? "ascending" : "descending") : "none"}>
-      <button type="button" aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => handleSort(field)}
+      <button type="button" aria-label={`Sort by ${label.toLowerCase()}`} data-control-action="jobs.sort" onClick={() => handleSort(field)}
         className="inline-flex items-center gap-1 min-h-[var(--control-height-sm)] cursor-pointer">
         {field === "favorited" ? <Icon name="star" size="sm" /> : label.toUpperCase()}
         {sortField === field && <Icon name={sortAsc ? "up" : "down"} size="sm" />}
@@ -162,7 +162,7 @@ export function DiscoveredTable({
                     <span>{job.company}</span>
                   </div>
                 </TableCell>
-                <TableCell className="font-bold"><button type="button" className="normal-case text-left hover:underline" onClick={() => onSelectJob?.(job)}>{job.title}</button></TableCell>
+                <TableCell className="font-bold"><button type="button" className="normal-case text-left hover:underline" data-control-action="job.inspect" onClick={() => onSelectJob?.(job)}>{job.title}</button></TableCell>
                 <TableCell
                   className="text-xs font-mono text-[var(--color-ink-mute)] max-w-xs truncate select-text"
                   title={job.description_text || "No description"}
@@ -198,7 +198,7 @@ export function DiscoveredTable({
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <button
+                    <button data-control-action="job.applied.mark"
                       onClick={(e) => {
                         e.stopPropagation();
                         onUpdateStatus(job.id, "applied");
@@ -208,7 +208,7 @@ export function DiscoveredTable({
                     >
                       APPLY
                     </button>
-                    <button
+                    <button data-control-action="job.ignored.mark"
                       onClick={(e) => {
                         e.stopPropagation();
                         onUpdateStatus(job.id, "ignored");

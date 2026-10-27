@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent, type KeyboardEvent, typ
 import type { Job } from "../../../bindings/Job";
 import type { JobStatus } from "../../../bindings/JobStatus";
 import { TRACKED_STAGES } from "../../../lib/constants";
+import { recordControlAction } from "../../../lib/controlActivity";
 
 type Drag = { job: Job; target: JobStatus | null; active: boolean; pending?: boolean; pointer?: number; x: number; y: number; startX: number; startY: number; offsetX: number; offsetY: number; width: number };
 // Only the dedicated handle captures pointers. Text, links, controls and OS file drops
@@ -48,7 +49,7 @@ export function useKanbanDrag(jobs: Job[], move: (id: string, status: JobStatus)
  }, [current?.pointer, current?.active, current?.pending]);
  useEffect(() => {
   const cancel = () => { if (!drag.current?.pending) finish(); };
-  const escape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape" && drag.current && !drag.current.pending) { event.preventDefault(); event.stopImmediatePropagation(); finish(); } };
+  const escape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape" && drag.current && !drag.current.pending) { event.preventDefault(); event.stopImmediatePropagation(); if (drag.current.active) recordControlAction("kanban.drag.cancel", "drag"); finish(); } };
   window.addEventListener("blur", cancel); window.addEventListener("keydown", escape, true);
   return () => { window.removeEventListener("blur", cancel); window.removeEventListener("keydown", escape, true); };
  }, []);
@@ -78,6 +79,7 @@ export function useKanbanDrag(jobs: Job[], move: (id: string, status: JobStatus)
    hit();
    const value = drag.current;
    if (value?.active && value.target && value.target !== value.job.status) {
+    recordControlAction("kanban.drag.commit", "drag");
     const section = document.getElementById(`kanban-stage-${value.target}`)?.getBoundingClientRect();
     value.pending = true; value.pointer = undefined;
     if (section) { value.x = section.left + 16 + value.offsetX; value.y = section.top + 64 + value.offsetY; }
@@ -88,10 +90,10 @@ export function useKanbanDrag(jobs: Job[], move: (id: string, status: JobStatus)
      else { announce(`Moved ${value.job.title} to ${value.target}.`); if (document.documentElement.getAttribute("data-reduce-motion") !== "true" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) await new Promise(resolve => setTimeout(resolve, 180)); }
      if (drag.current === value) { restore.current = value.job.id; drag.current = null; publish(); }
     });
-   } else finish(true);
+   } else { if (value?.active) recordControlAction("kanban.drag.cancel", "drag"); finish(true); }
    event.currentTarget.releasePointerCapture(event.pointerId);
   },
-  onPointerCancel: () => finish(), onLostPointerCapture: () => { if (drag.current?.pointer !== undefined) finish(); },
+  onPointerCancel: () => { if (drag.current?.active) recordControlAction("kanban.drag.cancel", "drag"); finish(); }, onLostPointerCapture: () => { if (drag.current?.pointer !== undefined) { if (drag.current.active) recordControlAction("kanban.drag.cancel", "drag"); finish(); } },
   onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => {
    if (![" ", "Enter", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
    event.preventDefault(); event.stopPropagation();
@@ -99,7 +101,7 @@ export function useKanbanDrag(jobs: Job[], move: (id: string, status: JobStatus)
     drag.current = { job, active: true, target: job.status, x: 0, y: 0, startX: 0, startY: 0, offsetX: 0, offsetY: 0, width: 300 }; publish();
     announce(`Moving ${job.title}. Use left/right arrows, Enter to confirm or Escape to cancel.`);
    } else if (drag.current?.pointer === undefined && drag.current) {
-    if (event.key === "Enter" || event.key === " ") finish(true);
+    if (event.key === "Enter" || event.key === " ") { recordControlAction(drag.current.target && drag.current.target !== job.status ? "kanban.drag.commit" : "kanban.drag.cancel", "drag"); finish(true); }
     else { const index = TRACKED_STAGES.indexOf(drag.current.target || job.status); drag.current.target = TRACKED_STAGES[Math.max(0, Math.min(TRACKED_STAGES.length - 1, index + (event.key === "ArrowRight" ? 1 : -1)))]; publish(); document.getElementById(`kanban-stage-${drag.current.target}`)?.scrollIntoView({ block: "nearest", inline: "nearest" }); announce(`Target ${drag.current.target}`); }
    }
   },

@@ -267,7 +267,7 @@ export function CustomExtractorConfig({
         <label className="font-bold text-xs uppercase tracking-wider text-[var(--color-ink)]">
           Extraction mode
         </label>
-        <Select
+        <Select actionId="extractor.extraction_mode"
           aria-label={`Source ${sourceIndex + 1} Extraction mode`}
           value={mode}
           options={MODE_OPTIONS}
@@ -286,7 +286,7 @@ export function CustomExtractorConfig({
           <div className="grid gap-2">
             <label className="flex flex-col gap-1 text-xs">
               <span className="font-medium">Job container locator *</span>
-              <Input
+              <Input data-control-action="extractor.job_container_locator"
                 aria-label={`Source ${sourceIndex + 1} Job container locator`}
                 placeholder="e.g. div.job-card or xpath://article[@data-job-id]"
                 value={extractor.job_container || ""}
@@ -298,7 +298,7 @@ export function CustomExtractorConfig({
 
             <label className="flex flex-col gap-1 text-xs">
               <span className="font-medium">Title locator *</span>
-              <Input
+              <Input data-control-action="extractor.title_locator"
                 aria-label={`Source ${sourceIndex + 1} Title locator`}
                 placeholder="e.g. h3.title or xpath:.//h3"
                 value={extractor.title_selector || ""}
@@ -310,7 +310,7 @@ export function CustomExtractorConfig({
 
             <label className="flex flex-col gap-1 text-xs">
               <span className="font-medium">Destination link locator *</span>
-              <Input
+              <Input data-control-action="extractor.destination_link_locator"
                 aria-label={`Source ${sourceIndex + 1} Destination link locator`}
                 placeholder="e.g. a.apply-link or xpath:.//a"
                 value={extractor.url_selector || ""}
@@ -323,13 +323,13 @@ export function CustomExtractorConfig({
 
           {/* Optional Field Locators */}
           <details className="border border-[var(--color-border)] p-2 bg-[var(--color-surface)]">
-            <summary className="cursor-pointer text-xs font-semibold uppercase select-none">
+            <summary data-control-action="extractor.optional_locators" className="cursor-pointer text-xs font-semibold uppercase select-none">
               Optional field locators
             </summary>
             <div className="grid gap-2 pt-2 text-xs">
               <label className="flex flex-col gap-1">
                 Location locator
-                <Input
+                <Input data-control-action="extractor.location_locator"
                   aria-label={`Source ${sourceIndex + 1} Location locator`}
                   placeholder="e.g. span.location"
                   value={extractor.location_selector || ""}
@@ -343,7 +343,7 @@ export function CustomExtractorConfig({
 
               <label className="flex flex-col gap-1">
                 Compensation locator
-                <Input
+                <Input data-control-action="extractor.compensation_locator"
                   aria-label={`Source ${sourceIndex + 1} Compensation locator`}
                   placeholder="e.g. span.salary"
                   value={extractor.salary_selector || ""}
@@ -357,7 +357,7 @@ export function CustomExtractorConfig({
 
               <label className="flex flex-col gap-1">
                 Description locator
-                <Input
+                <Input data-control-action="extractor.description_locator"
                   aria-label={`Source ${sourceIndex + 1} Description locator`}
                   placeholder="e.g. div.description"
                   value={extractor.description_selector || ""}
@@ -371,7 +371,7 @@ export function CustomExtractorConfig({
 
               <label className="flex flex-col gap-1">
                 Posting date locator
-                <Input
+                <Input data-control-action="extractor.posting_date_locator"
                   aria-label={`Source ${sourceIndex + 1} Posting date locator`}
                   placeholder="e.g. time.posted-date"
                   value={extractor.date_selector || ""}
@@ -383,7 +383,7 @@ export function CustomExtractorConfig({
 
               <label className="flex flex-col gap-1">
                 Posting ID locator
-                <Input
+                <Input data-control-action="extractor.posting_id_locator"
                   aria-label={`Source ${sourceIndex + 1} Posting ID locator`}
                   placeholder="e.g. span.job-id or xpath:.//@data-id"
                   value={extractor.id_selector || ""}
@@ -395,7 +395,7 @@ export function CustomExtractorConfig({
 
               <label className="flex flex-col gap-1">
                 Employer logo locator
-                <Input
+                <Input data-control-action="extractor.employer_logo_locator"
                   aria-label={`Source ${sourceIndex + 1} Employer logo locator`}
                   placeholder="e.g. img.company-logo"
                   value={extractor.employer_logo_selector || ""}
@@ -411,14 +411,14 @@ export function CustomExtractorConfig({
 
           {/* Attributes and Regex Details */}
           <details className="border border-[var(--color-border)] p-2 bg-[var(--color-surface)]">
-            <summary className="cursor-pointer text-xs font-semibold uppercase select-none">
+            <summary data-control-action="extractor.attribute_regex_transforms" className="cursor-pointer text-xs font-semibold uppercase select-none">
               Attributes and Regex Transforms
             </summary>
             <div className="grid gap-2 pt-2 text-xs">
               <div className="grid grid-cols-2 gap-2">
                 <label className="flex flex-col gap-1">
                   Title attribute
-                  <Input
+                  <Input data-control-action="extractor.title_attribute"
                     aria-label={`Source ${sourceIndex + 1} Title attribute`}
                     placeholder="text (default)"
                     value={extractor.title_attribute || ""}
@@ -431,7 +431,7 @@ export function CustomExtractorConfig({
                 </label>
                 <label className="flex flex-col gap-1">
                   Title regex
-                  <Input
+                  <Input data-control-action="extractor.title_regex"
                     aria-label={`Source ${sourceIndex + 1} Title regex`}
                     placeholder="(?P<value>.*)"
                     value={extractor.title_regex || ""}
@@ -447,7 +447,7 @@ export function CustomExtractorConfig({
               <div className="grid grid-cols-2 gap-2">
                 <label className="flex flex-col gap-1">
                   URL attribute
-                  <Input
+                  <Input data-control-action="extractor.url_attribute"
                     aria-label={`Source ${sourceIndex + 1} URL attribute`}
                     placeholder="href (default)"
                     value={extractor.url_attribute || ""}
@@ -460,7 +460,7 @@ export function CustomExtractorConfig({
                 </label>
                 <label className="flex flex-col gap-1">
                   URL regex
-                  <Input
+                  <Input data-control-action="extractor.url_regex"
                     aria-label={`Source ${sourceIndex + 1} URL regex`}
                     placeholder="(?P<value>.*)"
                     value={extractor.link_regex || ""}
@@ -476,7 +476,7 @@ export function CustomExtractorConfig({
               <div className="grid grid-cols-2 gap-2">
                 <label className="flex flex-col gap-1">
                   Location attribute
-                  <Input
+                  <Input data-control-action="extractor.location_attribute"
                     aria-label={`Source ${sourceIndex + 1} Location attribute`}
                     placeholder="text"
                     value={extractor.location_attribute || ""}
@@ -489,7 +489,7 @@ export function CustomExtractorConfig({
                 </label>
                 <label className="flex flex-col gap-1">
                   Location regex
-                  <Input
+                  <Input data-control-action="extractor.location_regex"
                     aria-label={`Source ${sourceIndex + 1} Location regex`}
                     placeholder="(?P<value>.*)"
                     value={extractor.location_regex || ""}
@@ -505,7 +505,7 @@ export function CustomExtractorConfig({
               <div className="grid grid-cols-2 gap-2">
                 <label className="flex flex-col gap-1">
                   Salary attribute
-                  <Input
+                  <Input data-control-action="extractor.salary_attribute"
                     aria-label={`Source ${sourceIndex + 1} Salary attribute`}
                     placeholder="text"
                     value={extractor.salary_attribute || ""}
@@ -518,7 +518,7 @@ export function CustomExtractorConfig({
                 </label>
                 <label className="flex flex-col gap-1">
                   Salary regex
-                  <Input
+                  <Input data-control-action="extractor.salary_regex"
                     aria-label={`Source ${sourceIndex + 1} Salary regex`}
                     placeholder="(?P<value>.*)"
                     value={extractor.salary_regex || ""}
@@ -541,7 +541,7 @@ export function CustomExtractorConfig({
 
             <label className="flex flex-col gap-1 text-xs">
               Detail page link locator
-              <Input
+              <Input data-control-action="extractor.detail_page_locator"
                 aria-label={`Source ${sourceIndex + 1} Detail page link locator`}
                 placeholder="e.g. a.details"
                 value={extractor.detail_selector || ""}
@@ -553,7 +553,7 @@ export function CustomExtractorConfig({
 
             <label className="flex flex-col gap-1 text-xs">
               Next page locator
-              <Input
+              <Input data-control-action="extractor.next_page_locator"
                 aria-label={`Source ${sourceIndex + 1} Next page locator`}
                 placeholder="e.g. a.pagination-next"
                 value={extractor.next_page_selector || ""}
@@ -569,7 +569,7 @@ export function CustomExtractorConfig({
               <>
                 <label className="flex flex-col gap-1 text-xs">
                   Load more locator
-                  <Input
+                  <Input data-control-action="extractor.load_more_locator"
                     aria-label={`Source ${sourceIndex + 1} Load more locator`}
                     placeholder="e.g. button.load-more"
                     value={extractor.load_more_selector || ""}
@@ -583,7 +583,7 @@ export function CustomExtractorConfig({
 
                 <label className="flex flex-col gap-1 text-xs">
                   Readiness wait locator
-                  <Input
+                  <Input data-control-action="extractor.readiness_wait_locator"
                     aria-label={`Source ${sourceIndex + 1} Readiness wait locator`}
                     placeholder="e.g. div.job-card"
                     value={extractor.wait_for_selector || ""}
@@ -599,7 +599,7 @@ export function CustomExtractorConfig({
 
             <label className="flex flex-col gap-1 text-xs">
               URL match pattern (glob)
-              <Input
+              <Input data-control-action="extractor.url_match_pattern"
                 aria-label={`Source ${sourceIndex + 1} URL match pattern`}
                 placeholder="e.g. */jobs/*"
                 value={extractor.url_pattern || ""}
@@ -612,7 +612,7 @@ export function CustomExtractorConfig({
 
           {/* Test Extractor Button and Preview */}
           <div className="pt-2 border-t border-[var(--color-border)]">
-            <Button
+            <Button data-control-action="extractor.test_extractor"
               type="button"
               size="sm"
               aria-label={`Test extractor`}
@@ -736,7 +736,7 @@ export function CustomExtractorConfig({
           <div className="grid grid-cols-3 gap-2 text-xs">
             <label className="flex flex-col gap-1">
               Navigation timeout (s)
-              <Input
+              <Input data-control-action="extractor.navigation_timeout"
                 aria-label={`Source ${sourceIndex + 1} Navigation timeout`}
                 type="number"
                 value={extractor.navigation_timeout_s ?? 30}
@@ -750,7 +750,7 @@ export function CustomExtractorConfig({
 
             <label className="flex flex-col gap-1">
               Max pages
-              <Input
+              <Input data-control-action="extractor.max_pages"
                 aria-label={`Source ${sourceIndex + 1} Max pages`}
                 type="number"
                 value={extractor.max_pages ?? 100}
@@ -764,7 +764,7 @@ export function CustomExtractorConfig({
 
             <label className="flex flex-col gap-1">
               Max duration (s)
-              <Input
+              <Input data-control-action="extractor.max_duration"
                 aria-label={`Source ${sourceIndex + 1} Max duration`}
                 type="number"
                 value={extractor.max_source_duration_s ?? 180}
@@ -796,7 +796,7 @@ export function CustomExtractorConfig({
               )}
             </div>
 
-            <Select
+            <Select actionId="extractor.browser_session"
               aria-label={`Source ${sourceIndex + 1} Browser session`}
               value={extractor.session_id || ""}
               options={[
@@ -812,7 +812,7 @@ export function CustomExtractorConfig({
             />
 
             <div className="flex flex-wrap gap-2 pt-1">
-              <Button
+              <Button data-control-action="extractor.toggle_login_form"
                 type="button"
                 size="sm"
                 aria-label="Open login session"
@@ -822,7 +822,7 @@ export function CustomExtractorConfig({
                 {showOpenSession ? "Close login form" : "Open login session"}
               </Button>
 
-              <Button
+              <Button data-control-action="extractor.save_session"
                 type="button"
                 size="sm"
                 aria-label="Save session"
@@ -832,7 +832,7 @@ export function CustomExtractorConfig({
                 Save session
               </Button>
 
-              <Button
+              <Button data-control-action="extractor.clear_session"
                 type="button"
                 size="sm"
                 variant="danger"
@@ -848,7 +848,7 @@ export function CustomExtractorConfig({
               <div className="border border-[var(--color-border)] p-2.5 mt-2 bg-[var(--color-paper)] grid gap-2">
                 <label className="flex flex-col gap-1">
                   Session label
-                  <Input
+                  <Input data-control-action="extractor.session_label"
                     aria-label="New session label"
                     value={openLabel}
                     onChange={(e) => setOpenLabel(e.target.value)}
@@ -857,7 +857,7 @@ export function CustomExtractorConfig({
 
                 <label className="flex flex-col gap-1">
                   Login URL
-                  <Input
+                  <Input data-control-action="extractor.session_login_url"
                     aria-label="New session login URL"
                     value={openUrl}
                     onChange={(e) => setOpenUrl(e.target.value)}
@@ -865,7 +865,7 @@ export function CustomExtractorConfig({
                 </label>
 
                 <div className="flex gap-2 pt-1">
-                  <Button
+                  <Button data-control-action="extractor.launch_login_browser"
                     type="button"
                     size="sm"
                     variant="inverted"
@@ -901,7 +901,7 @@ export function CustomExtractorConfig({
           {/* Script Runtime Selector */}
           <div className="flex flex-col gap-1 text-xs">
             <label className="font-semibold uppercase">Script runtime</label>
-            <Select
+            <Select actionId="extractor.script_runtime"
               aria-label={`Source ${sourceIndex + 1} Script runtime`}
               value={extractor.script?.runtime || "js"}
               options={RUNTIME_OPTIONS}
@@ -924,7 +924,7 @@ export function CustomExtractorConfig({
           <div className="grid grid-cols-2 gap-2 text-xs">
             <label className="flex flex-col gap-1">
               Interpreter path (absolute)
-              <Input
+              <Input data-control-action="extractor.script_interpreter"
                 aria-label={`Source ${sourceIndex + 1} Script interpreter`}
                 placeholder="Absolute executable path, e.g. /usr/bin/python3"
                 value={extractor.script?.interpreter || ""}
@@ -945,7 +945,7 @@ export function CustomExtractorConfig({
 
             <label className="flex flex-col gap-1">
               Timeout (s)
-              <Input
+              <Input data-control-action="extractor.script_timeout"
                 aria-label={`Source ${sourceIndex + 1} Script timeout`}
                 type="number"
                 value={extractor.script?.timeout_s ?? 30}
@@ -968,7 +968,7 @@ export function CustomExtractorConfig({
           {/* Arguments */}
           <label className="flex flex-col gap-1 text-xs">
             Arguments (space-separated)
-            <Input
+            <Input data-control-action="extractor.script_arguments"
               aria-label={`Source ${sourceIndex + 1} Script arguments`}
               placeholder="e.g. --mode full --verbose"
               value={extractor.script?.args?.join(" ") || ""}
@@ -994,7 +994,7 @@ export function CustomExtractorConfig({
           <div className="grid gap-2 text-xs">
             <label className="flex flex-col gap-1">
               Script file path
-              <Input
+              <Input data-control-action="extractor.script_file_path"
                 aria-label={`Source ${sourceIndex + 1} Script file path`}
                 placeholder="./scripts/custom-scraper.py"
                 value={extractor.script?.path || ""}
@@ -1015,7 +1015,7 @@ export function CustomExtractorConfig({
 
             <label className="flex flex-col gap-1">
               Inline script code (if no path specified)
-              <textarea
+              <textarea data-control-action="extractor.inline_script_code"
                 aria-label={`Source ${sourceIndex + 1} Inline script code`}
                 className="font-mono text-xs border border-[var(--color-ink)] bg-[var(--color-paper)] p-2 min-h-28"
                 placeholder="// Write NDJSON script code here"
@@ -1038,7 +1038,7 @@ export function CustomExtractorConfig({
 
           {/* Check Environment Button */}
           <div className="pt-1">
-            <Button
+            <Button data-control-action="extractor.check_script_environment"
               type="button"
               size="sm"
               aria-label="Check environment"
@@ -1110,7 +1110,7 @@ export function CustomExtractorConfig({
               {reviewSource?.id && reviewSource?.script_sha256 ? (
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button
+                    <Button data-control-action="extractor.trust_saved_script"
                       type="button"
                       size="sm"
                       variant="inverted"

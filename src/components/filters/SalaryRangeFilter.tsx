@@ -31,24 +31,24 @@ export function SalaryRangeFilter({ salaryMin, salaryMax, currency, interval = n
   return <fieldset className="flex flex-col gap-3 text-sm">
     <legend className="font-bold mb-2">Compensation</legend>
     <div className="flex gap-2" role="group" aria-label="Pay interval">
-      <button type="button" aria-pressed={mode === "year"} onClick={() => changeMode("year")} className={`border px-3 py-2 ${mode === "year" ? "bg-[var(--color-ink)] text-[var(--color-paper)]" : "bg-[var(--color-paper)] text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"}`}>Annual</button>
-      <button type="button" aria-pressed={mode === "hour"} onClick={() => changeMode("hour")} className={`border px-3 py-2 ${mode === "hour" ? "bg-[var(--color-ink)] text-[var(--color-paper)]" : "bg-[var(--color-paper)] text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"}`}>Hourly</button>
+      <button type="button" aria-pressed={mode === "year"} data-control-action="filters.salary.interval" onClick={() => changeMode("year")} className={`border px-3 py-2 ${mode === "year" ? "bg-[var(--color-ink)] text-[var(--color-paper)]" : "bg-[var(--color-paper)] text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"}`}>Annual</button>
+      <button type="button" aria-pressed={mode === "hour"} data-control-action="filters.salary.interval" onClick={() => changeMode("hour")} className={`border px-3 py-2 ${mode === "hour" ? "bg-[var(--color-ink)] text-[var(--color-paper)]" : "bg-[var(--color-paper)] text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"}`}>Hourly</button>
     </div>
     <p className="text-[var(--color-ink-mute)]">Matches explicitly {mode === "hour" ? "hourly" : "annual"} pay. Switching units clears the amount bounds.</p>
     <div className="flex gap-3">
       <label className="flex flex-col gap-1 min-w-0">Minimum {mode === "hour" ? "per hour" : "per year"}
-        <input inputMode="decimal" value={minText} onChange={(event) => { setMinText(event.target.value); onDraftChange?.(); }} onBlur={apply} aria-invalid={!!error} aria-describedby={error ? "salary-filter-error" : undefined} className="w-full border bg-[var(--color-paper)] p-2" />
+        <input inputMode="decimal" value={minText} data-control-action="filters.salary.minimum" onChange={(event) => { setMinText(event.target.value); onDraftChange?.(); }} onBlur={apply} aria-invalid={!!error} aria-describedby={error ? "salary-filter-error" : undefined} className="w-full border bg-[var(--color-paper)] p-2" />
       </label>
       <label className="flex flex-col gap-1 min-w-0">Maximum {mode === "hour" ? "per hour" : "per year"}
-        <input inputMode="decimal" value={maxText} onChange={(event) => { setMaxText(event.target.value); onDraftChange?.(); }} onBlur={apply} aria-invalid={!!error} aria-describedby={error ? "salary-filter-error" : undefined} className="w-full border bg-[var(--color-paper)] p-2" />
+        <input inputMode="decimal" value={maxText} data-control-action="filters.salary.maximum" onChange={(event) => { setMaxText(event.target.value); onDraftChange?.(); }} onBlur={apply} aria-invalid={!!error} aria-describedby={error ? "salary-filter-error" : undefined} className="w-full border bg-[var(--color-paper)] p-2" />
       </label>
     </div>
     {error && <p id="salary-filter-error" role="alert" className="text-[var(--color-danger)]">{error}</p>}
     <label className="grid gap-1">Currency
-      <Select aria-label="Currency" value={currency || ""} onChange={(value) => onChange({ salaryMin, salaryMax, interval, currency: value || null, includeUnknown })}
+      <Select aria-label="Currency" actionId="filters.salary.currency" value={currency || ""} onChange={(value) => onChange({ salaryMin, salaryMax, interval, currency: value || null, includeUnknown })}
         options={[{ value: "", label: "Any currency" }, ...["USD", "CAD", "EUR", "GBP"].map((code) => ({ value: code, label: code }))]} />
     </label>
-    <label className="flex gap-3 items-start"><input type="checkbox" checked={includeUnknown} onChange={(event) => onChange({ salaryMin, salaryMax, currency, interval, includeUnknown: event.target.checked })} />Include unknown pay bounds (a selected unit and currency must still be known)</label>
-    <button type="button" className="border px-3 py-2 self-start" onClick={() => { setMinText(""); setMaxText(""); setError(""); onChange({ salaryMin: null, salaryMax: null, currency: null, interval: null, includeUnknown: false }); }}>Clear compensation filter</button>
+    <label className="flex gap-3 items-start"><input type="checkbox" data-control-action="filters.salary.unknown" checked={includeUnknown} onChange={(event) => onChange({ salaryMin, salaryMax, currency, interval, includeUnknown: event.target.checked })} />Include unknown pay bounds (a selected unit and currency must still be known)</label>
+    <button type="button" className="border px-3 py-2 self-start" data-control-action="filters.salary.clear" onClick={() => { setMinText(""); setMaxText(""); setError(""); onChange({ salaryMin: null, salaryMax: null, currency: null, interval: null, includeUnknown: false }); }}>Clear compensation filter</button>
   </fieldset>;
 }

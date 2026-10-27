@@ -25,6 +25,7 @@ export function FavoriteButton({
 
   return (
     <IconButton
+      data-control-action="job.favorite.toggle"
       label={favorited ? "Unfavorite posting" : "Favorite posting"}
       onClick={(e) => { e.stopPropagation(); onToggle?.(e); }}
       aria-pressed={favorited}

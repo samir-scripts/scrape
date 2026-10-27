@@ -7,8 +7,8 @@ import { KeywordInput } from "../../ui/KeywordInput";
 
 const CITY_SUGGESTIONS = ["San Francisco", "Austin", "New York", "Seattle", "London", "Lisbon", "Berlin", "Indianapolis"];
 type Choice = { code: string; name: string };
-function SearchChoice({ label, value, choices, disabled, placeholder, resetAfterSelect, onSelect, onDraftChange }: {
-  label: string; value: string; choices: Choice[]; disabled?: boolean; placeholder: string; resetAfterSelect?: boolean;
+function SearchChoice({ actionId, label, value, choices, disabled, placeholder, resetAfterSelect, onSelect, onDraftChange }: {
+  actionId: string; label: string; value: string; choices: Choice[]; disabled?: boolean; placeholder: string; resetAfterSelect?: boolean;
   onSelect: (code: string) => void; onDraftChange: () => void;
 }) {
   const id = useId();
@@ -30,7 +30,7 @@ function SearchChoice({ label, value, choices, disabled, placeholder, resetAfter
   };
   return <div className="grid gap-1 min-w-0">
     <label htmlFor={id}>{label}</label>
-    <SearchCombobox id={id} aria-label={label} value={find(value)?.code || ""} query={text} disabled={disabled} placeholder={placeholder} invalid={invalid}
+    <SearchCombobox actionId={actionId} id={id} aria-label={label} value={find(value)?.code || ""} query={text} disabled={disabled} placeholder={placeholder} invalid={invalid}
       options={choices.map(choice => ({ value: choice.code, label: `${choice.name} (${choice.code})`, searchText: `${choice.name} ${choice.code}` }))}
       onQueryChange={query => { setText(query); onDraftChange(); }}
       onChange={code => { const choice = choices.find(item => item.code === code); if (choice) { onSelect(code); setText(resetAfterSelect ? "" : choice.name); } }}
@@ -48,14 +48,15 @@ export function GeographyMatching({ rules, onChange, onDraftChange }: { rules: P
   const canonical = (region: string) => region.includes("-") ? region.toUpperCase() : countries.length === 1 ? `${countries[0]}-${region.toUpperCase()}` : region.toUpperCase();
   return <fieldset className="grid gap-3 text-sm border-t pt-3">
     <legend className="font-bold">Location and workplace</legend>
-    <SearchChoice label="Country" value={value} choices={COUNTRIES} placeholder="Any country — search name or code" onDraftChange={onDraftChange}
+    <SearchChoice actionId="workflow.country" label="Country" value={value} choices={COUNTRIES} placeholder="Any country — search name or code" onDraftChange={onDraftChange}
       onSelect={code => onChange({ countries: code ? [code] : [], regions: code ? rules.regions.map(canonical).filter(region => region.startsWith(`${code}-`)) : [] })} />
-    <SearchChoice label="State/province" value="" choices={regions} disabled={!regions.length} placeholder={countries.length ? (regions.length ? "Any state — search to add" : "No subdivision list available") : "Choose a country first"} resetAfterSelect onDraftChange={onDraftChange}
+    <SearchChoice actionId="workflow.region" label="State/province" value="" choices={regions} disabled={!regions.length} placeholder={countries.length ? (regions.length ? "Any state — search to add" : "No subdivision list available") : "Choose a country first"} resetAfterSelect onDraftChange={onDraftChange}
       onSelect={code => { if (!rules.regions.map(canonical).includes(code)) onChange({ regions: [...rules.regions, code] }); }} />
-    {!!rules.regions.length && <div className="flex gap-2 flex-wrap">{rules.regions.map(region => <button key={region} type="button" className="border min-h-8 px-2 py-1 inline-flex gap-2 items-center" aria-label={`Remove ${regions.find(r => r.code === canonical(region))?.name || region}`} onClick={() => onChange({ regions: rules.regions.filter(value => value !== region) })}>
+    {!!rules.regions.length && <div className="flex gap-2 flex-wrap">{rules.regions.map(region => <button data-control-action="workflow.remove_region" key={region} type="button" className="border min-h-8 px-2 py-1 inline-flex gap-2 items-center" aria-label={`Remove ${regions.find(r => r.code === canonical(region))?.name || region}`} onClick={() => onChange({ regions: rules.regions.filter(value => value !== region) })}>
       {regions.find(r => r.code === canonical(region))?.name || region}<Icon name="close" />
     </button>)}</div>}
     <KeywordInput
+      actionId="workflow.cities"
       label="Cities / Location terms"
       value={rules.cities || []}
       onChange={cities => onChange({ cities })}
@@ -66,6 +67,7 @@ export function GeographyMatching({ rules, onChange, onDraftChange }: { rules: P
       <span className="text-[var(--color-ink-mute)]">Quick add:</span>
       {CITY_SUGGESTIONS.map(city => (
         <button
+          data-control-action="workflow.quick_add_city"
           key={city}
           type="button"
           disabled={(rules.cities || []).some(c => c.toLowerCase() === city.toLowerCase())}
@@ -84,9 +86,9 @@ export function GeographyMatching({ rules, onChange, onDraftChange }: { rules: P
     </div>
     <p className="text-[var(--color-ink-mute)]">Country, state, city, and workplace apply together. Remote alone does not imply a country. Leave a field empty for no restriction.</p>
     <fieldset className="flex gap-4 flex-wrap"><legend className="mb-1">Workplace — match any selected</legend>
-      {([['remote','Remote'],['hybrid','Hybrid'],['onsite','In-person / On-site'],['unknown','Unknown workplace']] as const).map(([code,label]) => <label key={code} className="flex gap-2 items-center min-h-8"><input type="checkbox" checked={rules.workplaces.includes(code)} onChange={event => onChange({ workplaces: event.target.checked ? [...rules.workplaces,code] : rules.workplaces.filter(value => value !== code) })} />{label}</label>)}
+      {([['remote','Remote'],['hybrid','Hybrid'],['onsite','In-person / On-site'],['unknown','Unknown workplace']] as const).map(([code,label]) => <label key={code} className="flex gap-2 items-center min-h-8"><input data-control-action="workflow.workplace" type="checkbox" checked={rules.workplaces.includes(code)} onChange={event => onChange({ workplaces: event.target.checked ? [...rules.workplaces,code] : rules.workplaces.filter(value => value !== code) })} />{label}</label>)}
     </fieldset>
     <p className="text-[var(--color-ink-mute)]">In-person, in-office and on-site use the same category. Leave all unchecked for any workplace, including unknown. Unknown workplace is separate from unknown location.</p>
-    <label className="flex items-start gap-2"><input type="checkbox" checked={rules.location_include_unknown} onChange={event => onChange({ location_include_unknown: event.target.checked })} />Include postings with unknown location</label>
+    <label className="flex items-start gap-2"><input data-control-action="workflow.include_unknown_location" type="checkbox" checked={rules.location_include_unknown} onChange={event => onChange({ location_include_unknown: event.target.checked })} />Include postings with unknown location</label>
   </fieldset>;
 }

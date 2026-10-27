@@ -89,38 +89,38 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
   ].filter(Boolean);
   return <Modal isOpen={isOpen} onClose={close} title={initialSource ? "Edit workflow" : "Create workflow"} width="w-[1200px] max-w-[calc(100vw-16px)]" wideOnMobile
     footer={!saved && <div className="flex flex-wrap items-center justify-between gap-3">
-      <Button onClick={close} disabled={locked}>Cancel</Button>
+      <Button data-control-action="workflow.cancel" onClick={close} disabled={locked}>Cancel</Button>
       <div className="flex flex-wrap gap-2">
-        {model.operation === "preview" && <Button onClick={model.cancel}>Cancel preview</Button>}
-        {hasScripts && step !== "Review" && <Button disabled={busy || locked || yaml != null} onClick={() => void model.saveDisabled()}>Save disabled for review</Button>}
-        {index > 0 && <Button disabled={busy || locked} onClick={() => model.navigate(WORKFLOW_STEPS[index - 1])}>Back</Button>}
-        {yaml == null && step === "Review" && <Button disabled={busy || locked || isRecordedMode()} onClick={() => void model.runPreview()}>{preview ? "Refresh preview" : "Preview matches"}</Button>}
-        {step !== "Review" ? <Button variant="inverted" className="transition-none" disabled={busy || locked || yaml != null} onClick={() => void model.next()}>{`Continue to ${WORKFLOW_STEPS[index + 1]}`}</Button>
-          : <Button variant="inverted" disabled={!model.canSave} onClick={() => void model.save()}>Save workflow</Button>}
+        {model.operation === "preview" && <Button data-control-action="workflow.cancel_preview" onClick={model.cancel}>Cancel preview</Button>}
+        {hasScripts && step !== "Review" && <Button data-control-action="workflow.save_disabled" disabled={busy || locked || yaml != null} onClick={() => void model.saveDisabled()}>Save disabled for review</Button>}
+        {index > 0 && <Button data-control-action="workflow.back" disabled={busy || locked} onClick={() => model.navigate(WORKFLOW_STEPS[index - 1])}>Back</Button>}
+        {yaml == null && step === "Review" && <Button data-control-action="workflow.preview" disabled={busy || locked || isRecordedMode()} onClick={() => void model.runPreview()}>{preview ? "Refresh preview" : "Preview matches"}</Button>}
+        {step !== "Review" ? <Button data-control-action="workflow.continue" variant="inverted" className="transition-none" disabled={busy || locked || yaml != null} onClick={() => void model.next()}>{`Continue to ${WORKFLOW_STEPS[index + 1]}`}</Button>
+          : <Button data-control-action="workflow.save" variant="inverted" disabled={!model.canSave} onClick={() => void model.save()}>Save workflow</Button>}
       </div>
     </div>}>
     <div ref={model.content} className="grid gap-5 text-sm">
       {!saved && <div role="group" aria-label="Workflow mode" className="flex w-fit border border-[var(--color-border)] p-1">
         {(["Simple", "Advanced"] as const).map((mode, index) => {
           const selected = advanced === (mode === "Advanced");
-          return <button key={mode} type="button" aria-pressed={selected} onClick={() => { model.commitInputs(); setAdvanced(mode === "Advanced"); }}
+          return <button data-control-action="workflow.mode" key={mode} type="button" aria-pressed={selected} onClick={() => { model.commitInputs(); setAdvanced(mode === "Advanced"); }}
             className={`min-h-9 px-4 text-xs font-semibold uppercase ${selected ? "bg-[var(--color-ink)] text-[var(--color-paper)]" : "hover:bg-[var(--color-surface-raised)]"} ${index ? "border-l border-[var(--color-border)]" : ""}`}>
             {mode}
           </button>;
         })}
       </div>}
-      {!advanced && advancedSettings.length > 0 && <p className="text-xs text-[var(--color-ink-mute)]">Active advanced settings: {advancedSettings.join(", ")}. <button type="button" className="underline" onClick={() => setAdvanced(true)}>Review Advanced</button></p>}
+      {!advanced && advancedSettings.length > 0 && <p className="text-xs text-[var(--color-ink-mute)]">Active advanced settings: {advancedSettings.join(", ")}. <button data-control-action="workflow.review_advanced" type="button" className="underline" onClick={() => setAdvanced(true)}>Review Advanced</button></p>}
       {isDemoMode() && <p className="text-[var(--color-ink-mute)]">Example mode. Open the desktop application to test a live source.</p>}
-      {error && <div role="alert" className="text-[var(--color-danger)]"><p>{error}</p><button type="button" className="underline min-h-8" onClick={() => { model.navigate(model.errorStep); requestAnimationFrame(() => model.content.current?.querySelector<HTMLElement>(`[data-workflow-step="${model.errorStep}"] input`)?.focus()); }}>Go to {model.errorStep}</button></div>}
+      {error && <div role="alert" className="text-[var(--color-danger)]"><p>{error}</p><button data-control-action="workflow.go_to_error" type="button" className="underline min-h-8" onClick={() => { model.navigate(model.errorStep); requestAnimationFrame(() => model.content.current?.querySelector<HTMLElement>(`[data-workflow-step="${model.errorStep}"] input`)?.focus()); }}>Go to {model.errorStep}</button></div>}
       {saved ? <>
         <p>Saved {saved.name}. Saving has not started a scrape.</p>{saved.needs_review && <p>Saved disabled. Reopen this workflow to review and trust each saved script. Trust keeps the workflow disabled until you explicitly enable it.</p>}
         <p>Next run: {!saved.enabled ? "Disabled" : saved.next_run_at ? new Date(saved.next_run_at).toLocaleString() : saved.cadence === "manual" ? "Manual only" : "Calculated by the desktop scheduler"}.</p>
-        <div className="flex gap-2"><Button variant="inverted" disabled={busy || !!model.pendingImport || isRecordedMode() || saved.needs_review || !saved.enabled} onClick={async () => { if (await model.runSaved()) onClose(); }}>Run now</Button>{model.operation === "run" && <Button variant="danger" onClick={() => void api.cancelScrape().catch(error => setError(String(error)))}>Cancel run</Button>}<Button disabled={busy} onClick={close}>Done</Button></div>
+        <div className="flex gap-2"><Button data-control-action="workflow.run_now" variant="inverted" disabled={busy || !!model.pendingImport || isRecordedMode() || saved.needs_review || !saved.enabled} onClick={async () => { if (await model.runSaved()) onClose(); }}>Run now</Button>{model.operation === "run" && <Button data-control-action="workflow.cancel_run" variant="danger" onClick={() => void api.cancelScrape().catch(error => setError(String(error)))}>Cancel run</Button>}<Button data-control-action="workflow.done" disabled={busy} onClick={close}>Done</Button></div>
       </> : <>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <nav aria-label="Workflow steps" className="min-w-0 flex-1"><ol className="grid grid-cols-2 sm:grid-cols-5 gap-2">
             {WORKFLOW_STEPS.map((value, position) => <li key={value} className="min-w-0">
-              <button type="button" aria-label={value} aria-current={step === value ? "step" : undefined} disabled={position > model.visited || busy || locked}
+              <button data-control-action="workflow.navigate_step" type="button" aria-label={value} aria-current={step === value ? "step" : undefined} disabled={position > model.visited || busy || locked}
                 className={`w-full min-h-10 flex items-center gap-2 border px-2 text-xs font-semibold uppercase disabled:opacity-50 ${step === value ? "bg-[var(--color-text)] text-[var(--color-surface)]" : "border-[var(--color-border)] hover:bg-[var(--color-surface-raised)]"}`}
                 onClick={() => model.navigate(value)}>
                 <span aria-hidden="true" className="inline-flex items-center justify-center w-5 h-5 shrink-0 border border-current">
@@ -134,18 +134,18 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
         <p className="text-[var(--color-text-muted)]">{stepHelp[step]}</p>
         {model.pendingImport && <section role="region" aria-label="Replace unsaved workflow changes" className="border border-[var(--color-warning)] p-3 grid gap-3">
           <p>Replace unsaved changes with {model.pendingImport.metadata.name}? Your current draft stays unchanged until you replace it.</p>
-          <div className="flex flex-wrap gap-2"><Button autoFocus onClick={model.cancelImport}>Keep editing</Button><Button variant="inverted" onClick={model.confirmImport}>Replace draft</Button></div>
+          <div className="flex flex-wrap gap-2"><Button data-control-action="workflow.keep_import_draft" autoFocus onClick={model.cancelImport}>Keep editing</Button><Button data-control-action="workflow.replace_draft" variant="inverted" onClick={model.confirmImport}>Replace draft</Button></div>
         </section>}
         {model.pendingCompany && <section role="region" aria-label="Replace source" className="border border-[var(--color-warning)] p-3 grid gap-3">
           <p>Replace this source with the selected company? Other sources, matching rules, schedule and workflow name stay unchanged.</p>
-          <div className="flex flex-wrap gap-2"><Button autoFocus onClick={model.cancelCompany}>Keep editing</Button><Button variant="inverted" onClick={model.confirmCompany}>Replace source</Button></div>
+          <div className="flex flex-wrap gap-2"><Button data-control-action="workflow.keep_source" autoFocus onClick={model.cancelCompany}>Keep editing</Button><Button data-control-action="workflow.replace_source" variant="inverted" onClick={model.confirmCompany}>Replace source</Button></div>
         </section>}
-        {yaml != null && <label className="grid gap-2">Workflow YAML<textarea disabled={locked} aria-label="Workflow YAML" className="font-code border bg-[var(--color-paper)] p-3 min-h-80" value={yaml} onChange={event => setYaml(event.target.value)} /></label>}
+        {yaml != null && <label className="grid gap-2">Workflow YAML<textarea data-control-action="workflow.yaml" disabled={locked} aria-label="Workflow YAML" className="font-code border bg-[var(--color-paper)] p-3 min-h-80" value={yaml} onChange={event => setYaml(event.target.value)} /></label>}
         <fieldset disabled={locked} className={yaml != null ? "hidden" : "min-w-0 grid gap-4"}>
           {WORKFLOW_STEPS.filter(section => section !== "Review").map(section => <section key={section} data-workflow-step={section} hidden={step !== section} className={step === section ? "grid gap-3" : "hidden"}>
             <h3 className="text-base font-bold normal-case">{section}</h3>
             <WorkflowSections key={`${section}:${model.inputSession}`} draft={draft} change={change} advanced={advanced} section={section} initialSource={initialSource} onTrustChanged={() => model.invalidate()} selectCompany={model.selectCompany} setTargetCompanies={model.setTargetCompanies} attachCompanyBoard={model.attachCompanyBoard} onDetect={index => void model.detect(index)} preview={preview} is24h={is24h} />
-            {section === "Schedule" && <details><summary className="cursor-pointer min-h-9">Retention</summary><WorkflowSections draft={draft} change={change} advanced section="Retention" initialSource={initialSource} onTrustChanged={() => model.invalidate()} setTargetCompanies={model.setTargetCompanies} attachCompanyBoard={model.attachCompanyBoard} /></details>}
+            {section === "Schedule" && <details><summary data-control-action="workflow.retention_details" className="cursor-pointer min-h-9">Retention</summary><WorkflowSections draft={draft} change={change} advanced section="Retention" initialSource={initialSource} onTrustChanged={() => model.invalidate()} setTargetCompanies={model.setTargetCompanies} attachCompanyBoard={model.attachCompanyBoard} /></details>}
           </section>)}
         </fieldset>
         {step === "Review" && yaml == null && <section className="grid gap-3" data-workflow-step="Review">
@@ -156,10 +156,10 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
               {model.operation === "preview" ? "Preview in progress…" : model.canSave ? preview!.sampled ? "Preview sampled — coverage incomplete" : `Preview complete — ${preview!.matched - preview!.blocked} eligible postings found` : preview?.errors.length ? "Preview needs attention" : "Preview required before saving"}
             </h3>
             <p>{model.canSave ? preview!.sampled ? "Configuration is ready to save with coverage warnings; Preview did not examine all available postings." : "Configuration is ready to save." : isDemoMode() ? "Example preview only; no live source is contacted." : "Preview checks the current workflow and does not save jobs."}</p>
-            {!model.canSave && <div><Button variant="inverted" disabled={busy || locked || yaml != null || isRecordedMode()} onClick={() => void model.runPreview()}>Run Preview</Button></div>}
+            {!model.canSave && <div><Button data-control-action="workflow.preview" variant="inverted" disabled={busy || locked || yaml != null || isRecordedMode()} onClick={() => void model.runPreview()}>Run Preview</Button></div>}
             {hasScripts && <>
               <p>Custom scripts require local review and trust. Save disabled, then reopen to review each script; trust does not enable the workflow.</p>
-              <div><Button variant="inverted" disabled={busy || locked || yaml != null} onClick={() => void model.saveDisabled()}>Save disabled for review</Button></div>
+              <div><Button data-control-action="workflow.save_disabled" variant="inverted" disabled={busy || locked || yaml != null} onClick={() => void model.saveDisabled()}>Save disabled for review</Button></div>
             </>}
           </section>
           <h3 className="font-bold text-base">Workflow summary</h3>
@@ -194,13 +194,13 @@ export function AddSourceModal({ isOpen, onClose, onSourceSaved, initialSource, 
               <div><dt className="font-semibold">New Grad</dt><dd>{rules?.new_grad || "any"} (independent of years of experience)</dd></div>
             </dl>
           </section>
-          <details><summary className="cursor-pointer min-h-9">All configured rules</summary><pre className="font-code whitespace-pre-wrap break-words text-xs">{workflowSpecToYaml(draft)}</pre></details>
+          <details><summary data-control-action="workflow.all_rules" className="cursor-pointer min-h-9">All configured rules</summary><pre className="font-code whitespace-pre-wrap break-words text-xs">{workflowSpecToYaml(draft)}</pre></details>
         </section>}
         {step === "Review" && <WorkflowPreviewResults preview={preview} draft={draft} setError={setError} />}
         {advanced && <section className="grid gap-3 border-t pt-3">
-          <div className="flex flex-wrap gap-2"><Button disabled={locked} onClick={() => yaml == null ? setYaml(workflowSpecToYaml(model.commitInputs())) : void model.applyYaml()}>{yaml == null ? "Edit YAML" : "Apply YAML to form"}</Button><Button disabled={yaml != null} onClick={() => { const url = URL.createObjectURL(new Blob([workflowSpecToYaml(model.commitInputs())], { type: "text/yaml" })); const link = document.createElement("a"); link.href = url; link.download = "workflow.yaml"; link.click(); URL.revokeObjectURL(url); }}>Export YAML</Button></div>
+          <div className="flex flex-wrap gap-2"><Button data-control-action="workflow.edit_apply_yaml" disabled={locked} onClick={() => yaml == null ? setYaml(workflowSpecToYaml(model.commitInputs())) : void model.applyYaml()}>{yaml == null ? "Edit YAML" : "Apply YAML to form"}</Button><Button data-control-action="workflow.export_yaml" disabled={yaml != null} onClick={() => { const url = URL.createObjectURL(new Blob([workflowSpecToYaml(model.commitInputs())], { type: "text/yaml" })); const link = document.createElement("a"); link.href = url; link.download = "workflow.yaml"; link.click(); URL.revokeObjectURL(url); }}>Export YAML</Button></div>
           <label className="grid gap-2">Load example workflow
-            <Select aria-label="Load example workflow" value="" disabled={locked} options={[{ value: "", label: "Choose an example…" }, ...SAMPLE_WORKFLOW_TEMPLATES.map(template => ({value: template.id, label: template.name}))]}
+            <Select actionId="workflow.load_example" aria-label="Load example workflow" value="" disabled={locked} options={[{ value: "", label: "Choose an example…" }, ...SAMPLE_WORKFLOW_TEMPLATES.map(template => ({value: template.id, label: template.name}))]}
               onChange={id => { const template = SAMPLE_WORKFLOW_TEMPLATES.find(template => template.id === id); if (template) model.replaceImport(structuredClone(template.spec)); }} />
           </label>
         </section>}

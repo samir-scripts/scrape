@@ -25,7 +25,7 @@ export function WorkflowPreviewResults({ preview, draft, setError }: { preview: 
         {preview.matched - preview.blocked} eligible matches
       </h3>
       <details open={!preview.jobs.length || preview.sampled || preview.errors.length > 0} className="border border-[var(--color-border)] p-2 bg-[var(--color-surface)]">
-        <summary className="cursor-pointer min-h-8 font-semibold text-xs uppercase">
+        <summary data-control-action="workflow.preview_breakdown" className="cursor-pointer min-h-8 font-semibold text-xs uppercase">
           Preview breakdown
         </summary>
         <div className="pt-2 grid gap-2">
@@ -68,6 +68,7 @@ export function WorkflowPreviewResults({ preview, draft, setError }: { preview: 
                   <CompanyLogo company={job.company} size="sm" logo={preview.branding.find(item => item.source_id === job.source_id && item.company === job.company)?.logo} />
                   <div className="min-w-0 flex-1">
                     <a
+                      data-control-action="workflow.open_preview_posting"
                       href={job.url}
                       onClick={(e) => {
                         e.preventDefault();

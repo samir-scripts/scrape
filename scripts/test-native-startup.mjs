@@ -1,6 +1,6 @@
 import { checkNativeDataManagement } from "./native-data-management.mjs";
 import { checkNativeSchedule } from "./native-schedule.mjs";
-import { checkNativeWorkflow } from "./native-workflow.mjs";
+import { checkNativeWorkflow, checkNativeWorkflowDeletion } from "./native-workflow.mjs";
 import { createServer } from "node:http";
 import { checkNativeKanban } from "./native-kanban.mjs";
 import { checkNativeJobLayout } from "./native-job-layout.mjs";
@@ -103,10 +103,11 @@ for (const mode of modes) {
       const schedule = ${process.env.SCRAPE_NATIVE_SCHEDULE === "1" ? `await (${checkNativeSchedule.toString()})()` : "null"};
       const appearance = ${process.env.SCRAPE_NATIVE_APPEARANCE === "1" ? `await (${checkNativeAppearance.toString()})()` : "null"};
       const workflow = ${process.env.SCRAPE_NATIVE_WORKFLOW === "1" ? `await (${checkNativeWorkflow.toString()})(${JSON.stringify(workflowOrigin)})` : "null"};
+      const deletion = ${process.env.SCRAPE_NATIVE_DELETE === "1" ? `await (${checkNativeWorkflowDeletion.toString()})()` : "null"};
       const kanban = ${process.env.SCRAPE_NATIVE_KANBAN === "1" ? `await (${checkNativeKanban.toString()})()` : "null"};
       const layout = ${process.env.SCRAPE_NATIVE_LAYOUT === "1" ? `await (${checkNativeJobLayout.toString()})()` : "null"};
       const dataManagement = ${process.env.SCRAPE_NATIVE_DATA_MANAGEMENT === "1" ? `await (${checkNativeDataManagement.toString()})(${JSON.stringify(workflowOrigin)})` : "null"};
-      await invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:true,schedule,appearance,layout,kanban,workflow,dataManagement,steps:["actual Tauri dev readiness: ${mode}"]}});
+      await invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:true,schedule,appearance,layout,kanban,workflow,deletion,dataManagement,steps:["actual Tauri dev readiness: ${mode}"]}});
     } catch(error) {
       await window.__TAURI_INTERNALS__.invoke("plugin:event|emit", {event:"native-smoke-result",payload:{ok:false,error:String(error)}});
     }
@@ -124,6 +125,14 @@ for (const mode of modes) {
     if ((await readdir(directory)).some(name => name.includes("pre-migration"))) throw new Error("Rejected history was backed up/mutated");
   } else if (invalid || code !== 0 || !output.includes('"ok":true')) {
     throw new Error(`Native startup failed for ${mode}: ${directory}\n${output}`);
+  }
+  if (process.env.SCRAPE_NATIVE_WORKFLOW === "1" || process.env.SCRAPE_NATIVE_DELETE === "1") {
+    const log = await readFile(join(directory, "scrape.log"), "utf8");
+    const interactions = log.split("\n").filter(line => line.includes("[UI]"));
+    for (const action of ["workflow.delete.request", "workflow.delete.cancel", "workflow.delete.confirm"]) {
+      if (!interactions.some(line => line.includes(` ${action}:`))) throw new Error(`Missing ${action} interaction in ${directory}`);
+    }
+    if (interactions.some(line => line.includes("Native wizard fixture") || line.includes("Fixture Co"))) throw new Error(`Workflow name leaked into interaction log: ${directory}`);
   }
   if (process.env.SCRAPE_NATIVE_DATA_MANAGEMENT === "1") execFileSync("python3", ["-c", String.raw`
 import pathlib,sqlite3,sys

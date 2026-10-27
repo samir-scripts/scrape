@@ -164,7 +164,7 @@ export function LocationFilter({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={handleAutoDetect}
+            data-control-action="filters.location.detect" onClick={handleAutoDetect}
             disabled={isDetecting}
             className="text-xs text-[var(--color-ink)] hover:bg-[var(--color-ink)] hover:text-[var(--color-paper)] border border-[var(--color-ink)] px-1.5 py-0.5 uppercase cursor-pointer disabled:opacity-50"
             title="Auto-detect system/user location"
@@ -172,7 +172,7 @@ export function LocationFilter({
             {isDetecting ? "DETECTING..." : "📍 AUTO-DETECT"}
           </button>
           {hasFilter && (
-            <button
+            <button data-control-action="filters.location.clear"
               onClick={() =>
                 onChange({
                   countries: null,
@@ -205,7 +205,7 @@ export function LocationFilter({
             const active = (remote || "all") === opt.id;
             return (
               <button
-                key={opt.id}
+                data-control-action="filters.location.preset" key={opt.id}
                 type="button"
                 onClick={() =>
                   onChange({
@@ -237,14 +237,14 @@ export function LocationFilter({
           {selectedCountryCode !== "ALL" && (
             <button
               type="button"
-              onClick={() => handleCountryChange("ALL")}
+              data-control-action="filters.location.country.clear" onClick={() => handleCountryChange("ALL")}
               className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-danger)] uppercase cursor-pointer"
             >
               [ANY COUNTRY]
             </button>
           )}
         </div>
-        <SearchCombobox aria-label="Country" value={selectedCountryCode}
+        <SearchCombobox aria-label="Country" actionId="filters.location.country" value={selectedCountryCode}
           query={countryQuery ?? (selectedCountryCode === "ALL" ? "" : COUNTRIES.find(country => country.code === selectedCountryCode)?.name || selectedCountryCode)}
           onFocus={() => setCountryQuery("")} onBlur={() => setCountryQuery(null)} onQueryChange={setCountryQuery}
           onChange={code => { handleCountryChange(code); setCountryQuery(null); }}
@@ -265,7 +265,7 @@ export function LocationFilter({
           {selectedRegions.length > 0 && (
             <button
               type="button"
-              onClick={handleClearRegions}
+              data-control-action="filters.location.regions.clear" onClick={handleClearRegions}
               className="text-xs text-[var(--color-ink-mute)] hover:text-[var(--color-danger)] uppercase cursor-pointer"
             >
               [CLEAR ({selectedRegions.length})]
@@ -273,7 +273,7 @@ export function LocationFilter({
           )}
         </div>
 
-        <Select aria-label="Add state/province" value="" onChange={handleAddRegion}
+        <Select aria-label="Add state/province" actionId="filters.location.region.add" value="" onChange={handleAddRegion}
           options={[{ value: "", label: "+ ADD STATE / PROVINCE..." }, ...cascadingRegions.map((region) => {
             const alreadySelected = selectedRegions.includes(region.code);
             return { value: region.code, label: `${region.name.toUpperCase()} (${region.code}) ${alreadySelected ? "✓" : ""}`, disabled: alreadySelected };
@@ -296,7 +296,7 @@ export function LocationFilter({
                   className="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-mono font-bold uppercase border border-[var(--color-ink)] bg-[var(--color-paper-2)] text-[var(--color-ink)]"
                 >
                   <span>{label}</span>
-                  <IconButton label={`Remove ${reg}`} onClick={() => handleRemoveRegion(reg)}>
+                  <IconButton data-control-action="filters.location.region.remove" label={`Remove ${reg}`} onClick={() => handleRemoveRegion(reg)}>
                     <Icon name="close" size="sm" />
                   </IconButton>
                 </span>
@@ -309,7 +309,7 @@ export function LocationFilter({
       {/* Include Unknown Toggle */}
       <div className="flex items-center gap-2 pt-1">
         <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--color-ink)]">
-          <input
+          <input data-control-action="filters.location.unknown"
             type="checkbox"
             checked={includeUnknown}
             onChange={(e) =>

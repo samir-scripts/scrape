@@ -26,7 +26,7 @@ export function ScheduleControl() {
     }
   }
   return <>
-    <button type="button" aria-label={`Schedule: ${presentation.label}`} aria-haspopup="dialog" aria-expanded={open}
+    <button data-control-action="schedule.summary.open" type="button" aria-label={`Schedule: ${presentation.label}`} aria-haspopup="dialog" aria-expanded={open}
       onClick={() => { setOpen(true); if (desktop) void query.refetch(); }}
       className="min-h-8 px-2 border border-transparent hover:border-[var(--color-ink)] text-xs text-[var(--color-ink)] max-w-72 text-left">
       <span className="inline-block w-2 h-2 mr-2 bg-current" aria-hidden="true" />{presentation.label}
@@ -44,12 +44,12 @@ export function ScheduleControl() {
         </ul>}
         {actionError && <p role="alert" className="text-[var(--color-danger)]">{actionError}</p>}
         <div className="flex flex-wrap gap-2">
-          {desktop && <Button disabled={busy || query.isFetching} onClick={() => void query.refetch()}>Refresh status</Button>}
-          {desktop && status && !query.error && <Button disabled={busy} onClick={() => void act(() => api.setSchedulerPaused(status.enabled))}>{status.enabled ? "Pause automatic runs" : "Resume automatic runs"}</Button>}
-          {running && <Button disabled={busy} onClick={() => void act(async () => {
+          {desktop && <Button data-control-action="schedule.status.refresh" disabled={busy || query.isFetching} onClick={() => void query.refetch()}>Refresh status</Button>}
+          {desktop && status && !query.error && <Button data-control-action="schedule.automatic.toggle" disabled={busy} onClick={() => void act(() => api.setSchedulerPaused(status.enabled))}>{status.enabled ? "Pause automatic runs" : "Resume automatic runs"}</Button>}
+          {running && <Button data-control-action="schedule.run.cancel" disabled={busy} onClick={() => void act(async () => {
             if (!await api.cancelScrape()) throw new Error("No active worker accepted cancellation. Refresh status.");
           })}>Cancel active run</Button>}
-          <Button onClick={() => { setView("scraper"); setOpen(false); }}>Open Workflows</Button>
+          <Button data-control-action="schedule.workflows.open" onClick={() => { setView("scraper"); setOpen(false); }}>Open Workflows</Button>
         </div>
       </div>
     </Modal>

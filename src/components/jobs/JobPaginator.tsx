@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { pagination } from "../../lib/pagination";
 import { Icon } from "../ui/Icon";
 import { IconButton } from "../ui/IconButton";
+import { recordControlAction } from "../../lib/controlActivity";
 
 export function JobPaginator({ page, pageSize, total, busy = false, onPageChange }: {
   page: number; pageSize: number; total: number | undefined; busy?: boolean; onPageChange: (page: number) => void;
@@ -26,19 +27,19 @@ export function JobPaginator({ page, pageSize, total, busy = false, onPageChange
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
       <span role="status" aria-live="polite" aria-atomic="true">{busy ? `Loading page ${page}…` : total === undefined ? "Results unavailable" : `${model.start}–${model.end} of ${total}`}</span>
       <div className="flex flex-wrap items-center gap-1">
-        <IconButton label="First page" disabled={disabled || model.page === 1} onClick={() => onPageChange(1)}><Icon name="first" /></IconButton>
-        <IconButton label="Previous page" disabled={disabled || model.page === 1} onClick={() => onPageChange(model.page - 1)}><Icon name="left" /></IconButton>
-        <form aria-label="Jump to page" onSubmit={event => { event.preventDefault(); submit(); }} className="flex items-center gap-2 px-1">
-          <label className="normal-case">Page <input ref={input} aria-label="Page number" inputMode="numeric" type="text" disabled={disabled}
+        <IconButton label="First page" data-control-action="jobs.page.first" disabled={disabled || model.page === 1} onClick={() => onPageChange(1)}><Icon name="first" /></IconButton>
+        <IconButton label="Previous page" data-control-action="jobs.page.previous" disabled={disabled || model.page === 1} onClick={() => onPageChange(model.page - 1)}><Icon name="left" /></IconButton>
+        <form aria-label="Jump to page" data-control-action="jobs.page.submit" onSubmit={event => { event.preventDefault(); submit(); }} className="flex items-center gap-2 px-1">
+          <label className="normal-case">Page <input ref={input} data-control-action="jobs.page.number" aria-label="Page number" inputMode="numeric" type="text" disabled={disabled}
             value={total === 0 ? "" : draft} aria-invalid={Boolean(error)} aria-describedby={`${helpId}${error ? ` ${errorId}` : ""}`}
             onChange={event => { setDraft(event.target.value); setError(""); }}
-            onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setDraft(String(model.page)); setError(""); } }}
+            onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); recordControlAction("jobs.page.cancel", "shortcut"); setDraft(String(model.page)); setError(""); } }}
             className="w-14 min-h-8 border border-[var(--color-border)] bg-[var(--color-paper)] p-1 text-center" /></label>
           <span>of {model.pageCount ?? "—"}</span>
           <IconButton label="Go to page" type="submit" disabled={disabled}><Icon name="right" /></IconButton>
         </form>
-        <IconButton label="Next page" disabled={disabled || model.page === model.pageCount} onClick={() => onPageChange(model.page + 1)}><Icon name="right" /></IconButton>
-        <IconButton label="Last page" disabled={disabled || model.page === model.pageCount} onClick={() => onPageChange(model.pageCount!)}><Icon name="last" /></IconButton>
+        <IconButton label="Next page" data-control-action="jobs.page.next" disabled={disabled || model.page === model.pageCount} onClick={() => onPageChange(model.page + 1)}><Icon name="right" /></IconButton>
+        <IconButton label="Last page" data-control-action="jobs.page.last" disabled={disabled || model.page === model.pageCount} onClick={() => onPageChange(model.pageCount!)}><Icon name="last" /></IconButton>
       </div>
     </div>
     <span id={helpId} className="sr-only">Enter a page number and press Enter, or use Go to page.</span>

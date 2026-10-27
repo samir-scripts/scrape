@@ -235,7 +235,7 @@ export function JobMetaPanel({
         </span>
 
         <Button
-          variant="inverted"
+          data-control-action="job.applied.mark" variant="inverted"
           onClick={() => onUpdateStatus(job.id, "applied")}
           className="w-full justify-between"
           shortcut="A"
@@ -244,7 +244,7 @@ export function JobMetaPanel({
         </Button>
 
         <Button
-          variant="default"
+          data-control-action="job.ignored.mark" variant="default"
           onClick={() => onUpdateStatus(job.id, "ignored")}
           className="w-full justify-between"
           shortcut="X"
@@ -254,7 +254,7 @@ export function JobMetaPanel({
 
         {onToggleFavorite && (
           <Button
-            variant={job.favorited ? "inverted" : "default"}
+            data-control-action="job.favorite.toggle" variant={job.favorited ? "inverted" : "default"}
             onClick={() => onToggleFavorite(job.id)}
             className="w-full justify-between"
             shortcut="S"
@@ -265,7 +265,7 @@ export function JobMetaPanel({
 
         {job.status === "scraped" && (
           <Button
-            variant="ghost"
+            data-control-action="job.viewed.mark" variant="ghost"
             onClick={() => onUpdateStatus(job.id, "viewed")}
             className="w-full justify-between"
             shortcut="V"
@@ -276,7 +276,7 @@ export function JobMetaPanel({
 
         <Button
           variant="ghost"
-          onClick={() => onOpenUrl(job.url)}
+          data-control-action="job.posting.open" onClick={() => onOpenUrl(job.url)}
           className="w-full justify-between mt-1"
           shortcut="↵"
         >

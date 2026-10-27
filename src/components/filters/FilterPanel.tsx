@@ -15,6 +15,7 @@ import { Rule } from "../ui/Rule";
 import type { JobSort } from "../../bindings/JobSort";
 import { JOB_SORT_OPTIONS } from "../../lib/jobSort";
 import { Select } from "../ui/Select";
+import { recordControlAction } from "../../lib/controlActivity";
 export {
   calculateFilterDropdownCoordinates,
   type FilterDropdownCoordinates,
@@ -124,6 +125,7 @@ export function FilterPanel({
         return;
       }
 
+      recordControlAction("filters.dismiss", "dismiss");
       onClose();
     };
 
@@ -140,10 +142,12 @@ export function FilterPanel({
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
+        recordControlAction("filters.dismiss", "dismiss");
         onClose();
       } else if (e.shiftKey && (e.key === "F" || e.key === "f")) {
         e.preventDefault();
         e.stopPropagation();
+        recordControlAction("filters.reset.shortcut", "shortcut");
         onResetFilters();
       }
     };
@@ -230,7 +234,7 @@ export function FilterPanel({
           )}
         </div>
         <div className="flex items-center gap-1.5 font-mono text-xs">
-          <IconButton label="Close filters" onClick={onClose} variant="outlined">
+          <IconButton label="Close filters" data-control-action="filters.close" onClick={onClose} variant="outlined">
             <Icon name="close" />
           </IconButton>
         </div>
@@ -241,10 +245,10 @@ export function FilterPanel({
         <section aria-label="Sort results" className="flex flex-col gap-2 font-mono text-xs">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="font-bold uppercase tracking-wider">SORT RESULTS</span>
-            <button type="button" onClick={onResetSort} disabled={sort === defaultSort}
+            <button type="button" onClick={onResetSort} data-control-action="filters.sort.reset" disabled={sort === defaultSort}
               className="underline disabled:no-underline disabled:opacity-50">Reset sort</button>
           </div>
-          <Select aria-label="Sort jobs" value={sort} onChange={value => onSortChange(value as JobSort)} options={JOB_SORT_OPTIONS} />
+          <Select aria-label="Sort jobs" actionId="filters.sort.change" value={sort} onChange={value => onSortChange(value as JobSort)} options={JOB_SORT_OPTIONS} />
         </section>
         <Rule />
         {/* Contains / Keywords Filter */}
@@ -255,7 +259,7 @@ export function FilterPanel({
             </label>
           </div>
           <div className="flex items-center border border-[var(--color-ink)] bg-[var(--color-paper)]">
-            <input
+            <input data-control-action="filters.search.edit"
               type="text"
               placeholder="FILTER BY TITLE, COMPANY, SKILLS, TEXT..."
               value={filterSpec.search ?? ""}
@@ -269,7 +273,7 @@ export function FilterPanel({
               className="w-full py-1 px-2 bg-transparent text-[var(--color-ink)] text-xs font-mono uppercase focus:outline-none placeholder-[var(--color-ink-mute)]"
             />
             {Boolean(filterSpec.search?.trim()) && (
-              <IconButton label="Clear filter search" onClick={() => onUpdateFilter((prev) => ({ ...prev, search: null }))}>
+              <IconButton label="Clear filter search" data-control-action="filters.search.clear" onClick={() => onUpdateFilter((prev) => ({ ...prev, search: null }))}>
                 <Icon name="close" size="sm" />
               </IconButton>
             )}
@@ -388,14 +392,14 @@ export function FilterPanel({
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={onResetFilters}
+            data-control-action="filters.clear" onClick={onResetFilters}
             className="flex-1 py-1.5 px-2 border border-[var(--color-ink)] bg-[var(--color-paper)] hover:bg-[var(--color-paper-2)] text-xs font-bold uppercase cursor-pointer"
           >
             [CLEAR FILTERS]
           </button>
           <button
             type="button"
-            onClick={onClose}
+            data-control-action="filters.apply" onClick={onClose}
             className="flex-1 py-1.5 px-2 border border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-90 text-xs font-bold uppercase cursor-pointer"
           >
             [APPLY & CLOSE]

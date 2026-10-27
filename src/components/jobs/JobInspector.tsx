@@ -147,9 +147,9 @@ export function JobInspectorContent({
               onClick={() => onDelete(job)}
             />
           )}
-          {onClose && onResetPane && <IconButton label="Reset pane width" onClick={onResetPane}><Icon name="refresh" /></IconButton>}
+          {onClose && onResetPane && <IconButton data-control-semantic label="Reset pane width" onClick={onResetPane}><Icon name="refresh" /></IconButton>}
           {onClose && (
-            <IconButton label="Close job details" onClick={onClose}>
+            <IconButton label="Close job details" data-control-action="job.inspector.close" onClick={onClose}>
               <Icon name="close" />
             </IconButton>
           )}
@@ -160,23 +160,23 @@ export function JobInspectorContent({
         </p>
         <p className="text-sm font-bold">{formatSalary(job)}</p>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="inverted" onClick={() => onOpenUrl(job.url)}>
+          <Button variant="inverted" data-control-action="job.posting.open" onClick={() => onOpenUrl(job.url)}>
             Open posting
           </Button>
           {tracked ? (
             <label className="text-sm">
               Stage{" "}
-              <Select aria-label="Application stage" value={job.status}
+              <Select aria-label="Application stage" actionId="job.stage.change" value={job.status}
                 onChange={(value) => onUpdateStatus(job.id, value as JobStatus)}
                 options={TRACKED_STAGES.map((stage) => ({ value: stage, label: stage }))} />
             </label>
           ) : (
             <>
-              <Button onClick={() => onUpdateStatus(job.id, "applied")}>
+              <Button onClick={() => onUpdateStatus(job.id, "applied")} data-control-action="job.applied.mark">
                 Mark as applied
               </Button>
               <Button
-                variant="ghost"
+                data-control-action="job.ignored.mark" variant="ghost"
                 onClick={() => onUpdateStatus(job.id, "ignored")}
               >
                 Ignore
@@ -185,8 +185,8 @@ export function JobInspectorContent({
           )}
         </div>
         {!tracked && job.status === "scraped" && (
-          <ActionMenu label="More actions" items={[{
-            label: "Mark viewed",
+          <ActionMenu label="More actions" actionId="job.actions.open" items={[{
+            actionId: "job.viewed.mark", label: "Mark viewed",
             onSelect: () => onUpdateStatus(job.id, "viewed"),
           }]} />
         )}
@@ -208,7 +208,7 @@ export function JobInspectorContent({
             {noteState}
           </span>
         </div>
-        <textarea
+        <textarea data-control-action="job.notes.edit"
           id={`notes-${job.id}`}
           rows={4}
           value={notes}
@@ -221,11 +221,11 @@ export function JobInspectorContent({
           placeholder="Add notes or follow-up details…"
         />
         {noteState === "Failed to save" && (
-          <Button onClick={() => save(notes)}>Retry saving notes</Button>
+          <Button onClick={() => save(notes)} data-control-action="job.notes.retry">Retry saving notes</Button>
         )}
       </section>
       <details className="border-t pt-4">
-        <summary className="font-bold cursor-pointer min-h-8">
+        <summary data-control-action="job.details.expand" className="font-bold cursor-pointer min-h-8">
           More details
         </summary>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm mt-3">
@@ -261,7 +261,7 @@ export function JobInspectorContent({
         </dl>
       </details>
       <details className="border-t pt-4">
-        <summary className="font-bold cursor-pointer min-h-8">
+        <summary data-control-action="job.evidence.expand" className="font-bold cursor-pointer min-h-8">
           Source evidence
         </summary>
         <div className="grid gap-3 mt-3 text-sm break-words">
@@ -284,7 +284,7 @@ export function JobInspectorContent({
         className="border-t pt-4"
         onToggle={(e) => setHistoryOpen(e.currentTarget.open)}
       >
-        <summary className="font-bold cursor-pointer min-h-8">
+        <summary data-control-action="job.history.expand" className="font-bold cursor-pointer min-h-8">
           Activity history
         </summary>
         <div className="grid gap-2 mt-3 text-sm">

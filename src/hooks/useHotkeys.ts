@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useUIStore } from "../lib/store";
 import { NAV_TABS } from "../lib/constants";
+import { recordControlAction } from "../lib/controlActivity";
 
 /**
  * Root-level application hotkeys.
@@ -24,6 +25,7 @@ export function useGlobalHotkeys() {
 
       if (e.key === "Escape") {
         if (isInput) {
+          recordControlAction("shortcut.blur", "shortcut");
           (activeEl as HTMLElement).blur();
           return;
         }
@@ -37,14 +39,17 @@ export function useGlobalHotkeys() {
           setSelectedJobId,
         } = useUIStore.getState();
         if (isFilterPanelOpen) {
+          recordControlAction("shortcut.filter.close", "shortcut");
           setFilterPanelOpen(false);
           return;
         }
         if (drawerJobId) {
+          recordControlAction("shortcut.drawer.close", "shortcut");
           setDrawerJobId(null);
           return;
         }
         if (view === "discovered" && selectedJobId) {
+          recordControlAction("shortcut.selection.clear", "shortcut");
           setSelectedJobId(null);
           return;
         }
@@ -61,6 +66,7 @@ export function useGlobalHotkeys() {
       // Tab switching: Q / [ (prev), E / ] (next)
       if (!e.shiftKey && (e.key === "q" || e.key === "Q" || e.key === "[")) {
         e.preventDefault();
+        recordControlAction("shortcut.navigation.previous", "shortcut");
         const currentView = useUIStore.getState().view;
         const currentIdx = NAV_TABS.findIndex((t) => t.id === currentView);
         const prevIdx = (currentIdx - 1 + NAV_TABS.length) % NAV_TABS.length;
@@ -70,6 +76,7 @@ export function useGlobalHotkeys() {
 
       if (!e.shiftKey && (e.key === "e" || e.key === "E" || e.key === "]")) {
         e.preventDefault();
+        recordControlAction("shortcut.navigation.next", "shortcut");
         const currentView = useUIStore.getState().view;
         const currentIdx = NAV_TABS.findIndex((t) => t.id === currentView);
         const nextIdx = (currentIdx + 1) % NAV_TABS.length;
@@ -84,6 +91,7 @@ export function useGlobalHotkeys() {
           "global-search-input"
         ) as HTMLInputElement | null;
         searchInput?.focus();
+        if (searchInput) recordControlAction("shortcut.search", "shortcut");
         searchInput?.select();
         return;
       }
@@ -91,6 +99,7 @@ export function useGlobalHotkeys() {
       // Filter Drawer toggle: F
       if (!e.shiftKey && (e.key === "f" || e.key === "F")) {
         e.preventDefault();
+        recordControlAction("shortcut.filter.toggle", "shortcut");
         useUIStore.getState().toggleFilterPanel();
         return;
       }
@@ -146,11 +155,13 @@ export function useHotkeys(options: HotkeyOptions = {}) {
       if (!hasMod && e.shiftKey) {
         if (e.key === "ArrowLeft" || e.key === "H" || e.key === "h") {
           e.preventDefault();
+          if (optionsRef.current.onShiftLeft) recordControlAction("shortcut.stage.previous", "shortcut");
           optionsRef.current.onShiftLeft?.();
           return;
         }
         if (e.key === "ArrowRight" || e.key === "L" || e.key === "l") {
           e.preventDefault();
+          if (optionsRef.current.onShiftRight) recordControlAction("shortcut.stage.next", "shortcut");
           optionsRef.current.onShiftRight?.();
           return;
         }
@@ -160,11 +171,13 @@ export function useHotkeys(options: HotkeyOptions = {}) {
       if (!hasMod && !e.shiftKey) {
         if (e.key === "ArrowLeft" || e.key === "h" || e.key === "H") {
           e.preventDefault();
+          if (optionsRef.current.onColLeft) recordControlAction("shortcut.column.previous", "shortcut");
           optionsRef.current.onColLeft?.();
           return;
         }
         if (e.key === "ArrowRight" || e.key === "l" || e.key === "L") {
           e.preventDefault();
+          if (optionsRef.current.onColRight) recordControlAction("shortcut.column.next", "shortcut");
           optionsRef.current.onColRight?.();
           return;
         }
@@ -174,11 +187,13 @@ export function useHotkeys(options: HotkeyOptions = {}) {
       if (!hasMod && !e.shiftKey) {
         if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") {
           e.preventDefault();
+          if (optionsRef.current.onNextItem) recordControlAction("shortcut.item.next", "shortcut");
           optionsRef.current.onNextItem?.();
           return;
         }
         if (e.key === "ArrowUp" || e.key === "k" || e.key === "K") {
           e.preventDefault();
+          if (optionsRef.current.onPrevItem) recordControlAction("shortcut.item.previous", "shortcut");
           optionsRef.current.onPrevItem?.();
           return;
         }
@@ -187,6 +202,7 @@ export function useHotkeys(options: HotkeyOptions = {}) {
       // Open URL: Enter
       if (!hasMod && e.key === "Enter") {
         e.preventDefault();
+        if (optionsRef.current.onOpenUrl) recordControlAction("shortcut.job.open", "shortcut");
         optionsRef.current.onOpenUrl?.();
         return;
       }
@@ -195,30 +211,35 @@ export function useHotkeys(options: HotkeyOptions = {}) {
       if (!hasMod && !e.shiftKey) {
         if (e.key === "a" || e.key === "A") {
           e.preventDefault();
+          if (optionsRef.current.onApply) recordControlAction("shortcut.job.apply", "shortcut");
           optionsRef.current.onApply?.();
           return;
         }
 
         if (e.key === "x" || e.key === "X") {
           e.preventDefault();
+          if (optionsRef.current.onIgnore) recordControlAction("shortcut.job.ignore", "shortcut");
           optionsRef.current.onIgnore?.();
           return;
         }
 
         if (e.key === "v" || e.key === "V") {
           e.preventDefault();
+          if (optionsRef.current.onViewed) recordControlAction("shortcut.job.viewed", "shortcut");
           optionsRef.current.onViewed?.();
           return;
         }
 
         if (e.key === "u" || e.key === "U") {
           e.preventDefault();
+          if (optionsRef.current.onUndo) recordControlAction("shortcut.undo", "shortcut");
           optionsRef.current.onUndo?.();
           return;
         }
 
         if (e.key === "s" || e.key === "S") {
           e.preventDefault();
+          if (optionsRef.current.onToggleFavorite) recordControlAction("shortcut.job.favorite", "shortcut");
           optionsRef.current.onToggleFavorite?.();
           return;
         }
@@ -230,6 +251,7 @@ export function useHotkeys(options: HotkeyOptions = {}) {
           e.key === "D"
         ) {
           e.preventDefault();
+          if (optionsRef.current.onDelete) recordControlAction("shortcut.job.delete", "shortcut");
           optionsRef.current.onDelete?.();
           return;
         }

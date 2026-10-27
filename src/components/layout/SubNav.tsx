@@ -36,6 +36,7 @@ export function SubNav({ sort, onResetSort }: { sort?: JobSort; onResetSort?: ()
             <div className="flex items-center gap-1">
               <Tooltip content="Switch to pipeline Kanban board view" position="bottom">
                 <button
+                  data-control-action="tracked.view.kanban"
                   onClick={() => setTrackedViewMode("kanban")}
                   className={`inline-flex items-center gap-2 min-h-[var(--control-height-sm)] px-2.5 py-0.5 uppercase tracking-wider text-xs cursor-pointer border ${
                     trackedViewMode === "kanban"
@@ -48,6 +49,7 @@ export function SubNav({ sort, onResetSort }: { sort?: JobSort; onResetSort?: ()
               </Tooltip>
               <Tooltip content="Switch to structured application table view" position="bottom">
                 <button
+                  data-control-action="tracked.view.list"
                   onClick={() => setTrackedViewMode("list")}
                   className={`inline-flex items-center gap-2 min-h-[var(--control-height-sm)] px-2.5 py-0.5 uppercase tracking-wider text-xs cursor-pointer border ${
                     trackedViewMode === "list"
@@ -65,6 +67,7 @@ export function SubNav({ sort, onResetSort }: { sort?: JobSort; onResetSort?: ()
           {showFilters && (
               <Tooltip content="Toggle filters and sorting [F]" position="bottom">
               <button
+                data-control-action="filters.panel.toggle"
                 id="subnav-filters-trigger"
                 onClick={toggleFilterPanel}
                 className={`flex items-center gap-1.5 min-h-[var(--control-height-sm)] px-2.5 py-0.5 border text-xs font-mono font-bold uppercase tracking-wider cursor-pointer ${
@@ -90,6 +93,7 @@ export function SubNav({ sort, onResetSort }: { sort?: JobSort; onResetSort?: ()
           {showFilters && (
             <Tooltip content="Filter by favorited postings" position="bottom">
               <button
+                data-control-action="filters.favorites.toggle"
                 onClick={() =>
                   setFilterSpec((prev) => ({
                     ...prev,
@@ -114,6 +118,7 @@ export function SubNav({ sort, onResetSort }: { sort?: JobSort; onResetSort?: ()
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex items-center">
               <input
+                data-control-action="jobs.search.change"
                 id="global-search-input"
                 type="text"
                 aria-label="Search jobs"
@@ -128,7 +133,7 @@ export function SubNav({ sort, onResetSort }: { sort?: JobSort; onResetSort?: ()
                 className="w-48 min-h-[var(--control-height-sm)] pl-2 pr-9 py-0.5 text-xs font-mono normal-case bg-[var(--color-paper)] text-[var(--color-ink)] border border-[var(--color-ink)] placeholder-[var(--color-ink-mute)] focus:outline-none focus:ring-1 focus:ring-[var(--color-ink)]"
               />
               {filterSpec.search ? (
-                <IconButton label="Clear search" onClick={() => setFilterSpec((prev) => ({ ...prev, search: null }))}
+                <IconButton data-control-action="jobs.search.clear" label="Clear search" onClick={() => setFilterSpec((prev) => ({ ...prev, search: null }))}
                   className="absolute right-0"><Icon name="close" size="sm" /></IconButton>
               ) : (
                 <div aria-hidden="true" className="absolute right-1.5 pointer-events-none">
