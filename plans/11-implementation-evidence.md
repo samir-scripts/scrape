@@ -1307,6 +1307,8 @@ chooser and native zoom acceptance remain outside this check.
 
 ## Follow-up — per-candidate console evidence and Phoenix geography
 
+Implementation commit: `9abf49c`.
+
 Persisted runs use protocol 14 candidate evaluations and print one scrolling
 console card for each examined occurrence. Cards contain the worker's final
 classification and, for eligible candidates, the host's actual persistence
