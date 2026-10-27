@@ -6,7 +6,7 @@ use crate::{RoleType, SourceKind, TriState, WorkplaceType};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 13;
+pub const PROTOCOL_VERSION: u32 = 14;
 pub const DEFAULT_NAVIGATION_TIMEOUT_S: u64 = 30;
 pub const MAX_PAGES_PER_SOURCE: u32 = 100;
 pub const DEFAULT_SOURCE_DURATION_S: u64 = 180;
@@ -212,6 +212,8 @@ pub struct WorkerConfig {
     // Persisted runs wait for an ordered host commit acknowledgement for each job.
     #[serde(default)]
     pub commit_feedback: bool,
+    #[serde(default)]
+    pub candidate_diagnostics: bool,
     pub sources: Vec<WorkerSource>,
     #[serde(default)]
     pub filters: WorkerFilters,
@@ -240,6 +242,7 @@ impl Default for WorkerConfig {
         Self {
             version: PROTOCOL_VERSION,
             commit_feedback: false,
+            candidate_diagnostics: false,
             sources: vec![],
             filters: WorkerFilters::default(),
             filters_by_source: std::collections::HashMap::default(),
@@ -647,12 +650,194 @@ pub enum ScanOutcome {
     Cancelled,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum CandidateDisposition {
+    Eligible,
+    Rejected,
+    Unresolved,
+    Duplicate,
+    Blocked,
+    Invalid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export)]
+pub struct CandidateFacts {
+    pub external_id: String,
+    pub title: String,
+    pub company: String,
+    pub url: String,
+    pub location: String,
+    pub date_posted: Option<String>,
+    pub provider_updated_at: Option<String>,
+    pub description_excerpt: Option<String>,
+    pub description_truncated: bool,
+    pub role_type: RoleType,
+    pub locations: Vec<ParsedLocation>,
+    pub location_data_complete: bool,
+    pub workplace_type: WorkplaceType,
+    pub salary: Option<Salary>,
+    pub experience: Option<ExperienceClassification>,
+    pub is_new_grad: TriState,
+    pub sponsorship: Option<ClassifiedSponsorship>,
+    pub work_auth: Option<ClassifiedWorkAuth>,
+    pub clearance: Option<ClassifiedClearance>,
+}
+
+impl CandidateFacts {
+    pub fn from_event(event: &WorkerEvent) -> Option<Self> {
+        let WorkerEvent::Job {
+            external_id,
+            title,
+            company,
+            url,
+            location,
+            date_posted,
+            provider_updated_at,
+            description_text,
+            role_type,
+            locations,
+            location_data_complete,
+            workplace_type,
+            salary,
+            experience,
+            is_new_grad,
+            sponsorship,
+            work_auth,
+            clearance,
+            ..
+        } = event
+        else {
+            return None;
+        };
+        Some(Self {
+            external_id: external_id.clone(),
+            title: title.clone(),
+            company: company.clone(),
+            url: url.clone(),
+            location: location.clone(),
+            date_posted: date_posted.clone(),
+            provider_updated_at: provider_updated_at.clone(),
+            description_excerpt: description_text
+                .as_ref()
+                .map(|text| text.chars().take(2048).collect()),
+            description_truncated: description_text
+                .as_ref()
+                .is_some_and(|text| text.chars().count() > 2048),
+            role_type: *role_type,
+            locations: locations.clone(),
+            location_data_complete: *location_data_complete,
+            workplace_type: *workplace_type,
+            salary: salary.clone(),
+            experience: experience.clone(),
+            is_new_grad: *is_new_grad,
+            sponsorship: sponsorship.clone(),
+            work_auth: work_auth.clone(),
+            clearance: clearance.clone(),
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export)]
+pub struct CandidateEvaluation {
+    #[ts(type = "number")]
+    pub sequence: u64,
+    pub disposition: CandidateDisposition,
+    pub candidate: Option<CandidateFacts>,
+    pub rejected: Vec<crate::matching::RejectionReason>,
+    pub unresolved: Vec<crate::matching::RejectionReason>,
+    pub diagnostic: Option<String>,
+}
+
+impl CandidateEvaluation {
+    pub fn validate(&self) -> Result<(), String> {
+        use CandidateDisposition::*;
+        let unique = |reasons: &[crate::matching::RejectionReason]| {
+            reasons
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                == reasons.len()
+        };
+        let shape = match self.disposition {
+            Rejected => !self.rejected.is_empty(),
+            Unresolved => self.rejected.is_empty() && !self.unresolved.is_empty(),
+            _ => self.rejected.is_empty() && self.unresolved.is_empty(),
+        };
+        if self.sequence == 0
+            || self.sequence > (1u64 << 53) - 1
+            || !shape
+            || !unique(&self.rejected)
+            || !unique(&self.unresolved)
+            || (self.candidate.is_none() && self.disposition != Invalid)
+            || self
+                .diagnostic
+                .as_ref()
+                .is_some_and(|text| text.chars().count() > 512)
+        {
+            return Err("Invalid candidate evaluation sequence, reasons or shape".into());
+        }
+        if let Some(facts) = &self.candidate {
+            if facts.locations.len() > 64
+                || facts
+                    .description_excerpt
+                    .as_ref()
+                    .is_some_and(|text| text.chars().count() > 2048)
+            {
+                return Err("Candidate evidence exceeds bounds".into());
+            }
+            if [
+                &facts.external_id,
+                &facts.title,
+                &facts.company,
+                &facts.url,
+                &facts.location,
+            ]
+            .iter()
+            .any(|text| text.len() > 65_536)
+                || facts
+                    .date_posted
+                    .as_ref()
+                    .is_some_and(|text| text.len() > 1024)
+                || facts
+                    .provider_updated_at
+                    .as_ref()
+                    .is_some_and(|text| text.len() > 1024)
+                || facts
+                    .salary
+                    .as_ref()
+                    .is_some_and(|salary| salary.ranges.len() > 64)
+            {
+                return Err(
+                    "Candidate text or compensation evidence exceeds protocol bounds".into(),
+                );
+            }
+            // The complete evidence payload is bounded even for nested provider strings.
+            if serde_json::to_vec(facts)
+                .map_err(|error| error.to_string())?
+                .len()
+                > 1_048_576
+            {
+                return Err("Candidate evidence exceeds protocol frame bounds".into());
+            }
+        }
+        Ok(())
+    }
+}
+
 /// NDJSON events streamed by scrape-worker over stdout.
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export)]
 #[allow(clippy::large_enum_variant)]
 pub enum WorkerEvent {
+    CandidateEvaluated {
+        source_id: String,
+        evaluation: CandidateEvaluation,
+    },
     Branding {
         source_id: String,
         company: String,
@@ -740,6 +925,7 @@ impl WorkerEvent {
     pub fn source_id(&self) -> Option<&str> {
         match self {
             Self::Branding { source_id, .. }
+            | Self::CandidateEvaluated { source_id, .. }
             | Self::Job { source_id, .. }
             | Self::Warning { source_id, .. }
             | Self::SourceInfo { source_id, .. }
@@ -1156,5 +1342,72 @@ mod tests {
         assert!(limits.validate().is_ok());
         limits.jitter_ms = Some(10_001);
         assert!(limits.validate().is_err());
+    }
+}
+
+#[cfg(test)]
+mod candidate_diagnostic_tests {
+    use super::*;
+
+    #[test]
+    fn facts_preserve_identity_and_bound_unicode_description_only() {
+        let identity = "x".repeat(1024);
+        let event: WorkerEvent = serde_json::from_value(serde_json::json!({
+            "type":"job","source_id":"fixture","external_id":identity,
+            "title":"Engineer","company":"Fixture","role_type":"unknown",
+            "url":"https://fixture.test/jobs/1","description_text":"é".repeat(2049)
+        }))
+        .unwrap();
+        let facts = CandidateFacts::from_event(&event).unwrap();
+        assert_eq!(facts.external_id.len(), 1024);
+        assert_eq!(
+            facts.description_excerpt.as_ref().unwrap().chars().count(),
+            2048
+        );
+        assert!(facts.description_truncated);
+        let mut evaluation = CandidateEvaluation {
+            sequence: 1,
+            disposition: CandidateDisposition::Eligible,
+            candidate: Some(facts),
+            rejected: vec![],
+            unresolved: vec![],
+            diagnostic: None,
+        };
+        evaluation.validate().unwrap();
+        evaluation.sequence = 0;
+        assert!(evaluation.validate().is_err());
+        evaluation.sequence = 1;
+        evaluation.candidate = None;
+        assert!(evaluation.validate().is_err());
+        evaluation.disposition = CandidateDisposition::Invalid;
+        evaluation.validate().unwrap();
+    }
+
+    #[test]
+    fn evaluation_shape_preserves_overlapping_categories_and_rejects_duplicates() {
+        use crate::matching::RejectionReason;
+        let event: WorkerEvent = serde_json::from_value(serde_json::json!({
+            "type":"job","source_id":"fixture","external_id":"1","title":"Engineer",
+            "company":"Fixture","role_type":"unknown","url":"https://fixture.test/jobs/1"
+        }))
+        .unwrap();
+        let reason = RejectionReason::InvalidCandidate;
+        let mut evaluation = CandidateEvaluation {
+            sequence: 1,
+            disposition: CandidateDisposition::Rejected,
+            candidate: CandidateFacts::from_event(&event),
+            rejected: vec![reason],
+            unresolved: vec![reason],
+            diagnostic: None,
+        };
+        evaluation.validate().unwrap();
+        evaluation.rejected.push(reason);
+        assert!(evaluation.validate().is_err());
+        evaluation.rejected.clear();
+        assert!(evaluation.validate().is_err());
+        evaluation.disposition = CandidateDisposition::Unresolved;
+        evaluation.validate().unwrap();
+        evaluation.sequence = 1u64 << 53;
+        assert!(evaluation.validate().is_err());
     }
 }

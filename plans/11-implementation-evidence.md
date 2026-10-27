@@ -1304,3 +1304,27 @@ Checks run in this follow-up:
 
 No live provider or user database was accessed. Physical-pointer, native file
 chooser and native zoom acceptance remain outside this check.
+
+## Follow-up — per-candidate console evidence and Phoenix geography
+
+Persisted runs use protocol 14 candidate evaluations and print one scrolling
+console card for each examined occurrence. Cards contain the worker's final
+classification and, for eligible candidates, the host's actual persistence
+outcome. Preview and recorded-provider checks keep diagnostics disabled.
+`Phoenix, AZ` now resolves to US-AZ through the existing bounded city catalog;
+explicit-country and ambiguous-token safeguards remain in place. The discovery
+test workflow remains a locally filtered, bounded The Muse feed.
+
+Commands and results from this run:
+
+- `cargo test -p scrape-core --lib`: 203 passed.
+- `cargo test -p scrape-worker --test coordinator_tests --test limit_process --test crawl_process --test worker_process`: 104 passed; final coordinator module alone passed 45 after adding invalid-error detail verification.
+- `npm run build:sidecar`, `cargo test -p scrape --lib` (252 passed), and `cargo test -p scrape --test worker_repository` (32 passed).
+- `npm run gen:types`, `npx tsc --noEmit`, `npx vitest run --maxWorkers=1` (91 files, 566 tests passed), `npm run build`, `node scripts/check-style.mjs`, `cargo fmt --all --check`, and `cargo clippy --workspace --all-targets -- -D warnings` passed. Production build reported the existing large-chunk advisory.
+- `npm run test:providers` passed recorded/non-feedback replay; this is not live-provider verification.
+- `cargo build -p scrape && npm run test:native` passed isolated host/worker protocol, refresh, transactional block, malformed sequences and correlations, pending EOF and post-commit diagnostic failure with retained row. Artifacts: `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-1vGUoY`.
+- `node scripts/native-web-scraping.mjs` passed a 1,000-candidate fictional The Muse fixture, with 999 deliberate title rejections and one inserted `AI/ML Engineer - Mid Level` in Phoenix before PageLimit. The isolated app's Terminal button was clicked; Terminal.app showed the live cards and final summary. Artifacts: `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-web-scraping-Zg4mEw`.
+- The generated console script replayed the isolated log in a PTY; it was stopped at its two-second command timeout after output was observed. A full system-module test also executed a path containing spaces, apostrophe, dollar sign and shell syntax without interpolation.
+
+The fictional fixture distribution does not describe the other 999 decisions
+from the user's reported run. No live provider or user database was accessed.

@@ -25,6 +25,8 @@ Google/Apple static sources remain **Needs review** and Netflix/Amazon script so
 **Replace test workflows** is an explicit, reviewed action: exact recognized shipped examples are selected by default; custom or modified workflows remain preserved unless selected. Review removals and the three targets before confirming. Loading/saving never launches a scrape or enables Adzuna. Saved jobs, notes, favorites, tracking/history and suppression are retained. Replacement reports the recovery backup path; never restore a full backup automatically over newer user data. Existing startup does not automatically replace old examples.
 
 Legacy recognition specs and recorded provider verification profiles are frozen separately from this production catalog. Recorded route hashes, script fingerprints and expected provider outcomes do not change when user-facing profiles change. See the [workflow contract](../plans/workflow-v3.md) for canonical matching semantics.
+The standalone [`software-engineering-discovery-test.yaml`](software-engineering-discovery-test.yaml) scans the bounded The Muse feed and applies its US, original-publication and literal title requirements locally. It is not an unrestricted web crawl; its 40-job target can remain unmet when the page or time bounds stop the scan. The Terminal console shows each evaluated candidate and its actual decision.
+
 
 ## Software Engineering crawler test
 

@@ -33,10 +33,11 @@ The `crates/scrape-core/src` directory contains the core source modules that def
 - **Behavior**: CSS and a documented XPath 1.0 location-path subset operate on the same `scraper::Html` tree. Supports relative/absolute paths, child/self/parent/following-sibling steps, descendant shorthand, attribute/text tests, positional predicates, field attributes and named regex captures. Unsupported syntax fails explicitly. XPath is bounded to 4096 bytes, 64 steps and 32 predicates per step; this is not a full XPath implementation.
 
 ### [`protocol.rs`](protocol.rs)
-- **Role**: Versioned IPC message contracts (`PROTOCOL_VERSION = 13`) exchanged between the Tauri host and isolated worker. Optional proxy credentials are execution-only and excluded from TypeScript bindings.
+- **Role**: Versioned IPC message contracts (`PROTOCOL_VERSION = 14`) exchanged between the Tauri host and isolated worker. Optional proxy credentials are execution-only and excluded from TypeScript bindings.
 - **Key Types**:
   - `WorkerConfig`: JSON payload sent via `stdin` to configure a scrape run (protocol version, sources, limits, filters, suppression keys).
   - `WorkerCommitAck`: Correlates one emitted job with its committed inserted, updated or blocked outcome in persisted runs.
+  - `CandidateEvaluation`: One bounded, sequenced final decision per examined posting in diagnostic-enabled runs.
   - `WorkerLimits` & `EnrichmentLimits`: Concurrency caps, per-host request delays, global timeouts, and bounded detail enrichment limits (`max_requests` 0–100, `timeout_ms` 1–45,000).
   - `WorkerFilters`: Structured `PostingRules`, legacy keyword/location/role constraints, and SQL filter expressions.
   - `WorkerSource`: Configuration for an individual job board source (ID, kind, name, identifier URL, custom options).
@@ -127,7 +128,7 @@ pretending description/date/pay evidence exists. `ParsedLocation::validate` and
 cities, preserving raw labels and ambiguous uncontextualized IN/CA as unknown.
 Geographic worker/SQLite predicates share tuple, city exact/raw-literal-substring,
 ASCII case and Unicode-whitespace semantics; aggregate location text is never borrowed.
-Custom script frames are version 2; the worker event/config protocol is 13.
+Custom script frames are version 2; the worker event/config protocol is 14.
 Numeric experience rules expose `ExperienceMatchMode`: omitted domain/filter modes
 retain `advertised_range_overlap`, while workflow v7+ omissions resolve to
 `required_minimum`. Workflow versions 1–6 explicitly retain overlap on upgrade.

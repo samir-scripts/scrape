@@ -123,6 +123,7 @@ pub fn prepare(source: &Source, timezone: &str, started_at: &str) -> Result<Work
     let mut config = WorkerConfig {
         version: PROTOCOL_VERSION,
         commit_feedback: true,
+        candidate_diagnostics: true,
         http_proxy: None,
         sources,
         filters: super::runner::resolve_worker_filters(&source.filters)?,

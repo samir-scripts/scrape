@@ -6,9 +6,9 @@ use futures::{stream, StreamExt};
 use scrape_core::branding::{CompanyLogo, LogoStatus};
 use scrape_core::matching::{MatchingEvaluator, MatchingEvidence, RejectionReason};
 use scrape_core::protocol::{
-    validate_job_limit, CoverageTermination, EnrichmentLimits, RejectionCount, RejectionExample,
-    ScanOutcome, SourceScanStats, WorkerCommitOutcome, WorkerStats, DEFAULT_MAX_JOBS_PER_RUN,
-    PREVIEW_MAX_JOBS,
+    validate_job_limit, CandidateDisposition, CandidateEvaluation, CandidateFacts,
+    CoverageTermination, EnrichmentLimits, RejectionCount, RejectionExample, ScanOutcome,
+    SourceScanStats, WorkerCommitOutcome, WorkerStats, DEFAULT_MAX_JOBS_PER_RUN, PREVIEW_MAX_JOBS,
 };
 use scrape_core::{
     PostingIdentity, SourceKind, WorkerConfig, WorkerEvent, WorkerFilters, WorkerLimits,
@@ -758,6 +758,27 @@ impl CoordinatorSession {
     }
 }
 
+fn candidate_evaluation(
+    event: &WorkerEvent,
+    sequence: u64,
+    disposition: CandidateDisposition,
+    rejected: Vec<RejectionReason>,
+    unresolved: Vec<RejectionReason>,
+    diagnostic: Option<&str>,
+) -> WorkerEvent {
+    WorkerEvent::CandidateEvaluated {
+        source_id: event.source_id().unwrap_or_default().to_string(),
+        evaluation: CandidateEvaluation {
+            sequence,
+            disposition,
+            candidate: CandidateFacts::from_event(event),
+            rejected,
+            unresolved,
+            diagnostic: diagnostic.map(|text| text.chars().take(512).collect()),
+        },
+    }
+}
+
 pub struct SourceCoordinator {
     pub client: HttpClient,
     pub browser: Option<std::sync::Arc<crate::browser::BrowserPool>>,
@@ -769,6 +790,7 @@ pub struct SourceCoordinator {
     pub limits: WorkerLimits,
     pub dry_run: bool,
     pub commit_feedback: bool,
+    pub candidate_diagnostics: bool,
     pub max_jobs_per_run: u32,
     pub starting_source_index: usize,
 }
@@ -829,6 +851,7 @@ impl SourceCoordinator {
             limits,
             dry_run,
             commit_feedback: config.commit_feedback && !dry_run,
+            candidate_diagnostics: config.candidate_diagnostics && !dry_run,
             max_jobs_per_run: cap,
             starting_source_index: config.starting_source_index.unwrap_or(0),
         })
@@ -1036,11 +1059,23 @@ impl SourceCoordinator {
                                         continue;
                                     }
                                     WorkerEvent::Error {
-                                        invalid_posting, ..
+                                        invalid_posting,
+                                        message,
+                                        ..
                                     } => {
                                         if invalid_posting.as_ref() == Some(&true) {
                                             session.stats.examined += 1;
                                             session.stats.invalid += 1;
+                                            if self.candidate_diagnostics {
+                                                emit(&candidate_evaluation(
+                                                    &event,
+                                                    session.stats.examined,
+                                                    CandidateDisposition::Invalid,
+                                                    vec![],
+                                                    vec![],
+                                                    Some(message),
+                                                ))?;
+                                            }
                                         } else {
                                             session.failed = true;
                                         }
@@ -1073,6 +1108,20 @@ impl SourceCoordinator {
                                         ..
                                     } => {
                                         session.stats.examined += 1;
+                                        let facts = self
+                                            .candidate_diagnostics
+                                            .then(|| CandidateFacts::from_event(&event))
+                                            .flatten();
+                                        let decision_source = session.source.id.clone();
+                                        let sequence = session.stats.examined;
+                                        let decision = |disposition, rejected, unresolved, diagnostic: Option<&str>| WorkerEvent::CandidateEvaluated {
+                                            source_id: decision_source,
+                                            evaluation: CandidateEvaluation {
+                                                sequence,
+                                                disposition, candidate: facts, rejected, unresolved,
+                                                diagnostic: diagnostic.map(|text| text.chars().take(512).collect()),
+                                            },
+                                        };
                                         if !company.is_empty() && company != "Unknown company" {
                                             session.record_logo(company, company_logo);
                                         }
@@ -1087,6 +1136,14 @@ impl SourceCoordinator {
                                             Err(msg) => {
                                                 session.stats.invalid += 1;
                                                 session.had_errors = true;
+                                                if self.candidate_diagnostics {
+                                                    emit(&decision(
+                                                        CandidateDisposition::Invalid,
+                                                        vec![],
+                                                        vec![],
+                                                        Some(&msg),
+                                                    ))?;
+                                                }
                                                 emit(&WorkerEvent::Error {
                                                     source_id: session.source.id.clone(),
                                                     message: msg,
@@ -1106,6 +1163,14 @@ impl SourceCoordinator {
                                             || workflow_seen_urls.contains(&normalized_url)
                                         {
                                             session.stats.duplicates += 1;
+                                            if self.candidate_diagnostics {
+                                                emit(&decision(
+                                                    CandidateDisposition::Duplicate,
+                                                    vec![],
+                                                    vec![],
+                                                    None,
+                                                ))?;
+                                            }
                                             // Duplicate: continue candidate traversal to find a unique job!
                                             continue;
                                         }
@@ -1125,6 +1190,17 @@ impl SourceCoordinator {
 
                                         if let Some(primary) = reasons.first().copied() {
                                             session.stats.rejected += 1;
+                                            if self.candidate_diagnostics {
+                                                emit(&decision(
+                                                    CandidateDisposition::Rejected,
+                                                    reasons.clone(),
+                                                    assessment
+                                                        .as_ref()
+                                                        .map(|a| a.unresolved.clone())
+                                                        .unwrap_or_default(),
+                                                    None,
+                                                ))?;
+                                            }
                                             session.record_rejection(primary, reasons, title);
                                             continue;
                                         }
@@ -1134,6 +1210,14 @@ impl SourceCoordinator {
                                             .is_some_and(|a| !a.unresolved.is_empty())
                                         {
                                             session.stats.unresolved += 1;
+                                            if self.candidate_diagnostics {
+                                                emit(&decision(
+                                                    CandidateDisposition::Unresolved,
+                                                    vec![],
+                                                    assessment.as_ref().unwrap().unresolved.clone(),
+                                                    None,
+                                                ))?;
+                                            }
                                             if session.stats.unresolved <= 5 {
                                                 if let Some(warning) =
                                                     crate::filter::unresolved_warning(
@@ -1159,6 +1243,14 @@ impl SourceCoordinator {
                                             ))
                                         {
                                             session.stats.blocked += 1;
+                                            if self.candidate_diagnostics {
+                                                emit(&decision(
+                                                    CandidateDisposition::Blocked,
+                                                    vec![],
+                                                    vec![],
+                                                    None,
+                                                ))?;
+                                            }
                                             continue;
                                         }
 
@@ -1170,6 +1262,14 @@ impl SourceCoordinator {
                                         round_progress = true;
 
                                         session.record_logo(company, company_logo);
+                                        if self.candidate_diagnostics {
+                                            emit(&decision(
+                                                CandidateDisposition::Eligible,
+                                                vec![],
+                                                vec![],
+                                                None,
+                                            ))?;
+                                        }
                                         emit(&event)?;
                                         if self.commit_feedback {
                                             let outcome = tokio::time::timeout_at(

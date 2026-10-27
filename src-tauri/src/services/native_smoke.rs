@@ -82,6 +82,11 @@ pub fn install(app: &mut tauri::App) -> bool {
             "missing-completion",
             "missing-summary",
             "duplicate-summary",
+            "bad-sequence",
+            "missing-evaluation",
+            "wrong-evaluation-source",
+            "wrong-job-correlation",
+            "pending-eof",
             "timeout",
         ]
         .contains(&mode)

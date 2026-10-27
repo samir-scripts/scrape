@@ -93,7 +93,7 @@ JSON-LD relative destinations resolve against their extraction page; missing or
 unsafe destinations emit errors rather than borrowing the listing URL. Worker
 HTTP fixtures and process tests are deterministic and do not verify live providers.
 
-Worker protocol version 13 adds ordered commit acknowledgements for persisted runs.
+Worker protocol version 14 adds sequenced candidate evaluations to the ordered commit acknowledgements for persisted runs.
 Older protocol configurations fail explicitly. Rebuild the packaged sidecar with
 `npm run build:sidecar` after updating host/worker code. `max_jobs_per_run`
 (default 20, range 1–10,000) targets committed new Discovered jobs; refreshes,
@@ -276,7 +276,7 @@ detection (`CoverageTermination::NeedsLogin`) feed into the same authoritative
 
 ## Script evidence contract (Plan 12 Section 4)
 
-Custom scripts speak protocol **2**, distinct from host/worker protocol 13. Candidate
+Custom scripts speak protocol **2**, distinct from host/worker protocol 14. Candidate
 frames optionally provide employment_type, a snake-case workplace_type enum and
 validated locations tuples; Rust owns matching/acceptance. Unknown frame fields
 and version-1 frames fail explicitly. The supported pay text field is salary.

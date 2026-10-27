@@ -2559,3 +2559,176 @@ fn search_detail_bounds_preserve_feed_evidence_and_strict_matching() {
         );
     }
 }
+
+fn diagnostic_events(server: &Server, mut config: Value) -> Vec<WorkerEvent> {
+    config["version"] = json!(PROTOCOL_VERSION);
+    config["candidate_diagnostics"] = json!(true);
+    config["run_started_at"] = json!("2026-10-16T00:00:00Z");
+    config["limits"] = worker_limits();
+    let output = worker_output(server, &config, false);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
+}
+
+#[test]
+fn candidate_diagnostics_thousand_examined_page_limit() {
+    use scrape_core::protocol::{CandidateDisposition, CoverageTermination};
+    let server = Server::new(|path| {
+        assert_eq!(path, "/www.themuse.com/api/public/jobs?page=0");
+        let results: Vec<_> = (0..1000)
+            .map(|id| {
+                muse_job(
+                    id,
+                    if id >= 899 {
+                        "Software Engineer"
+                    } else {
+                        "Cashier"
+                    },
+                    "Fixture",
+                    if (899..999).contains(&id) {
+                        Value::Null
+                    } else {
+                        json!("2026-10-15T18:00:00Z")
+                    },
+                )
+            })
+            .collect();
+        json!({"page":0,"page_count":2,"results":results}).to_string()
+    });
+    let events = diagnostic_events(
+        &server,
+        json!({
+            "sources":[search_source("themuse", json!({"max_pages":1}))],
+            "max_jobs_per_run":40,
+            "filters":{"matching":{"target_roles":["Software Engineer"],
+                "posting_date":{"preset":"past_24h","timezone":"UTC","include_unknown":false}}}
+        }),
+    );
+    let evaluations: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            WorkerEvent::CandidateEvaluated { evaluation, .. } => Some(evaluation),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(evaluations.len(), 1000);
+    for (index, evaluation) in evaluations.iter().enumerate() {
+        assert_eq!(evaluation.sequence, index as u64 + 1);
+        evaluation.validate().unwrap();
+        assert_eq!(
+            evaluation.disposition,
+            if index == 999 {
+                CandidateDisposition::Eligible
+            } else if index >= 899 {
+                CandidateDisposition::Unresolved
+            } else {
+                CandidateDisposition::Rejected
+            }
+        );
+    }
+    let scan = &scans(&events)[0];
+    assert_eq!(scan.examined, 1000);
+    assert_eq!(scan.rejected, 899);
+    assert_eq!(scan.unresolved, 100);
+    assert_eq!(scan.accepted, 1);
+    assert_eq!(scan.termination, CoverageTermination::PageLimit);
+    scan.validate().unwrap();
+}
+
+#[test]
+fn candidate_diagnostics_disabled_by_default() {
+    let server = Server::new(|_| generate_lever_postings(3, "diagnostics"));
+    let events = run_worker(
+        &server,
+        vec![json!({"id":"a","name":"A","kind":"lever",
+        "identifier":"diagnostics","config":{}})],
+        3,
+        0,
+        false,
+    );
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event, WorkerEvent::CandidateEvaluated { .. })));
+}
+
+#[test]
+fn candidate_diagnostics_all_final_dispositions_and_overlapping_reasons() {
+    use scrape_core::protocol::CandidateDisposition;
+    let server = Server::new(|path| {
+        assert_eq!(path, "/www.themuse.com/api/public/jobs?page=0");
+        let mut invalid = muse_job(
+            8,
+            "Software Engineer",
+            "Fixture",
+            json!("2026-10-15T18:00:00Z"),
+        );
+        invalid.as_object_mut().unwrap().remove("name");
+        json!({"page":0,"page_count":1,"results":[
+            muse_job(1,"Software Engineer","Fixture",json!("2026-10-15T18:00:00Z")),
+            muse_job(1,"Software Engineer","Fixture",json!("2026-10-15T18:00:00Z")),
+            muse_job(2,"Cashier","Other",Value::Null),
+            muse_job(3,"Software Engineer","Fixture",Value::Null),
+            muse_job(4,"Software Engineer","Fixture",json!("2026-10-15T18:00:00Z")),
+            invalid
+        ]})
+        .to_string()
+    });
+    let events = diagnostic_events(
+        &server,
+        json!({
+            "sources":[search_source("themuse",json!({"follow_detail":false}))],
+            "max_jobs_per_run":40,"blocked_postings":["search:4"],
+            "filters":{"matching":{"target_roles":["Software Engineer"],"companies":["Fixture"],
+                "posting_date":{"preset":"past_24h","timezone":"UTC","include_unknown":false}}}
+        }),
+    );
+    let evaluations: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            WorkerEvent::CandidateEvaluated { evaluation, .. } => Some(evaluation),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(evaluations.len(), 6);
+    assert_eq!(
+        evaluations
+            .iter()
+            .map(|evaluation| evaluation.disposition)
+            .collect::<Vec<_>>(),
+        [
+            CandidateDisposition::Eligible,
+            CandidateDisposition::Duplicate,
+            CandidateDisposition::Rejected,
+            CandidateDisposition::Unresolved,
+            CandidateDisposition::Blocked,
+            CandidateDisposition::Invalid
+        ]
+    );
+    assert!(evaluations[2].rejected.len() >= 2);
+    assert!(!evaluations[2].unresolved.is_empty());
+    assert!(evaluations[5]
+        .diagnostic
+        .as_deref()
+        .unwrap()
+        .contains("missing field `name`"));
+    for (index, evaluation) in evaluations.iter().enumerate() {
+        assert_eq!(evaluation.sequence, index as u64 + 1);
+        evaluation.validate().unwrap();
+    }
+    for (index, event) in events.iter().enumerate() {
+        if matches!(event,WorkerEvent::CandidateEvaluated {evaluation,..}
+            if evaluation.disposition == CandidateDisposition::Eligible)
+        {
+            assert!(matches!(events[index + 1], WorkerEvent::Job { .. }));
+        }
+    }
+    scans(&events)[0].validate().unwrap();
+}

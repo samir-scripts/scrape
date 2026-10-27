@@ -13,6 +13,10 @@ const recentDate = new Date(Date.now() - 3600_000).toISOString();
 
 const rawCrawlerYaml = readFileSync("workflows/software-engineering-web-scraper-test.yaml", "utf8");
 const rawDiscoveryYaml = readFileSync("workflows/software-engineering-discovery-test.yaml", "utf8");
+let bulkMode = false;
+const bulkSpec = parseYaml(rawDiscoveryYaml);
+bulkSpec.metadata.name = "Thousand-candidate diagnostic fixture";
+bulkSpec.sources[0].extractor.source_config = { follow_detail: false, max_pages: 1 };
 
 const site = createServer((request, response) => {
   response.setHeader("Access-Control-Allow-Origin", "*");
@@ -42,6 +46,12 @@ const site = createServer((request, response) => {
   if (path === "/discovery.yaml") {
     response.writeHead(200, { "content-type": "text/yaml; charset=utf-8" });
     response.end(rawDiscoveryYaml);
+    return;
+  }
+  if (path === "/enable-bulk") {
+    bulkMode = true;
+    response.writeHead(200);
+    response.end("ok");
     return;
   }
   // Palantir Lever crawl routes
@@ -87,6 +97,21 @@ const site = createServer((request, response) => {
   // The Muse search discovery routes
   if (path.startsWith("/www.themuse.com/api/public/jobs")) {
     response.writeHead(200, { "content-type": "application/json" });
+    if (bulkMode) {
+      response.end(JSON.stringify({
+        page: 0, page_count: 2,
+        results: Array.from({ length: 1000 }, (_, index) => ({
+          id: 10000 + index,
+          name: index === 0 ? "AI/ML Engineer - Mid Level" : "Retail Associate",
+          company: { name: "Bulk Fixture" },
+          refs: { landing_page: `https://www.themuse.com/jobs/bulk/${index}` },
+          contents: "<p>Fictional bulk fixture.</p>",
+          publication_date: recentDate,
+          locations: [{ name: "Phoenix, AZ" }],
+        })),
+      }));
+      return;
+    }
     response.end(JSON.stringify({
       page: 0,
       page_count: 1,
@@ -324,6 +349,15 @@ await writeFile(join(directory, "smoke.js"), `
     const jobsAfterRun2 = await invoke("list_jobs", { filter: {} });
     assert(jobsAfterRun2.total > jobsAfterRun1.total, "Discovery run must persist newly discovered jobs");
     assert(jobsAfterRun2.items.some(j => j.company === "Native Heuristic Discovery Inc"), "Persisted job must include Native Heuristic Discovery Inc");
+    const consoleButton = await wait(() => document.getElementById("terminal-console-btn"), "Terminal console button");
+    consoleButton.click();
+    await pause(1000);
+    await mark("Clicked the native Terminal console button");
+    await fetch(${JSON.stringify(origin)} + "/enable-bulk");
+    const bulk = await invoke("save_workflow", { spec: ${JSON.stringify(bulkSpec)}, id: null });
+    const bulkRun = await invoke("run_source_now", { id: bulk.id });
+    assert(bulkRun.counts.sources[0].examined === 1000 && bulkRun.counts.sources[0].rejected === 999 && bulkRun.counts.inserted === 1 && bulkRun.counts.sources[0].termination === "page_limit", "Bulk fixture accounting was inconsistent: " + JSON.stringify(bulkRun));
+    await mark("Examined 1,000 Muse fixtures with 999 title rejections and one Phoenix insertion before the page bound");
 
     const allRuns = await invoke("list_scrape_runs", { limit: 100 });
     assert(allRuns.length >= 2, "Expected persisted scrape runs for both explicit executions");
@@ -340,6 +374,9 @@ try {
   const { code, signal, output } = await runNativeDev(directory);
   if (code !== 0 || signal) throw new Error(`Native web crawl/proxy smoke failed (${code}/${signal}); isolated artifacts: ${directory}\n${output}`);
   const result = JSON.parse(await readFile(join(directory, "result.json"), "utf8"));
+  const log = await readFile(join(directory, "scrape.log"), "utf8");
+  const bulkCards = log.split("+-- CANDIDATE ").slice(1).filter(card => card.includes("| Company: Bulk Fixture\n"));
+  if (bulkCards.length !== 1000 || bulkCards.filter(card => card.startsWith("1 | INSERTED --")).length !== 1 || !bulkCards.some(card => card.startsWith("1000 | REJECTED --"))) throw new Error(`Bulk fixture did not produce all 1,000 ordered outcome cards: ${bulkCards.length}; artifacts: ${directory}`);
   if (!result.ok) throw new Error(`Native web crawl/proxy smoke failed: ${JSON.stringify(result)}; isolated artifacts: ${directory}`);
   console.log(`Native web scraping smoke passed: ${JSON.stringify({ result, artifacts: directory })}`);
 } finally {

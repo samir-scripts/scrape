@@ -243,6 +243,7 @@ async fn run_single_source(
     let config = WorkerConfig {
         version: PROTOCOL_VERSION,
         commit_feedback: false,
+        candidate_diagnostics: false,
         run_started_at: Some(scrape_core::now_iso()),
         filters_by_source: Default::default(),
         sources: vec![source],

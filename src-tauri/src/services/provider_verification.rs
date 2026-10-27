@@ -309,6 +309,9 @@ fn validated_jobs(config: &WorkerConfig, events: &[WorkerEvent]) -> VResult<Vec<
     let mut batch = Vec::new();
     let mut emitted_by_source = BTreeMap::<&str, u64>::new();
     for event in events {
+        if matches!(event, WorkerEvent::CandidateEvaluated { .. }) {
+            return Err("Unexpected candidate diagnostic in provider verification".into());
+        }
         if let Some(id) = event.source_id() {
             if !owned.contains(id) {
                 return Err("Worker emitted a foreign source ID".into());
@@ -606,6 +609,7 @@ async fn run_case(
         RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&parent.id)).await?;
     let mut config = execution_diagnostics::prepare(&parent, "UTC", &run.started_at)?;
     config.commit_feedback = false;
+    config.candidate_diagnostics = false;
     config.blocked_postings = postings::suppression_snapshot(&pool).await?;
     // Only replay timing is changed; budgets, enrichment and matching stay real.
     if !live {

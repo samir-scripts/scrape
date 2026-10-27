@@ -1263,7 +1263,7 @@ mod tests {
         use scrape_core::enrich::{CompensationMatchMode, Salary};
 
         assert_eq!(WORKFLOW_SPEC_VERSION, 10);
-        assert_eq!(scrape_core::PROTOCOL_VERSION, 13);
+        assert_eq!(scrape_core::PROTOCOL_VERSION, 14);
         let v1 = validate(
             serde_json::json!({
                 "version": 1, "company": "Legacy", "url": "https://boards.greenhouse.io/fixture",

@@ -1,6 +1,6 @@
 # Workflow specification compatibility and current v10 contract
 
-Current canonical exports use **v10**, worker protocol **13**, and migration **32**.
+Current canonical exports use **v10**, worker protocol **14**, and migration **32**.
 Rust accepts versions 1–9 through the same compatibility resolver. Older contract
 descriptions below record their original behavior; saved rules are not broadened.
 

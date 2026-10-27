@@ -1,4 +1,4 @@
-# Development/test-only workflow for cross-employer heuristic discovery and HTML crawling.
+# Development/test-only workflow for bounded The Muse feed discovery with detail enrichment.
 version: 10
 max_jobs_per_run: 40
 metadata:
@@ -6,7 +6,7 @@ metadata:
   enabled: true
 sources:
   - id: heuristic-public-html
-    label: Cross-employer heuristic discovery and HTML crawl
+    label: The Muse feed discovery with detail enrichment
     enabled: true
     extractor:
       kind: search

@@ -509,6 +509,7 @@ mod tests {
         let config = scrape_core::WorkerConfig {
             version: scrape_core::PROTOCOL_VERSION,
             commit_feedback: false,
+            candidate_diagnostics: false,
             sources: vec![],
             filters: Default::default(),
             filters_by_source: Default::default(),

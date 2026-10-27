@@ -5647,7 +5647,7 @@ async fn imported_software_engineering_discovery_yaml_persists_discoveries_to_sq
 }
 
 #[test]
-fn version_ten_compatibility_and_worker_protocol_twelve_enforcement() {
+fn version_ten_compatibility_and_worker_protocol_thirteen_enforcement() {
     use scrape_lib::services::workflow;
     use serde_json::json;
 
@@ -5665,7 +5665,7 @@ fn version_ten_compatibility_and_worker_protocol_twelve_enforcement() {
     assert_eq!(spec.version, 10);
     assert!(spec.sources[0].extractor.source_config.is_none());
 
-    // Worker rejects protocol 12 payload with explicit error.
+    // Worker rejects protocol 13 payload with explicit error.
     let mut child = Command::new(worker())
         .arg("--stdin")
         .stdin(Stdio::piped())
@@ -5675,7 +5675,7 @@ fn version_ten_compatibility_and_worker_protocol_twelve_enforcement() {
         .unwrap();
 
     let old_protocol_config = json!({
-        "version": 12,
+        "version": 13,
         "sources": [],
         "limits": { "per_host_delay_ms": 0, "request_timeout_s": 5 }
     });
@@ -5689,7 +5689,7 @@ fn version_ten_compatibility_and_worker_protocol_twelve_enforcement() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("Unsupported protocol version: expected 13, got 12"),
+        stderr.contains("Unsupported protocol version: expected 14, got 13"),
         "unexpected stderr: {stderr}"
     );
 }

@@ -20,7 +20,7 @@ The `src-tauri/src/services` directory contains long-running background tasks, p
 | [`workflow_store.rs`](workflow_store.rs) | Atomic Workflow Ownership | Validates and saves parent/child records in one transaction, canonicalizes IDs, preserves owned identities/trust, retires removed sources, and performs explicit backed-up ownership repair. |
 | [`workflow.rs`](workflow.rs) | Authoritative Workflow Specification | Validates WorkflowSpec v9; converts v1–v8 without broadening stored filters; prepares public search and direct-board inputs through the same resolver. |
 | [`script_trust.rs`](script_trust.rs) | Local Script Trust | Quarantines imports, hashes executable inputs/file bytes, persists explicit confirmation, rechecks trust before previews/runs and reconciles workflow review state. Trust never enables execution automatically. |
-| [`runner.rs`](runner.rs) | Worker Process Orchestration | Spawns worker protocol 13, revalidates NDJSON, acknowledges committed outcomes and enforces the new-discovery target. |
+| [`runner.rs`](runner.rs) | Worker Process Orchestration | Spawns worker protocol 14, validates candidate evaluations and NDJSON, acknowledges committed outcomes and enforces the new-discovery target. |
 | [`ingestion.rs`](ingestion.rs) | Ingestion & Revalidation | Validates worker-emitted job records, source scan summaries, and employer branding reports before persisting them to SQLite. |
 | [`scheduler.rs`](scheduler.rs) | Automated Crawl Dispatcher | `SchedulerService`: Unified background dispatcher that evaluates per-workflow schedules and startup triggers, coalesces due runs, respects the global automatic-scraping pause, and coordinates with manual runs. |
 | [`calendar.rs`](calendar.rs) | IANA Calendar Scheduling | Computes next-run UTC instants for `CalendarSchedule` (local `HH:MM`, ISO weekdays, and IANA timezone), handling DST gaps and overlaps deterministically. |
@@ -46,7 +46,7 @@ Application Boot (lib.rs)
         │         ▼
         │    ScrapeRunner
         │         │
-        │         ├──► Spawns scrape-worker Sidecar (Protocol 13; optional proxy only in execution copies)
+        │         ├──► Spawns scrape-worker Sidecar (Protocol 14; optional proxy only in execution copies)
         │         ├──► Revalidates NDJSON Events (ingestion.rs)
         │         ├──► Upserts Jobs, Branding & Outcomes into SQLite
         │         └──► Emits Tauri Window Events
@@ -58,7 +58,7 @@ Each workflow owns an explicit WorkflowSpec v9 (sources, role/company/keyword cr
 
 Calendar scheduling (`calendar.rs`) computes next runs from local time, ISO weekdays, and IANA timezone across creation, edits, and post-run updates. DST gaps run at the first valid instant; overlaps use their first occurrence once. One dispatcher queue in `scheduler.rs` coalesces due workflows and waits through manual-run overlap; missed occurrences become one catch-up run before the next future date. All automatic paths share the persisted global pause flag, while explicit manual runs remain available.
 
-`PostingRules` is shared by worker evaluation and repository SQL compilation, including literal target-role/company substrings, native compensation matching modes and dynamic publication-date presets. One run-start instant anchors relative windows; Today resolves the date filter's local midnight each run. Missing publication dates are never replaced with discovery/provider edit time. Protocol 13 enforces host/sidecar compatibility and acknowledges committed outcomes before scheduling the next candidate. `execution_diagnostics::prepare_search_sources` derives the same canonical context for preview/manual/scheduled/Run all execution; providers are not assumed to support arbitrary query fields.
+`PostingRules` is shared by worker evaluation and repository SQL compilation, including literal target-role/company substrings, native compensation matching modes and dynamic publication-date presets. One run-start instant anchors relative windows; Today resolves the date filter's local midnight each run. Missing publication dates are never replaced with discovery/provider edit time. Protocol 14 enforces host/sidecar compatibility, carries final candidate evaluations and acknowledges committed outcomes before scheduling the next candidate. `execution_diagnostics::prepare_search_sources` derives the same canonical context for preview/manual/scheduled/Run all execution; providers are not assumed to support arbitrary query fields.
 
 ## Built-in workflow replacement
 
@@ -124,7 +124,7 @@ checks independent acceptance expectations and import/save/reopen/global isolati
 
 Ingestion revalidates the core location tuple bounds and country/subdivision
 consistency before persistence. Script protocol 2 supplies employment/workplace/
-location evidence through existing WorkerEvent fields; worker protocol is 13.
+location evidence through existing WorkerEvent fields; worker protocol is 14.
 Existing script fingerprints/trust checks remain authoritative.
 
 JavaScript runtime preflight requires an explicit absolute Node.js 18+ executable; missing setup never falls back to a developer shell. File scripts require absolute readable paths before trust/execution; embedded scripts need no repository checkout. See [template setup](../../../workflows/README.md).

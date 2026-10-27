@@ -62,5 +62,5 @@ The `crates/scrape-worker/src` directory contains the source code for the scrape
 Static sources now use `adapters/selector_session.rs` for resumable CSS/XPath or
 hydration discovery, bounded next pages and lazy detail enrichment. Coordinator
 turns retain one eligible unique acceptance and yield during bounded discovery.
-Protocol v13 adds ordered commit feedback for persisted discovery targets; proxy configuration and bounded static crawling remain supported. Per-host pacing and robots checks remain authoritative.
+Protocol v14 adds final candidate evaluations for persisted runs while preserving ordered commit feedback; proxy configuration and bounded static crawling remain supported. Per-host pacing and robots checks remain authoritative.
 `--protocol-version` reports the Rust-owned contract version for external harnesses.

@@ -98,17 +98,29 @@ pub fn has_geographic_value(locations: &[ParsedLocation]) -> bool {
 pub fn from_address(city: &str, region: &str, country: &str) -> Option<ParsedLocation> {
     use crate::geography::{country_code, normalize, REGIONS};
     let Some(country_code) = country_code(country) else {
-        // Explicit locality is still evidence when the provider has no country.
-        return (!city.trim().is_empty()).then(|| ParsedLocation {
-            raw: [city, region, country]
+        // Infer only from associated address fields when the country is absent.
+        // An unrecognized explicit country must not silently become US evidence.
+        return (!city.trim().is_empty()).then(|| {
+            let raw = [city, region, country]
                 .into_iter()
                 .filter(|value| !value.trim().is_empty())
                 .collect::<Vec<_>>()
-                .join(", "),
-            city: Some(city.trim().into()),
-            region_code: None,
-            country_code: None,
-            is_remote: false,
+                .join(", ");
+            if country.trim().is_empty() {
+                let mut location = parse_single_with_country(&raw, None);
+                if location.city.is_none() {
+                    location.city = Some(city.trim().into());
+                }
+                location
+            } else {
+                ParsedLocation {
+                    raw,
+                    city: Some(city.trim().into()),
+                    region_code: None,
+                    country_code: None,
+                    is_remote: false,
+                }
+            }
         });
     };
     let region_code = if region.trim().is_empty() {
@@ -204,6 +216,12 @@ static TOP_CITIES: &[CityEntry] = &[
         name: "SUNNYVALE",
         city: "Sunnyvale",
         region_code: "US-CA",
+        country_code: "US",
+    },
+    CityEntry {
+        name: "PHOENIX",
+        city: "Phoenix",
+        region_code: "US-AZ",
         country_code: "US",
     },
     CityEntry {
@@ -905,6 +923,151 @@ mod tests {
         assert_eq!(remote.len(), 2);
         assert_eq!(remote[0].country_code.as_deref(), Some("US"));
         assert_eq!(remote[1].country_code.as_deref(), Some("CA"));
+    }
+
+    #[test]
+    fn phoenix_raw_location_preserves_evidence_and_resolves_arizona() {
+        for raw in ["Phoenix, AZ", "Phoenix, Arizona", "Phoenix, AZ, US"] {
+            let location = parse(raw).remove(0);
+            assert_eq!(location.raw, raw);
+            assert_eq!(location.city.as_deref(), Some("Phoenix"), "{raw}");
+            assert_eq!(location.country_code.as_deref(), Some("US"), "{raw}");
+            assert_eq!(location.region_code.as_deref(), Some("US-AZ"), "{raw}");
+            assert!(!location.is_remote);
+        }
+    }
+
+    #[test]
+    fn blank_country_address_reuses_locality_and_region_evidence() {
+        for (city, region, country, expected_city, expected_country, expected_region) in [
+            ("Phoenix", "AZ", "", "Phoenix", Some("US"), Some("US-AZ")),
+            (
+                "  phoenix  ",
+                " AZ ",
+                " \t",
+                "Phoenix",
+                Some("US"),
+                Some("US-AZ"),
+            ),
+            (
+                "Unlisted locality",
+                "Arizona",
+                "",
+                "Unlisted locality",
+                Some("US"),
+                Some("US-AZ"),
+            ),
+            (
+                "Unlisted locality",
+                "AZ",
+                "",
+                "Unlisted locality",
+                None,
+                None,
+            ),
+            (
+                "Unlisted locality",
+                "CA",
+                "",
+                "Unlisted locality",
+                None,
+                None,
+            ),
+            (
+                "Unlisted locality",
+                "Georgia",
+                "",
+                "Unlisted locality",
+                None,
+                None,
+            ),
+            (
+                "San Francisco",
+                "CA",
+                "",
+                "San Francisco",
+                Some("US"),
+                Some("US-CA"),
+            ),
+            ("Toronto", "CA", "", "Toronto", Some("CA"), Some("CA-ON")),
+            (
+                "Atlanta",
+                "Georgia",
+                "",
+                "Atlanta",
+                Some("US"),
+                Some("US-GA"),
+            ),
+            ("Tbilisi", "Georgia", "", "Tbilisi", Some("GE"), None),
+            ("Unlisted locality", "", "", "Unlisted locality", None, None),
+        ] {
+            let location = from_address(city, region, country).unwrap();
+            let raw = [city, region, country]
+                .into_iter()
+                .filter(|value| !value.trim().is_empty())
+                .collect::<Vec<_>>()
+                .join(", ");
+            assert_eq!(location.raw, raw);
+            assert_eq!(location.city.as_deref(), Some(expected_city), "{raw}");
+            assert_eq!(location.country_code.as_deref(), expected_country, "{raw}");
+            assert_eq!(location.region_code.as_deref(), expected_region, "{raw}");
+            assert!(!location.is_remote, "{raw}");
+        }
+    }
+
+    #[test]
+    fn explicit_address_country_remains_authoritative() {
+        for (city, region, country, expected_country, expected_region) in [
+            ("Phoenix", "AZ", "US", Some("US"), Some("US-AZ")),
+            ("Phoenix", "", "AZ", Some("AZ"), None),
+            ("Phoenix", "AZ", "AZ", Some("AZ"), Some("AZ-AZ")),
+            ("Phoenix", "AZ", "Unknown country", None, None),
+            ("Phoenix", "AZ", "Atlantis", None, None),
+            ("Phoenix", "ON", "Canada", Some("CA"), Some("CA-ON")),
+            ("Phoenix", "", "Canada", Some("CA"), None),
+            ("Atlanta", "", "Georgia", Some("GE"), None),
+            ("Unlisted locality", "CA", "US", Some("US"), Some("US-CA")),
+        ] {
+            let location = from_address(city, region, country).unwrap();
+            assert_eq!(
+                location.raw,
+                [city, region, country]
+                    .into_iter()
+                    .filter(|value| !value.trim().is_empty())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            assert_eq!(location.city.as_deref(), Some(city));
+            assert_eq!(
+                location.country_code.as_deref(),
+                expected_country,
+                "{city}, {region}, {country}"
+            );
+            assert_eq!(
+                location.region_code.as_deref(),
+                expected_region,
+                "{city}, {region}, {country}"
+            );
+            assert!(!location.is_remote);
+        }
+    }
+
+    #[test]
+    fn phoenix_does_not_override_conflicting_country_or_remote_eligibility() {
+        for (raw, country, region, remote) in [
+            ("Phoenix, Canada", Some("CA"), None, false),
+            ("Unlisted locality, AZ", None, None, false),
+            ("Remote (CA)", None, None, true),
+            ("Georgia", None, None, false),
+            ("Remote except Phoenix, AZ", None, None, true),
+            ("Remote - US except Phoenix, AZ", Some("US"), None, true),
+        ] {
+            let location = parse(raw).remove(0);
+            assert_eq!(location.raw, raw);
+            assert_eq!(location.country_code.as_deref(), country, "{raw}");
+            assert_eq!(location.region_code.as_deref(), region, "{raw}");
+            assert_eq!(location.is_remote, remote, "{raw}");
+        }
     }
 
     #[test]

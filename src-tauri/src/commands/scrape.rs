@@ -194,6 +194,7 @@ async fn execute_dry_run_worker(
     let mut config = WorkerConfig {
         version: PROTOCOL_VERSION,
         commit_feedback: false,
+        candidate_diagnostics: false,
         http_proxy: None,
         run_started_at: Some(scrape_core::now_iso()),
         filters_by_source: Default::default(),
@@ -278,6 +279,12 @@ async fn execute_dry_run_worker(
                     }
                     match serde_json::from_str::<WorkerEvent>(line) {
                         Ok(event) => {
+                            if matches!(event, WorkerEvent::CandidateEvaluated { .. }) {
+                                failure.get_or_insert_with(|| {
+                                    "Unexpected candidate diagnostic in preview".into()
+                                });
+                                continue;
+                            }
                             if event.source_id().is_some_and(|id| {
                                 !config.sources.iter().any(|source| source.id == id)
                             }) {
@@ -720,6 +727,11 @@ pub async fn preview_workflow(
                 });
             }
             WorkerEvent::SourceInfo { .. } => {}
+            WorkerEvent::CandidateEvaluated { .. } => {
+                return Err(AppError::Validation(
+                    "Unexpected candidate diagnostic in preview".into(),
+                ));
+            }
             WorkerEvent::Done { stats } => {
                 for scan in &stats.sources {
                     scan.validate().map_err(AppError::Validation)?;
@@ -969,6 +981,11 @@ pub async fn test_extractor(
                         employer_logo_url: logo_url,
                     });
                 }
+            }
+            WorkerEvent::CandidateEvaluated { .. } => {
+                return Err(AppError::Validation(
+                    "Unexpected candidate diagnostic in extractor test".into(),
+                ));
             }
             WorkerEvent::Warning { message, .. } | WorkerEvent::Error { message, .. } => {
                 warnings.push(message);

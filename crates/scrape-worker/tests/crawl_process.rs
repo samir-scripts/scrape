@@ -1134,6 +1134,16 @@ fn structured_detail_requires_original_date_and_same_job_geography() {
             1,
         ),
         (
+            "phoenix-explicit",
+            json!({"datePosted":"2026-10-15T12:00:00Z","jobLocation":{"address":{"addressLocality":"Phoenix","addressRegion":"AZ","addressCountry":"US"}}}),
+            1,
+        ),
+        (
+            "phoenix-blank-country",
+            json!({"datePosted":"2026-10-15T12:00:00Z","jobLocation":{"address":{"addressLocality":"Phoenix","addressRegion":"AZ"}}}),
+            1,
+        ),
+        (
             "old",
             json!({"datePosted":"2026-10-14T12:00:00Z","jobLocation":{"address":{"addressCountry":"US"}}}),
             0,
@@ -1172,6 +1182,18 @@ fn structured_detail_requires_original_date_and_same_job_geography() {
             regression_filters(),
         );
         assert_eq!(jobs(&events).len(), expected, "{name}: {events:?}");
+        if name.starts_with("phoenix-") {
+            let WorkerEvent::Job { locations, .. } = jobs(&events)[0] else {
+                panic!("expected job")
+            };
+            assert!(
+                locations
+                    .iter()
+                    .any(|location| location.country_code.as_deref() == Some("US")
+                        && location.region_code.as_deref() == Some("US-AZ")),
+                "{name}: {locations:?}"
+            );
+        }
         assert_eq!(server.paths(), ["/careers", "/jobs/123"], "{name}");
     }
 }

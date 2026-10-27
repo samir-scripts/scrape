@@ -14,6 +14,97 @@ use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_shell::process::CommandEvent;
 use tokio::time::{timeout_at, Instant};
 
+use scrape_core::protocol::{CandidateDisposition, CandidateEvaluation, SourceScanStats};
+
+#[derive(Default)]
+struct CandidateLedger {
+    counts: HashMap<String, [u64; 6]>,
+    pending: Option<(String, CandidateEvaluation)>,
+}
+
+fn candidate_index(disposition: CandidateDisposition) -> usize {
+    match disposition {
+        CandidateDisposition::Eligible => 0,
+        CandidateDisposition::Rejected => 1,
+        CandidateDisposition::Unresolved => 2,
+        CandidateDisposition::Duplicate => 3,
+        CandidateDisposition::Blocked => 4,
+        CandidateDisposition::Invalid => 5,
+    }
+}
+
+impl CandidateLedger {
+    fn observe(
+        &mut self,
+        source_id: String,
+        evaluation: CandidateEvaluation,
+    ) -> std::result::Result<bool, String> {
+        if self.pending.is_some() {
+            return Err("Candidate diagnostic arrived while an eligible job was pending".into());
+        }
+        evaluation.validate()?;
+        let counts = self.counts.entry(source_id.clone()).or_default();
+        if evaluation.sequence != counts.iter().sum::<u64>() + 1 {
+            return Err("Candidate diagnostic sequence is not contiguous".into());
+        }
+        counts[candidate_index(evaluation.disposition)] += 1;
+        if evaluation.disposition == CandidateDisposition::Eligible {
+            self.pending = Some((source_id, evaluation));
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn take_job(
+        &mut self,
+        source_id: &str,
+        external_id: &str,
+    ) -> std::result::Result<(String, CandidateEvaluation), String> {
+        let (pending_source, evaluation) = self
+            .pending
+            .as_ref()
+            .ok_or("Worker emitted a job without an eligible candidate diagnostic")?;
+        if pending_source != source_id
+            || evaluation
+                .candidate
+                .as_ref()
+                .map(|facts| facts.external_id.as_str())
+                != Some(external_id)
+        {
+            return Err("Worker job does not match its eligible candidate diagnostic".into());
+        }
+        Ok(self
+            .pending
+            .take()
+            .expect("pending candidate checked above"))
+    }
+
+    fn validate_summary(&self, scan: &SourceScanStats) -> std::result::Result<(), String> {
+        let counts = self
+            .counts
+            .get(&scan.source_id)
+            .copied()
+            .unwrap_or_default();
+        if counts
+            != [
+                scan.accepted,
+                scan.rejected,
+                scan.unresolved,
+                scan.duplicates,
+                scan.blocked,
+                scan.invalid,
+            ]
+        {
+            return Err(format!(
+                "Candidate diagnostic totals disagree with source summary: {}",
+                scan.source_id
+            ));
+        }
+        Ok(())
+    }
+}
+
 pub struct RunLockGuard {
     flag: Arc<AtomicBool>,
     _permit: tokio::sync::OwnedRwLockReadGuard<()>,
@@ -752,6 +843,42 @@ impl ScrapeRunner {
                 }
             }
         };
+        if config.candidate_diagnostics {
+            for source in &config.sources {
+                let filters = config
+                    .filters_by_source
+                    .get(&source.id)
+                    .unwrap_or(&config.filters);
+                let description = if source.kind == scrape_core::SourceKind::Search
+                    && source.identifier.eq_ignore_ascii_case("themuse")
+                {
+                    let pages = source
+                        .config
+                        .get("max_pages")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(scrape_core::search_source::DEFAULT_MAX_PAGES as u64)
+                        .min(u64::from(config.limits.max_pages_per_source));
+                    let detail = source
+                        .config
+                        .get("follow_detail")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false);
+                    let enrichment = config.limits.enrichment.clone().unwrap_or_default();
+                    format!("The Muse feed; matching is applied locally; max pages: {pages}; detail enrichment: {detail}; detail request limit: {}; detail time limit: {}ms",
+                        enrichment.max_requests, enrichment.timeout_ms)
+                } else {
+                    format!("Source kind: {:?}", source.kind)
+                };
+                super::system::SystemService::append_requirements(
+                    app,
+                    run_id,
+                    &source.id,
+                    filters,
+                    config.run_started_at.as_deref().unwrap_or("Unknown"),
+                    &description,
+                )?;
+            }
+        }
         let (mut rx, child) = crate::services::process::worker_command(app)?
             .args(["--stdin"])
             .spawn()
@@ -786,6 +913,7 @@ impl ScrapeRunner {
         }
 
         let mut committed_by_source: HashMap<String, u64> = HashMap::new();
+        let mut candidate_ledger = CandidateLedger::default();
         let mut total_found = 0i64;
         let mut total_new = 0i64;
         let mut source_statuses: HashMap<String, (String, Option<String>)> = HashMap::new();
@@ -875,11 +1003,59 @@ impl ScrapeRunner {
                                 break 'worker;
                             }
                         }
+                        if candidate_ledger.pending.is_some()
+                            && !matches!(worker_event, WorkerEvent::Job { .. })
+                        {
+                            sidecar_err = Some("Eligible candidate diagnostic was not immediately followed by its Job".into());
+                            let _ = child.kill();
+                            break 'worker;
+                        }
                         {
                             match worker_event {
+                                WorkerEvent::CandidateEvaluated {
+                                    source_id,
+                                    evaluation,
+                                } => {
+                                    if !config.candidate_diagnostics {
+                                        sidecar_err =
+                                            Some("Unexpected candidate diagnostic".into());
+                                        let _ = child.kill();
+                                        break 'worker;
+                                    }
+                                    let eligible = match candidate_ledger
+                                        .observe(source_id.clone(), evaluation.clone())
+                                    {
+                                        Ok(eligible) => eligible,
+                                        Err(error) => {
+                                            sidecar_err = Some(error);
+                                            let _ = child.kill();
+                                            break 'worker;
+                                        }
+                                    };
+                                    if !eligible {
+                                        let outcome = match evaluation.disposition {
+                                            CandidateDisposition::Rejected => "REJECTED",
+                                            CandidateDisposition::Unresolved => "UNRESOLVED",
+                                            CandidateDisposition::Duplicate => "DUPLICATE",
+                                            CandidateDisposition::Blocked => "BLOCKED",
+                                            CandidateDisposition::Invalid => "INVALID",
+                                            CandidateDisposition::Eligible => unreachable!(),
+                                        };
+                                        super::system::SystemService::append_candidate_card(
+                                            app,
+                                            run_id,
+                                            &source_id,
+                                            &evaluation,
+                                            outcome,
+                                            None,
+                                        )?;
+                                    }
+                                }
                                 event @ WorkerEvent::Job { .. } => {
                                     if total_new >= i64::from(target) {
-                                        return Err(AppError::Validation("Worker emitted a job after the discovery target was reached".into()));
+                                        sidecar_err = Some("Worker emitted a job after the discovery target was reached".into());
+                                        let _ = child.kill();
+                                        break 'worker;
                                     }
                                     let (source_id, external_id) = match &event {
                                         WorkerEvent::Job {
@@ -889,24 +1065,76 @@ impl ScrapeRunner {
                                         } => (source_id.clone(), external_id.clone()),
                                         _ => unreachable!(),
                                     };
-                                    let job = super::ingestion::scraped_job_from_event(event)?;
-                                    let stats = super::execution_diagnostics::persist_batch(
+                                    let pending = if config.candidate_diagnostics {
+                                        match candidate_ledger.take_job(&source_id, &external_id) {
+                                            Ok(pending) => Some(pending),
+                                            Err(error) => {
+                                                sidecar_err = Some(error);
+                                                let _ = child.kill();
+                                                break 'worker;
+                                            }
+                                        }
+                                    } else {
+                                        None
+                                    };
+                                    let job = match super::ingestion::scraped_job_from_event(event)
+                                    {
+                                        Ok(job) => job,
+                                        Err(error) => {
+                                            if let Some((source, evaluation)) = pending.as_ref() {
+                                                super::system::SystemService::append_candidate_card(app, run_id, source, evaluation, "INVALID JOB", Some(&error.to_string()))?;
+                                            }
+                                            return Err(error);
+                                        }
+                                    };
+                                    let stats = match super::execution_diagnostics::persist_batch(
                                         &self.pool,
                                         run_id,
                                         std::slice::from_ref(&job),
                                         &mut counts,
                                     )
-                                    .await?;
-                                    let outcome = match (stats.inserted, stats.updated, stats.blocked) {
+                                    .await
+                                    {
+                                        Ok(stats) => stats,
+                                        Err(error) => {
+                                            if let Some((source, evaluation)) = pending.as_ref() {
+                                                super::system::SystemService::append_candidate_card(app, run_id, source, evaluation, "PERSISTENCE ERROR — commit state may already be durable", Some(&error.to_string()))?;
+                                            }
+                                            return Err(error);
+                                        }
+                                    };
+                                    let outcome = match (
+                                        stats.inserted,
+                                        stats.updated,
+                                        stats.blocked,
+                                    ) {
                                         (1, 0, 0) => {
                                             total_new += 1;
-                                            *committed_by_source.entry(source_id.clone()).or_default() += 1;
+                                            *committed_by_source
+                                                .entry(source_id.clone())
+                                                .or_default() += 1;
                                             WorkerCommitOutcome::Inserted
-                                        },
+                                        }
                                         (0, 1, 0) => WorkerCommitOutcome::Updated,
                                         (0, 0, 1) => WorkerCommitOutcome::Blocked,
-                                        _ => return Err(AppError::Internal("Persistence returned an inconsistent single-job outcome".into())),
+                                        _ => {
+                                            let error = "Persistence returned an inconsistent single-job outcome";
+                                            if let Some((source, evaluation)) = pending.as_ref() {
+                                                super::system::SystemService::append_candidate_card(app, run_id, source, evaluation, "PERSISTENCE ERROR — commit state may already be durable", Some(error))?;
+                                            }
+                                            return Err(AppError::Internal(error.into()));
+                                        }
                                     };
+                                    if let Some((source, evaluation)) = pending.as_ref() {
+                                        let label = match outcome {
+                                            WorkerCommitOutcome::Inserted => "INSERTED",
+                                            WorkerCommitOutcome::Updated => "UPDATED",
+                                            WorkerCommitOutcome::Blocked => "BLOCKED AT SAVE",
+                                        };
+                                        super::system::SystemService::append_candidate_card(
+                                            app, run_id, source, evaluation, label, None,
+                                        )?;
+                                    }
                                     total_found += 1;
                                     let mut ack = serde_json::to_vec(&WorkerCommitAck {
                                         source_id,
@@ -1063,6 +1291,15 @@ impl ScrapeRunner {
                                 }
                                 WorkerEvent::SourceInfo { .. } => {}
                                 WorkerEvent::Done { stats } => {
+                                    if config.candidate_diagnostics
+                                        && (candidate_ledger.pending.is_some()
+                                            || stats.sources.iter().any(|scan| {
+                                                candidate_ledger.validate_summary(scan).is_err()
+                                            }))
+                                    {
+                                        sidecar_err.get_or_insert_with(|| "Worker completion disagrees with candidate diagnostics".into());
+                                        continue;
+                                    }
                                     let ids: std::collections::HashSet<_> = stats
                                         .sources
                                         .iter()
@@ -1154,7 +1391,15 @@ impl ScrapeRunner {
                                             (status.into(), message),
                                         );
                                         counts.blocked += scan.blocked as i64;
-                                        self.log_event(app, run_id, LogLevel::Info, Some(&scan.source_id), &format!("Examined {} postings; {} matched, {} blocked, {} duplicates; {} new discoveries committed from this source toward workflow target {}; coverage {:?}. Counts cover examined postings only.", scan.examined, scan.matched, scan.blocked, scan.duplicates, scan.newly_committed, target, scan.termination)).await;
+                                        let reasons = scan
+                                            .rejections
+                                            .iter()
+                                            .map(|reason| {
+                                                format!("{:?}: {}", reason.reason, reason.count)
+                                            })
+                                            .collect::<Vec<_>>()
+                                            .join(", ");
+                                        self.log_event(app, run_id, LogLevel::Info, Some(&scan.source_id), &format!("Examined {}; accepted {}, rejected {}, unresolved {}, invalid {}, duplicate {}, blocked {}; committed {} of target {}; coverage {:?}; primary rejection reasons: {}.", scan.examined, scan.accepted, scan.rejected, scan.unresolved, scan.invalid, scan.duplicates, scan.blocked, scan.newly_committed, target, scan.termination, if reasons.is_empty() { "none" } else { &reasons })).await;
                                     }
                                     RunsRepo::record_counts(&self.pool, run_id, &counts).await?;
                                     saw_done = true;
@@ -1206,6 +1451,21 @@ impl ScrapeRunner {
                 }
                 _ => {}
             }
+        }
+        if let Some((source, evaluation)) = candidate_ledger.pending.take() {
+            let cancelled = self.cancel_requested.load(Ordering::SeqCst);
+            super::system::SystemService::append_candidate_card(
+                app,
+                run_id,
+                &source,
+                &evaluation,
+                if cancelled {
+                    "CANCELLED"
+                } else {
+                    "NOT SAVED — worker/protocol failure"
+                },
+                sidecar_err.as_deref(),
+            )?;
         }
 
         // Terminal failures override earlier progress; partial rows remain recoverable.
@@ -1305,6 +1565,60 @@ impl ScrapeRunner {
 mod tests {
     use super::*;
     use scrape_core::{RoleType, TriState};
+
+    fn eligible_evaluation(sequence: u64, external_id: &str) -> CandidateEvaluation {
+        let event: WorkerEvent = serde_json::from_value(serde_json::json!({
+            "type": "job", "source_id": "source", "external_id": external_id,
+            "title": "Engineer", "company": "Fixture", "url": "https://example.test/job",
+            "role_type": "unknown"
+        }))
+        .unwrap();
+        CandidateEvaluation {
+            sequence,
+            disposition: CandidateDisposition::Eligible,
+            candidate: scrape_core::protocol::CandidateFacts::from_event(&event),
+            rejected: vec![],
+            unresolved: vec![],
+            diagnostic: None,
+        }
+    }
+
+    #[test]
+    fn candidate_ledger_enforces_order_correlation_and_terminal_accounting() {
+        let mut ledger = CandidateLedger::default();
+        assert!(ledger
+            .observe("source".into(), eligible_evaluation(2, "one"))
+            .is_err());
+        assert!(ledger
+            .observe("source".into(), eligible_evaluation(1, "one"))
+            .unwrap());
+        assert!(ledger
+            .observe("source".into(), eligible_evaluation(2, "two"))
+            .is_err());
+        assert!(ledger.take_job("other", "one").is_err());
+        assert!(ledger.take_job("source", "wrong").is_err());
+        assert!(ledger.pending.is_some());
+        ledger.take_job("source", "one").unwrap();
+        assert!(ledger.take_job("source", "one").is_err());
+        let invalid = CandidateEvaluation {
+            sequence: 2,
+            disposition: CandidateDisposition::Invalid,
+            candidate: None,
+            rejected: vec![],
+            unresolved: vec![],
+            diagnostic: Some("invalid".into()),
+        };
+        assert!(!ledger.observe("source".into(), invalid).unwrap());
+        let mut scan = SourceScanStats {
+            source_id: "source".into(),
+            accepted: 1,
+            invalid: 1,
+            ..Default::default()
+        };
+        ledger.validate_summary(&scan).unwrap();
+        scan.invalid = 0;
+        assert!(ledger.validate_summary(&scan).is_err());
+    }
 
     #[tokio::test]
     async fn completion_notification_observes_released_worker() {
