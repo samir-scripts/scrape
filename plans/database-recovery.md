@@ -369,3 +369,24 @@ SQLite integrity and foreign-key checks. A second helper run was idempotent.
 The pre-repair SQLite snapshot and the helper's adjacent migration backup remain
 available. The next application build applies migration 32 normally; it adds
 only the employer-name index. Do not delete the database or WAL/SHM files.
+
+## Search endpoint uniqueness (migration 33)
+
+Migration `0033_search_source_endpoints.sql` allows multiple search sources for
+one provider within a workflow when their effective endpoints differ. Non-search
+sources retain `(workflow_id, kind, identifier)` uniqueness. A partial index for
+search sources uses the provider identifier and the configured endpoint, or the
+provider's default when unspecified; it rejects byte-identical endpoints and an
+explicit endpoint matching that default. Workflow validation is authoritative
+for URL normalization and query-pair ordering. Invalid historical JSON is retained
+unchanged and treated as unspecified by the index, not repaired or discarded.
+
+The forward migration copies every source into a replacement table while keeping
+foreign keys enabled, saves and restores job/run source links, and recreates the
+source indexes in the same transaction. The normal consistent pre-migration
+snapshot is taken before upgrade; all earlier migration SQL and checksums remain
+unchanged. Populated v32 recovery tests compare historical rows and migration
+records, inspect the backup and foreign-key integrity, inject failure immediately
+after dropping the old table, and cover rollback, retry, duplicate rejection and
+idempotent restart. Restore the compatible snapshot to roll back; reverting the
+executable alone does not reverse this schema change.

@@ -249,6 +249,12 @@ Robots are respected by default; `ignore_robots: true` bypasses `robots.txt` for
 source only and must remain confined to explicit test/development workflows.
 Partial coverage retains confirmed jobs and page/time-limit outcomes. Crawling starts
 only from user-provided URLs; it does not discover search-engine results or the web.
+Navigation controls remain traversable but are not heuristic job cards. Identical
+public-HTML observations are suppressed per source and destination; changed
+evidence is evaluated again. Failed optional pages emit partial-coverage warnings
+and do not discard other queued pages. Access, robots, safety and time bounds
+remain terminal. Missing eligibility evidence makes the outcome partial without
+changing an actual exhausted or quota stop into a failed stop.
 An optional secure-store HTTP(S) proxy routes shared HTTP transports and
 application-launched Chromium, without enabling a direct-route fallback.
 Use `scrape-worker --protocol-version` to query the authoritative version rather

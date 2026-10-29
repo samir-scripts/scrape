@@ -1548,3 +1548,126 @@ fn public_html_crawl_detail_timeout_preserves_remaining_candidates() {
         "{events:?}"
     );
 }
+
+#[test]
+fn repeated_listing_evidence_is_evaluated_once_but_later_jobs_survive() {
+    let cards = "<article><a href='/jobs/old'>Software Engineer</a><div class='location'>Austin, TX</div><time datetime='2026-10-14T12:00:00Z'>Posted</time></article><article><a href='/jobs/wrong'>Accounting Manager</a></article><article><a href='/jobs/missing'>Software Engineer</a></article>";
+    let server = Server::new(move |path| match path {
+        "/careers" => Response::html(format!(
+            "{cards}<nav><a href='/careers?page=2'>Next page</a></nav>"
+        )),
+        "/careers?page=2" => Response::html(format!(
+            "{cards}<article><a href='/jobs/good'>Software Engineer</a></article>"
+        )),
+        "/jobs/missing" => Response::html(plain_html_detail(
+            "Software Engineer",
+            Some("Austin, TX"),
+            None,
+        )),
+        "/jobs/old" | "/jobs/wrong" => Response::html("No additional posting evidence"),
+        "/jobs/good" => Response::html(plain_html_detail(
+            "Software Engineer",
+            Some("Austin, TX"),
+            Some("2026-10-15T12:00:00Z"),
+        )),
+        other => panic!("unexpected request {other}"),
+    });
+    let events = run_with_filters(
+        vec![source(&server, "repeat", "/careers", regression_crawl())],
+        10,
+        regression_filters(),
+    );
+    assert_eq!(jobs(&events).len(), 1, "{events:?}");
+    assert_eq!(stats(&events)[0].examined, 4, "{events:?}");
+    assert_eq!(
+        server.paths(),
+        [
+            "/careers",
+            "/jobs/missing",
+            "/jobs/old",
+            "/jobs/wrong",
+            "/careers?page=2",
+            "/jobs/good"
+        ]
+    );
+}
+
+#[test]
+fn later_listing_can_supply_missing_evidence_for_same_job() {
+    let server = Server::new(|path| {
+        match path {
+        "/careers" => Response::html("<article><a href='/jobs/42'>Software Engineer</a></article><nav><a href='/careers?page=2'>Next page</a></nav>"),
+        "/careers?page=2" => Response::html("<article><a href='/jobs/42'>Software Engineer</a><div class='location'>Austin, TX</div><time datetime='2026-10-15T12:00:00Z'>Posted</time></article>"),
+        "/jobs/42" => Response::html(plain_html_detail("Software Engineer", None, None)),
+        other => panic!("unexpected request {other}"),
+    }
+    });
+    let events = run_with_filters(
+        vec![source(&server, "improved", "/careers", regression_crawl())],
+        10,
+        regression_filters(),
+    );
+    assert_eq!(jobs(&events).len(), 1, "{events:?}");
+    assert_eq!(stats(&events)[0].unresolved, 1, "{events:?}");
+    assert_eq!(server.paths(), ["/careers", "/jobs/42", "/careers?page=2"]);
+}
+
+#[test]
+fn navigation_facets_are_traversed_not_emitted_as_jobs() {
+    let server = Server::new(|path| {
+        match path {
+        "/careers" => Response::html("<nav><ul><li><a href='/careers?team=engineering'>Engineering facet</a></li></ul></nav><div role='navigation'><a href='/careers?team=data'>Data facet</a></div>"),
+        "/careers?team=engineering" => Response::html("<article><a href='/posting?gh_jid=42'>Software Engineer</a></article><article><a href='/posting?gh_jid=43'>Software Engineer</a></article>"),
+        "/careers?team=data" => Response::html("No positions"),
+        "/posting?gh_jid=42" | "/posting?gh_jid=43" => Response::html(plain_html_detail("Software Engineer", Some("Austin, TX"), Some("2026-10-15T12:00:00Z"))),
+        other => panic!("unexpected request {other}"),
+    }
+    });
+    let events = run_with_filters(
+        vec![source(&server, "facets", "/careers", regression_crawl())],
+        10,
+        regression_filters(),
+    );
+    assert_eq!(jobs(&events).len(), 2, "{events:?}");
+    assert_eq!(stats(&events)[0].examined, 2, "{events:?}");
+    let paths = server.paths();
+    for path in [
+        "/careers?team=engineering",
+        "/careers?team=data",
+        "/posting?gh_jid=42",
+        "/posting?gh_jid=43",
+    ] {
+        assert!(paths.contains(&path.to_string()), "{paths:?}");
+    }
+    assert_eq!(paths.len(), 5, "{paths:?}");
+}
+
+#[test]
+fn failed_optional_crawl_page_does_not_discard_healthy_frontier() {
+    let server = Server::new(|path| {
+        match path {
+        "/careers" => Response::html("<nav><a href='/careers?bad=1'>Software Engineer bad</a><a href='/careers?good=1'>Software Engineer good</a></nav>"),
+        "/careers?bad=1" => Response::status("500 Internal Server Error"),
+        "/careers?good=1" => Response::html(plain_html_detail("Software Engineer", Some("Austin, TX"), Some("2026-10-15T12:00:00Z"))),
+        other => panic!("unexpected request {other}"),
+    }
+    });
+    let events = run_with_filters(
+        vec![source(&server, "failure", "/careers", regression_crawl())],
+        10,
+        regression_filters(),
+    );
+    assert_eq!(jobs(&events).len(), 1, "{events:?}");
+    assert_eq!(stats(&events)[0].outcome, Some(ScanOutcome::Partial));
+    assert_eq!(stats(&events)[0].termination, CoverageTermination::Failed);
+    let paths = server.paths();
+    assert_eq!(
+        paths
+            .iter()
+            .filter(|p| p.as_str() == "/careers?bad=1")
+            .count(),
+        1,
+        "{paths:?}"
+    );
+    assert!(paths.contains(&"/careers?good=1".to_string()), "{paths:?}");
+}

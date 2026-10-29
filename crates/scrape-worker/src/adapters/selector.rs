@@ -595,11 +595,19 @@ pub(crate) fn extract_heuristic_candidates(
     };
 
     let mut heuristic_found = false;
-    let mut seen_urls = std::collections::HashSet::new();
     let configured_date = FieldLocator::from_config(&source.config, "date", None)
         .map_err(ClientError::Configuration)?;
 
     for anchor in document.select(&anchor_sel) {
+        if anchor
+            .ancestors()
+            .filter_map(scraper::ElementRef::wrap)
+            .any(|node| {
+                node.value().name() == "nav" || node.value().attr("role") == Some("navigation")
+            })
+        {
+            continue;
+        }
         let Some(href) = anchor.value().attr("href") else {
             continue;
         };
@@ -679,12 +687,6 @@ pub(crate) fn extract_heuristic_candidates(
                 | "home"
                 | "privacy policy"
                 | "terms of service"
-        ) {
-            continue;
-        }
-        if !seen_urls.insert(
-            scrape_core::identity::normalized_detail_url(&job_url_str)
-                .unwrap_or_else(|_| job_url_str.clone()),
         ) {
             continue;
         }
@@ -772,7 +774,7 @@ pub(crate) fn extract_heuristic_candidates(
             break;
         }
     }
-    if seen_urls.is_empty() {
+    if !heuristic_found {
         if let Ok(h1_sel) = scraper::Selector::parse(
             "h1, .posting-headline h2, [class*='job-title'], main h2, article h2",
         ) {

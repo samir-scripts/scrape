@@ -526,8 +526,15 @@ pub fn normalized_source_endpoint(extractor: &WorkflowExtractor) -> Result<Strin
             scrape_core::search_source::identifier(&extractor.url).map_err(AppError::Validation)?;
         let config = extractor.source_config.as_ref().unwrap_or(&Value::Null);
         scrape_core::search_source::validate_config(config).map_err(AppError::Validation)?;
-        scrape_core::search_source::endpoint(provider, config).map_err(AppError::Validation)?;
-        return Ok(format!("Search:{provider}"));
+        let mut endpoint =
+            scrape_core::search_source::endpoint(provider, config).map_err(AppError::Validation)?;
+        let mut query: Vec<_> = endpoint.query_pairs().into_owned().collect();
+        query.sort();
+        endpoint.set_query(None);
+        if !query.is_empty() {
+            endpoint.query_pairs_mut().extend_pairs(query);
+        }
+        return Ok(format!("Search:{provider}:{endpoint}"));
     }
     if extractor.kind.expects_url() {
         if extractor
@@ -1356,6 +1363,24 @@ mod tests {
         second["extractor"]["url"] = Value::String("themuse".into());
         duplicate["sources"].as_array_mut().unwrap().push(second);
         assert!(validate(duplicate, "UTC")
+            .unwrap_err()
+            .to_string()
+            .contains("duplicate source endpoint"));
+        let mut scoped = value.clone();
+        let mut category = scoped["sources"][0].clone();
+        category["id"] = Value::String("category".into());
+        category["extractor"]["source_config"] = serde_json::json!({"endpoint":"https://www.themuse.com/api/public/jobs?page=0&category=Data%20Science"});
+        scoped["sources"]
+            .as_array_mut()
+            .unwrap()
+            .push(category.clone());
+        assert!(validate(scoped.clone(), "UTC").is_ok());
+        category["id"] = Value::String("same-category".into());
+        category["extractor"]["source_config"]["endpoint"] = Value::String(
+            "https://www.themuse.com/api/public/jobs?category=Data+Science&page=0".into(),
+        );
+        scoped["sources"].as_array_mut().unwrap().push(category);
+        assert!(validate(scoped, "UTC")
             .unwrap_err()
             .to_string()
             .contains("duplicate source endpoint"));

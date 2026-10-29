@@ -5519,7 +5519,19 @@ async fn imported_software_engineering_discovery_yaml_persists_discoveries_to_sq
     let yaml_value: serde_json::Value = serde_json::from_slice(&parsed_yaml.stdout).unwrap();
     let spec = workflow::validate(yaml_value, "America/New_York").unwrap();
     assert_eq!(spec.version, 10);
-    assert_eq!(spec.sources.len(), 1);
+    assert_eq!(spec.sources.len(), 4);
+    assert_eq!(
+        spec.sources
+            .iter()
+            .map(|s| s.id.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "heuristic-public-html",
+            "muse-computer-it",
+            "muse-data-analytics",
+            "muse-data-science"
+        ]
+    );
     assert_eq!(spec.sources[0].extractor.kind, SourceKind::Search);
     assert_eq!(
         spec.sources[0]
@@ -5641,6 +5653,20 @@ async fn imported_software_engineering_discovery_yaml_persists_discoveries_to_sq
     let discovered = JobsRepo::list(&pool, JobFilter::default()).await.unwrap();
     assert_eq!(discovered.total, 1);
     assert_eq!(discovered.items[0].company, "Discovered Corp");
+    let paths = requests.lock().unwrap();
+    for category in [
+        "Computer%20and%20IT",
+        "Data%20and%20Analytics",
+        "Data%20Science",
+    ] {
+        assert!(
+            paths
+                .iter()
+                .any(|path| path.contains(&format!("category={category}"))),
+            "{paths:?}"
+        );
+    }
+    drop(paths);
 
     stopped.store(true, Ordering::SeqCst);
     server.join().unwrap();

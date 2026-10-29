@@ -16,6 +16,7 @@ const rawDiscoveryYaml = readFileSync("workflows/software-engineering-discovery-
 let bulkMode = false;
 const bulkSpec = parseYaml(rawDiscoveryYaml);
 bulkSpec.metadata.name = "Thousand-candidate diagnostic fixture";
+bulkSpec.sources = [bulkSpec.sources[0]];
 bulkSpec.sources[0].extractor.source_config = { follow_detail: false, max_pages: 1 };
 
 const site = createServer((request, response) => {
@@ -26,13 +27,14 @@ const site = createServer((request, response) => {
     response.end();
     return;
   }
-  let path = new URL(request.url || "/", "http://fixture.invalid").pathname;
+  const requestUrl = new URL(request.url || "/", "http://fixture.invalid");
+  let path = requestUrl.pathname;
   if (path.startsWith("/127.0.0.1/")) {
     path = path.slice("/127.0.0.1".length);
   }
   const throughProxy = pendingProxyPaths[0] === path || pendingProxyPaths[0] === "/127.0.0.1" + path;
   if (throughProxy) pendingProxyPaths.shift();
-  pages.push({ path, throughProxy, userAgent: request.headers["user-agent"] || null });
+  pages.push({ path, query: requestUrl.search, throughProxy, userAgent: request.headers["user-agent"] || null });
   if (path === "/robots.txt" || path.endsWith("/robots.txt")) {
     response.writeHead(200, { "content-type": "text/plain" });
     response.end("User-agent: *\nAllow: /\n");
@@ -378,6 +380,12 @@ try {
   const bulkCards = log.split("+-- CANDIDATE ").slice(1).filter(card => card.includes("| Company: Bulk Fixture\n"));
   if (bulkCards.length !== 1000 || bulkCards.filter(card => card.startsWith("1 | INSERTED --")).length !== 1 || !bulkCards.some(card => card.startsWith("1000 | REJECTED --"))) throw new Error(`Bulk fixture did not produce all 1,000 ordered outcome cards: ${bulkCards.length}; artifacts: ${directory}`);
   if (!result.ok) throw new Error(`Native web crawl/proxy smoke failed: ${JSON.stringify(result)}; isolated artifacts: ${directory}`);
+  for (const category of ["Computer and IT", "Data and Analytics", "Data Science"]) {
+    if (!pages.some(page => page.path === "/www.themuse.com/api/public/jobs" && new URLSearchParams(page.query).get("category") === category)) {
+      throw new Error(`Missing Muse category request for ${category}; artifacts: ${directory}`);
+    }
+  }
+  if (!pages.some(page => page.path === "/www.themuse.com/api/public/jobs" && !new URLSearchParams(page.query).has("category"))) throw new Error(`Missing unfiltered Muse request; artifacts: ${directory}`);
   console.log(`Native web scraping smoke passed: ${JSON.stringify({ result, artifacts: directory })}`);
 } finally {
   site.closeAllConnections();

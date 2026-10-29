@@ -252,6 +252,87 @@ fn feedback_quota_counts_committed_insertions_instead_of_refreshes() {
 }
 
 #[test]
+fn unresolved_evidence_does_not_replace_feedback_quota_stop_reason() {
+    use scrape_core::protocol::{CoverageTermination, ScanOutcome};
+    let server = Server::new(|_| {
+        json!({"page":0,"page_count":1,"results":[
+        muse_item_custom(1,"Software Engineer","Fixture",None,vec!["Austin, TX"]),
+        muse_item_custom(2,"Software Engineer","Fixture",Some("2026-10-15T12:00:00Z"),vec![]),
+        muse_item_custom(3,"Software Engineer","Fixture",Some("2026-10-15T12:00:00Z"),vec!["Austin, TX"]),
+        muse_item_custom(4,"Software Engineer","Fixture",Some("2026-10-15T12:00:00Z"),vec!["Austin, TX"]),
+        muse_item_custom(5,"Software Engineer","Fixture",Some("2026-10-15T12:00:00Z"),vec!["Austin, TX"])
+    ]}).to_string()
+    });
+    let config = json!({"version":PROTOCOL_VERSION,"commit_feedback":true,"sources":[search_source("themuse",json!({"follow_detail":false}))],
+        "filters":{"matching":{"countries":["US"],"location_include_unknown":false,"posting_date":{"preset":"past_24h","timezone":"UTC","include_unknown":false}}},
+        "run_started_at":"2026-10-16T00:00:00Z","limits":worker_limits(),"max_jobs_per_run":2});
+    let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+        .args(["--stdin", "--replay-origin", &server.origin])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    writeln!(input, "{config}").unwrap();
+    let mut reader = BufReader::new(child.stdout.take().unwrap());
+    let mut inserted = 0;
+    let stats = loop {
+        let mut line = String::new();
+        assert_ne!(reader.read_line(&mut line).unwrap(), 0);
+        match serde_json::from_str::<WorkerEvent>(&line).unwrap() {
+            WorkerEvent::Job {
+                source_id,
+                external_id,
+                ..
+            } => {
+                inserted += 1;
+                writeln!(
+                    input,
+                    "{}",
+                    json!({"source_id":source_id,"external_id":external_id,"outcome":"inserted"})
+                )
+                .unwrap();
+            }
+            WorkerEvent::Done { stats } => break stats,
+            _ => {}
+        }
+    };
+    drop(input);
+    assert!(child.wait_with_output().unwrap().status.success());
+    let scan = &stats.sources[0];
+    assert_eq!(inserted, 2);
+    assert_eq!(scan.unresolved, 2);
+    assert_eq!(scan.newly_committed, 2);
+    assert!(scan.limit_reached);
+    assert_eq!(scan.termination, CoverageTermination::JobLimit);
+    assert_eq!(scan.outcome, Some(ScanOutcome::Partial));
+    scan.validate().unwrap();
+}
+
+#[test]
+fn unresolved_only_source_reports_exhaustion_not_failure() {
+    use scrape_core::protocol::{CoverageTermination, ScanOutcome};
+    let server = Server::new(|_| {
+        json!({"page":0,"page_count":1,"results":[muse_item_custom(1,"Software Engineer","Fixture",None,vec!["Austin, TX"])]}).to_string()
+    });
+    let events = run_worker_config(
+        &server,
+        vec![search_source("themuse", json!({"follow_detail":false}))],
+        json!({"matching":{"posting_date":{"preset":"past_24h","timezone":"UTC","include_unknown":false}}}),
+        2,
+        0,
+        false,
+        worker_limits(),
+    );
+    let scan = &scans(&events)[0];
+    assert_eq!(scan.unresolved, 1);
+    assert!(!scan.limit_reached);
+    assert_eq!(scan.termination, CoverageTermination::Exhausted);
+    assert_eq!(scan.outcome, Some(ScanOutcome::Partial));
+}
+
+#[test]
 fn feedback_rejects_wrong_malformed_duplicate_and_eof_acknowledgements() {
     let server = Server::new(|path| {
         if path.contains("/v0/postings/source-a") {
@@ -1204,6 +1285,120 @@ fn search_default_muse_evaluates_later_page_roles_companies_and_publication_wind
             "/www.themuse.com/api/public/jobs?page=1",
         ]
     );
+}
+
+#[test]
+fn muse_category_samples_preserve_pagination_filters_and_shared_quota() {
+    let server = Server::new(|path| {
+        let parsed = url::Url::parse(&format!("http://fixture{path}")).unwrap();
+        let params: std::collections::HashMap<_, _> = parsed.query_pairs().into_owned().collect();
+        let category = params.get("category").map(String::as_str);
+        let page = params.get("page").map(String::as_str).unwrap_or("0");
+        let results = match (category, page) {
+            (None, "0") => vec![muse_item_custom(
+                10,
+                "Retail Associate",
+                "Fixture",
+                Some("2026-10-15T20:00:00Z"),
+                vec!["Austin, TX"],
+            )],
+            (Some(_), "0") => vec![
+                muse_item_custom(
+                    11,
+                    "Software Engineer",
+                    "Fixture",
+                    Some("2026-10-14T00:00:00Z"),
+                    vec!["Austin, TX"],
+                ),
+                muse_item_custom(
+                    12,
+                    "Software Engineer",
+                    "Fixture",
+                    Some("2026-10-15T20:00:00Z"),
+                    vec!["Toronto, Canada"],
+                ),
+            ],
+            (Some("Data Science"), "1") => vec![
+                muse_item_custom(
+                    22,
+                    "Software Engineer",
+                    "Fixture",
+                    Some("2026-10-15T20:00:00Z"),
+                    vec!["Austin, TX"],
+                ),
+                muse_item_custom(
+                    23,
+                    "Software Engineer",
+                    "Fixture",
+                    Some("2026-10-15T20:00:00Z"),
+                    vec!["Austin, TX"],
+                ),
+            ],
+            (Some(_), "1") => vec![muse_item_custom(
+                21,
+                "Software Engineer",
+                "Fixture",
+                Some("2026-10-15T20:00:00Z"),
+                vec!["Austin, TX"],
+            )],
+            _ => vec![],
+        };
+        json!({"page": page.parse::<u32>().unwrap(), "page_count": if category.is_some() {2} else {1}, "results": results}).to_string()
+    });
+    let mut sources = vec![search_source(
+        "themuse",
+        json!({"follow_detail":false,"max_pages":50}),
+    )];
+    sources[0]["id"] = json!("unfiltered");
+    for (id, category) in [
+        ("computer", "Computer%20and%20IT"),
+        ("analytics", "Data%20and%20Analytics"),
+        ("science", "Data%20Science"),
+    ] {
+        let mut source = search_source(
+            "themuse",
+            json!({"follow_detail":false,"max_pages":50,"endpoint":format!("https://www.themuse.com/api/public/jobs?page=0&category={category}")}),
+        );
+        source["id"] = json!(id);
+        sources.push(source);
+    }
+    let events = run_worker_config(
+        &server,
+        sources,
+        json!({"matching":{"target_roles":["Software Engineer"],"countries":["US"],"location_include_unknown":false,"posting_date":{"preset":"past_24h","timezone":"UTC","include_unknown":false}}}),
+        2,
+        0,
+        false,
+        worker_limits(),
+    );
+    let ids: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            WorkerEvent::Job { external_id, .. } => Some(external_id.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ids, ["21", "22"], "{events:?}");
+    assert!(scans(&events).iter().map(|s| s.rejected).sum::<u64>() >= 7);
+    let requests = feed_requests(&server);
+    assert!(
+        requests.contains(&"/www.themuse.com/api/public/jobs?page=0".to_string()),
+        "{requests:?}"
+    );
+    for category in ["Computer and IT", "Data and Analytics", "Data Science"] {
+        for page in [0, 1] {
+            assert!(
+                requests.iter().any(|request| {
+                    let url = url::Url::parse(&format!("http://fixture{request}")).unwrap();
+                    let params: std::collections::HashMap<_, _> =
+                        url.query_pairs().into_owned().collect();
+                    params.get("category").map(String::as_str) == Some(category)
+                        && params.get("page") == Some(&page.to_string())
+                }),
+                "{requests:?}"
+            );
+        }
+    }
 }
 
 #[test]

@@ -225,7 +225,7 @@ export function useWorkflowDraft({ isOpen, initialSource, initialSpec, onSourceS
       }
       const seen = new Set<string>();
       for (const s of draft.sources) {
-        const ep = normalizedEndpoint(s.extractor.kind, s.extractor.url);
+        const ep = normalizedEndpoint(s.extractor.kind, s.extractor.url, s.extractor.source_config);
         if (seen.has(ep)) {
           report(`Duplicate source endpoint: '${s.extractor.url}' conflicts with another source in this workflow.`, "Sources");
           return;

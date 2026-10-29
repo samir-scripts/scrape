@@ -1,6 +1,6 @@
 # Workflow specification compatibility and current v10 contract
 
-Current canonical exports use **v10**, worker protocol **14**, and migration **32**.
+Current canonical exports use **v10**, worker protocol **14**, and migration **33**.
 Rust accepts versions 1–9 through the same compatibility resolver. Older contract
 descriptions below record their original behavior; saved rules are not broadened.
 
@@ -21,6 +21,10 @@ Posting-date presets are `past_12h`, `today`, `past_24h`, `past_week` (168 hours
 Sources may attach explicit company ATS boards without replacing workflow matching. Catalog attachments retain disabled/review/script-trust requirements. Search uses canonical matching context (roles, keywords, companies, location and run-relative age) but does not invent provider API query support: authoritative filtering stays in Rust. Search sessions yield between pages/candidates under the shared round-robin cap, stop further requests at acceptance caps, and report page/time bounds and unresolved evidence as partial. Default search pages are five, at most 100; existing workflow/source duration bounds apply. Optional `source_config.endpoint` must be a credential-free HTTP(S) URL returning that provider's schema. Pagination stays on the same origin/collection with sequential page numbers; malformed envelopes fail explicitly and invalid individual postings remain isolated.
 
 Migration 29 admits `search` without altering applied SQL, historical rows, source/job/run links or user state. See [recovery verification](database-recovery.md#search-source-kind-migration-29).
+Migration 33 permits distinct effective search endpoints for the same provider
+within one workflow; identical normalized endpoints remain invalid. The standalone
+Muse test workflow uses an unfiltered feed and explicit category-scoped samples,
+not an exhaustive category mapping. Existing saved workflows are not rewritten.
 
 Simple Matching exposes searchable Country and dependent State/province controls plus Remote/Hybrid/In-person workplace choices. Countries use ISO alpha-2 codes; newly selected subdivisions use qualified codes such as `US-CA` or `CA-ON`. Geography and workplace apply together, selected workplaces match with OR, and country/subdivision must match the same location entry. Changing country clears incompatible subdivisions. Imported multiple-country rules and legacy short subdivision codes remain intact until explicitly edited. The generated [catalog](../crates/scrape-core/data/README.md) has all 249 countries but a bounded subdivision list; Advanced retains raw codes for other subdivisions. Additional free-text location restrictions live in Advanced and still apply with AND.
 

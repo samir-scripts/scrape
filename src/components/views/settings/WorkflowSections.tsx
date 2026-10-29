@@ -209,7 +209,7 @@ export function WorkflowSections({
     const endpointMap = new Map<string, number>();
     (draft.sources || []).forEach((s) => {
       if (s.extractor?.kind === "search" || s.extractor?.url?.trim()) {
-        const ep = normalizedEndpoint(s.extractor.kind, s.extractor.url);
+        const ep = normalizedEndpoint(s.extractor.kind, s.extractor.url, s.extractor.source_config);
         endpointMap.set(ep, (endpointMap.get(ep) || 0) + 1);
       }
     });

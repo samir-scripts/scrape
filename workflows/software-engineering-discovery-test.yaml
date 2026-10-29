@@ -14,6 +14,36 @@ sources:
       source_config:
         follow_detail: true
         max_pages: 50
+  - id: muse-computer-it
+    label: The Muse Computer and IT category-scoped sample
+    enabled: true
+    extractor:
+      kind: search
+      url: themuse
+      source_config:
+        endpoint: https://www.themuse.com/api/public/jobs?page=0&category=Computer%20and%20IT
+        follow_detail: true
+        max_pages: 50
+  - id: muse-data-analytics
+    label: The Muse Data and Analytics category-scoped sample
+    enabled: true
+    extractor:
+      kind: search
+      url: themuse
+      source_config:
+        endpoint: https://www.themuse.com/api/public/jobs?page=0&category=Data%20and%20Analytics
+        follow_detail: true
+        max_pages: 50
+  - id: muse-data-science
+    label: The Muse Data Science category-scoped sample
+    enabled: true
+    extractor:
+      kind: search
+      url: themuse
+      source_config:
+        endpoint: https://www.themuse.com/api/public/jobs?page=0&category=Data%20Science
+        follow_detail: true
+        max_pages: 50
 schedule:
   cadence: manual
   time: 09:00

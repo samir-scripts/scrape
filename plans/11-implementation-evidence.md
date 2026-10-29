@@ -1367,3 +1367,58 @@ Checks from this run:
 
 No live provider or user database was accessed. Native physical-pointer delivery,
 file chooser and native zoom/visual acceptance were not performed.
+
+## Follow-up — bounded crawler and Muse discovery (2026-10-29)
+
+The prior isolated baseline is preserved in `local://crawler-gap-evaluation-evidence.md`.
+The public-HTML worker now suppresses identical full observations per URL, keeps
+changed evidence, excludes navigation controls from heuristic job cards, and
+continues queued pages after individual recoverable failures. Missing eligibility
+evidence remains partial without manufacturing a failed termination. Migration 33
+allows distinct search endpoints for the same provider in one workflow; populated
+v32 upgrade, rollback/retry, backup and restart were exercised in temporary SQLite.
+The standalone Muse test retains the unfiltered feed and adds three explicitly
+category-scoped samples; no existing saved workflow is rewritten.
+
+Checks from this run:
+
+- `cargo test -p scrape-worker --test crawl_process`: 32 passed; before repair,
+  three new process regressions failed (repeated evidence, navigation and failed
+  frontier page). The fixtures include stronger later evidence and query identities.
+- `cargo test -p scrape-worker --test coordinator_tests`: 48 passed; the new
+  unresolved-only exhaustion regression failed before the accounting fix.
+- `npx vitest run src/test/workflow_editor_interaction.test.tsx --maxWorkers=1`:
+  17 passed. The populated v32 migration recovery and canonical search validation
+  tests passed individually. `npx tsc --noEmit` and
+  `cargo clippy -p scrape-worker -p scrape --all-targets -- -D warnings` passed.
+- `npm run build:sidecar`; `cargo test -p scrape --test worker_repository -- --test-threads=1`:
+  32 passed; `npm run test:providers` passed. The initial parallel integration
+  run had an unrelated loopback read `WouldBlock`; the serial full suite passed.
+- `npm run test:native-web-scraping`: passed with actual isolated WKWebView
+  Preview → Save → Run and category requests, plus the unchanged one-source
+  1,000-row accounting fixture. Artifacts:
+  `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-web-scraping-O1U3kT`.
+
+Live packaged-worker runs used separate temporary databases, canonical workflow
+validation/save/preparation, actual insertion acknowledgements and robots bypass
+disabled globally and per crawler source. These are not native UI runs. The
+original strict title, US and past-24-hour filters and pacing remained in force:
+
+| Workflow / target | New jobs | Elapsed | Coverage |
+| --- | ---: | ---: | --- |
+| Crawler / 2 | 0 | 180.370 s | Palantir time limit; SEP page limit |
+| Crawler / 40 | 0 | 181.230 s | Palantir time limit; SEP page limit |
+| Muse / 2 | 2 | 12.410 s | Shared quota reached |
+| Muse / 40 | 8 | 137.386 s | Page and detail-time bounds; one category exhausted |
+
+Baseline Muse returned zero in both targets. Live inventories and provider
+responses vary, so this comparison does not establish a controlled causal effect.
+The crawler still reaches its source deadline. For target 2 Palantir emitted
+2,370 decisions for 1,154 distinct URLs; target 40 emitted 1,739 for 874.
+The displayed diagnostic candidate payload repeated unchanged 1,120 and 809
+times respectively, despite full-event deduplication; diagnostic payloads omit
+some full evidence fields, so this is not proof those full events were equal.
+HTTP attempt counts were not instrumented in the live driver. Source summaries,
+not an outer watchdog, report the remaining bounds. Reports under the OS temp
+directory: `scrape-native-smoke-gap-jWQ0Af`, `-YWChg4`, `-Q1SU3f`, `-BUJvkl`.
+No user database, physical pointer, native file chooser or native zoom QA was used.

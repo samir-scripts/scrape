@@ -354,6 +354,47 @@ describe("role-first workflow boundaries", () => {
     expect(extract.mock.calls[0][0].schedule?.time).toBe("09:01");
     expect(save.mock.calls[0][0].schedule?.time).toBe("09:01");
   });
+  it("validates category-scoped feeds separately while rejecting effective default and explicit duplicates", () => {
+    const spec = sourceToWorkflowSpec(SAMPLE_ENGINEERING_SOURCE);
+    const categories = ["Computer%20and%20IT", "Data%20and%20Analytics", "Data%20Science"];
+    spec.sources = [
+      { id: "unfiltered", label: "Unfiltered", enabled: true, extractor: { kind: "search", url: "themuse" } },
+      ...categories.map((category, index) => ({
+        id: `category-${index}`, label: "Category-scoped sample", enabled: true,
+        extractor: { kind: "search" as const, url: "themuse", source_config: { endpoint: `https://www.themuse.com/api/public/jobs?page=0&category=${category}`, follow_detail: true, max_pages: 50 } },
+      })),
+    ];
+    expect(validateWorkflowYaml(workflowSpecToYaml(spec)).errors).toEqual([]);
+    spec.sources.push({ ...spec.sources[1], id: "duplicate" });
+    expect(validateWorkflowYaml(workflowSpecToYaml(spec)).errors.some(error => /Duplicate source endpoint/.test(error.message))).toBe(true);
+    spec.sources[4] = { id: "default", label: "Default", enabled: true, extractor: { kind: "search", url: "default", source_config: { endpoint: "https://www.themuse.com/api/public/jobs?page=0" } } };
+    expect(validateWorkflowYaml(workflowSpecToYaml(spec)).errors.some(error => /Duplicate source endpoint/.test(error.message))).toBe(true);
+    spec.sources[4] = { ...spec.sources[1], id: "reordered", extractor: { ...spec.sources[1].extractor, source_config: { endpoint: "https://www.themuse.com/api/public/jobs?category=Computer+and+IT&page=0" } } };
+    expect(validateWorkflowYaml(workflowSpecToYaml(spec)).errors.some(error => /Duplicate source endpoint/.test(error.message))).toBe(true);
+  });
+
+  it.each([false, true])("checks effective search endpoints when continuing from Sources (duplicate: %s)", async duplicate => {
+    const user = userEvent.setup();
+    const spec = sourceToWorkflowSpec(SAMPLE_ENGINEERING_SOURCE);
+    spec.sources = [
+      { id: "first", label: "Unfiltered", enabled: true, extractor: { kind: "search", url: "themuse" } },
+      { id: "second", label: "Sample", enabled: true, extractor: { kind: "search", url: "default", source_config: { endpoint: duplicate ? "https://www.themuse.com/api/public/jobs?page=0" : "https://www.themuse.com/api/public/jobs?page=0&category=Data%20Science" } } },
+    ];
+    const validate = vi.spyOn(api, "validateWorkflow").mockResolvedValue(spec);
+    render(<AddSourceModal isOpen initialSpec={spec} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Sources" }));
+    expect(Boolean(screen.queryByText(/Duplicate source endpoint detected/))).toBe(duplicate);
+    await user.click(screen.getByRole("button", { name: "Continue to Schedule" }));
+    if (duplicate) {
+      expect(screen.getByText(/conflicts with another source/)).toBeTruthy();
+      expect(validate).not.toHaveBeenCalled();
+    } else {
+      await waitFor(() => expect(validate).toHaveBeenCalled());
+      expect(screen.getByRole("button", { name: "Schedule", current: "step" })).toBeTruthy();
+    }
+  });
+
   it("roundtrips version8 search and role/company/date rules without silent drops", () => {
     const spec = sourceToWorkflowSpec(SAMPLE_ENGINEERING_SOURCE); spec.version = 8;
     spec.sources = [{ id: "search", label: "Public listings", enabled: true, extractor: { kind: "search", url: "" } }];

@@ -62,11 +62,28 @@ const VALID_ROLE_TYPES: RoleType[] = [
   "unknown",
 ];
 
-export function normalizedEndpoint(kind: SourceKind, urlOrSlug: string): string {
+export function normalizedEndpoint(kind: SourceKind, urlOrSlug: string, sourceConfig?: WorkflowSourceSpec["extractor"]["source_config"]): string {
   const trimmed = (urlOrSlug || "").trim();
   if (kind === "search") {
     const provider = !trimmed || trimmed.toLowerCase() === "default" ? "themuse" : trimmed.toLowerCase();
-    return `Search:${provider}`;
+    const defaults: Record<string, string> = {
+      themuse: "https://www.themuse.com/api/public/jobs?page=0",
+      arbeitnow: "https://www.arbeitnow.com/api/job-board-api",
+      adzuna: "https://api.adzuna.com/v1/api/jobs/us/search/1",
+      jobicy: "https://jobicy.com/api/jobs",
+    };
+    const configured = sourceConfig && typeof sourceConfig === "object" && !Array.isArray(sourceConfig) ? sourceConfig.endpoint : undefined;
+    const endpoint = typeof configured === "string" ? configured.trim() : defaults[provider];
+    try {
+      const url = new URL(endpoint);
+      const pairs = Array.from(url.searchParams.entries()).sort(([ak, av], [bk, bv]) =>
+        ak < bk ? -1 : ak > bk ? 1 : av < bv ? -1 : av > bv ? 1 : 0);
+      url.search = "";
+      for (const [key, value] of pairs) url.searchParams.append(key, value);
+      return `Search:${provider}:${url.href}`;
+    } catch {
+      return `Search:${provider}:${endpoint || ""}`;
+    }
   }
   if (["greenhouse", "lever", "ashby"].includes(kind)) {
     if (!trimmed.includes("://")) {
@@ -238,7 +255,7 @@ export function validateWorkflowYaml(
               } catch { /* Rust validation reports malformed endpoint syntax. */ }
             }
           }
-          const endpointKey = normalizedEndpoint("search", provider);
+          const endpointKey = normalizedEndpoint("search", provider, extractor.source_config);
           if (seenEndpoints.has(endpointKey)) errors.push({ message: `Duplicate source endpoint: ${endpointKey}` });
           else seenEndpoints.add(endpointKey);
         } else if (

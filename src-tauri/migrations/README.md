@@ -57,6 +57,7 @@ Additional forward migrations:
 | 0030 | Creates indexed `role_titles` and token-prefix lookup tables; the embedded O*NET TSV is seeded only into an empty table. The committed SQL plus two exactly verified historical variants remain immutable; migration 0031 converges all three. |
 | 0031 | Converges the three recognized role-term table histories with a transactional copy while preserving role IDs and links; no migration-30 checksum is rewritten. |
 | 0032 | Adds a case-insensitive company-name index for bounded local-employer search. |
+| 0033 | Preserve all source rows and job/run links while allowing a workflow to contain distinct search endpoints for one provider. Partial unique indexes retain non-search uniqueness and reject identical effective search endpoints; host validation handles URL and query normalization. |
 The Rust backfills preserve source identities, uncertain legacy salary values and
 unresolved suppression keys. Populated upgrade tests preserve all tracked states,
 notes, favorites, status events, workflow rules, custom settings and tombstones.

@@ -27,7 +27,7 @@ Save never runs a scrape.
 Older saved examples can be replaced only through the reviewed, fingerprinted
 workflow-replacement dialog. Its database backup precedes one atomic transaction;
 custom workflows and saved-job state remain preserved.
-Current contracts: WorkflowSpec **10**, worker protocol **14**, migration **32**.
+Current contracts: WorkflowSpec **10**, worker protocol **14**, migration **33**.
 The per-run target counts newly inserted Discovered jobs, not refreshes. Runs can
 finish below target when sources exhaust or existing safety bounds are reached;
 Preview is a non-writing sample rather than a prediction of new discoveries.
@@ -43,6 +43,11 @@ crawler uses same-origin link traversal, `robots.txt` by default, a default 750 
 delay, page/depth caps, and ordinary HTTP semantics; it does not search the web
 or bypass login/access controls. The standalone Software Engineering development/test
 workflow deliberately ignores `robots.txt` for its two test sources only.
+Repeated identical public-HTML evidence is evaluated once per source; richer
+later evidence remains eligible for matching. A failed optional crawl page leaves
+coverage partial while other queued pages continue. The standalone Muse discovery
+test retains its unfiltered feed and adds three explicitly category-scoped samples;
+these are bounded provider samples, not exhaustive job search.
 
 For workflow Preview, public-HTML crawl sources are capped at six navigations per
 source and the existing 20-second source/45-second workflow deadlines remain

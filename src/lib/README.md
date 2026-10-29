@@ -64,6 +64,9 @@ does not contact providers or claim live coverage.
 
 Workflow compatibility is resolved by Rust. `yamlWorkflow.ts` serializes/parses
 supported configuration without migrating legacy matching into structured rules.
+Search source duplicate checks use the provider's effective endpoint, including its
+query string; omitted endpoints resolve to provider defaults, so explicit default
+endpoints and default provider aliases remain duplicates.
 `api.describeWorkflowFilters` returns generated `FilterCompatibilityRestriction`
 entries from desktop IPC; browser demonstrations preserve restrictions and report
 that authoritative explanations require desktop, rather than implementing a copy.

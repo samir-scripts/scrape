@@ -50,6 +50,9 @@ credential store, previews a two-page same-origin public-HTML crawl, explicitly
 runs it, and verifies the robots/seed/listing requests, persisted identities and
 credential redaction. The local proxy fixture refuses unauthenticated or
 out-of-origin requests; no live provider or user database is involved.
+It also imports the standalone crawler and Muse discovery YAMLs through native
+Preview → Save → Run, verifies unfiltered and category-scoped fixture requests,
+and checks a separate one-source 1,000-candidate accounting fixture.
 
 `test-native-startup.mjs` runs the actual configured Tauri development pipeline
 with isolated ports and temporary database fixtures. It verifies native readiness,

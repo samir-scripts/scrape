@@ -1094,7 +1094,18 @@ impl SourceCoordinator {
                                         }
                                         session.coverage_incomplete |= *eligibility_incomplete;
                                         if let Some(t) = termination {
-                                            session.stats.termination = *t;
+                                            if !matches!(
+                                                session.stats.termination,
+                                                CoverageTermination::Failed
+                                                    | CoverageTermination::NeedsLogin
+                                                    | CoverageTermination::TimeLimit
+                                            ) || !matches!(
+                                                t,
+                                                CoverageTermination::PageLimit
+                                                    | CoverageTermination::RequestLimit
+                                            ) {
+                                                session.stats.termination = *t;
+                                            }
                                         }
                                         emit(&event)?;
                                         continue;
@@ -1409,10 +1420,7 @@ impl SourceCoordinator {
                 && !session.exhausted
                 && !session.failed
             {
-                if !session.coverage_incomplete
-                    && (session.stats.unresolved == 0
-                        || session.stats.termination == CoverageTermination::Exhausted)
-                {
+                if session.stats.termination == CoverageTermination::Exhausted {
                     session.stats.termination = CoverageTermination::JobLimit;
                 }
             } else if session.failed
@@ -1485,9 +1493,6 @@ impl SourceCoordinator {
                     ScanOutcome::Failed
                 }
             } else if session.coverage_incomplete || session.stats.unresolved > 0 {
-                if session.stats.termination == CoverageTermination::Exhausted {
-                    session.stats.termination = CoverageTermination::Failed;
-                }
                 if matches!(
                     session.stats.termination,
                     CoverageTermination::NeedsLogin | CoverageTermination::Failed

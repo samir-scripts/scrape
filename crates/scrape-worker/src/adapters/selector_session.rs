@@ -144,6 +144,8 @@ pub(crate) struct SelectorSession {
     crawl_terms: CrawlSearchTerms,
     current_html: Option<(String, Url)>,
     hydrated_jobs: HashMap<String, WorkerEvent>,
+    public_html_observations: HashMap<String, WorkerEvent>,
+    attempted_details: HashSet<String>,
     priority_ready: bool,
 }
 impl SelectorSession {
@@ -313,6 +315,8 @@ impl SelectorSession {
             crawl_terms: CrawlSearchTerms::from_filters(filters),
             current_html: None,
             hydrated_jobs: HashMap::new(),
+            public_html_observations: HashMap::new(),
+            attempted_details: HashSet::new(),
             priority_ready: false,
         };
         session.enqueue_links(&html, &actual, 0);
@@ -706,6 +710,9 @@ impl SelectorSession {
             .rejected
             .is_empty()
         {
+            if self.same_public_html_observation(&identity, &event) {
+                return Ok(SelectorStep::Yield);
+            }
             return Ok(SelectorStep::Event(Box::new((event, Some(preliminary)))));
         }
         let mut warning = None;
@@ -724,7 +731,7 @@ impl SelectorSession {
             }
         } else if let Some(cached) = self.hydrated_jobs.get(&identity) {
             super::selector::merge_normalized_job(&mut event, cached.clone());
-        } else {
+        } else if !self.attempted_details.contains(&identity) {
             if Instant::now() >= self.source_deadline {
                 return Ok(self.stop(
                     "Website detail crawl bound reached; remaining candidates were not examined",
@@ -761,6 +768,7 @@ impl SelectorSession {
                 }
             } else {
                 self.detail_requests += 1;
+                self.attempted_details.insert(identity.clone());
                 self.pages_visited += 1;
                 let scoped = client.for_static_source(&self.config);
                 let call_started = Instant::now();
@@ -785,13 +793,21 @@ impl SelectorSession {
                     Ok(Ok((html, actual))) => {
                         let actual = Url::parse(&actual)?;
                         self.visited.insert(actual.to_string());
-                        if let Err(error) = super::selector::hydrate_public_html_job(
+                        match super::selector::hydrate_public_html_job(
                             &mut event,
                             &html,
                             &actual,
                             &self.source,
                         ) {
-                            warning = Some((error.to_string(), None));
+                            Ok(()) => {
+                                self.hydrated_jobs.insert(identity.clone(), event.clone());
+                                if let Ok(actual_identity) =
+                                    scrape_core::identity::normalized_detail_url(actual.as_str())
+                                {
+                                    self.hydrated_jobs.insert(actual_identity, event.clone());
+                                }
+                            }
+                            Err(error) => warning = Some((error.to_string(), None)),
                         }
                     }
                     Ok(Err(error)) => {
@@ -812,11 +828,13 @@ impl SelectorSession {
                         ));
                     }
                 }
-                self.hydrated_jobs.insert(identity, event.clone());
             }
         }
         if self.page.candidates.is_empty() {
             self.current_html = None;
+        }
+        if self.same_public_html_observation(&identity, &event) {
+            return Ok(SelectorStep::Yield);
         }
         let evidence = MatchingEvidence::from_event(&event, true);
         let assessment = matcher.assess(&event, started, &evidence);
@@ -837,6 +855,16 @@ impl SelectorSession {
             ))));
         }
         Ok(SelectorStep::Event(Box::new((event, Some(evidence)))))
+    }
+    // Every observation in a session has the same source ID, so WorkerEvent's
+    // by-reference equality compares the complete job evidence without copying it.
+    fn same_public_html_observation(&mut self, identity: &str, event: &WorkerEvent) -> bool {
+        if self.public_html_observations.get(identity) == Some(event) {
+            return true;
+        }
+        self.public_html_observations
+            .insert(identity.to_owned(), event.clone());
+        false
     }
 
     pub fn has_pending(&self) -> bool {
@@ -982,11 +1010,12 @@ impl SelectorSession {
             {
                 return Ok(self.stop(&format!("Website crawl access requires login or permission (HTTP {status}): {message}"), CoverageTermination::NeedsLogin));
             }
+            Ok(Err(error @ (ClientError::Configuration(_) | ClientError::Url(_) | ClientError::RobotsDisallowed(_)))) => {
+                return Ok(self.stop(&format!("Website crawl page {url} unavailable: {error}"), CoverageTermination::Failed));
+            }
             Ok(Err(error)) => {
-                return Ok(self.stop(
-                    &format!("Website crawl page {url} unavailable: {error}"),
-                    CoverageTermination::Failed,
-                ))
+                self.visited.insert(scrape_core::identity::normalized_detail_url(url.as_str()).map_err(ClientError::Configuration)?);
+                return Ok(self.warning(&format!("Website crawl page {url} unavailable: {error}"), CoverageTermination::Failed));
             }
             Err(_) => {
                 return Ok(self.stop(
@@ -1018,7 +1047,7 @@ impl SelectorSession {
                 return Ok(self.stop(&message, CoverageTermination::NeedsLogin))
             }
             Err(error) => {
-                return Ok(self.stop(
+                return Ok(self.warning(
                     &format!("Website crawl page extraction failed: {error}"),
                     CoverageTermination::Failed,
                 ))
@@ -1050,6 +1079,9 @@ impl SelectorSession {
     }
     fn stop(&mut self, message: &str, termination: CoverageTermination) -> SelectorStep {
         self.exhausted = true;
+        self.warning(message, termination)
+    }
+    fn warning(&self, message: &str, termination: CoverageTermination) -> SelectorStep {
         SelectorStep::Event(Box::new((
             WorkerEvent::Warning {
                 source_id: self.source.id.clone(),
@@ -1217,6 +1249,8 @@ mod tests {
             crawl_terms: CrawlSearchTerms::default(),
             current_html: None,
             hydrated_jobs: HashMap::new(),
+            public_html_observations: HashMap::new(),
+            attempted_details: HashSet::new(),
             priority_ready: false,
         };
         let client = HttpClient::new(1, 0);
