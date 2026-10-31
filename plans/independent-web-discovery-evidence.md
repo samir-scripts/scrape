@@ -270,3 +270,158 @@ database.
 The 20 older jobs were 17 `scraped` and 3 `viewed`, with no favorites or
 nonblank notes. The latest startup/migration validator was also run against a
 second isolated copy and returned `REPAIR_OK migration_version=35 integrity=ok`.
+
+## Discovery coverage follow-on baseline — 2026-10-31
+
+Before coverage edits, `node scripts/native-independent-live.mjs` ran the
+canonical profile in an isolated temporary native profile. It started at
+`2026-10-31T18:49:23.509Z`, examined 36 candidates, rejected all 36 and
+inserted zero jobs. Both sources terminated partial at their 100-page limits:
+the company directory used 25 origins and examined five candidates; the
+historical sample used 17 origins and examined 31. Artifacts, including the
+exact executed spec and temporary database:
+`/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-independent-live-jJQOuA`.
+These are bounded yield counts, not a measurable web-wide recall rate.
+
+Before implementation, `cargo test -p scrape-worker --test web_discovery_process
+-- --nocapture` ran seven cases: five passed and two new coverage regressions
+failed. The directory fixture followed the operator's job board without
+reaching the employer; the structured posting with an explicit English month
+publication label remained unresolved. Captured output: `artifact://478`.
+
+Follow-on checks run so far: `cargo test -p scrape-worker public_web` passed
+14 transport tests; the robots repair was committed as `1e31c87`.
+`cargo test -p scrape-worker --test web_discovery_process` passed all seven
+then-current cases after the first frontier/date changes. The full frontend
+sequence `npx tsc --noEmit`, `npx vitest run --maxWorkers=1`,
+`node scripts/test-app-startup.mjs`, and `npm run build` passed: 92 test files,
+588 tests, startup smoke and production build. The existing large-chunk advisory
+remained. These checks do not establish live non-ATS acceptance.
+
+The expanded date and directory regression run passed `cargo test -p
+scrape-core posting_date` (14 tests), `cargo test -p scrape-worker --test
+web_discovery_process -- --test-threads=1` (11 tests), and `cargo test -p
+scrape-worker relative_date_tests` (6 tests). An earlier concurrent execution
+of the process file had one local replay robots connection error; the complete
+serial file passed without changing assertions or timeouts. After rebuilding the
+sidecar, `cargo test -p scrape --test worker_repository` passed all 33 tests.
+The fixture exercises listing-to-detail date provenance through the real worker
+and temporary SQLite while retaining the shared quota, updates and blocked rows.
+
+`npm run test:native-web-scraping` passed against the isolated native fixture:
+the North Carolina directory markup led to a fictional employer-controlled,
+dated US software role with direct email application; the actual Discovered
+inspector, captured chain and temporary SQLite observation were correlated.
+Artifact:
+`/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-web-scraping-S0JcYA`.
+The first attempt failed because the harness selected the navigation button by
+exact text while its visible count is included in that text. The harness now
+uses the existing semantic navigation action; the assertions were not relaxed.
+This fixture is not a live employer posting.
+
+The first follow-on live verification, started at `2026-10-31T19:10:58.712Z`,
+failed before completion with `Candidate evidence exceeds bounds`. It reached
+both directory and employer pages but emitted a diagnostic containing too many
+geographic evidence tuples; the host rejected the malformed protocol event.
+Artifacts:
+`/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-independent-live-DUQEBe`.
+This failed run is not a zero-result coverage measurement. A local 65-location
+fixture reproduced the defect before correction; its failed-before output was
+captured as `artifact://505`.
+
+The worker now validates geographic tuples before candidate diagnostics and
+reports oversized tuples as an invalid posting, continuing other candidates
+without truncating location evidence. The full `web_discovery_process` file
+passed 12 cases and `coordinator_tests` passed 48. The local replay listener
+was also corrected to read complete HTTP headers before responding, to address
+the intermittent connection reset without changing assertions or timeouts.
+The next live run completed partial at `2026-10-31T19:14:39.723Z`; it examined
+15 candidates, rejected 14, marked one invalid and saved zero jobs. Both
+sources visited 100 pages, across 20 and 25 origins respectively. SQLite
+integrity was `ok`; no candidate was available for independent adjudication.
+Artifacts and an explicit unproven review:
+`/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-independent-live-0wxZGF`.
+Trace review showed company-partner pages and event-calendar articles being
+scheduled as career navigation. A fixture reproduced those unnecessary
+requests before tightening generic directory-profile and non-job-path admission.
+
+After that navigation correction, another live default run began at
+`2026-10-31T19:17:44.913Z` and ended partial: eight candidates examined and
+rejected, zero inserted, and 100 pages per source across 22 and 25 origins.
+SQLite integrity was `ok`. No candidate existed for a non-ATS adjudication.
+Artifacts and the unproven review:
+`/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-independent-live-dVzSS2`.
+The trace also showed a `.png` asset discovered via a sitemap; a regression
+reproduced this before reusing the asset exclusion for sitemap locations.
+
+The preceding live default run began at `2026-10-31T19:20:02.044Z`. Both sources
+again reached 100 pages, across 23 and 25 origins. Eight candidates were
+examined and rejected; none was persisted. SQLite integrity was `ok`. The trace
+recorded one job-detail dispatch to Greenhouse, which is not non-ATS proof.
+No job was available for independent employer, application-route or date
+adjudication. The acceptance gate returned `unproven` (exit 2), with a separate
+review and artifacts at
+`/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-independent-live-tcy37M`.
+No web-wide recall or miss-rate claim follows from these bounded counts.
+
+The live trace reached [Broadleaf's public openings index](https://broadleafcommerce.com/job-listings/).
+That page linked to [Full Stack Engineer](https://broadleafcommerce.com/full-stack-engineer/)
+and [Senior DevOps Engineer](https://broadleafcommerce.com/senior-devops-engineer/)
+using role-title links whose URLs contain neither `job` nor `career`. Before
+the role-link fix, the crawler did not admit either detail. The independently
+read detail pages show engineering duties and a direct contact, but did not
+establish original posting dates or US eligibility. Their 2025
+`article:modified_time` values are not posting dates and cannot establish the
+48-hour requirement.
+
+A deterministic regression reproduced the missed role-title link before the
+fix. The crawl now uses the core Rust role-choice predicate on short link titles
+from a career index to admit and prioritize detail leads; actual eligibility
+still uses the unchanged worker/host filters. `cargo test -p scrape-worker
+--test web_discovery_process -- --test-threads=1` passed all 12 cases, and
+`cargo test -p scrape-core matching` passed 18 tests. The intermittent fixture
+transport failure was traced to accepted sockets inheriting nonblocking mode on
+macOS; explicitly setting accepted fixture sockets to blocking fixed the read
+race without increasing timeouts or weakening checks.
+
+The follow-on live retry after the title-link fix began at
+`2026-10-31T19:27:36.526Z`. The default directory reached Broadleaf's index and
+fetched both employer-hosted Full Stack and DevOps details; their candidate
+diagnostics explicitly record unknown original publication and unknown
+geography, and both remained unresolved. The run examined ten candidates,
+rejected eight, saved zero, and reached 100 pages per source across 22 and 25
+origins. SQLite integrity was `ok`. The acceptance gate correctly returned
+`unproven`; trace, diagnostics and independent review are retained at
+`/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-independent-live-ixhaiD`.
+An actually observed employer-controlled non-ATS posting with explicit US
+eligibility and a provable original date inside the window remains necessary
+to satisfy live acceptance.
+
+The post-interjection regression also found that two seeds on one origin could
+consume a one-page budget on the alternate before the configured primary seed.
+A deterministic fixture reproduced the problem; the scheduler now selects the
+canonical primary seed first. The original default profile has one seed per
+source, so this correction does not retroactively change the live run above.
+
+The final workspace run initially encountered an intermittent macOS fixture
+failure in `workday_cxs_survives_worker_and_sqlite`: its accepted socket
+inherited the listener's nonblocking mode. The affected fixture now explicitly
+sets the accepted stream to blocking, matching its sibling fixtures; no timeout
+or assertion was changed. Complete workspace checks are rerun after this fix.
+
+Final checks after the role-link and fixture corrections:
+`cargo test --workspace` passed 765 tests with one ignored;
+`npm run gen:types` and `git diff --exit-code src/bindings` passed;
+`npm run test:providers` passed the recorded-provider matrix.
+`npm run test:native-web-scraping` passed again against isolated fixture data
+at `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-web-scraping-DI6QOv`.
+The frontend TypeScript, 588 Vitest tests, startup smoke and production build
+passed as recorded above. Provider replay and native fixture results do not
+replace a live qualifying non-ATS posting.
+
+Reviewable checkpoints: `1e31c87` repairs same-origin robots redirects;
+`52d96b6` formats that transport; `27fcc94` adds isolated native acceptance
+collection; `97463b6` implements bounded independent discovery, publication
+evidence and the associated persistence regressions. `cargo fmt --all --check`,
+`node scripts/check-style.mjs`, and `git diff --check` also passed. No live user
+database was opened or modified for this work.
