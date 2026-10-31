@@ -154,6 +154,95 @@ support a recall estimate even if some qualifying roles were identified. The
 alphabetically clustered, partly post-smoke selection is not representative of
 all employers or global web coverage.
 
+## Repeat live comparison — 2026-10-31
+
+Two independently selected convenience samples of ten employer career surfaces
+each were frozen before either run's results were inspected. The institution
+sample was recorded at 09:08:05.686 UTC; the company sample's first clock
+reading immediately after selection was 09:08:05.692 UTC. Their approximate
+48-hour cutoff was 2026-10-29 09:08:05 UTC. The samples are not representative:
+the company set contains large organizations, several surfaces require
+JavaScript, and none was exhaustively enumerated. The earlier sample above
+includes smaller employers but used a different cutoff.
+
+| Selected surface | Public-page assessment |
+| --- | --- |
+| [IBM](https://www.ibm.com/careers/search) | Search readable but paginated; a US software role had no observed original date. |
+| [Microsoft](https://careers.microsoft.com/v2/global/en/home.html) | Public portal shell; individual current jobs and dates not established. |
+| [Apple](https://jobs.apple.com/en-us/search) | US results contain unlabeled dates; the inspected detail returned a shell. Robots response was not usable. |
+| [Google](https://www.google.com/about/careers/applications/jobs/results) | US software detail readable without an original date; pagination was not fully examined. |
+| [NVIDIA](https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite) | Public page returned a shell; no roles enumerated from it. |
+| [Intel](https://intel.wd1.myworkdayjobs.com/External) | Listing and candidate detail returned shells; robots response was not usable. |
+| [Boeing](https://jobs.boeing.com/) | Employer detail pages readable; IT category only partially enumerated. Its robots file disallows `/search-jobs/`. |
+| [Lockheed Martin](https://www.lockheedmartin.com/en-us/careers/index.html) | Landing page readable; individual current job dates not established. |
+| [JPMorgan Chase](https://www.jpmorganchase.com/careers) | Landing page readable; robots restricts linked job-details paths. |
+| [Goldman Sachs](https://higher.gs.com/) | Selected site and robots request returned 502; no role verified. |
+| [USAJOBS](https://www.usajobs.gov/) | Static software search reported no jobs, which does not prove the rendered search is empty. |
+| [Harvard](https://hr.harvard.edu/search-jobs) | Selected page and robots request returned 403. |
+| [Mayo Clinic](https://jobs.mayoclinic.org/) | Employer detail for a Rochester software engineer displayed 2026-08-20, outside the window; broader search was not enumerated. |
+| [Cleveland Clinic](https://jobs.clevelandclinic.org/) | Search returned a static shell; a linked role returned 404. |
+| [CDC](https://jobs.cdc.gov/) | Redirected to USAJOBS; not a distinct enumerated surface. |
+| [Red Cross selected hostname](https://careers.redcross.org/) | DNS failed; the separately located employer careers page links to Workday. |
+| [Johns Hopkins Medicine](https://jobs.hopkinsmedicine.org/jobs/information-technology/) | IT listing exposed roles; inspected recent clinical data roles did not establish SWE/IT duties. An inspected software engineer was dated 2026-09-28. |
+| [Children's Hospital of Philadelphia](https://careers.chop.edu/) | Search returned a shell; one indexed administrator detail returned 410. |
+| [Cornell](https://hr.cornell.edu/jobs) | Linked job-search page returned a shell; one indexed ML engineer detail returned 410. |
+| [University of Virginia](https://jobs.virginia.edu/) | Search and IT category returned static shells without enumerated jobs. |
+
+The [Boeing Senior Cloud DevOps Developer](https://jobs.boeing.com/job/hazelwood/senior-cloud-devops-developer/185/102655847072)
+(`JR2026527973`, Missouri) and
+[IT Systems Administrator](https://jobs.boeing.com/job/el-segundo/it-systems-administrator-millennium-space-systems/185/101069888336)
+(`JR2026525275`, California) each visibly showed Post Date October 30 and an
+Apply link; both also exposed structured `datePosted: 2026-10-30`. Their page
+does not establish the source timezone. They are plausible recent US roles,
+not confirmed strict-window reference jobs, and both link to Workday applications.
+Neither requisition appeared in either bounded run's persisted results.
+That is an output observation, not proof that either channel could never find
+the jobs. A third [Boeing programmer analyst](https://jobs.boeing.com/job/fairfax/programmer-analyst-subject-matter-expert/185/102227910896)
+(`JR2026527462`) showed the same visible date and a US location but was
+contingent on program award; its publication timezone remains unknown.
+
+The isolated canonical independent run began at **09:08:25.045 UTC** with the
+unchanged 48-hour US filters and 20-new-job cap. It examined 36 candidates,
+inserted **0**, and ended `partial`: its directory source attempted 100 pages
+across 25 origins, its seed sample 100 pages across 17 origins, and both hit
+page limits. Eight candidates had posting date as their primary rejection.
+The temporary database contains zero jobs and zero discovery observations.
+Artifacts: `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-independent-live-kuJx74`.
+
+The separate prior-channel run began at **09:09:04.137 UTC**, with the same
+filter configuration and cap but a 39-second-later rolling cutoff. It inserted
+**20** jobs after 1,203 examined candidates and ended `partial` with page/job
+limits. Its result cannot establish an uncapped baseline. Artifacts:
+`/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-independent-live-K8fXoP`.
+No strictly reference-eligible job was established by the incomplete sample;
+the miss-rate denominator and a comparable old/new recall rate remain
+**not measurable**. Neither run demonstrates discovery of a qualifying
+non-ATS employer from a directory seed.
+
+A further manually seeded native run began at **09:14:38.895 UTC** from
+`https://jobs.boeing.com/category/information-technology-jobs/185/2630/1`.
+It persisted **4** jobs after examining 39 candidates; its 100-page, 7-origin
+run ended `partial` at the page limit. The saved provenance shows the Boeing
+seed, then a Workday sitemap and Workday-hosted final job pages—not an
+ATS-independent employer result. The saved requisitions were `JR2026527973`,
+`JR2026514051`, `JR2026526220`, and `JR2026528420`. Each final page was
+independently reread and exposed `JobPosting.datePosted: 2026-10-30`; each
+observation retained that date. The workflow interpreted these date-only values
+in its configured `America/New_York` timezone; the pages did not independently
+declare their publication timezone. `JR2026527973` was one of the sampled
+roles above; `JR2026525275` was not persisted in this run. This manually targeted
+run is not part of the prior/default channel comparison. Temporary SQLite had
+four observations for four jobs, integrity `ok`, and no foreign-key violations.
+Artifacts:
+`/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-independent-live-HFwNHE`.
+
+Repeat regressions: `cargo test --workspace` passed 739 tests with one ignored;
+`npm run gen:types` and the bindings drift check passed; `npx tsc --noEmit`,
+`npx vitest run --maxWorkers=1` (92 files, 588 tests), the frontend startup
+smoke, `npm run build`, `node scripts/check-style.mjs`, and the recorded
+`npm run test:providers` passed. The production bundle retained its large-chunk
+advisory. These results do not change the live coverage limitations above.
+
 ## Database migration incident
 
 A local development version of migration 34 changed while Scrape was running.
