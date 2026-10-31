@@ -390,3 +390,14 @@ records, inspect the backup and foreign-key integrity, inject failure immediatel
 after dropping the old table, and cover rollback, retry, duplicate rejection and
 idempotent restart. Restore the compatible snapshot to roll back; reverting the
 executable alone does not reverse this schema change.
+
+## Independent web discovery (migration 34)
+
+Migration `0034_web_discovery.sql` adds the `web_discovery` source kind and a
+per-job/run/source observation table containing validated discovery provenance.
+It preserves existing job/run source links while rebuilding the source-kind
+constraint. Migration 35 retains observations and their source identity when a
+source is removed. Exact recognized local development variants of migration 34
+retain their original checksums and receive the appropriate forward migration;
+unknown checksums or schemas are refused. A compatible pre-upgrade backup is
+required to roll back; a Git revert alone cannot reverse this schema.
