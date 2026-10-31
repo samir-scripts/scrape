@@ -1420,7 +1420,14 @@ impl SourceCoordinator {
                 && !session.exhausted
                 && !session.failed
             {
-                if session.stats.termination == CoverageTermination::Exhausted {
+                if session.stats.termination == CoverageTermination::Exhausted
+                    || (!session.coverage_incomplete
+                        && session.stats.unresolved == 0
+                        && matches!(
+                            session.stats.termination,
+                            CoverageTermination::RequestLimit | CoverageTermination::PageLimit
+                        ))
+                {
                     session.stats.termination = CoverageTermination::JobLimit;
                 }
             } else if session.failed
