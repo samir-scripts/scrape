@@ -5074,7 +5074,7 @@ async fn imported_software_engineering_crawler_yaml_caps_persisted_discoveries_a
     let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap();
-    let parse_script = r#"import fs from "node:fs"; import { parse } from "yaml"; console.log(JSON.stringify(parse(fs.readFileSync("workflows/software-engineering-web-scraper-test.yaml", "utf8"))));"#;
+    let parse_script = r#"import fs from "node:fs"; import { parse } from "yaml"; console.log(JSON.stringify(parse(fs.readFileSync("test-workflows/software-engineering-web-scraper-test.yaml", "utf8"))));"#;
     let parsed_yaml = Command::new("node")
         .current_dir(repo)
         .args(["--input-type=module", "-e", parse_script])
@@ -5505,7 +5505,7 @@ async fn imported_software_engineering_discovery_yaml_persists_discoveries_to_sq
     let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap();
-    let parse_script = r#"import fs from "node:fs"; import { parse } from "yaml"; console.log(JSON.stringify(parse(fs.readFileSync("workflows/software-engineering-discovery-test.yaml", "utf8"))));"#;
+    let parse_script = r#"import fs from "node:fs"; import { parse } from "yaml"; console.log(JSON.stringify(parse(fs.readFileSync("test-workflows/software-engineering-discovery-test.yaml", "utf8"))));"#;
     let parsed_yaml = Command::new("node")
         .current_dir(repo)
         .args(["--input-type=module", "-e", parse_script])

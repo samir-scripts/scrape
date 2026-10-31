@@ -11,8 +11,8 @@ const pages = [];
 const pendingProxyPaths = [];
 const recentDate = new Date(Date.now() - 3600_000).toISOString();
 
-const rawCrawlerYaml = readFileSync("workflows/software-engineering-web-scraper-test.yaml", "utf8");
-const rawDiscoveryYaml = readFileSync("workflows/software-engineering-discovery-test.yaml", "utf8");
+const rawCrawlerYaml = readFileSync("test-workflows/software-engineering-web-scraper-test.yaml", "utf8");
+const rawDiscoveryYaml = readFileSync("test-workflows/software-engineering-discovery-test.yaml", "utf8");
 let bulkMode = false;
 const bulkSpec = parseYaml(rawDiscoveryYaml);
 bulkSpec.metadata.name = "Thousand-candidate diagnostic fixture";
