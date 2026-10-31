@@ -1,7 +1,7 @@
-# Workflow specification compatibility and current v10 contract
+# Workflow specification compatibility and current v11 contract
 
-Current canonical exports use **v10**, worker protocol **14**, and migration **33**.
-Rust accepts versions 1–9 through the same compatibility resolver. Older contract
+Current canonical exports use **v11**, worker protocol **15**, and migration **35**.
+Rust accepts versions 1–10 through the same compatibility resolver. Older contract
 descriptions below record their original behavior; saved rules are not broadened.
 
 The desktop validator is authoritative for create, edit, import and preview. Rust contracts generate the TypeScript representations in `src/bindings`. Versions 1 and 2 migrate explicitly to version 3; unknown fields and unsupported versions are errors with paths.
@@ -15,6 +15,25 @@ Only legacy versions 1–3 resolve omitted keyword/location/role properties from
 Native compensation defaults to `match_mode: range_overlap`, preserving inclusive overlap and unbounded missing endpoints for all saved versions. `advertised_amount` requires an evidenced endpoint in one native currency/interval range: compare `max_minor.or(min_minor)` to the inclusive minimum and `min_minor.or(max_minor)` to the inclusive maximum. Missing amounts never qualify in this mode, including when `include_unknown` is true. No annualization or currency conversion is performed. Thus USD/year `min_minor: 6000001` accepts an advertised $50,000–$80,000 range or sole $70,000 lower endpoint, but not a sole $50,000 lower endpoint or exactly $60,000. The Rust matcher and SQLite `COALESCE` predicates use the same comparisons.
 
 Posting-date presets are `past_12h`, `today`, `past_24h`, `past_48h`, `past_week` (168 hours), `past_month` (720 hours), and `any`. New drafts use `past_week`, excluding unknown dates. A preset cannot coexist with `last_hours`, `from` or `through`. Today resolves local midnight anew at each run in the filter's IANA timezone, not when saved; rolling windows share the captured run start. Custom absolute dates retain inclusive final-day semantics. Existing arbitrary-hour and absolute filters survive unchanged until edited. UI Any time removes the date filter; unknown-date inclusion is explicit whenever a date rule remains active.
+
+For `past_48h`, a date-only value denotes the whole calendar day in the filter's
+timezone; the entire interval must fit in the captured rolling window. Other
+presets retain their existing date-only interpretation.
+Rounded relative publication labels are not currently converted into precise
+timestamps; a workflow excluding unknown dates will not accept them.
+
+`extractor.kind: web_discovery` starts from `extractor.url` and optional additional
+`source_config.seed_urls`. The canonical complete seed set identifies the source.
+`max_domains` (1–100), `max_depth` (0–5), and `max_pages` (1–100) bound traversal.
+An optional newline-delimited HTTPS manifest can be imported in the editor; its
+Common Crawl ID and import time are recorded with observations reached from
+imported seeds. Discovery uses public static HTML, robots and DNS-pinned public
+destinations, not the proxy or unrestricted browser rendering. JavaScript-only
+pages are unsupported. Sitemap modification dates do not establish publication.
+Per-run observations retain seed, referrer, final URL and original-date evidence.
+Editing the additional-seed list clears its manifest attribution; importing a new
+file replaces that list atomically. Literal IP addresses are refused at import,
+and DNS destinations are checked again at fetch time.
 
 `extractor.kind: search` accepts provider identifiers `themuse` (default), `arbeitnow`, `jobicy` and `adzuna`. The Muse is a bounded public feed; Arbeitnow is Germany-focused and does not establish original publication dates. Jobicy is remote-only, delayed three hours, limited to seven days and synchronized at most hourly. Adzuna US discovery requires personal credentials stored in the OS keystore, explicit source enablement and safe credential-only requests. Provider-specific availability, rate limits and publication windows bound coverage; no provider guarantees every employer or matching posting.
 

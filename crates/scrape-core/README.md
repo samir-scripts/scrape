@@ -32,6 +32,7 @@ scrape-core/
     ├── protocol.rs     # Subprocess IPC contracts (WorkerConfig, WorkerEvent, NDJSON v11)
     ├── role.rs         # Role category classification heuristics (SWE, Data, etc.)
     ├── search_source.rs # Shared public search provider identity, endpoint validation and bounds
+    ├── web_discovery.rs # Bounded independent discovery seeds and manifest provenance
     ├── static_source.rs # Bounded static selector source configuration and transforms
     ├── types.rs        # Core enums and domain structures (JobStatus, RoleType, etc.)
     └── xpath.rs        # Pure-Rust XPath 1.0 query execution over html5ever DOM trees
@@ -48,12 +49,13 @@ scrape-core/
 | [`examples/cache-logo-fixture.rs`](examples/cache-logo-fixture.rs) | CLI example that runs raw logo bytes through production `branding` validation to reproduce review PNGs. |
 | [`src/lib.rs`](src/README.md) | Crate root. Re-exports public submodules and shared utilities (`now_iso()`, `INGESTION_LIMITS`, `PROTOCOL_VERSION`). |
 | [`src/types.rs`](src/README.md#typesrs) | Canonical domain enumerations: `JobStatus`, `RoleType`, `TriState`, `SalaryInterval`, `SalarySource`, `SourceKind`, `SourceCadence`, `ClearanceLevel`, `WorkAuthRequirement`, and `WorkplaceType`. |
-| [`src/protocol.rs`](src/README.md#protocolrs) | IPC protocol v14: WorkerConfig, candidate decisions, ordered commit feedback, limits, filters, sources, NDJSON events and reconciled coverage/outcome statistics. User-supplied proxy configuration is execution-only; custom script protocol remains v2. |
+| [`src/protocol.rs`](src/README.md#protocolrs) | IPC protocol v15: WorkerConfig, candidate decisions, ordered commit feedback, limits, filters, discovery provenance, NDJSON events and reconciled coverage/outcome statistics. User-supplied proxy configuration is execution-only; custom script protocol remains v2. |
 | [`src/matching.rs`](src/README.md#matchingrs) | Single authoritative owner of `PostingRules` evaluation, `KeywordRules` (Any/All/Exclude/fields), partial-evidence decisions for bounded enrichment, primary `RejectionReason` categorization, and `RejectionExample` diagnostics. |
 | [`src/filter.rs`](src/README.md#filterrs) | SQL-style filter parser and evaluator plus parameterized SQLite `WHERE` clause compilation for saved-job queries and `PostingRules`. |
 | [`src/identity.rs`](src/README.md#identityrs) | Canonical `PostingIdentity` derivation across ATS providers, JSON-LD, and custom selectors so deduplication, rescraping, and suppression share one identity rule. |
 | [`src/geography.rs`](src/README.md#geographyrs) | ISO alpha-2 country and qualified subdivision (`US-CA`, `CA-ON`, etc.) catalog, alias resolution, and exported `CountryOption`/`RegionOption` bindings. |
 | [`src/search_source.rs`](src/README.md#search_sourcers) | Canonical public provider identities and fixed endpoint validation for The Muse, Arbeitnow, Adzuna and Jobicy; bounded provider hints never replace local matching. |
+| [`src/web_discovery.rs`](src/web_discovery.rs) | Canonical independent discovery seed identity, bounded traversal configuration and imported manifest metadata. |
 | [`src/branding.rs`](src/README.md#brandingrs) | Employer identity precedence, `LogoEvidence`/`LogoStatus`/`LogoMethod`, bounded image decoding (512 KiB input, 5120px dimensions, 64 MiB raster allocation), lossless asset caching at most 128px, and the exact legacy Ashby-platform-favicon filter. |
 | [`src/role.rs`](src/README.md#rolers) | Role classification engine that analyzes job titles and external hints to categorize postings into `RoleType` (`swe`, `data`, `product`, `design`, `seasonal`, `other`). |
 | [`src/enrich/`](src/enrich/README.md) | Heuristic parsing engine for unstructured ATS fields: native compensation ranges, multi-location strings, security clearance, visa sponsorship, work authorization, experience/new-grad detection, workplace arrangement, and structured HTML normalization. |

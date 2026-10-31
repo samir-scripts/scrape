@@ -268,6 +268,11 @@ impl HttpClient {
         self.replay_origin = Some(url);
         Ok(self)
     }
+    /// The offline replay origin is set only by the worker's explicit fixture CLI.
+    pub(crate) fn replay_origin(&self) -> Option<&str> {
+        self.replay_origin.as_ref().map(Url::as_str)
+    }
+
 
     fn transport_url(&self, original: &str) -> Result<Url, ClientError> {
         let parsed = Url::parse(original)?;

@@ -1332,6 +1332,7 @@ impl SelectorPosting {
             description_source,
             company_icon_url: company_logo.as_ref().map(|logo| logo.url.clone()),
             company_logo,
+            discovery_provenance: None,
         }
     }
 }

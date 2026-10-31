@@ -48,6 +48,7 @@ pub enum SourceKind {
     Selector,
     Workday,
     Search,
+    WebDiscovery,
 }
 
 impl SourceKind {
@@ -55,7 +56,7 @@ impl SourceKind {
     pub fn expects_url(self) -> bool {
         matches!(
             self,
-            SourceKind::Jsonld | SourceKind::Selector | SourceKind::Workday
+            SourceKind::Jsonld | SourceKind::Selector | SourceKind::Workday | SourceKind::WebDiscovery
         )
     }
 }

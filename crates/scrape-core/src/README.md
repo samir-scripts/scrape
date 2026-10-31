@@ -21,19 +21,22 @@ The `crates/scrape-core/src` directory contains the core source modules that def
   - `TriState`: Three-state boolean enum (`yes`, `no`, `unknown`) used for visa sponsorship, security clearance, and new-grad eligibility.
   - `SalaryInterval`: Frequency of pay (`hourly`, `monthly`, `yearly`).
   - `SalarySource`: Origin of salary data (`structured`, `parsed_title`, `parsed_body`).
-  - `SourceKind`: Ingestion adapter type (`search`, `greenhouse`, `lever`, `ashby`, `workday`, `jsonld`, `selector`).
+  - `SourceKind`: Ingestion adapter type (`search`, `web_discovery`, `greenhouse`, `lever`, `ashby`, `workday`, `jsonld`, `selector`).
   - `SourceCadence`: Scraping frequency (`hourly`, `six_hours`, `twelve_hours`, `daily`, `manual`).
   - `ClearanceLevel`: Government clearance requirements (`none`, `secret`, `top_secret`, `ts_sci`, `polygraph`, `public_trust`).
   - `WorkAuthRequirement`: Work authorization status (`citizen_only`, `us_person`, `open`, `unknown`).
   - `WorkplaceType`: Working arrangement (`onsite`, `hybrid`, `remote`, `unknown`).
 - **Derivations**: Derives `Serialize`, `Deserialize`, `TS` (for TypeScript bindings), and conditionally `sqlx::Type` for database storage.
 
+### [`web_discovery.rs`](web_discovery.rs)
+- Validates canonical seed sets, traversal bounds, and optional imported manifest provenance.
+
 ### [`locator.rs`](locator.rs) and [`xpath.rs`](xpath.rs)
 - **Role**: One locator/regex parser shared by workflow validation and static extraction.
 - **Behavior**: CSS and a documented XPath 1.0 location-path subset operate on the same `scraper::Html` tree. Supports relative/absolute paths, child/self/parent/following-sibling steps, descendant shorthand, attribute/text tests, positional predicates, field attributes and named regex captures. Unsupported syntax fails explicitly. XPath is bounded to 4096 bytes, 64 steps and 32 predicates per step; this is not a full XPath implementation.
 
 ### [`protocol.rs`](protocol.rs)
-- **Role**: Versioned IPC message contracts (`PROTOCOL_VERSION = 14`) exchanged between the Tauri host and isolated worker. Optional proxy credentials are execution-only and excluded from TypeScript bindings.
+- **Role**: Versioned IPC message contracts (`PROTOCOL_VERSION = 15`) exchanged between the Tauri host and isolated worker. Optional proxy credentials are execution-only and excluded from TypeScript bindings.
 - **Key Types**:
   - `WorkerConfig`: JSON payload sent via `stdin` to configure a scrape run (protocol version, sources, limits, filters, suppression keys).
   - `WorkerCommitAck`: Correlates one emitted job with its committed inserted, updated or blocked outcome in persisted runs.

@@ -25,6 +25,7 @@ export function ScanDiagnostics({ sources }: { sources?: SourceScanStats[] | nul
     {sources.map(source => <section key={source.source_id} aria-label={`Scan details ${source.source_id}`} className="grid gap-2">
       <p>{source.source_id}{source.outcome ? ` · ${runStatusLabel(source.outcome)}` : ""} · {source.termination === "job_limit" && !source.commit_feedback ? "Candidate limit reached" : terminations[source.termination]} · {source.commit_feedback ? `new discoveries ${source.newly_committed ?? 0} (workflow target ${source.limit})` : `candidate limit ${source.limit}`}</p>
       {source.provider_total != null && <p>Provider-reported total: {source.provider_total}</p>}
+      {(source.discovery_pages > 0 || source.discovery_origins > 0) && <p>Web discovery: {source.discovery_pages} pages attempted · {source.discovery_origins} origins attempted</p>}
       <p>{source.examined} examined · {source.accepted} accepted · {source.rejected} matching rejections · {source.blocked} blocked · {source.duplicates} duplicates · {source.invalid} invalid · {source.unresolved ?? 0} unresolved · {source.enrichment_warnings ?? 0} enrichment warnings</p>
       <p className="text-[var(--color-ink-mute)]">Counts describe examined candidates. Accepted candidates passed worker matching, not necessarily persistence or new discovery. Unvisited pages and provider eligibility are not inferred.</p>
       {!!source.rejections.length && <ul className="list-disc pl-5">

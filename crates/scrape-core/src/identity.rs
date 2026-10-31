@@ -51,7 +51,10 @@ impl PostingIdentity {
                 Some(id),
             ) => serde_json::to_string(&(kind, board.trim().to_ascii_lowercase(), id.trim()))
                 .unwrap(),
-            (Some(SourceKind::Jsonld | SourceKind::Selector), _, Some(id))
+            (Some(SourceKind::WebDiscovery), _, Some(id)) if Url::parse(id).is_ok() => {
+                serde_json::to_string(&("url", normalized_detail_url(id)?)).unwrap()
+            }
+            (Some(SourceKind::Jsonld | SourceKind::Selector | SourceKind::WebDiscovery), _, Some(id))
                 if Url::parse(id).is_err() =>
             {
                 let origin = Url::parse(&normalized)
@@ -113,5 +116,26 @@ mod tests {
             normalized_detail_url("https://example.com/careers?gh_jid=43").unwrap()
         );
         assert!(normalized_detail_url("javascript:alert(1)").is_err());
+    }
+    #[test]
+    fn web_discovery_distinguishes_multiple_roles_on_one_employer_page() {
+        let identity = |id: &str| {
+            PostingIdentity::for_posting(
+                Some(SourceKind::WebDiscovery),
+                Some("https://directory.test/"),
+                Some(id),
+                "https://employer.test/careers",
+            )
+            .unwrap()
+        };
+        assert_ne!(identity("job-1"), identity("job-2"));
+        assert_ne!(
+            identity("https://employer.test/apply/one"),
+            identity("https://employer.test/apply/two")
+        );
+        assert_eq!(
+            identity("https://employer.test/apply/one?utm_source=directory"),
+            identity("https://employer.test/apply/one")
+        );
     }
 }

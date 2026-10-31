@@ -440,7 +440,7 @@ pub async fn persist_batch(
     batch: &[ScrapedJob],
     counts: &mut RunCounts,
 ) -> Result<UpsertStats> {
-    match JobsRepo::upsert_scraped(pool, batch).await {
+    match JobsRepo::upsert_scraped_for_run(pool, batch, Some(run_id)).await {
         Ok(stats) => {
             counts.inserted += stats.inserted;
             counts.updated += stats.updated;
@@ -699,6 +699,41 @@ mod tests {
     fn candidate(source_id: &str, id: &str) -> ScrapedJob {
         scraped_job_from_event(serde_json::from_value(json!({"type":"job","source_id":source_id,"external_id":id,"title":"Authored diagnostic fixture","company":"Authored","url":format!("https://fixture.invalid/jobs/{id}"),"role_type":"unknown"})).unwrap()).unwrap()
     }
+    #[tokio::test]
+    async fn discovery_observations_are_transactional_and_preserve_each_run() {
+        let pool = init_memory_db().await.unwrap();
+        let source = sample_workflows::seed_default(&pool).await.unwrap();
+        let first = RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&source.id)).await.unwrap();
+        let second = RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&source.id)).await.unwrap();
+        let mut job = candidate(&source.id, "observation");
+        job.discovery_provenance = Some(scrape_core::protocol::DiscoveryProvenance {
+            seed_url: "https://directory.test/".into(),
+            referrer_url: None,
+            final_url: "https://fixture.invalid/jobs/observation".into(),
+            seed_manifest: None,
+            date_evidence: None,
+        });
+        let mut counts = RunCounts::default();
+        persist_batch(&pool, &first.id, &[job.clone()], &mut counts).await.unwrap();
+        job.discovery_provenance.as_mut().unwrap().seed_url = "https://other.test/".into();
+        persist_batch(&pool, &second.id, &[job.clone()], &mut counts).await.unwrap();
+        let rows: Vec<(String, String)> = sqlx::query_as("SELECT run_id, json_extract(provenance, '$.seed_url') FROM discovery_observations ORDER BY run_id")
+            .fetch_all(&pool).await.unwrap();
+        assert_eq!(rows.len(), 2);
+        assert!(rows.contains(&(first.id.clone(), "https://directory.test/".into())));
+        assert!(rows.contains(&(second.id.clone(), "https://other.test/".into())));
+        let mut bad = job.clone();
+        bad.external_id = Some("bad".into());
+        bad.dedupe_key = format!("{}:bad", source.id);
+        bad.source_id = Some("missing".into());
+        assert!(persist_batch(&pool, &second.id, &[job, bad], &mut counts).await.is_err());
+        assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM discovery_observations").fetch_one(&pool).await.unwrap(), 2);
+        sqlx::query("DELETE FROM sources WHERE id = ?").bind(&source.id).execute(&pool).await.unwrap();
+        let retained: Vec<(Option<String>, String)> = sqlx::query_as("SELECT source_id, source_key FROM discovery_observations")
+            .fetch_all(&pool).await.unwrap();
+        assert_eq!(retained, vec![(None, source.id.clone()), (None, source.id.clone())]);
+    }
+
     #[tokio::test]
     async fn diagnostic_write_failure_after_commit_retains_inserted_job() {
         let pool = init_memory_db().await.unwrap();

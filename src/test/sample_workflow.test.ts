@@ -87,7 +87,7 @@ describe("targeted workflow catalog", () => {
     expect(report.preserved_ids).toEqual([...before.map(source => source.id), custom.id].sort());
     const source = report.created[0];
     expect(source.enabled).toBe(false);
-    expect(canonical.sources.find(child => child.extractor.kind === "search" && child.extractor.url === "adzuna")?.enabled).toBe(false);
+    expect(canonical.sources.map(child => child.extractor.kind)).toEqual(["web_discovery", "web_discovery"]);
     expect((source.config as Record<string, unknown>).__workflow_spec).toEqual(canonical);
     expect((await api.listSources()).find(saved => saved.id === custom.id)).toEqual(custom);
     expect((await api.listJobs()).total).toBe(0n);

@@ -304,6 +304,7 @@ fn parse_ashby_jobs_with(
         let company_icon_url = None;
 
         if !sink(WorkerEvent::Job {
+            discovery_provenance: None,
             source_id: source.id.clone(),
             external_id: job.id,
             title: job.title,

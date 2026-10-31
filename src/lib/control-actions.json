@@ -262,6 +262,7 @@
   "workflow.delete.confirm": "Confirm workflow deletion",
   "workflow.delete.request": "Request workflow deletion",
   "workflow.detect_source": "Workflow: Detect source",
+  "workflow.discovery.import_seeds": "Import independent discovery seed manifest",
   "workflow.done": "Close the saved workflow confirmation",
   "workflow.edit": "Edit workflow",
   "workflow.edit_apply_yaml": "Edit or apply workflow YAML",

@@ -45,6 +45,7 @@ scrape-worker/
 │   ├── adapters/   # Target-specific parsers (Greenhouse, Lever, Ashby, Workday, JSON-LD, Selector)
 │   ├── browser/    # Direct Rust CDP browser engine (stealth, blocking, pagination)
 │   ├── client.rs   # Rate-limited HTTP client with robots.txt enforcement
+│   ├── public_web.rs # DNS-pinned public fetches, robots and bounded response handling
 │   ├── coordinator.rs # Multi-source round-robin coordinator and fair budget manager
 │   ├── detect.rs   # ATS auto-detection from arbitrary URLs
 │   ├── filter.rs   # Worker-side job pre-filtering
@@ -58,6 +59,7 @@ scrape-worker/
     ├── coordinator_tests.rs   # Multi-source round-robin ingestion & budget tests
     ├── limit_process.rs       # Subprocess tests for bounded ingestion & detail enrichment
     ├── script_runner_process.rs # Subprocess tests for versioned stdin/NDJSON script runner
+    ├── web_discovery_process.rs # Independent cross-origin discovery fixture journeys
     ├── worker_process.rs      # Subprocess protocol, diagnostics & error handling tests
     └── fixtures/              # Mock payloads and branding fixtures from real ATS platforms
 ```
@@ -93,7 +95,7 @@ JSON-LD relative destinations resolve against their extraction page; missing or
 unsafe destinations emit errors rather than borrowing the listing URL. Worker
 HTTP fixtures and process tests are deterministic and do not verify live providers.
 
-Worker protocol version 14 adds sequenced candidate evaluations to the ordered commit acknowledgements for persisted runs.
+Worker protocol version 15 adds bounded independent-web provenance and discovery counters to sequenced candidate evaluations and commit acknowledgements.
 Older protocol configurations fail explicitly. Rebuild the packaged sidecar with
 `npm run build:sidecar` after updating host/worker code. `max_jobs_per_run`
 (default 20, range 1–10,000) targets committed new Discovered jobs; refreshes,
@@ -282,7 +284,7 @@ detection (`CoverageTermination::NeedsLogin`) feed into the same authoritative
 
 ## Script evidence contract (Plan 12 Section 4)
 
-Custom scripts speak protocol **2**, distinct from host/worker protocol 14. Candidate
+Custom scripts speak protocol **2**, distinct from host/worker protocol 15. Candidate
 frames optionally provide employment_type, a snake-case workplace_type enum and
 validated locations tuples; Rust owns matching/acceptance. Unknown frame fields
 and version-1 frames fail explicitly. The supported pay text field is salary.

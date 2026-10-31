@@ -667,4 +667,48 @@ mod rule_parity_tests {
         assert_eq!(ids, ["literal", "unicode"]);
         assert_eq!(page.total, 2);
     }
+    #[tokio::test]
+    async fn rolling_forty_eight_hour_window_keeps_day_precision_in_worker_and_sql() {
+        let pool = init_memory_db().await.unwrap();
+        let clock = DateTime::parse_from_rfc3339("2026-03-09T16:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let rules = PostingRules {
+            posting_date: Some(
+                scrape_core::posting_date::PostingDateFilter::from_preset(
+                    "past_48h",
+                    "America/New_York",
+                    clock,
+                )
+                .unwrap(),
+            ),
+            ..Default::default()
+        };
+        for (id, posted, expected) in [
+            ("cutoff-day", "2026-03-07", false),
+            ("inside-day", "2026-03-08", true),
+            ("current-day", "2026-03-09", false),
+            ("inside-time", "2026-03-07T17:00:00Z", true),
+            ("old-time", "2026-03-07T15:59:59Z", false),
+        ] {
+            sqlx::query("INSERT INTO jobs(id,dedupe_key,title,company,url,date_posted,date_added,last_seen_at,status_changed_at) VALUES (?1,?1,'Engineer','Fixture',?2,?3,'2026-03-09','2026-03-09','2026-03-09')")
+                .bind(id).bind(format!("https://fixture.test/{id}")).bind(posted)
+                .execute(&pool).await.unwrap();
+            let event: WorkerEvent = serde_json::from_value(serde_json::json!({
+                "type":"job","source_id":"fixture","external_id":id,
+                "title":"Engineer","company":"Fixture","url":format!("https://fixture.test/{id}"),
+                "location":"","role_type":"unknown","date_posted":posted
+            })).unwrap();
+            assert_eq!(rules.matches_event_at(&event, clock), expected, "{id}");
+        }
+        let page = JobsRepo::list_at(
+            &pool,
+            JobFilter { matching: Some(rules), ..Default::default() },
+            clock,
+        ).await.unwrap();
+        let mut ids: Vec<_> = page.items.iter().map(|job| job.id.as_str()).collect();
+        ids.sort_unstable();
+        assert_eq!(ids, ["inside-day", "inside-time"]);
+        assert_eq!(page.total, 2);
+    }
 }

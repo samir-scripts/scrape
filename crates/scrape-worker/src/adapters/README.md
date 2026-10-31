@@ -14,7 +14,7 @@ Production uses `coordinator.rs` resumable sessions and shared matching/budgetin
 
 | File | Adapter Target | Data Source & Mechanism | Key Implementation Details |
 |---|---|---|---|
-| [`mod.rs`](mod.rs) | Adapter Dispatcher | Router | Matches `source.kind` (`Greenhouse`, `Lever`, `Ashby`, `JsonLd`, `Selector`, `Workday`, `Search`) to its respective asynchronous scraper function. |
+| [`mod.rs`](mod.rs) | Adapter Dispatcher | Router | Matches `source.kind` (`Greenhouse`, `Lever`, `Ashby`, `JsonLd`, `Selector`, `Workday`, `Search`, `WebDiscovery`) to its respective asynchronous scraper function. |
 | [`branding.rs`](branding.rs) | Shared employer branding | Posting-page HTML and Ashby organization theme data | Bounded lookup and shared logo extraction; validates exact employer association and rejects generic platform favicons. |
 | [`greenhouse.rs`](greenhouse.rs) | Greenhouse | JSON REST API | Fetches `https://boards-api.greenhouse.io/v1/boards/{board}/jobs?content=true`. Keeps Remote workplace policy separate from eligible geography; uses office location fields for an explicit hybrid/on-site arrangement and labeled eligible-location sections from normalized descriptions. Fetches provider detail fields and preserves posting provenance. |
 | [`lever.rs`](lever.rs) | Lever | JSON REST API | Fetches `https://api.lever.co/v0/postings/{company}`. Parses commitment categories, workplace types, salary ranges, and plain-text descriptions. |
@@ -24,6 +24,7 @@ Production uses `coordinator.rs` resumable sessions and shared matching/budgetin
 | [`selector.rs`](selector.rs), [`selector_session.rs`](selector_session.rs) | Custom Web Pages | CSS/XPath, hydration JSON, bounded HTTP pages/details | Configurable engine for arbitrary career websites. Extracts job items, titles, URLs, locations, and salaries using configurable CSS selectors, regex captures, and URL glob filters (`url_pattern`, `exclude_url_patterns`). |
 | [`search.rs`](search.rs) | Cross-employer public discovery | The Muse / Arbeitnow / Adzuna / Jobicy | Resumable strict-schema feed sessions share round-robin matching/caps with direct boards. Adzuna requires execution-only credentials, rejects redirects, paginates from page 1 and never treats predicted/native-unit-unknown pay as annual evidence. Jobicy is remote-only, uses original publication dates and native salary metadata, and validates opaque cursor pagination. Provider queries are discovery hints; canonical Rust filters decide acceptance. |
 | [`search_cache.rs`](search_cache.rs) | Jobicy response cache | Hourly bounded JSON pages | SHA-256 keyed, credential-free URL cache with atomic replacement, one-hour expiry and at most 64 pages; cached responses are schema-validated again. |
+| [`web_discovery.rs`](web_discovery.rs) | Independent public web | Directory and career-page links, bounded sitemaps, structured and visible HTML | Origin-fair frontier, public-only DNS-pinned requests, robots checks, shared-page requisition identity, and seed/referrer/date provenance. JavaScript rendering is not enabled. |
 
 ---
 

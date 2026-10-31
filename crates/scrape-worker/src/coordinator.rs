@@ -46,6 +46,7 @@ pub struct CoordinatorSession {
     script_session: Option<crate::script_runner::ScriptSession>,
     workday_session: Option<crate::adapters::workday::WorkdaySession>,
     search_session: Option<crate::adapters::search::SearchSession>,
+    web_discovery_session: Option<crate::adapters::web_discovery::WebDiscoverySession>,
     coverage_incomplete: bool,
     yield_after_candidate: bool,
 }
@@ -55,6 +56,7 @@ impl CoordinatorSession {
     pub async fn init(
         client: &HttpClient,
         browser: Option<std::sync::Arc<crate::browser::BrowserPool>>,
+        web_transport: &crate::public_web::PublicWeb,
         source: WorkerSource,
         filters: WorkerFilters,
         extraction_limits: &WorkerLimits,
@@ -146,6 +148,7 @@ impl CoordinatorSession {
             script_session: None,
             workday_session: None,
             search_session: None,
+            web_discovery_session: None,
             coverage_incomplete: false,
             yield_after_candidate: false,
         };
@@ -294,6 +297,17 @@ impl CoordinatorSession {
                     started,
                 )?);
             }
+            SourceKind::WebDiscovery => {
+                session.web_discovery_session = Some(
+                    crate::adapters::web_discovery::WebDiscoverySession::new(
+                        &session.source,
+                        extraction_limits,
+                        workflow_deadline,
+                        web_transport,
+                        started,
+                    )?,
+                );
+            }
         }
 
         Ok(session)
@@ -311,6 +325,10 @@ impl CoordinatorSession {
                 .is_some_and(|s| s.has_pending())
             || self
                 .workday_session
+                .as_ref()
+                .is_some_and(|s| s.has_pending())
+            || self
+                .web_discovery_session
                 .as_ref()
                 .is_some_and(|s| s.has_pending())
     }
@@ -405,6 +423,24 @@ impl CoordinatorSession {
                 }
                 crate::adapters::search::SearchStep::Yield => Ok(None),
                 crate::adapters::search::SearchStep::Exhausted => {
+                    self.exhausted = true;
+                    Ok(None)
+                }
+            };
+        }
+        if let Some(discovery) = &mut self.web_discovery_session {
+            let before = discovery.pages_visited();
+            let step = discovery.next().await?;
+            self.stats.discovery_pages = discovery.pages_visited();
+            self.stats.discovery_origins = discovery.origins_visited();
+            self.yield_after_candidate |= discovery.pages_visited() > before;
+            return match step {
+                crate::adapters::selector_session::SelectorStep::Event(event) => {
+                    self.exhausted = discovery.is_exhausted();
+                    Ok(Some(*event))
+                }
+                crate::adapters::selector_session::SelectorStep::Yield => Ok(None),
+                crate::adapters::selector_session::SelectorStep::Exhausted => {
                     self.exhausted = true;
                     Ok(None)
                 }
@@ -908,6 +944,20 @@ impl SourceCoordinator {
             start_time + std::time::Duration::from_secs(self.limits.max_workflow_duration_s);
         let enrichment = self.limits.enrichment.clone().unwrap_or_default();
         enrichment.validate()?;
+        // One transport owns the global four-request semaphore and origin pacing;
+        // each discovery session derives its own bounded request budget.
+        let request_budget = (self.limits.max_pages_per_source as usize)
+            .saturating_mul(8)
+            .saturating_mul(self.sources.len().max(1));
+        let mut web_transport = crate::public_web::PublicWeb::new(
+            request_budget,
+            std::time::Duration::from_secs(self.limits.request_timeout_s),
+            std::time::Duration::from_millis(self.limits.per_host_delay_ms),
+        );
+        if let Some(origin) = self.client.replay_origin() {
+            web_transport = web_transport.with_test_replay_origin(origin)?;
+        }
+
 
         let mut sessions: Vec<CoordinatorSession> = Vec::new();
         let mut failed_sources: Vec<SourceScanStats> = Vec::new();
@@ -934,6 +984,7 @@ impl SourceCoordinator {
                     CoordinatorSession::init(
                         &self.client,
                         self.browser.clone(),
+                        &web_transport,
                         source.clone(),
                         filters,
                         &self.limits,
@@ -1033,6 +1084,7 @@ impl SourceCoordinator {
                             || session.script_session.is_some()
                             || session.workday_session.is_some()
                             || session.search_session.is_some()
+                            || session.web_discovery_session.is_some()
                             || session.has_pending()
                         {
                             session.next_candidate(&self.client, self.started).await
@@ -1171,7 +1223,8 @@ impl SourceCoordinator {
 
                                         // Workflow-wide canonical deduplication check:
                                         if workflow_seen_identities.contains(&identity)
-                                            || workflow_seen_urls.contains(&normalized_url)
+                                            || (session.source.kind != SourceKind::WebDiscovery
+                                                && workflow_seen_urls.contains(&normalized_url))
                                         {
                                             session.stats.duplicates += 1;
                                             if self.candidate_diagnostics {

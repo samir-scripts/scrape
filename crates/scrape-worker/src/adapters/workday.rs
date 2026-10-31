@@ -250,6 +250,7 @@ fn posting_to_event(
     let is_new_grad = experience.is_new_grad;
 
     let event = WorkerEvent::Job {
+        discovery_provenance: None,
         source_id: source.id.clone(),
         external_id,
         title,

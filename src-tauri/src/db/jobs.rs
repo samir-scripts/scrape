@@ -194,6 +194,9 @@ pub struct LocationOptions {
 #[ts(export)]
 pub struct ScrapedJob {
     pub dedupe_key: String,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub discovery_provenance: Option<scrape_core::protocol::DiscoveryProvenance>,
     pub source_id: Option<String>,
     pub external_id: Option<String>,
     pub title: String,
@@ -987,6 +990,14 @@ impl JobsRepo {
     }
 
     pub async fn upsert_scraped(pool: &SqlitePool, batch: &[ScrapedJob]) -> Result<UpsertStats> {
+        Self::upsert_scraped_for_run(pool, batch, None).await
+    }
+
+    pub async fn upsert_scraped_for_run(
+        pool: &SqlitePool,
+        batch: &[ScrapedJob],
+        run_id: Option<&str>,
+    ) -> Result<UpsertStats> {
         let mut stats = UpsertStats::default();
         let now = now_iso();
 
@@ -998,6 +1009,12 @@ impl JobsRepo {
         for job in batch {
             if let Some(evidence) = &job.company_logo {
                 evidence.validate().map_err(AppError::Validation)?;
+            }
+            if let Some(provenance) = &job.discovery_provenance {
+                provenance.validate().map_err(AppError::Validation)?;
+                if run_id.is_none() || job.source_id.is_none() {
+                    return Err(AppError::Validation("Discovery provenance requires a run and source".into()));
+                }
             }
             stats.total += 1;
 
@@ -1319,6 +1336,21 @@ impl JobsRepo {
             .bind(&dedupe_key)
             .execute(&mut *tx)
             .await?;
+            if let (Some(provenance), Some(run_id), Some(source_id)) =
+                (&job.discovery_provenance, run_id, &job.source_id)
+            {
+                sqlx::query(
+                    "INSERT OR IGNORE INTO discovery_observations (job_id, run_id, source_id, source_key, observed_at, provenance) SELECT id, ?, ?, ?, ?, ? FROM jobs WHERE dedupe_key = ?",
+                )
+                .bind(run_id)
+                .bind(source_id)
+                .bind(source_id)
+                .bind(&now)
+                .bind(serde_json::to_string(provenance)?)
+                .bind(&dedupe_key)
+                .execute(&mut *tx)
+                .await?;
+            }
         }
 
         tx.commit().await?;
@@ -1771,6 +1803,7 @@ mod tests {
 
         let batch = vec![
             ScrapedJob {
+                discovery_provenance: None,
                 compensation: scrape_core::enrich::Salary::from_structured(
                     Some(180_000.0),
                     Some(240_000.0),
@@ -1829,6 +1862,7 @@ mod tests {
                 }],
             },
             ScrapedJob {
+                discovery_provenance: None,
                 compensation: scrape_core::enrich::Salary::from_structured(
                     Some(130_000.0),
                     Some(160_000.0),
@@ -2025,6 +2059,7 @@ mod tests {
 
         // 1. Initial scrape ingestion
         let initial_job = ScrapedJob {
+            discovery_provenance: None,
             compensation: vec![],
             dedupe_key: "lever:stripe:eng-1".to_string(),
             source_id: None,
@@ -2098,6 +2133,7 @@ mod tests {
 
         // 3. Re-scrape same job: updated salary and changed location
         let updated_job = ScrapedJob {
+            discovery_provenance: None,
             compensation: vec![],
             dedupe_key: "lever:stripe:eng-1".to_string(),
             source_id: None,
@@ -2215,6 +2251,7 @@ mod tests {
 
         // Insert job with no structured enrichment, only plain description text
         let raw_job = ScrapedJob {
+            discovery_provenance: None,
                 compensation: vec![],
             dedupe_key: "gh:unclassified:01".to_string(),
             source_id: None,
@@ -2550,6 +2587,7 @@ mod tests {
         // Insert jobs across varied attribute permutations
         let jobs = vec![
             ScrapedJob {
+                discovery_provenance: None,
                 compensation: scrape_core::enrich::Salary::from_structured(
                     Some(160_000.0),
                     Some(200_000.0),
@@ -2604,6 +2642,7 @@ mod tests {
                 }],
             },
             ScrapedJob {
+                discovery_provenance: None,
                 compensation: scrape_core::enrich::Salary::from_structured(
                     Some(130_000.0),
                     Some(170_000.0),
@@ -2706,6 +2745,7 @@ mod tests {
         let pool = init_memory_db().await.unwrap();
 
         let job_ca = ScrapedJob {
+            discovery_provenance: None,
             compensation: vec![],
             dedupe_key: "k1".to_string(),
             source_id: None,
@@ -2753,6 +2793,7 @@ mod tests {
         };
 
         let job_on = ScrapedJob {
+            discovery_provenance: None,
             compensation: vec![],
             dedupe_key: "k2".to_string(),
             source_id: None,
@@ -2842,6 +2883,7 @@ mod tests {
         let pool = init_memory_db().await.unwrap();
 
         let job = ScrapedJob {
+            discovery_provenance: None,
             compensation: vec![],
             dedupe_key: "fav:1".to_string(),
             source_id: None,
@@ -2910,6 +2952,7 @@ mod tests {
         let pool = init_memory_db().await.unwrap();
 
         let job_a = ScrapedJob {
+            discovery_provenance: None,
             compensation: vec![],
             dedupe_key: "fav:a".to_string(),
             source_id: None,
@@ -2951,6 +2994,7 @@ mod tests {
         };
 
         let job_b = ScrapedJob {
+            discovery_provenance: None,
             compensation: vec![],
             dedupe_key: "fav:b".to_string(),
             source_id: None,
@@ -3408,6 +3452,7 @@ mod tests {
         let pool = init_memory_db().await.unwrap();
 
         let mut scraped = vec![ScrapedJob {
+            discovery_provenance: None,
             compensation: vec![],
             source_id: None,
             external_id: Some("99999".into()),

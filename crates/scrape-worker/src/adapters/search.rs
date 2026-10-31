@@ -1037,6 +1037,7 @@ impl Posting {
         let description_text = (!text.is_empty()).then(|| text.to_owned());
         let description_format = description_source.as_ref().map(|_| DescriptionFormat::Html);
         Ok(WorkerEvent::Job {
+            discovery_provenance: None,
             source_id: source_id.into(),
             external_id,
             title: self.title,

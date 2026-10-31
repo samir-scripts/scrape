@@ -6,7 +6,7 @@ use crate::{RoleType, SourceKind, TriState, WorkplaceType};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 14;
+pub const PROTOCOL_VERSION: u32 = 15;
 pub const DEFAULT_NAVIGATION_TIMEOUT_S: u64 = 30;
 pub const MAX_PAGES_PER_SOURCE: u32 = 100;
 pub const DEFAULT_SOURCE_DURATION_S: u64 = 180;
@@ -828,6 +828,74 @@ impl CandidateEvaluation {
     }
 }
 
+/// Evidence retained for an independently discovered posting.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export)]
+pub struct DiscoveryProvenance {
+    pub seed_url: String,
+    pub referrer_url: Option<String>,
+    pub final_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub seed_manifest: Option<crate::web_discovery::SeedManifest>,
+    pub date_evidence: Option<DiscoveryDateEvidence>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export)]
+pub struct DiscoveryDateEvidence {
+    pub kind: String,
+    pub raw_value: String,
+    pub page_url: String,
+    pub locator: String,
+    pub observed_at: String,
+    pub precision: String,
+}
+
+impl DiscoveryProvenance {
+    pub fn validate(&self) -> Result<(), String> {
+        fn url(value: &str) -> Result<(), String> {
+            if value.len() > 4096 {
+                return Err("Discovery URL exceeds 4096 bytes".into());
+            }
+            let parsed = url::Url::parse(value).map_err(|_| "Invalid discovery URL")?;
+            if !matches!(parsed.scheme(), "http" | "https")
+                || parsed.host_str().is_none()
+                || !parsed.username().is_empty()
+                || parsed.password().is_some()
+            {
+                return Err("Discovery URL must be an HTTP(S) URL without credentials".into());
+            }
+            Ok(())
+        }
+        fn text(value: &str, max: usize) -> Result<(), String> {
+            if value.trim().is_empty() || value.len() > max || value.chars().any(char::is_control) {
+                return Err("Invalid or oversized discovery date evidence".into());
+            }
+            Ok(())
+        }
+        url(&self.seed_url)?;
+        url(&self.final_url)?;
+        if let Some(referrer) = &self.referrer_url {
+            url(referrer)?;
+        }
+        if let Some(manifest) = &self.seed_manifest {
+            manifest.validate()?;
+        }
+        if let Some(date) = &self.date_evidence {
+            url(&date.page_url)?;
+            text(&date.kind, 128)?;
+            text(&date.raw_value, 1024)?;
+            text(&date.locator, 1024)?;
+            text(&date.precision, 128)?;
+            text(&date.observed_at, 64)?;
+            chrono::DateTime::parse_from_rfc3339(&date.observed_at)
+                .map_err(|_| "Invalid discovery evidence observation time")?;
+        }
+        Ok(())
+    }
+}
+
 /// NDJSON events streamed by scrape-worker over stdout.
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -902,6 +970,9 @@ pub enum WorkerEvent {
         company_logo: Option<crate::branding::LogoEvidence>,
         #[serde(default)]
         work_auth: Option<ClassifiedWorkAuth>,
+        #[serde(default)]
+        #[ts(optional = nullable)]
+        discovery_provenance: Option<DiscoveryProvenance>,
     },
     Progress {
         source_id: String,
@@ -952,6 +1023,10 @@ pub struct WorkerStats {
 pub struct SourceScanStats {
     pub source_id: String,
     pub limit: u32,
+    #[serde(default)]
+    pub discovery_pages: u32,
+    #[serde(default)]
+    pub discovery_origins: u32,
     #[serde(default)]
     pub commit_feedback: bool,
     #[serde(default)]
@@ -1078,6 +1153,21 @@ pub enum CoverageTermination {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn discovery_fields_default_for_older_event_and_stats_frames() {
+        let event: WorkerEvent = serde_json::from_value(serde_json::json!({
+            "type":"job","source_id":"s","external_id":"1","title":"Engineer",
+            "company":"Employer","role_type":"unknown","url":"https://example.test/1"
+        })).unwrap();
+        assert!(matches!(event, WorkerEvent::Job { discovery_provenance: None, .. }));
+        let stats: SourceScanStats = serde_json::from_value(serde_json::json!({
+            "source_id":"s","limit":1,"examined":0,"matched":0,"blocked":0,
+            "duplicates":0,"invalid":0,"limit_reached":false
+        })).unwrap();
+        assert_eq!((stats.discovery_pages, stats.discovery_origins), (0, 0));
+        stats.validate().unwrap();
+    }
+
 
     #[test]
     fn feedback_summaries_allow_refreshes_but_not_unconfirmed_insertions() {
@@ -1228,6 +1318,7 @@ mod tests {
     #[test]
     fn test_worker_events_ndjson_roundtrip() {
         let job = WorkerEvent::Job {
+            discovery_provenance: None,
             source_id: "src-1".to_string(),
             external_id: "5012345".to_string(),
             title: "Software Engineer, Data".to_string(),

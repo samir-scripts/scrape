@@ -12,6 +12,7 @@ it.each([
   render(<ScanDiagnostics sources={[{
     source_id: "Bounded fixture", limit: 20, examined: 2, matched: 2, accepted: 2,
     commit_feedback: false, newly_committed: 0,
+    discovery_pages: 0, discovery_origins: 0,
     blocked: 0, rejected: 0, duplicates: 0, invalid: 0, unresolved: 0,
     limit_reached: false, provider_total: null, enrichment_warnings: 0,
     termination, outcome: "partial", rejections: [], rejection_examples: [],
@@ -23,12 +24,14 @@ it("explains primary rejection counts and explicitly overlapping examples throug
   const source: SourceScanStats = {
     source_id: "Authored diagnostic fixture", limit: 20, examined: 438, matched: 2,
     commit_feedback: false, newly_committed: 0,
+    discovery_pages: 24, discovery_origins: 6,
     accepted: 2, blocked: 0, rejected: 436, duplicates: 0, invalid: 0,
     limit_reached: false, provider_total: null, termination: "exhausted", unresolved: 0, enrichment_warnings: 0, outcome: "success",
     rejections: [{ reason: "legacy_role_type", count: 436 }],
     rejection_examples: [{ title: "Software Engineer", primary: "legacy_role_type", overlapping: ["legacy_role_type", "geography"] }],
   };
   render(<ScanDiagnostics sources={[source]} />);
+  expect(screen.getByText("Web discovery: 24 pages attempted · 6 origins attempted")).toBeTruthy();
   expect(screen.getByText(/438 examined · 2 accepted · 436 matching rejections/)).toBeTruthy();
   expect(screen.getByText("Imported role restriction: 436")).toBeTruthy();
   expect(screen.queryByText(/Provider-reported total/)).toBeNull();

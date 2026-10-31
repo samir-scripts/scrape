@@ -58,13 +58,15 @@ Additional forward migrations:
 | 0031 | Converges the three recognized role-term table histories with a transactional copy while preserving role IDs and links; no migration-30 checksum is rewritten. |
 | 0032 | Adds a case-insensitive company-name index for bounded local-employer search. |
 | 0033 | Preserve all source rows and job/run links while allowing a workflow to contain distinct search endpoints for one provider. Partial unique indexes retain non-search uniqueness and reject identical effective search endpoints; host validation handles URL and query normalization. |
+| 0034 | Admit independent `web_discovery` sources and add per-job/run/source discovery observations, preserving source and job/run links. |
+| 0035 | Retain discovery observations and source identity on source deletion; exact recognized development v34 variants use their own immutable forward path. |
 The Rust backfills preserve source identities, uncertain legacy salary values and
 unresolved suppression keys. Populated upgrade tests preserve all tracked states,
 notes, favorites, status events, workflow rules, custom settings and tombstones.
 See [database recovery](../../plans/database-recovery.md); a Git revert does not
 reverse database schema changes. Never update `_sqlx_migrations` to bypass errors.
 
-`../historical-migrations/` contains verified immutable migration-12/18, migration-19/20, migration-23/25, and two migration-30 variants. The runner accepts only matching histories and independently rebuilt schemas, then preserves their stored checksums. See the recovery documentation.
+`../historical-migrations/` contains verified immutable migration-12/18, migration-19/20, migration-23/25, migration-30 variants, and the forward path for the recognized retained-schema v34 variant. The runner accepts only matching histories and independently rebuilt schemas, then preserves their stored checksums. See the recovery documentation.
 
 Migration 27 scopes `(kind, identifier)` uniqueness to `workflow_id`, allowing two
 workflows to reference the same board. It recreates `sources` with all existing

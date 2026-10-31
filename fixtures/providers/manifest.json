@@ -3233,7 +3233,7 @@
     }
   ],
   "extractors": {
-    "worker_protocol": 14,
+    "worker_protocol": 15,
     "script_protocol": 2,
     "verification_profile_revision": 1,
     "netflix": {

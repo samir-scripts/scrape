@@ -662,6 +662,7 @@ pub(crate) fn parse_greenhouse_jobs_with(
         let url = job.absolute_url;
 
         if !sink(WorkerEvent::Job {
+            discovery_provenance: None,
             source_id: source.id.clone(),
             external_id: job.id.to_string(),
             title: job.title,

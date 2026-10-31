@@ -21,6 +21,7 @@ pub mod protocol;
 mod role;
 pub mod search_source;
 pub mod static_source;
+pub mod web_discovery;
 mod types;
 
 pub use extraction::{

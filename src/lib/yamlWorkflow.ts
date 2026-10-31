@@ -42,6 +42,7 @@ const VALID_KINDS: SourceKind[] = [
   "jsonld",
   "selector",
   "search",
+  "web_discovery",
 ];
 const VALID_CADENCES: SourceCadence[] = [
   "global",
@@ -64,6 +65,15 @@ const VALID_ROLE_TYPES: RoleType[] = [
 
 export function normalizedEndpoint(kind: SourceKind, urlOrSlug: string, sourceConfig?: WorkflowSourceSpec["extractor"]["source_config"]): string {
   const trimmed = (urlOrSlug || "").trim();
+  if (kind === "web_discovery") {
+    const config = sourceConfig && typeof sourceConfig === "object" && !Array.isArray(sourceConfig) ? sourceConfig : {};
+    const extra = Array.isArray(config.seed_urls) ? config.seed_urls.filter((value): value is string => typeof value === "string") : [];
+    const seeds = [trimmed, ...extra].map(raw => {
+      try { const url = new URL(raw.trim()); url.hash = ""; return url.href; }
+      catch { return raw.trim(); }
+    }).sort();
+    return `WebDiscovery:${JSON.stringify(seeds)}`;
+  }
   if (kind === "search") {
     const provider = !trimmed || trimmed.toLowerCase() === "default" ? "themuse" : trimmed.toLowerCase();
     const defaults: Record<string, string> = {
@@ -155,9 +165,9 @@ export function validateWorkflowYaml(
   }
 
   // Version check
-  if (json.version !== undefined && ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(json.version)) {
+  if (json.version !== undefined && ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(json.version)) {
     errors.push({
-      message: `Unsupported workflow version ${json.version}. Expected supported versions: 1–10`,
+      message: `Unsupported workflow version ${json.version}. Expected supported versions: 1–11`,
     });
   }
 
@@ -234,6 +244,45 @@ export function validateWorkflowYaml(
             message: `sources[${i}].extractor.kind must be one of: ${VALID_KINDS.join(", ")}`,
           });
         }
+        if (extractor.kind === "web_discovery") {
+          const path = `sources[${i}].extractor.source_config`;
+          const raw = extractor.source_config;
+          if (raw != null && (typeof raw !== "object" || Array.isArray(raw))) {
+            errors.push({ message: `${path}: expected mapping` });
+          } else {
+            const config = (raw ?? {}) as Record<string, unknown>;
+            for (const key of Object.keys(config)) {
+              if (!["seed_urls", "seed_manifest", "max_domains", "max_depth", "max_pages"].includes(key)) errors.push({ message: `${path}.${key}: unsupported discovery setting` });
+            }
+            for (const [key, min, max] of [["max_domains", 1, 100], ["max_depth", 0, 5], ["max_pages", 1, 100]] as const) {
+              const value = config[key];
+              if (value !== undefined && (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max)) errors.push({ message: `${path}.${key}: expected integer between ${min} and ${max}` });
+            }
+            if (config.seed_manifest != null) {
+              const manifest = config.seed_manifest as Record<string, unknown>;
+              if (typeof manifest !== "object" || Array.isArray(manifest)
+                || Object.keys(manifest).some(key => !["crawl_id", "imported_at"].includes(key))
+                || (manifest.crawl_id != null && (typeof manifest.crawl_id !== "string" || !manifest.crawl_id.trim() || manifest.crawl_id.length > 128))
+                || typeof manifest.imported_at !== "string" || Number.isNaN(Date.parse(manifest.imported_at))) {
+                errors.push({ message: `${path}.seed_manifest: invalid crawl ID or import timestamp` });
+              }
+            }
+            const seeds = config.seed_urls;
+            if (seeds !== undefined && !Array.isArray(seeds)) errors.push({ message: `${path}.seed_urls: expected array` });
+            const seen = new Set<string>();
+            for (const [index, value] of [extractor.url, ...(Array.isArray(seeds) ? seeds : [])].entries()) {
+              const label = index === 0 ? `sources[${i}].extractor.url` : `${path}.seed_urls[${index - 1}]`;
+              try {
+                if (typeof value !== "string") throw new Error();
+                const url = new URL(value.trim());
+                if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error();
+                url.hash = "";
+                if (seen.has(url.href)) errors.push({ message: `${label}: duplicate canonical seed URL` });
+                seen.add(url.href);
+              } catch { errors.push({ message: `${label}: expected HTTP(S) URL without credentials` }); }
+            }
+          }
+        }
         if (extractor.kind === "search") {
           const provider = (extractor.url || "").trim().toLowerCase();
           if (!["", "default", "themuse", "arbeitnow", "adzuna", "jobicy"].includes(provider)) errors.push({ message: `sources[${i}].extractor.url: unsupported search provider` });
@@ -286,7 +335,7 @@ export function validateWorkflowYaml(
           }
 
           if (extractor.kind) {
-            const endpointKey = normalizedEndpoint(extractor.kind, extractor.url);
+            const endpointKey = normalizedEndpoint(extractor.kind, extractor.url, extractor.source_config);
             if (seenEndpoints.has(endpointKey)) {
               errors.push({
                 message: `Duplicate source endpoint: '${extractor.url}' conflicts with another source in this workflow`,
@@ -443,7 +492,7 @@ export function validateWorkflowYaml(
   return {
     isValid: true,
     errors: [],
-    parsedSpec: { ...json, version: json.version ?? 9 } as WorkflowSpec,
+    parsedSpec: { ...json, version: json.version ?? 11 } as WorkflowSpec,
   };
 }
 
@@ -471,7 +520,7 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
     ? undefined
     : storedSpec;
   const sourceConfig = Object.fromEntries(
-    Object.entries(config).filter(([key]) => !key.startsWith("__")),
+    Object.entries(config).filter(([key]) => !key.startsWith("__") && !(source.kind === "web_discovery" && key === "url")),
   );
   const selectors = {
     job_container: "item",
@@ -521,7 +570,7 @@ export function sourceToWorkflowSpec(source: Source): WorkflowSpec {
 
   return {
     ...snapshot,
-    version: snapshot?.version ?? 10,
+    version: snapshot?.version ?? 11,
     max_jobs_per_run: snapshot?.max_jobs_per_run ?? INGESTION_LIMITS.default,
     metadata: {
       ...snapshot?.metadata,

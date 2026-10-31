@@ -30,6 +30,7 @@ pub fn scraped_job_from_event(event: WorkerEvent) -> Result<ScrapedJob> {
             description_format,
             company_icon_url,
             company_logo,
+            discovery_provenance,
         } => {
             if title.trim().is_empty()
                 || external_id.trim().is_empty()
@@ -42,6 +43,9 @@ pub fn scraped_job_from_event(event: WorkerEvent) -> Result<ScrapedJob> {
             scrape_core::identity::normalized_detail_url(&url).map_err(AppError::Validation)?;
             scrape_core::enrich::location::validate_locations(&locations)
                 .map_err(AppError::Validation)?;
+            if let Some(provenance) = &discovery_provenance {
+                provenance.validate().map_err(AppError::Validation)?;
+            }
             let dedupe_key = format!("{}:{}", source_id, external_id);
             let loc_opt = if location.is_empty() {
                 None
@@ -100,6 +104,7 @@ pub fn scraped_job_from_event(event: WorkerEvent) -> Result<ScrapedJob> {
 
             Ok(ScrapedJob {
                 compensation,
+                discovery_provenance,
                 dedupe_key,
                 source_id: Some(source_id),
                 external_id: Some(external_id),
@@ -155,5 +160,27 @@ mod geographic_validation_tests {
             let event:WorkerEvent=serde_json::from_value(serde_json::json!({"type":"job","source_id":"fixture","external_id":"1","title":"Engineer","company":"Authored fixture","url":"https://fixture.test/1","location":"Cupertino","role_type":"unknown","locations":[tuple]})).unwrap();
             assert!(scraped_job_from_event(event).is_err());
         }
+    }
+
+    #[test]
+    fn discovery_evidence_is_validated_at_the_ingestion_boundary() {
+        let mut value = serde_json::json!({
+            "type":"job", "source_id":"s", "external_id":"1", "title":"Engineer",
+            "company":"Employer", "url":"https://employer.test/job/1", "role_type":"unknown",
+            "discovery_provenance": {
+                "seed_url":"https://directory.test/", "referrer_url":"https://employer.test/jobs",
+                "final_url":"https://employer.test/job/1",
+                "date_evidence":{"kind":"visible_posted", "raw_value":"2026-10-30",
+                    "page_url":"https://employer.test/job/1", "locator":"time",
+                    "observed_at":"2026-10-31T00:00:00Z", "precision":"day"}
+            }
+        });
+        let parse = |v| scraped_job_from_event(serde_json::from_value(v).unwrap());
+        assert!(parse(value.clone()).unwrap().discovery_provenance.is_some());
+        value["discovery_provenance"]["seed_url"] = "https://user:secret@directory.test/".into();
+        assert!(parse(value.clone()).is_err());
+        value["discovery_provenance"]["seed_url"] = "https://directory.test/".into();
+        value["discovery_provenance"]["date_evidence"]["observed_at"] = "yesterday".into();
+        assert!(parse(value).is_err());
     }
 }

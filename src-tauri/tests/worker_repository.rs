@@ -95,6 +95,236 @@ fn invoke_replay(config: &WorkerConfig, preview: bool, origin: Option<&str>) -> 
 }
 
 #[tokio::test]
+async fn independent_web_discovery_persists_recent_us_jobs() {
+    use scrape_lib::db::runs::{RunsRepo, TriggerType};
+    use std::sync::{atomic::{AtomicBool, Ordering}, mpsc, Arc, Mutex};
+
+    // Replay retains public HTTPS identities while routing requests to this local server.
+    struct Server {
+        origin: String,
+        paths: Arc<Mutex<Vec<String>>>,
+        stop: Arc<AtomicBool>,
+        thread: Option<std::thread::JoinHandle<()>>,
+    }
+    impl Drop for Server {
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::SeqCst);
+            self.thread.take().unwrap().join().unwrap();
+        }
+    }
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let paths = Arc::new(Mutex::new(Vec::new()));
+    let captured = paths.clone();
+    let stop = Arc::new(AtomicBool::new(false));
+    let stopping = stop.clone();
+    let thread = std::thread::spawn(move || {
+        while !stopping.load(Ordering::SeqCst) {
+            let (mut socket, _) = match listener.accept() {
+                Ok(value) => value,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(2));
+                    continue;
+                }
+                Err(error) => panic!("{error}"),
+            };
+            socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+            let mut request = [0; 8192];
+            let Ok(n) = socket.read(&mut request) else { continue };
+            let request = String::from_utf8_lossy(&request[..n]);
+            let Some(path) = request.split_whitespace().nth(1) else { continue };
+            captured.lock().unwrap().push(path.to_owned());
+            let (status, content_type, body) = if path.ends_with("/robots.txt") {
+                ("200 OK", "text/plain", "User-agent: *\nAllow: /\n".to_owned())
+            } else if path.ends_with("/sitemap.xml") {
+                ("200 OK", "application/xml", "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"></urlset>".to_owned())
+            } else if path == "/directory.example/start" {
+                ("200 OK", "text/html", "<p>Directory starting page</p>".to_owned())
+            } else if path == "/directory.example/companies" {
+                ("200 OK", "text/html", "<a href=\"https://employer.example/careers\">Employer careers</a>".to_owned())
+            } else if path == "/employer.example/careers" {
+                let mut body = String::new();
+                for id in ["old", "undated", "foreign", "updated", "blocked"].into_iter().map(str::to_owned).chain((0..25).map(|n| format!("new-{n:02}"))) {
+                    body.push_str(&format!("<a href=\"/jobs/{id}\">Software Engineer {id}</a>"));
+                }
+                body.push_str("<a href=\"/jobs/new-00\">Duplicate job</a>");
+                ("200 OK", "text/html", body)
+            } else if let Some(id) = path.strip_prefix("/employer.example/jobs/") {
+                let date = match id {
+                    "old" => Some("2026-10-12T00:00:00Z"),
+                    "undated" => None,
+                    _ => Some("2026-10-15T00:00:00Z"),
+                };
+                let mut job = serde_json::json!({
+                    "@context":"https://schema.org", "@type":"JobPosting",
+                    "identifier":id, "title":format!("Software Engineer {id}"),
+                    "hiringOrganization":{"name":"Fixture Employer"},
+                    "jobLocation":{"@type":"Place","address":{"addressCountry":if id == "foreign" {"GB"} else {"US"},"addressRegion":"CA"}},
+                    "description":"Build reliable distributed software systems."
+                });
+                if let Some(date) = date { job["datePosted"] = date.into(); }
+                ("200 OK", "text/html", format!("<script type=\"application/ld+json\">{job}</script>"))
+            } else if path == "/second.example/careers" {
+                let body = (0..25).map(|n| format!("<a href=\"/jobs/second-{n:02}\">Software Engineer</a>")).collect::<String>();
+                ("200 OK", "text/html", body)
+            } else if let Some(id) = path.strip_prefix("/second.example/jobs/") {
+                let job = serde_json::json!({
+                    "@type":"JobPosting", "identifier":id, "title":format!("Software Engineer {id}"),
+                    "hiringOrganization":{"name":"Second Fixture Employer"}, "datePosted":"2026-10-15T00:00:00Z",
+                    "jobLocation":{"address":{"addressCountry":"US","addressRegion":"CA"}},
+                    "description":"Build reliable distributed software systems."
+                });
+                ("200 OK", "text/html", format!("<script type=\"application/ld+json\">{job}</script>"))
+            } else {
+                ("404 Not Found", "text/plain", "not found".to_owned())
+            };
+            let _ = write!(socket, "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+        }
+    });
+    let server = Server { origin, paths, stop, thread: Some(thread) };
+
+    let directory = tempfile::tempdir().unwrap();
+    let pool = scrape_lib::db::init_db(&directory.path().join("discovery-quota.db")).await.unwrap();
+    let seed = "https://directory.example/companies";
+    let source = SourcesRepo::create(&pool, CreateSourceInput {
+        kind: SourceKind::WebDiscovery, name: "Directory".into(), identifier: "https://directory.example/start".into(),
+        config: Some(serde_json::json!({"max_domains":4,"max_depth":4,"max_pages":100})),
+        enabled: Some(true), cadence: Some(scrape_core::SourceCadence::Manual),
+        cadence_cron: None, retention_days: Some(30), retention_policy: Some("untracked_only".into()), filters: None,
+    }).await.unwrap();
+    let second_source = SourcesRepo::create(&pool, CreateSourceInput {
+        kind: SourceKind::WebDiscovery, name: "Second directory".into(), identifier: "https://second.example/careers".into(),
+        config: Some(serde_json::json!({"max_domains":4,"max_depth":4,"max_pages":100})),
+        enabled: Some(true), cadence: Some(scrape_core::SourceCadence::Manual),
+        cadence_cron: None, retention_days: Some(30), retention_policy: Some("untracked_only".into()), filters: None,
+    }).await.unwrap();
+    for id in ["updated", "blocked"] {
+        let event: WorkerEvent = serde_json::from_value(serde_json::json!({
+            "type":"job","source_id":source.id,"external_id":id,
+            "title":format!("Software Engineer {id}"),"company":"Fixture Employer",
+            "url":format!("https://employer.example/jobs/{id}"),"location":"California, US","role_type":"unknown"
+        })).unwrap();
+        JobsRepo::upsert_scraped(&pool, &[scraped_job_from_event(event).unwrap()]).await.unwrap();
+    }
+    sqlx::query("UPDATE jobs SET notes='preserve', favorited=1 WHERE external_id='updated'").execute(&pool).await.unwrap();
+    let blocked_id: String = sqlx::query_scalar("SELECT id FROM jobs WHERE external_id='blocked'").fetch_one(&pool).await.unwrap();
+    postings::remove(&pool, &blocked_id, true).await.unwrap();
+    let run = RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&source.id)).await.unwrap();
+    let config = serde_json::json!({
+        "version":PROTOCOL_VERSION, "commit_feedback":true, "max_jobs_per_run":20,
+        "run_started_at":"2026-10-16T00:00:00Z",
+        "sources":[{"id":source.id,"name":"Directory","kind":"web_discovery","identifier":"https://directory.example/start",
+            "config":{"seed_urls":[seed],"max_domains":4,"max_depth":4,"max_pages":100,"seed_manifest":{"crawl_id":"CC-MAIN-2026-43","imported_at":"2026-10-16T00:00:00Z"}}},
+            {"id":second_source.id,"name":"Second directory","kind":"web_discovery","identifier":"https://second.example/careers","config":{"max_domains":4,"max_depth":4,"max_pages":100}}],
+        "filters":{"matching":{"target_roles":["Software Engineer"],"countries":["US"],"location_include_unknown":false,
+            "posting_date":{"preset":"past_48h","timezone":"UTC","include_unknown":false}}},
+        "limits":{"per_host_delay_ms":0,"request_timeout_s":3,"max_pages_per_source":100}
+    });
+    let mut child = Command::new(worker()).args(["--stdin", "--replay-origin", &server.origin])
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    writeln!(stdin, "{config}").unwrap();
+    let (sender, receiver) = mpsc::channel();
+    let stdout = child.stdout.take().unwrap();
+    let reader = std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines() {
+            if sender.send(line).is_err() { break; }
+        }
+    });
+    let mut stderr = child.stderr.take().unwrap();
+    let stderr_reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        stderr.read_to_end(&mut bytes).unwrap();
+        bytes
+    });
+    let deadline = Instant::now() + Duration::from_secs(45);
+    let mut outcomes = Vec::new();
+    let mut observed = Vec::new();
+    let summary = loop {
+        let line = match receiver.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            Ok(line) => line.unwrap(),
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("Discovery worker did not complete: {error}");
+            }
+        };
+        let event: WorkerEvent = serde_json::from_str(&line).unwrap();
+        match &event {
+            WorkerEvent::Job { source_id, external_id, .. } => {
+                observed.push(external_id.clone());
+                let row = scraped_job_from_event(event.clone()).unwrap();
+                let result = JobsRepo::upsert_scraped_for_run(&pool, &[row], Some(&run.id)).await.unwrap();
+                let outcome = match (result.inserted, result.updated, result.blocked) {
+                    (1, 0, 0) => "inserted",
+                    (0, 1, 0) => "updated",
+                    (0, 0, 1) => "blocked",
+                    other => panic!("invalid outcome: {other:?}"),
+                };
+                outcomes.push(outcome);
+                writeln!(stdin, "{}", serde_json::json!({"source_id":source_id,"external_id":external_id,"outcome":outcome})).unwrap();
+            }
+            WorkerEvent::Done { stats } => break stats.clone(),
+            _ => {}
+        }
+    };
+    drop(stdin);
+    while child.try_wait().unwrap().is_none() {
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("Discovery worker did not exit after Done");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let status = child.wait().unwrap();
+    reader.join().unwrap();
+    let stderr = stderr_reader.join().unwrap();
+    assert!(status.success(), "{}", String::from_utf8_lossy(&stderr));
+    assert_eq!(outcomes.iter().filter(|&&outcome| outcome == "inserted").count(), 20);
+    assert_eq!(outcomes.iter().filter(|&&outcome| outcome == "updated").count(), 1);
+    assert_eq!(outcomes.iter().filter(|&&outcome| outcome == "blocked").count(), 1);
+    assert_eq!(observed.len(), 22);
+    assert!(observed.contains(&"updated".to_owned()) && observed.contains(&"blocked".to_owned()));
+    for id in ["old", "undated", "foreign"] {
+        assert!(server.paths.lock().unwrap().iter().any(|path| path == &format!("/employer.example/jobs/{id}")), "{id} was not examined");
+        assert!(!observed.iter().any(|value| value == id), "{id} passed strict filters");
+    }
+    assert_eq!(summary.sources.iter().map(|scan| scan.newly_committed).sum::<u64>(), 20);
+    assert!(summary.sources.iter().any(|scan| scan.termination == scrape_core::protocol::CoverageTermination::JobLimit));
+    let inserted: Vec<_> = observed.iter().filter(|id| id.starts_with("new-") || id.starts_with("second-")).collect();
+    assert_eq!(inserted.len(), 20);
+    assert_eq!(inserted.iter().collect::<std::collections::HashSet<_>>().len(), 20);
+    assert!(inserted.iter().any(|id| id.starts_with("new-")) && inserted.iter().any(|id| id.starts_with("second-")));
+    assert_eq!(server.paths.lock().unwrap().iter().filter(|path| path.as_str() == "/employer.example/jobs/new-00").count(), 1);
+    let preserved: (String, i64) = sqlx::query_as("SELECT notes, favorited FROM jobs WHERE external_id='updated'").fetch_one(&pool).await.unwrap();
+    assert_eq!(preserved, ("preserve".into(), 1));
+    let job_count: i64 = sqlx::query_scalar("SELECT count(*) FROM jobs").fetch_one(&pool).await.unwrap();
+    assert_eq!(job_count, 22); // 20 new, one updated, one retained blocked tombstone.
+    let active_count: i64 = sqlx::query_scalar("SELECT count(*) FROM jobs WHERE removed_at IS NULL").fetch_one(&pool).await.unwrap();
+    assert_eq!(active_count, 21);
+    let observations: Vec<(String, String, String, String, String, Option<String>)> = sqlx::query_as(
+        "SELECT j.external_id, o.run_id, json_extract(o.provenance, '$.seed_url'), json_extract(o.provenance, '$.final_url'), json_extract(o.provenance, '$.date_evidence.raw_value'), json_extract(o.provenance, '$.seed_manifest.crawl_id') FROM discovery_observations o JOIN jobs j ON j.id=o.job_id"
+    ).fetch_all(&pool).await.unwrap();
+    assert_eq!(observations.len(), 21);
+    for (id, run_id, observed_seed, final_url, date, crawl_id) in observations {
+        assert_eq!(run_id, run.id);
+        if id.starts_with("second-") {
+            assert_eq!(observed_seed, "https://second.example/careers");
+            assert_eq!(final_url, format!("https://second.example/jobs/{id}"));
+            assert_eq!(crawl_id, None);
+        } else {
+            assert_eq!(observed_seed, seed);
+            assert_eq!(final_url, format!("https://employer.example/jobs/{id}"));
+            assert_eq!(crawl_id.as_deref(), Some("CC-MAIN-2026-43"));
+        }
+        assert_eq!(date, "2026-10-15T00:00:00Z");
+        assert_ne!(id, "blocked");
+    }
+}
+
+#[tokio::test]
 async fn interactive_feedback_counts_only_committed_new_discoveries() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
@@ -5518,7 +5748,7 @@ async fn imported_software_engineering_discovery_yaml_persists_discoveries_to_sq
     );
     let yaml_value: serde_json::Value = serde_json::from_slice(&parsed_yaml.stdout).unwrap();
     let spec = workflow::validate(yaml_value, "America/New_York").unwrap();
-    assert_eq!(spec.version, 10);
+    assert_eq!(spec.version, 11);
     assert_eq!(spec.sources.len(), 4);
     assert_eq!(
         spec.sources
@@ -5673,11 +5903,11 @@ async fn imported_software_engineering_discovery_yaml_persists_discoveries_to_sq
 }
 
 #[test]
-fn version_ten_compatibility_and_worker_protocol_thirteen_enforcement() {
+fn version_ten_compatibility_and_previous_worker_protocol_enforcement() {
     use scrape_lib::services::workflow;
     use serde_json::json;
 
-    // v9 converts to v10 without changing filters or opting into detail crawling
+    // v9 converts to v11 without changing filters or opting into detail crawling.
     let v9 = json!({
         "version": 9,
         "metadata": {"name": "V9 Compatibility"},
@@ -5687,11 +5917,15 @@ fn version_ten_compatibility_and_worker_protocol_thirteen_enforcement() {
         }],
         "filters": {"role_types": []}
     });
-    let spec = workflow::validate(v9, "UTC").unwrap();
-    assert_eq!(spec.version, 10);
-    assert!(spec.sources[0].extractor.source_config.is_none());
+    for version in [9, 10] {
+        let mut previous = v9.clone();
+        previous["version"] = version.into();
+        let spec = workflow::validate(previous, "UTC").unwrap();
+        assert_eq!(spec.version, 11);
+        assert!(spec.sources[0].extractor.source_config.is_none());
+    }
 
-    // Worker rejects protocol 13 payload with explicit error.
+    // The worker rejects the immediately previous protocol with an explicit error.
     let mut child = Command::new(worker())
         .arg("--stdin")
         .stdin(Stdio::piped())
@@ -5701,7 +5935,7 @@ fn version_ten_compatibility_and_worker_protocol_thirteen_enforcement() {
         .unwrap();
 
     let old_protocol_config = json!({
-        "version": 13,
+        "version": 14,
         "sources": [],
         "limits": { "per_host_delay_ms": 0, "request_timeout_s": 5 }
     });
@@ -5715,7 +5949,7 @@ fn version_ten_compatibility_and_worker_protocol_thirteen_enforcement() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("Unsupported protocol version: expected 14, got 13"),
+        stderr.contains("Unsupported protocol version: expected 15, got 14"),
         "unexpected stderr: {stderr}"
     );
 }

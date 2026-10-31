@@ -1,0 +1,12 @@
+# Common Crawl CC-MAIN-2026-43 URL-index sample; queried 2026-10-31.
+# Index records are discovery leads, not evidence of current jobs or dates.
+# Shard 00060, fetched 2026-10-08T06:56:08Z:
+https://www.elitehockeyhq.com/careers/senior-software-engineer
+# Shard 00060, fetched 2026-10-13T09:35:41Z:
+https://eliteperformancetech.com/jobs/software-engineer-back-end-rust/
+# Shard 00090, fetched 2026-10-06T03:30:15Z:
+https://www.sanoh-america.com/careers
+# Shard 00150, fetched 2026-10-09T07:20:05Z:
+https://www.myturningpt.com/careers/
+# Shard 00150, fetched 2026-10-12T02:23:37Z:
+https://www.myubiquity.com/careers

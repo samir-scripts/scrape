@@ -121,6 +121,7 @@ export function WorkflowSections({
   const rules = { ...emptyRules(), ...filters.matching };
   const compensationMatchMode = rules.compensation?.match_mode ?? "range_overlap";
   const [adzunaCredentialConfigured, setAdzunaCredentialConfigured] = useState<boolean | null>(null);
+  const [seedImportError, setSeedImportError] = useState("");
   useEffect(() => {
     void api.getAdzunaCredentialStatus()
       .then(({ configured }) => setAdzunaCredentialConfigured(configured))
@@ -362,7 +363,7 @@ export function WorkflowSections({
                   </Button>
                 </div>
               </div>
-              {source.extractor.kind !== "search" && <CompanyPicker value={selectedCompanyId(source)}
+              {source.extractor.kind !== "search" && source.extractor.kind !== "web_discovery" && <CompanyPicker value={selectedCompanyId(source)}
                 onChange={companyId => selectCompany?.(source.id, companyId)}
                 onCustom={() => {}}
                 logo={preview?.branding.find(item => item.source_id === source.id && item.company === source.employer_hint)?.logo} />}
@@ -387,7 +388,7 @@ export function WorkflowSections({
                         change({ ...draft, sources: nextSources });
                       }}
                     />
-                    <Button data-control-action="workflow.detect_source"
+                    {source.extractor.kind !== "web_discovery" && <Button data-control-action="workflow.detect_source"
                       type="button"
                       size="sm"
                       tabIndex={-1}
@@ -395,7 +396,7 @@ export function WorkflowSections({
                       onClick={() => onDetect?.(index)}
                     >
                       Detect
-                    </Button>
+                    </Button>}
                   </div>
                 </div>}
                 {source.extractor.kind === "search" && <label className="grid gap-1 text-sm">Public listings provider
@@ -482,6 +483,7 @@ export function WorkflowSections({
                           "workday",
                           "jsonld",
                           "selector",
+                          "web_discovery",
                         ].map((value) => ({ value, label: value === "selector" ? "selector / Website crawl" : value }))}
                         onChange={(kind) => {
                           const nextSources = [...draft.sources];
@@ -490,12 +492,83 @@ export function WorkflowSections({
                             extractor: {
                               ...source.extractor,
                               kind: kind as WorkflowSourceSpec["extractor"]["kind"],
+                              source_config: kind === source.extractor.kind ? source.extractor.source_config : {},
                             },
                           };
                           change({ ...draft, sources: nextSources });
                         }}
                       />
                     </label>
+                    {source.extractor.kind === "web_discovery" && (() => {
+                      const raw = source.extractor.source_config;
+                      const config = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+                      const update = (key: string, value: unknown) => change(current => ({
+                        ...current, sources: current.sources.map(item => {
+                          if (item.id !== source.id) return item;
+                          const existing = item.extractor.source_config;
+                          const currentConfig = existing && typeof existing === "object" && !Array.isArray(existing) ? existing : {};
+                          const seedChanged = key === "seed_urls" && JSON.stringify(currentConfig.seed_urls ?? []) !== JSON.stringify(value);
+                          const nextConfig: Record<string, unknown> = { ...currentConfig, [key]: value };
+                          if (seedChanged) delete nextConfig.seed_manifest;
+                          return { ...item, extractor: { ...item.extractor, source_config: nextConfig as WorkflowSourceSpec["extractor"]["source_config"] } };
+                        }),
+                      }));
+                      return <fieldset className="grid gap-3">
+                        <legend className="text-sm font-semibold">Independent web discovery</legend>
+                        <p className="text-sm text-[var(--color-ink-mute)]">Public static HTML only. JavaScript-only pages cannot be rendered safely by independent discovery.</p>
+                        <label className="grid gap-1 text-sm">Additional seed URLs (one per line)
+                          <textarea aria-label={`Source ${index + 1} additional seed URLs`} value={Array.isArray(config.seed_urls) ? config.seed_urls.join("\n") : ""}
+                            onChange={event => update("seed_urls", event.target.value === "" ? [] : event.target.value.split("\n"))}
+                            onBlur={event => update("seed_urls", event.target.value.split("\n").map(value => value.trim()).filter(Boolean))} />
+                        </label>
+                        <label className="grid gap-1 text-sm">Import seed manifest (.txt)
+                          <Input data-control-action="workflow.discovery.import_seeds" type="file" accept=".txt,text/plain"
+                            aria-label={`Source ${index + 1} seed manifest`}
+                            onChange={async event => {
+                              const file = event.target.files?.[0];
+                              event.target.value = "";
+                              if (!file) return;
+                              setSeedImportError("");
+                              try {
+                                if (file.size > 1024 * 1024) throw new Error("Seed manifest exceeds 1 MiB");
+                                const text = await file.text();
+                                const crawlId = text.match(/\bCC-MAIN-\d{4}-\d{2}\b/)?.[0] ?? null;
+                                const seeds = new Set<string>();
+                                for (const line of text.split(/\r?\n/)) {
+                                  const raw = line.trim();
+                                  if (!raw || raw.startsWith("#")) continue;
+                                  const url = new URL(raw);
+                                  if (url.protocol !== "https:" || url.username || url.password
+                                    || url.hostname === "localhost" || url.hostname.endsWith(".local")
+                                    || /^\d+\.\d+\.\d+\.\d+$/.test(url.hostname)
+                                    || url.hostname.startsWith("[")) {
+                                    throw new Error(`Seed must be a public HTTPS hostname: ${raw}`);
+                                  }
+                                  url.hash = "";
+                                  seeds.add(url.href);
+                                }
+                                if (!seeds.size || seeds.size > 100) throw new Error("Seed manifest must contain 1–100 distinct URLs");
+                                const primary = new URL(source.extractor.url);
+                                primary.hash = "";
+                                seeds.delete(primary.href);
+                                change(current => ({
+                                  ...current, sources: current.sources.map(item => item.id === source.id
+                                    ? { ...item, extractor: { ...item.extractor, source_config: { ...(item.extractor.source_config && typeof item.extractor.source_config === "object" && !Array.isArray(item.extractor.source_config) ? item.extractor.source_config : {}), seed_urls: [...seeds], seed_manifest: { crawl_id: crawlId, imported_at: new Date().toISOString() } } as WorkflowSourceSpec["extractor"]["source_config"] } }
+                                    : item),
+                                }));
+                              } catch (error) {
+                                setSeedImportError(`Could not import seed manifest: ${String(error)}`);
+                              }
+                            }} />
+                        </label>
+                        {seedImportError && <p role="alert">{seedImportError}</p>}
+                        {([["max_domains", "Maximum origins", 1, 100, 25], ["max_depth", "Maximum depth", 0, 5, 4], ["max_pages", "Maximum pages", 1, 100, 100]] as const).map(([key, label, min, max, fallback]) =>
+                          <label key={key} className="grid gap-1 text-sm">{label}
+                            <Input type="number" min={min} max={max} value={typeof config[key] === "number" ? config[key] as number : fallback}
+                              onChange={event => update(key, event.target.value === "" ? null : Number(event.target.value))} />
+                          </label>)}
+                      </fieldset>;
+                    })()}
                     {source.extractor.kind === "selector" && (() => {
                       const rawConfig = source.extractor.source_config;
                       const config = rawConfig && typeof rawConfig === "object" && !Array.isArray(rawConfig) ? rawConfig : {};

@@ -27,7 +27,7 @@ Save never runs a scrape.
 Older saved examples can be replaced only through the reviewed, fingerprinted
 workflow-replacement dialog. Its database backup precedes one atomic transaction;
 custom workflows and saved-job state remain preserved.
-Current contracts: WorkflowSpec **10**, worker protocol **14**, migration **33**.
+Current contracts: WorkflowSpec **11**, worker protocol **15**, migration **35**.
 The per-run target counts newly inserted Discovered jobs, not refreshes. Runs can
 finish below target when sources exhaust or existing safety bounds are reached;
 Preview is a non-writing sample rather than a prediction of new discoveries.
@@ -48,6 +48,17 @@ later evidence remains eligible for matching. A failed optional crawl page leave
 coverage partial while other queued pages continue. The standalone Muse discovery
 test retains its unfiltered feed and adds three explicitly category-scoped samples;
 these are bounded provider samples, not exhaustive job search.
+
+The disabled [48-hour test workflow](test-workflows/software-engineering-it-us-48h.yaml)
+uses independent public-web discovery: a company directory and a small, dated
+Common Crawl-derived seed sample, not a board or API dependency. The directory
+and imported manifests are starting points, not a complete index of the web.
+Discovery follows bounded public links and sitemaps, checks robots and public
+network destinations, and reports attempted origins and pages. It does not use
+the configured proxy or render JavaScript-only sites. Missing, ambiguous, or
+insufficiently precise publication/geography evidence is not treated as a match.
+For date-only evidence, the entire day in the filter timezone must fall within
+the 48-hour window. A smaller result count does not imply no other jobs exist.
 
 For workflow Preview, public-HTML crawl sources are capped at six navigations per
 source and the existing 20-second source/45-second workflow deadlines remain

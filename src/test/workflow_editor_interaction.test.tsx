@@ -42,6 +42,7 @@ describe("Preview readiness and current-revision saving", () => {
         source_id: "fixture-company",
         limit: 10,
         commit_feedback: false, newly_committed: 0,
+        discovery_pages: 0, discovery_origins: 0,
         examined: 3,
         matched: 0,
         accepted: 0,
@@ -111,6 +112,7 @@ describe("Preview readiness and current-revision saving", () => {
         source_id: "fixture-company",
         limit: 10,
         commit_feedback: false, newly_committed: 0,
+        discovery_pages: 0, discovery_origins: 0,
         examined: unresolved,
         matched: 0,
         accepted: 0,
@@ -168,7 +170,7 @@ describe("role-first workflow boundaries", () => {
     await user.click(screen.getByRole("button", { name: "Save workflow" }));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     const spec = save.mock.calls[0][0];
-    expect(spec.version).toBe(10);
+    expect(spec.version).toBe(11);
     expect(spec.sources).toHaveLength((companies ? companies.split(",").length : 0) + 2);
     expect(spec.sources.filter(source => source.extractor.kind === "search")).toHaveLength(2);
     expect(spec.sources.filter(source => source.extractor.kind === "search").map(source => source.extractor.url)).toEqual(["themuse", "arbeitnow"]);
@@ -191,6 +193,32 @@ describe("role-first workflow boundaries", () => {
     expect((screen.getByLabelText("Workflow name") as HTMLInputElement).value).toBe("My jobs at home");
     expect(screen.getByRole("button", { name: "Remove Engineer from Target roles" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Remove Intern from Target roles" })).toBeTruthy();
+  });
+  it("imports canonical discovery seeds and preserves them when a manifest contains an unsafe URL", async () => {
+    const user = userEvent.setup();
+    const initialSpec = sourceToWorkflowSpec(SAMPLE_ENGINEERING_SOURCE);
+    initialSpec.sources = [{
+      ...initialSpec.sources[0],
+      extractor: { ...initialSpec.sources[0].extractor, kind: "web_discovery", url: "https://directory.example/", source_config: {} },
+    }];
+    render(<AddSourceModal isOpen initialSpec={initialSpec} onClose={vi.fn()} onSourceSaved={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Criteria" }));
+    await user.click(await screen.findByRole("button", { name: "Continue to Sources" }));
+    const input = screen.getByLabelText("Source 1 seed manifest");
+    const seeds = screen.getByLabelText("Source 1 additional seed URLs") as HTMLTextAreaElement;
+    const file = (text: string) => {
+      const result = new File([text], "seeds.txt", { type: "text/plain" });
+      Object.defineProperty(result, "text", { value: async () => text });
+      return result;
+    };
+    await user.upload(input, file("# Common Crawl CC-MAIN-2026-43\n\nhttps://directory.example/#home\nhttps://EXAMPLE.com:443/careers#jobs\nhttps://example.com/careers\nhttps://other.example/jobs\n"));
+    await waitFor(() => expect(seeds.value).toBe("https://example.com/careers\nhttps://other.example/jobs"));
+    for (const invalid of ["https://127.0.0.1/jobs", "http://public.example/jobs"]) {
+      await user.upload(input, file(`# CC-MAIN-2026-44\nhttps://new.example/jobs\n${invalid}\n`));
+      expect((await screen.findByRole("alert")).textContent).toContain("Seed must be a public HTTPS hostname");
+      expect(seeds.value).toBe("https://example.com/careers\nhttps://other.example/jobs");
+    }
   });
   it("defaults to 20, invalidates preview on limit changes, rejects invalid drafts and saves YAML limit", async () => {
     const user = userEvent.setup();

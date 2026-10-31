@@ -960,7 +960,7 @@ const apiImplementation = {
     const preserved_ids = devSources.filter(source => !seen.has(source.id)).map(source => source.id).sort();
     const nextSources = devSources.filter(source => !seen.has(source.id));
     const created: Source[] = [];
-    const setup_required = ["Adzuna requires credentials in Settings and explicit source enablement."];
+    const setup_required = targetMode === "starter_workflows" ? ["Adzuna requires credentials in Settings and explicit source enablement."] : [];
     for (const template of demoReplacementTemplates(targetMode)) {
       const existing = nextSources.find(source => demoWorkflowMarker(source).template_id === template.id);
       if (existing) {

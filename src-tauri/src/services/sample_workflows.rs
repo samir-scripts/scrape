@@ -421,9 +421,6 @@ pub async fn replace(
         .collect();
     let mut setup_required: Vec<String> = setup_required;
     setup_required.extend(preserved_conflicts);
-    if target == WorkflowReplacementTarget::TestWorkflow {
-        setup_required.push("Adzuna is not enabled — configure credentials and explicitly enable the source to use it.".into());
-    }
     Ok(WorkflowReplacementReport {
         created,
         removed_ids,
@@ -835,10 +832,8 @@ mod tests {
             .unwrap()
             .as_array()
             .unwrap();
-        assert!(installed
-            .iter()
-            .filter(|source| source["extractor"]["url"] == "adzuna")
-            .all(|source| source["enabled"] == false));
+        assert_eq!(installed.len(), 2);
+        assert!(installed.iter().all(|source| source["extractor"]["kind"] == "web_discovery"));
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM scrape_runs")
                 .fetch_one(&pool)
@@ -888,12 +883,7 @@ mod tests {
         assert_eq!(spec.max_jobs_per_run, Some(20));
         let targets = replacement_specs(WorkflowReplacementTarget::TestWorkflow, "UTC").unwrap();
         assert_eq!(targets.len(), 1);
-        assert!(targets[0]
-            .1
-            .sources
-            .iter()
-            .filter(|source| source.extractor.url == "adzuna")
-            .all(|source| !source.enabled));
+        assert!(targets[0].1.sources.iter().all(|source| source.extractor.kind == scrape_core::SourceKind::WebDiscovery));
     }
 
     #[test]

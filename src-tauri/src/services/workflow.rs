@@ -7,7 +7,7 @@ use scrape_core::{RoleType, SourceCadence, SourceKind, WorkerFilters};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
-pub const WORKFLOW_SPEC_VERSION: u32 = 10;
+pub const WORKFLOW_SPEC_VERSION: u32 = 11;
 
 macro_rules! optional_fields {
     ($name:ident { $($field:ident: $kind:ty),* $(,)? }) => {
@@ -335,11 +335,11 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
             }
         }
         value = serde_json::json!({"version":3,"metadata":{"name":value.get("company"),"company":value.get("company")},"extractor":extractor,"schedule":{"cadence":value.pointer("/cadence/type").cloned().unwrap_or(Value::String("global".into())),"cron":value.pointer("/cadence/cron")}});
-    } else if matches!(version, 2..=10) {
+    } else if matches!(version, 2..=11) {
         // Legacy extractor roots become source collections before decoding.
     } else {
         return Err(AppError::Validation(format!(
-            "version: unsupported workflow version {version}; supported versions are 1–10"
+            "version: unsupported workflow version {version}; supported versions are 1–11"
         )));
     }
     if submitted_version <= 4 && value.get("sources").is_none() {
@@ -521,6 +521,17 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
 }
 
 pub fn normalized_source_endpoint(extractor: &WorkflowExtractor) -> Result<String> {
+    if extractor.kind == SourceKind::WebDiscovery {
+        if extractor.source_config.as_ref().is_some_and(|value| value.get("url").is_some()) {
+            return Err(AppError::Validation("extractor.source_config.url: use extractor.url for the primary seed".into()));
+        }
+        let config = scrape_core::web_discovery::WebDiscoveryConfig::parse(
+            extractor.source_config.as_ref().unwrap_or(&Value::Null),
+        ).map_err(AppError::Validation)?;
+        let seeds = scrape_core::web_discovery::canonical_seeds(&extractor.url, &config)
+            .map_err(AppError::Validation)?;
+        return Ok(format!("WebDiscovery:{}", serde_json::to_string(&seeds)?));
+    }
     if extractor.kind == SourceKind::Search {
         let provider =
             scrape_core::search_source::identifier(&extractor.url).map_err(AppError::Validation)?;
@@ -989,6 +1000,15 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
             "extractor.source_config: expected mapping".into(),
         ));
     }
+    if kind == SourceKind::WebDiscovery {
+        let parsed = scrape_core::web_discovery::WebDiscoveryConfig::parse(config)
+            .map_err(AppError::Validation)?;
+        if let Some(url) = config.get("url") {
+            let url = url.as_str().ok_or_else(|| AppError::Validation("extractor.url: expected URL string".into()))?;
+            scrape_core::web_discovery::canonical_seeds(url, &parsed).map_err(AppError::Validation)?;
+        }
+        return Ok(());
+    }
     if kind == SourceKind::Search {
         return scrape_core::search_source::validate_config(config).map_err(AppError::Validation);
     }
@@ -1232,6 +1252,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn discovery_seed_set_defines_endpoint_and_rejects_unsafe_config() {
+        let value = serde_json::json!({
+            "version": 11, "metadata": {"name":"Discovery"},
+            "sources": [{"id":"web","label":"Directory","extractor":{
+                "kind":"web_discovery","url":"https://directory.test/",
+                "source_config":{"seed_urls":["https://employer.test/"],"max_domains":25,"max_depth":4,"max_pages":100}
+            }}], "schedule":{"cadence":"manual"}
+        });
+        let spec = validate(value.clone(), "UTC").unwrap();
+        assert_eq!(source_input(&spec, "UTC").unwrap().identifier, "https://directory.test/");
+        let mut reversed = spec.sources[0].extractor.clone();
+        reversed.url = "https://employer.test/".into();
+        reversed.source_config.as_mut().unwrap()["seed_urls"] = serde_json::json!(["https://directory.test/"]);
+        assert_eq!(normalized_source_endpoint(&reversed).unwrap(), normalized_source_endpoint(&spec.sources[0].extractor).unwrap());
+        for (key, bad) in [("max_depth", serde_json::json!(6)), ("max_pages", serde_json::json!(0)), ("ignore_robots", serde_json::json!(true)), ("seed_urls", serde_json::json!(["https://directory.test/#duplicate"]))] {
+            let mut invalid = value.clone();
+            invalid["sources"][0]["extractor"]["source_config"][key] = bad;
+            assert!(validate(invalid, "UTC").unwrap_err().to_string().contains(key));
+        }
+    }
+
+    #[test]
     fn website_crawl_requires_explicit_extraction_and_preserves_selector_validation() {
         use serde_json::json;
         assert!(validate_config(
@@ -1269,8 +1311,8 @@ mod tests {
     fn compensation_modes_upgrade_without_changing_saved_overlap_rules() {
         use scrape_core::enrich::{CompensationMatchMode, Salary};
 
-        assert_eq!(WORKFLOW_SPEC_VERSION, 10);
-        assert_eq!(scrape_core::PROTOCOL_VERSION, 14);
+        assert_eq!(WORKFLOW_SPEC_VERSION, 11);
+        assert_eq!(scrape_core::PROTOCOL_VERSION, 15);
         let v1 = validate(
             serde_json::json!({
                 "version": 1, "company": "Legacy", "url": "https://boards.greenhouse.io/fixture",
@@ -1279,14 +1321,14 @@ mod tests {
             "UTC",
         )
         .unwrap();
-        assert_eq!(v1.version, 10);
+        assert_eq!(v1.version, 11);
         assert!(v1
             .filters
             .as_ref()
             .is_none_or(|filters| filters.compensation.is_none()));
         let lower =
             Salary::from_structured(Some(50000.0), None, Some("USD"), Some("year"), None).unwrap();
-        for version in 2..=10 {
+        for version in 2..=11 {
             let mut value = serde_json::json!({
                 "version": version, "metadata": {"name": "Saved native pay"},
                 "sources": [{"id": "fixture", "label": "Fixture",
@@ -1304,7 +1346,7 @@ mod tests {
                         Value::String("range_overlap".into());
                 }
                 let spec = validate(value.clone(), "UTC").unwrap();
-                assert_eq!(spec.version, 10);
+                assert_eq!(spec.version, 11);
                 let reopened = validate(serde_json::to_value(&spec).unwrap(), "UTC").unwrap();
                 assert_eq!(spec.filters, reopened.filters);
                 let filters = reopened.filters.unwrap();

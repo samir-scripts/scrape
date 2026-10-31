@@ -2008,6 +2008,7 @@ mod tests {
         // 3. Emulate sidecar emitting scraped postings matching the workflow
         let batch = vec![
             ScrapedJob {
+                discovery_provenance: None,
                 compensation: vec![],
                 dedupe_key: format!("{}:job-101", source.id),
                 source_id: Some(source.id.clone()),
@@ -2048,6 +2049,7 @@ mod tests {
                 locations: vec![],
             },
             ScrapedJob {
+                discovery_provenance: None,
                 compensation: vec![],
                 dedupe_key: format!("{}:job-102", source.id),
                 source_id: Some(source.id.clone()),

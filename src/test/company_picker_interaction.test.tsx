@@ -36,7 +36,7 @@ describe("company board attachment editing", () => {
     await choose(user, 0, "cloud green");
     const draft = readDraft();
     expect(draft.metadata.name).toBe("New Job Workflow");
-    expect(draft.version).toBe(10);
+    expect(draft.version).toBe(11);
     expect(draft.filters?.matching?.experience_match_mode).toBe("required_minimum");
     expect(draft.sources[0].id).toBe("source-1");
     expect(selectedCompanyId(draft.sources[0])).toBe("cloudflare");

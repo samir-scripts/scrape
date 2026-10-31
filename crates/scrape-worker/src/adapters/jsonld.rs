@@ -442,6 +442,7 @@ fn parse_job_posting_map(
         description_source,
         company_icon_url,
         company_logo,
+        discovery_provenance: None,
     })
 }
 

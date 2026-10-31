@@ -1,127 +1,40 @@
 # Test workflow: US Software Engineering, IT, and related jobs from the past 48 hours.
-# Configured to query public search feeds and career boards; coverage is not exhaustive.
+# Independently follows a public company directory and a labeled archived seed sample.
 # Shared quota of 20 jobs across all workflow sources.
-version: 10
+version: 11
 max_jobs_per_run: 20
 metadata:
   name: Software Engineering & IT — US · Past 48 Hours · Test Workflow
   enabled: false
 sources:
-  - id: themuse-swe
-    label: The Muse — Software Engineering (Cross-Company Web Feed)
+  - id: public-company-directory
+    label: Public company-directory discovery
     enabled: true
     extractor:
-      kind: search
-      url: themuse
+      kind: web_discovery
+      url: https://en.wikipedia.org/wiki/Category:Software_companies_of_the_United_States
       source_config:
-        endpoint: https://www.themuse.com/api/public/jobs?page=0&category=Software%20Engineering
-        follow_detail: true
-        max_pages: 50
-  - id: themuse-it
-    label: The Muse — Computer & IT (Cross-Company Web Feed)
+        max_domains: 25
+        max_depth: 4
+        max_pages: 100
+  - id: public-employer-sample
+    label: Common Crawl employer-page seed sample
     enabled: true
     extractor:
-      kind: search
-      url: themuse
+      kind: web_discovery
+      url: https://www.elitehockeyhq.com/careers/senior-software-engineer
       source_config:
-        endpoint: https://www.themuse.com/api/public/jobs?page=0&category=Computer%20and%20IT
-        follow_detail: true
-        max_pages: 50
-  - id: themuse-general
-    label: The Muse — General Web Feed
-    enabled: true
-    extractor:
-      kind: search
-      url: themuse
-      source_config:
-        follow_detail: true
-        max_pages: 50
-  - id: themuse-data
-    label: The Muse — Data & Analytics (Cross-Company Web Feed)
-    enabled: true
-    extractor:
-      kind: search
-      url: themuse
-      source_config:
-        endpoint: https://www.themuse.com/api/public/jobs?page=0&category=Data%20and%20Analytics
-        follow_detail: true
-        max_pages: 50
-  - id: themuse-data-science
-    label: The Muse — Data Science (Cross-Company Web Feed)
-    enabled: true
-    extractor:
-      kind: search
-      url: themuse
-      source_config:
-        endpoint: https://www.themuse.com/api/public/jobs?page=0&category=Data%20Science
-        follow_detail: true
-        max_pages: 50
-  - id: jobicy-remote
-    label: Jobicy — Remote Tech Jobs
-    enabled: true
-    extractor:
-      kind: search
-      url: jobicy
-  - id: arbeitnow-feed
-    label: Arbeitnow — Tech Jobs Feed
-    enabled: true
-    extractor:
-      kind: search
-      url: arbeitnow
-  - id: adzuna-us
-    label: Adzuna — US Software & IT Search
-    enabled: false
-    extractor:
-      kind: search
-      url: adzuna
-  - id: website-crawl-reddit
-    label: Website Crawl — Reddit Careers (Public HTML)
-    enabled: true
-    employer_hint: Reddit
-    extractor:
-      kind: selector
-      mode: static
-      url: https://job-boards.greenhouse.io/reddit
-      source_config:
-        crawl:
-          max_pages: 50
-          max_depth: 2
-          extraction: public_html
-        per_host_delay_ms: 500
-        jitter_ms: 100
-        ignore_robots: true
-  - id: website-crawl-palantir
-    label: Website Crawl — Palantir Careers (Public HTML)
-    enabled: true
-    employer_hint: Palantir Technologies
-    extractor:
-      kind: selector
-      mode: static
-      url: https://jobs.lever.co/palantir
-      source_config:
-        crawl:
-          max_pages: 50
-          max_depth: 2
-          extraction: public_html
-        per_host_delay_ms: 500
-        jitter_ms: 100
-        ignore_robots: true
-  - id: website-crawl-discord
-    label: Website Crawl — Discord Careers (Public HTML)
-    enabled: true
-    employer_hint: Discord
-    extractor:
-      kind: selector
-      mode: static
-      url: https://job-boards.greenhouse.io/discord
-      source_config:
-        crawl:
-          max_pages: 50
-          max_depth: 2
-          extraction: public_html
-        per_host_delay_ms: 500
-        jitter_ms: 100
-        ignore_robots: true
+        seed_urls:
+          - https://eliteperformancetech.com/jobs/software-engineer-back-end-rust/
+          - https://www.sanoh-america.com/careers
+          - https://www.myturningpt.com/careers/
+          - https://www.myubiquity.com/careers
+        seed_manifest:
+          crawl_id: CC-MAIN-2026-43
+          imported_at: "2026-10-31T07:22:02Z"
+        max_domains: 25
+        max_depth: 4
+        max_pages: 100
 schedule:
   cadence: manual
   time: "09:00"

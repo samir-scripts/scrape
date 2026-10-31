@@ -226,6 +226,7 @@ async fn run_single_source(
         "selector" => SourceKind::Selector,
         "workday" => SourceKind::Workday,
         "search" => SourceKind::Search,
+        "web_discovery" => SourceKind::WebDiscovery,
         other => {
             eprintln!("Unknown source kind: {}", other);
             std::process::exit(1);

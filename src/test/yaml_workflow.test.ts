@@ -10,6 +10,30 @@ import {
 import type { Source } from "../bindings/Source";
 
 describe("YAML Workflow Validator & Serializer", () => {
+  it("validates independent discovery seeds and bounded configuration", () => {
+    const base = `version: 11
+metadata: { name: Discovery }
+sources:
+  - id: web
+    label: Directory
+    extractor:
+      kind: web_discovery
+      url: https://directory.test/
+      source_config:
+        seed_urls: [https://employer.test/]
+        max_domains: 25
+        max_depth: 4
+        max_pages: 100
+schedule: { cadence: manual }
+`;
+    const result = validateWorkflowYaml(base);
+    expect(result.errors).toEqual([]);
+    expect(validateWorkflowYaml(workflowSpecToYaml(result.parsedSpec!)).errors).toEqual([]);
+    expect(validateWorkflowYaml(base.replace("max_depth: 4", "max_depth: 6")).errors.some(error => error.message.includes("max_depth"))).toBe(true);
+    expect(validateWorkflowYaml(base.replace("https://employer.test/", "https://directory.test/#fragment")).errors.some(error => error.message.includes("seed_urls"))).toBe(true);
+    expect(validateWorkflowYaml(base.replace("max_depth: 4", "ignore_robots: true")).errors.some(error => error.message.includes("ignore_robots"))).toBe(true);
+  });
+
   it("preserves mixed CSS/XPath locators and field transforms in YAML", () => {
     const config = {
       item: "//article[contains(@class, 'job-card')]",
@@ -286,7 +310,7 @@ retention:
     };
 
     const spec = sourceToWorkflowSpec(source);
-    expect(spec.version).toBe(10);
+    expect(spec.version).toBe(11);
     expect(spec.metadata.name).toBe("Ramp");
     expect(spec.sources[0].extractor.kind).toBe("ashby");
     expect(spec.sources[0].extractor.url).toBe("https://jobs.ashbyhq.com/ramp");

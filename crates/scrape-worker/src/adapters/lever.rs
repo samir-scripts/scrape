@@ -270,6 +270,7 @@ fn parse_lever_postings_with(
         let company_icon_url = None;
 
         if !sink(WorkerEvent::Job {
+            discovery_provenance: None,
             source_id: source.id.clone(),
             external_id: posting.id,
             title: posting.text,

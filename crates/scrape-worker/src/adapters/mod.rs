@@ -7,6 +7,7 @@ pub mod search;
 pub(crate) mod search_cache;
 pub mod selector;
 pub(crate) mod selector_session;
+pub(crate) mod web_discovery;
 pub mod workday;
 
 use crate::client::{ClientError, HttpClient};
@@ -102,6 +103,38 @@ pub async fn scrape_source_with_evidence(
         }
         SourceKind::Workday => {
             workday::scrape_workday_with(client, source, &mut |event| validated(event, None)).await
+        }
+        SourceKind::WebDiscovery => {
+            let limits = scrape_core::WorkerLimits::default();
+            let mut transport = crate::public_web::PublicWeb::new(
+                (limits.max_pages_per_source as usize).saturating_mul(8),
+                std::time::Duration::from_secs(limits.request_timeout_s),
+                std::time::Duration::from_millis(limits.per_host_delay_ms),
+            );
+            if let Some(origin) = client.replay_origin() {
+                transport = transport.with_test_replay_origin(origin)
+                    .map_err(|error| ClientError::Configuration(error.to_string()))?;
+            }
+            let mut session = web_discovery::WebDiscoverySession::new(
+                source,
+                &limits,
+                tokio::time::Instant::now() + std::time::Duration::from_secs(limits.max_source_duration_s),
+                &transport,
+                started,
+            )?;
+            loop {
+                match session.next().await? {
+                    selector_session::SelectorStep::Event(event) => {
+                        let (event, evidence) = *event;
+                        if !validated(event, evidence) {
+                            break;
+                        }
+                    }
+                    selector_session::SelectorStep::Yield => {}
+                    selector_session::SelectorStep::Exhausted => break,
+                }
+            }
+            Ok(())
         }
         SourceKind::Search => {
             search::scrape_search_with(client, source, filters, started, limits, &mut |event| {
