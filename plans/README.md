@@ -1,16 +1,24 @@
+Independent public-web discovery now uses WorkflowSpec 11 and worker protocol 15;
+the 48-hour test profile combines a public directory with a bounded Common Crawl
+seed sample. The [evidence ledger](independent-web-discovery-evidence.md)
+separates isolated fixtures, live runs, incomplete coverage research and the
+version-34 migration incident. The default live profile found no qualifying
+jobs within its bounds; a manually supplied staffing-site seed persisted nine
+in temporary SQLite. This does not establish exhaustive web coverage.
+
 The per-run `max_jobs_per_run` value now targets newly committed Discovered jobs
 rather than refreshed matches. Protocol 13 coordinates each persisted candidate
 with the host; source exhaustion and existing safety bounds can leave a shortfall.
 Preview remains a non-writing sample. See the [workflow contract](workflow-v3.md)
 and [verification evidence](11-implementation-evidence.md).
 
-Latest implementation revision: **searchable workflow role and company selection**,
+Prior UI revision: **searchable workflow role and company selection**,
 specified in [Plan 13](13-searchable-workflow-role-company-selection.md).
 The role catalog includes all detailed BLS 2018 occupations and pinned O*NET
 31.0 technology alternate titles; company filters attach only known available
 boards, preserve source identity, and leave imported drafts unchanged until an
-explicit user action. Keyword completion reuses current workflow context. No
-matching semantics, persisted schema, or workflow/protocol versions changed.
+explicit user action. Keyword completion reuses current workflow context. That
+revision did not change matching semantics, persisted schema, or protocol versions.
 The [implementation evidence](13-implementation-evidence.md) records passing
 browser/frontend/Rust checks and the blocked native workflow acceptance gate.
 

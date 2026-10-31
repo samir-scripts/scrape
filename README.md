@@ -59,6 +59,8 @@ the configured proxy or render JavaScript-only sites. Missing, ambiguous, or
 insufficiently precise publication/geography evidence is not treated as a match.
 For date-only evidence, the entire day in the filter timezone must fall within
 the 48-hour window. A smaller result count does not imply no other jobs exist.
+See [independent discovery evidence and limits](plans/independent-web-discovery-evidence.md)
+for isolated native runs, live results and the migration recovery incident.
 
 For workflow Preview, public-HTML crawl sources are capped at six navigations per
 source and the existing 20-second source/45-second workflow deadlines remain
