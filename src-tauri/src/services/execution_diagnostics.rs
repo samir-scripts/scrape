@@ -703,8 +703,13 @@ mod tests {
     async fn discovery_observations_are_transactional_and_preserve_each_run() {
         let pool = init_memory_db().await.unwrap();
         let source = sample_workflows::seed_default(&pool).await.unwrap();
-        let first = RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&source.id)).await.unwrap();
-        let second = RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&source.id)).await.unwrap();
+        let first = RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&source.id))
+            .await
+            .unwrap();
+        let second =
+            RunsRepo::start_with_source(&pool, TriggerType::SingleSource, Some(&source.id))
+                .await
+                .unwrap();
         let mut job = candidate(&source.id, "observation");
         job.discovery_provenance = Some(scrape_core::protocol::DiscoveryProvenance {
             seed_url: "https://directory.test/".into(),
@@ -714,9 +719,13 @@ mod tests {
             date_evidence: None,
         });
         let mut counts = RunCounts::default();
-        persist_batch(&pool, &first.id, &[job.clone()], &mut counts).await.unwrap();
+        persist_batch(&pool, &first.id, &[job.clone()], &mut counts)
+            .await
+            .unwrap();
         job.discovery_provenance.as_mut().unwrap().seed_url = "https://other.test/".into();
-        persist_batch(&pool, &second.id, &[job.clone()], &mut counts).await.unwrap();
+        persist_batch(&pool, &second.id, &[job.clone()], &mut counts)
+            .await
+            .unwrap();
         let rows: Vec<(String, String)> = sqlx::query_as("SELECT run_id, json_extract(provenance, '$.seed_url') FROM discovery_observations ORDER BY run_id")
             .fetch_all(&pool).await.unwrap();
         assert_eq!(rows.len(), 2);
@@ -726,12 +735,30 @@ mod tests {
         bad.external_id = Some("bad".into());
         bad.dedupe_key = format!("{}:bad", source.id);
         bad.source_id = Some("missing".into());
-        assert!(persist_batch(&pool, &second.id, &[job, bad], &mut counts).await.is_err());
-        assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM discovery_observations").fetch_one(&pool).await.unwrap(), 2);
-        sqlx::query("DELETE FROM sources WHERE id = ?").bind(&source.id).execute(&pool).await.unwrap();
-        let retained: Vec<(Option<String>, String)> = sqlx::query_as("SELECT source_id, source_key FROM discovery_observations")
-            .fetch_all(&pool).await.unwrap();
-        assert_eq!(retained, vec![(None, source.id.clone()), (None, source.id.clone())]);
+        assert!(persist_batch(&pool, &second.id, &[job, bad], &mut counts)
+            .await
+            .is_err());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM discovery_observations")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            2
+        );
+        sqlx::query("DELETE FROM sources WHERE id = ?")
+            .bind(&source.id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let retained: Vec<(Option<String>, String)> =
+            sqlx::query_as("SELECT source_id, source_key FROM discovery_observations")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            retained,
+            vec![(None, source.id.clone()), (None, source.id.clone())]
+        );
     }
 
     #[tokio::test]

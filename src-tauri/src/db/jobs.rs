@@ -1013,7 +1013,9 @@ impl JobsRepo {
             if let Some(provenance) = &job.discovery_provenance {
                 provenance.validate().map_err(AppError::Validation)?;
                 if run_id.is_none() || job.source_id.is_none() {
-                    return Err(AppError::Validation("Discovery provenance requires a run and source".into()));
+                    return Err(AppError::Validation(
+                        "Discovery provenance requires a run and source".into(),
+                    ));
                 }
             }
             stats.total += 1;

@@ -698,14 +698,20 @@ mod rule_parity_tests {
                 "type":"job","source_id":"fixture","external_id":id,
                 "title":"Engineer","company":"Fixture","url":format!("https://fixture.test/{id}"),
                 "location":"","role_type":"unknown","date_posted":posted
-            })).unwrap();
+            }))
+            .unwrap();
             assert_eq!(rules.matches_event_at(&event, clock), expected, "{id}");
         }
         let page = JobsRepo::list_at(
             &pool,
-            JobFilter { matching: Some(rules), ..Default::default() },
+            JobFilter {
+                matching: Some(rules),
+                ..Default::default()
+            },
             clock,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
         let mut ids: Vec<_> = page.items.iter().map(|job| job.id.as_str()).collect();
         ids.sort_unstable();
         assert_eq!(ids, ["inside-day", "inside-time"]);

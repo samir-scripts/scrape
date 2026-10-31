@@ -112,13 +112,15 @@ pub async fn scrape_source_with_evidence(
                 std::time::Duration::from_millis(limits.per_host_delay_ms),
             );
             if let Some(origin) = client.replay_origin() {
-                transport = transport.with_test_replay_origin(origin)
+                transport = transport
+                    .with_test_replay_origin(origin)
                     .map_err(|error| ClientError::Configuration(error.to_string()))?;
             }
             let mut session = web_discovery::WebDiscoverySession::new(
                 source,
                 &limits,
-                tokio::time::Instant::now() + std::time::Duration::from_secs(limits.max_source_duration_s),
+                tokio::time::Instant::now()
+                    + std::time::Duration::from_secs(limits.max_source_duration_s),
                 &transport,
                 started,
             )?;

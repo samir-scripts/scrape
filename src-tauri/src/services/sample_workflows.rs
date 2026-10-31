@@ -833,7 +833,9 @@ mod tests {
             .as_array()
             .unwrap();
         assert_eq!(installed.len(), 2);
-        assert!(installed.iter().all(|source| source["extractor"]["kind"] == "web_discovery"));
+        assert!(installed
+            .iter()
+            .all(|source| source["extractor"]["kind"] == "web_discovery"));
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM scrape_runs")
                 .fetch_one(&pool)
@@ -883,7 +885,11 @@ mod tests {
         assert_eq!(spec.max_jobs_per_run, Some(20));
         let targets = replacement_specs(WorkflowReplacementTarget::TestWorkflow, "UTC").unwrap();
         assert_eq!(targets.len(), 1);
-        assert!(targets[0].1.sources.iter().all(|source| source.extractor.kind == scrape_core::SourceKind::WebDiscovery));
+        assert!(targets[0]
+            .1
+            .sources
+            .iter()
+            .all(|source| source.extractor.kind == scrape_core::SourceKind::WebDiscovery));
     }
 
     #[test]

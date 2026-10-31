@@ -298,15 +298,14 @@ impl CoordinatorSession {
                 )?);
             }
             SourceKind::WebDiscovery => {
-                session.web_discovery_session = Some(
-                    crate::adapters::web_discovery::WebDiscoverySession::new(
+                session.web_discovery_session =
+                    Some(crate::adapters::web_discovery::WebDiscoverySession::new(
                         &session.source,
                         extraction_limits,
                         workflow_deadline,
                         web_transport,
                         started,
-                    )?,
-                );
+                    )?);
             }
         }
 
@@ -957,7 +956,6 @@ impl SourceCoordinator {
         if let Some(origin) = self.client.replay_origin() {
             web_transport = web_transport.with_test_replay_origin(origin)?;
         }
-
 
         let mut sessions: Vec<CoordinatorSession> = Vec::new();
         let mut failed_sources: Vec<SourceScanStats> = Vec::new();

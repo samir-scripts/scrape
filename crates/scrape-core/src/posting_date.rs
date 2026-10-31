@@ -150,12 +150,17 @@ impl PostingDateFilter {
                 let Some(timezone) = self.timezone.parse::<Tz>().ok() else {
                     return false;
                 };
-                let Some(start) = day.and_hms_opt(0, 0, 0)
-                    .and_then(|local| first_local_instant(timezone, local)) else {
+                let Some(start) = day
+                    .and_hms_opt(0, 0, 0)
+                    .and_then(|local| first_local_instant(timezone, local))
+                else {
                     return false;
                 };
-                let Some(end) = day.succ_opt().and_then(|next| next.and_hms_opt(0, 0, 0))
-                    .and_then(|local| first_local_instant(timezone, local)) else {
+                let Some(end) = day
+                    .succ_opt()
+                    .and_then(|next| next.and_hms_opt(0, 0, 0))
+                    .and_then(|local| first_local_instant(timezone, local))
+                else {
                     return false;
                 };
                 return from.is_none_or(|bound| start >= bound)
@@ -219,7 +224,8 @@ mod tests {
     #[test]
     fn forty_eight_hour_window_requires_whole_local_day_to_be_recent() {
         let started = instant("2026-03-09T16:00:00Z");
-        let filter = PostingDateFilter::from_preset("past_48h", "America/New_York", started).unwrap();
+        let filter =
+            PostingDateFilter::from_preset("past_48h", "America/New_York", started).unwrap();
         // The 48-hour cutoff falls within March 7 and the run occurs during March 9.
         assert!(!filter.matches(Some("2026-03-07"), started));
         assert!(filter.matches(Some("2026-03-08"), started));
@@ -227,10 +233,10 @@ mod tests {
         assert!(filter.matches(Some("2026-03-07T17:00:00Z"), started));
         assert!(!filter.matches(Some("2026-03-07T15:59:59Z"), started));
         // Existing windows retain their historical date-only interpretation.
-        let previous = PostingDateFilter::from_preset("past_week", "America/New_York", started).unwrap();
+        let previous =
+            PostingDateFilter::from_preset("past_week", "America/New_York", started).unwrap();
         assert!(previous.matches(Some("2026-03-09"), started));
     }
-
 
     #[test]
     fn today_is_persisted_and_rolls_to_each_runs_local_midnight() {

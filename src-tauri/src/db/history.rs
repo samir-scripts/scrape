@@ -151,21 +151,43 @@ pub(super) fn manifest(applied: &[Applied]) -> Migrator {
             " PRIMARY KEY (job_id, run_id, source_id)",
             " PRIMARY KEY (job_id, run_id, source_key)",
         );
-    let original_34 = manifest.iter().find(|migration| migration.version == 34).unwrap();
-    let variants_34 = [old_index_34, retained_34].map(|sql| Migration::new(
-        34, original_34.description.clone(), original_34.migration_type, sql.into(), false,
-    ));
+    let original_34 = manifest
+        .iter()
+        .find(|migration| migration.version == 34)
+        .unwrap();
+    let variants_34 = [old_index_34, retained_34].map(|sql| {
+        Migration::new(
+            34,
+            original_34.description.clone(),
+            original_34.migration_type,
+            sql.into(),
+            false,
+        )
+    });
     if let Some((_, checksum, _)) = applied.iter().find(|entry| entry.0 == 34) {
-        if let Some((index, variant)) = variants_34.iter().enumerate()
-            .find(|(_, migration)| migration.checksum.as_ref() == checksum.as_slice()) {
-            manifest.migrations = manifest.iter().map(|migration| match migration.version {
-                34 => variant.clone(),
-                35 if index == 1 => Migration::new(
-                    35, migration.description.clone(), migration.migration_type,
-                    include_str!("../../historical-migrations/0035_web_discovery_retention.sql").into(), false,
-                ),
-                _ => migration.clone(),
-            }).collect::<Vec<_>>().into();
+        if let Some((index, variant)) = variants_34
+            .iter()
+            .enumerate()
+            .find(|(_, migration)| migration.checksum.as_ref() == checksum.as_slice())
+        {
+            manifest.migrations = manifest
+                .iter()
+                .map(|migration| match migration.version {
+                    34 => variant.clone(),
+                    35 if index == 1 => Migration::new(
+                        35,
+                        migration.description.clone(),
+                        migration.migration_type,
+                        include_str!(
+                            "../../historical-migrations/0035_web_discovery_retention.sql"
+                        )
+                        .into(),
+                        false,
+                    ),
+                    _ => migration.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into();
         }
     }
     // The caller validates the entire history and independently reconstructed

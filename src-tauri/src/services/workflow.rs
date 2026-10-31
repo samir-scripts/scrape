@@ -522,12 +522,19 @@ pub fn validate(value: Value, default_timezone: &str) -> Result<WorkflowSpec> {
 
 pub fn normalized_source_endpoint(extractor: &WorkflowExtractor) -> Result<String> {
     if extractor.kind == SourceKind::WebDiscovery {
-        if extractor.source_config.as_ref().is_some_and(|value| value.get("url").is_some()) {
-            return Err(AppError::Validation("extractor.source_config.url: use extractor.url for the primary seed".into()));
+        if extractor
+            .source_config
+            .as_ref()
+            .is_some_and(|value| value.get("url").is_some())
+        {
+            return Err(AppError::Validation(
+                "extractor.source_config.url: use extractor.url for the primary seed".into(),
+            ));
         }
         let config = scrape_core::web_discovery::WebDiscoveryConfig::parse(
             extractor.source_config.as_ref().unwrap_or(&Value::Null),
-        ).map_err(AppError::Validation)?;
+        )
+        .map_err(AppError::Validation)?;
         let seeds = scrape_core::web_discovery::canonical_seeds(&extractor.url, &config)
             .map_err(AppError::Validation)?;
         return Ok(format!("WebDiscovery:{}", serde_json::to_string(&seeds)?));
@@ -1004,8 +1011,11 @@ pub fn validate_config(kind: SourceKind, config: &Value) -> Result<()> {
         let parsed = scrape_core::web_discovery::WebDiscoveryConfig::parse(config)
             .map_err(AppError::Validation)?;
         if let Some(url) = config.get("url") {
-            let url = url.as_str().ok_or_else(|| AppError::Validation("extractor.url: expected URL string".into()))?;
-            scrape_core::web_discovery::canonical_seeds(url, &parsed).map_err(AppError::Validation)?;
+            let url = url
+                .as_str()
+                .ok_or_else(|| AppError::Validation("extractor.url: expected URL string".into()))?;
+            scrape_core::web_discovery::canonical_seeds(url, &parsed)
+                .map_err(AppError::Validation)?;
         }
         return Ok(());
     }
@@ -1261,15 +1271,33 @@ mod tests {
             }}], "schedule":{"cadence":"manual"}
         });
         let spec = validate(value.clone(), "UTC").unwrap();
-        assert_eq!(source_input(&spec, "UTC").unwrap().identifier, "https://directory.test/");
+        assert_eq!(
+            source_input(&spec, "UTC").unwrap().identifier,
+            "https://directory.test/"
+        );
         let mut reversed = spec.sources[0].extractor.clone();
         reversed.url = "https://employer.test/".into();
-        reversed.source_config.as_mut().unwrap()["seed_urls"] = serde_json::json!(["https://directory.test/"]);
-        assert_eq!(normalized_source_endpoint(&reversed).unwrap(), normalized_source_endpoint(&spec.sources[0].extractor).unwrap());
-        for (key, bad) in [("max_depth", serde_json::json!(6)), ("max_pages", serde_json::json!(0)), ("ignore_robots", serde_json::json!(true)), ("seed_urls", serde_json::json!(["https://directory.test/#duplicate"]))] {
+        reversed.source_config.as_mut().unwrap()["seed_urls"] =
+            serde_json::json!(["https://directory.test/"]);
+        assert_eq!(
+            normalized_source_endpoint(&reversed).unwrap(),
+            normalized_source_endpoint(&spec.sources[0].extractor).unwrap()
+        );
+        for (key, bad) in [
+            ("max_depth", serde_json::json!(6)),
+            ("max_pages", serde_json::json!(0)),
+            ("ignore_robots", serde_json::json!(true)),
+            (
+                "seed_urls",
+                serde_json::json!(["https://directory.test/#duplicate"]),
+            ),
+        ] {
             let mut invalid = value.clone();
             invalid["sources"][0]["extractor"]["source_config"][key] = bad;
-            assert!(validate(invalid, "UTC").unwrap_err().to_string().contains(key));
+            assert!(validate(invalid, "UTC")
+                .unwrap_err()
+                .to_string()
+                .contains(key));
         }
     }
 

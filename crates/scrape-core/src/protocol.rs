@@ -1158,16 +1158,23 @@ mod tests {
         let event: WorkerEvent = serde_json::from_value(serde_json::json!({
             "type":"job","source_id":"s","external_id":"1","title":"Engineer",
             "company":"Employer","role_type":"unknown","url":"https://example.test/1"
-        })).unwrap();
-        assert!(matches!(event, WorkerEvent::Job { discovery_provenance: None, .. }));
+        }))
+        .unwrap();
+        assert!(matches!(
+            event,
+            WorkerEvent::Job {
+                discovery_provenance: None,
+                ..
+            }
+        ));
         let stats: SourceScanStats = serde_json::from_value(serde_json::json!({
             "source_id":"s","limit":1,"examined":0,"matched":0,"blocked":0,
             "duplicates":0,"invalid":0,"limit_reached":false
-        })).unwrap();
+        }))
+        .unwrap();
         assert_eq!((stats.discovery_pages, stats.discovery_origins), (0, 0));
         stats.validate().unwrap();
     }
-
 
     #[test]
     fn feedback_summaries_allow_refreshes_but_not_unconfirmed_insertions() {

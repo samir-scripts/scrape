@@ -1045,17 +1045,19 @@ impl PostingRules {
                 if date.preset.as_deref() == Some("past_48h") {
                     // A date-only posting denotes a whole local day. It is eligible
                     // only when that entire day ends within the rolling window.
-                    if let (Ok(timezone), Some(end)) =
-                        (date.timezone.parse::<chrono_tz::Tz>(), end)
+                    if let (Ok(timezone), Some(end)) = (date.timezone.parse::<chrono_tz::Tz>(), end)
                     {
                         let today = started.with_timezone(&timezone).date_naive();
-                        let upper_day = today.succ_opt().and_then(|next| {
-                            next.and_hms_opt(0, 0, 0).and_then(|local| {
-                                crate::posting_date::first_local_instant(timezone, local)
-                                    .filter(|next_start| *next_start <= end)
-                                    .map(|_| next)
+                        let upper_day = today
+                            .succ_opt()
+                            .and_then(|next| {
+                                next.and_hms_opt(0, 0, 0).and_then(|local| {
+                                    crate::posting_date::first_local_instant(timezone, local)
+                                        .filter(|next_start| *next_start <= end)
+                                        .map(|_| next)
+                                })
                             })
-                        }).unwrap_or(today);
+                            .unwrap_or(today);
                         date_clauses.push(
                             "(length(jobs.date_posted) <> 10 OR jobs.date_posted < ?)".into(),
                         );

@@ -21,8 +21,8 @@ pub mod protocol;
 mod role;
 pub mod search_source;
 pub mod static_source;
-pub mod web_discovery;
 mod types;
+pub mod web_discovery;
 
 pub use extraction::{
     ExtractionMode, ScriptEnvironmentStatus, ScriptInputFrame, ScriptOutputFrame, ScriptRuntime,

@@ -54,9 +54,11 @@ impl PostingIdentity {
             (Some(SourceKind::WebDiscovery), _, Some(id)) if Url::parse(id).is_ok() => {
                 serde_json::to_string(&("url", normalized_detail_url(id)?)).unwrap()
             }
-            (Some(SourceKind::Jsonld | SourceKind::Selector | SourceKind::WebDiscovery), _, Some(id))
-                if Url::parse(id).is_err() =>
-            {
+            (
+                Some(SourceKind::Jsonld | SourceKind::Selector | SourceKind::WebDiscovery),
+                _,
+                Some(id),
+            ) if Url::parse(id).is_err() => {
                 let origin = Url::parse(&normalized)
                     .unwrap()
                     .origin()

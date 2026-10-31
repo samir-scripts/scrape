@@ -56,7 +56,10 @@ impl SourceKind {
     pub fn expects_url(self) -> bool {
         matches!(
             self,
-            SourceKind::Jsonld | SourceKind::Selector | SourceKind::Workday | SourceKind::WebDiscovery
+            SourceKind::Jsonld
+                | SourceKind::Selector
+                | SourceKind::Workday
+                | SourceKind::WebDiscovery
         )
     }
 }

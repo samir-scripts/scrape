@@ -273,7 +273,6 @@ impl HttpClient {
         self.replay_origin.as_ref().map(Url::as_str)
     }
 
-
     fn transport_url(&self, original: &str) -> Result<Url, ClientError> {
         let parsed = Url::parse(original)?;
         if let Some(origin) = &self.replay_origin {
