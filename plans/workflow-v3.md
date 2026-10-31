@@ -19,8 +19,10 @@ Posting-date presets are `past_12h`, `today`, `past_24h`, `past_48h`, `past_week
 For `past_48h`, a date-only value denotes the whole calendar day in the filter's
 timezone; the entire interval must fit in the captured rolling window. Other
 presets retain their existing date-only interpretation.
-Rounded relative publication labels are not currently converted into precise
-timestamps; a workflow excluding unknown dates will not accept them.
+Rounded whole-unit relative publication labels remain observation-anchored
+intervals, not fabricated timestamps. For `past_48h`, they qualify only when
+the entire supported interval fits within the captured run window; unsupported
+or ambiguous labels remain unknown.
 
 `extractor.kind: web_discovery` starts from `extractor.url` and optional additional
 `source_config.seed_urls`. The canonical complete seed set identifies the source.

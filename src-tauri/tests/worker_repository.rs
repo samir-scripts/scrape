@@ -132,14 +132,27 @@ async fn independent_web_discovery_persists_recent_us_jobs() {
                 }
                 Err(error) => panic!("{error}"),
             };
+            socket.set_nonblocking(false).unwrap();
             socket
                 .set_read_timeout(Some(Duration::from_secs(2)))
                 .unwrap();
-            let mut request = [0; 8192];
-            let Ok(n) = socket.read(&mut request) else {
-                continue;
-            };
-            let request = String::from_utf8_lossy(&request[..n]);
+            let mut request = Vec::new();
+            let mut chunk = [0; 8192];
+            loop {
+                let n = match socket.read(&mut chunk) {
+                    Ok(n) => n,
+                    Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                    Err(error) => panic!("Fixture request read failed: {error}"),
+                };
+                if n == 0 {
+                    break;
+                }
+                request.extend_from_slice(&chunk[..n]);
+                if request.windows(4).any(|part| part == b"\r\n\r\n") || request.len() >= 65536 {
+                    break;
+                }
+            }
+            let request = String::from_utf8_lossy(&request);
             let Some(path) = request.split_whitespace().nth(1) else {
                 continue;
             };
@@ -167,7 +180,13 @@ async fn independent_web_discovery_persists_recent_us_jobs() {
                 (
                     "200 OK",
                     "text/html",
-                    "<a href=\"https://employer.example/careers\">Employer careers</a>".to_owned(),
+                    r#"<a href="https://employer.example/careers">Employer careers</a>
+                    <a href="https://employer.example/jobs/updated">Software Engineer updated</a>
+                    <a href="https://employer.example/jobs/blocked">Software Engineer blocked</a>
+                    <a href="https://employer.example/jobs/old">Software Engineer old</a>
+                    <a href="https://employer.example/jobs/undated">Software Engineer undated</a>
+                    <a href="https://employer.example/jobs/foreign">Software Engineer foreign</a>
+                    <script type="application/ld+json">{"@type":"JobPosting","identifier":"new-00","title":"Software Engineer new-00","url":"https://employer.example/jobs/new-00","datePosted":"2026-10-15T00:00:00Z","hiringOrganization":{"name":"Fixture Employer"},"jobLocation":{"address":{"addressCountry":"US","addressRegion":"CA"}},"description":"Build reliable distributed software systems."}</script>"#.to_owned(),
                 )
             } else if path == "/employer.example/careers" {
                 let mut body = String::new();
@@ -185,7 +204,7 @@ async fn independent_web_discovery_persists_recent_us_jobs() {
             } else if let Some(id) = path.strip_prefix("/employer.example/jobs/") {
                 let date = match id {
                     "old" => Some("2026-10-12T00:00:00Z"),
-                    "undated" => None,
+                    "undated" | "new-00" => None,
                     _ => Some("2026-10-15T00:00:00Z"),
                 };
                 let mut job = serde_json::json!({
@@ -399,7 +418,9 @@ async fn independent_web_discovery_persists_recent_us_jobs() {
             .iter()
             .filter(|&&outcome| outcome == "blocked")
             .count(),
-        1
+        1,
+        "observed={observed:?} outcomes={outcomes:?} summary={summary:#?} paths={:?}",
+        server.paths.lock().unwrap()
     );
     assert_eq!(observed.len(), 22);
     assert!(observed.contains(&"updated".to_owned()) && observed.contains(&"blocked".to_owned()));
@@ -476,6 +497,16 @@ async fn independent_web_discovery_persists_recent_us_jobs() {
     let observations: Vec<(String, String, String, String, String, Option<String>)> = sqlx::query_as(
         "SELECT j.external_id, o.run_id, json_extract(o.provenance, '$.seed_url'), json_extract(o.provenance, '$.final_url'), json_extract(o.provenance, '$.date_evidence.raw_value'), json_extract(o.provenance, '$.seed_manifest.crawl_id') FROM discovery_observations o JOIN jobs j ON j.id=o.job_id"
     ).fetch_all(&pool).await.unwrap();
+    let inherited: (String, String) = sqlx::query_as(
+        "SELECT json_extract(o.provenance, '$.date_evidence.page_url'), json_extract(o.provenance, '$.date_evidence.locator') FROM discovery_observations o JOIN jobs j ON j.id=o.job_id WHERE j.external_id='new-00'"
+    ).fetch_one(&pool).await.unwrap();
+    assert_eq!(
+        inherited,
+        (
+            "https://directory.example/companies".into(),
+            "JobPosting.datePosted".into()
+        )
+    );
     assert_eq!(observations.len(), 21);
     for (id, run_id, observed_seed, final_url, date, crawl_id) in observations {
         assert_eq!(run_id, run.id);
@@ -1049,6 +1080,7 @@ async fn workday_cxs_survives_worker_and_sqlite() {
     let server = std::thread::spawn(move || {
         while !stopping.load(std::sync::atomic::Ordering::SeqCst) {
             if let Ok((mut stream, _)) = listener.accept() {
+                stream.set_nonblocking(false).unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(3)))
                     .unwrap();

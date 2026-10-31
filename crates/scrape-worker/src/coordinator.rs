@@ -304,6 +304,18 @@ impl CoordinatorSession {
                         extraction_limits,
                         workflow_deadline,
                         web_transport,
+                        session
+                            .filters
+                            .matching
+                            .as_ref()
+                            .and_then(|rules| rules.posting_date.as_ref())
+                            .map(|date| date.timezone.as_str()),
+                        session
+                            .filters
+                            .matching
+                            .as_ref()
+                            .map(|rules| rules.target_roles.as_slice())
+                            .unwrap_or_default(),
                         started,
                     )?);
             }
@@ -1166,9 +1178,40 @@ impl SourceCoordinator {
                                         url,
                                         company,
                                         company_logo,
+                                        locations,
                                         ..
                                     } => {
                                         session.stats.examined += 1;
+                                        if let Err(message) =
+                                            scrape_core::enrich::location::validate_locations(
+                                                locations,
+                                            )
+                                        {
+                                            session.stats.invalid += 1;
+                                            session.had_errors = true;
+                                            if self.candidate_diagnostics {
+                                                emit(&WorkerEvent::CandidateEvaluated {
+                                                    source_id: session.source.id.clone(),
+                                                    evaluation: CandidateEvaluation {
+                                                        sequence: session.stats.examined,
+                                                        disposition: CandidateDisposition::Invalid,
+                                                        candidate: None,
+                                                        rejected: vec![],
+                                                        unresolved: vec![],
+                                                        diagnostic: Some(
+                                                            message.chars().take(512).collect(),
+                                                        ),
+                                                    },
+                                                })?;
+                                            }
+                                            emit(&WorkerEvent::Error {
+                                                source_id: session.source.id.clone(),
+                                                message,
+                                                retryable: false,
+                                                invalid_posting: Some(true),
+                                            })?;
+                                            continue;
+                                        }
                                         let facts = self
                                             .candidate_diagnostics
                                             .then(|| CandidateFacts::from_event(&event))

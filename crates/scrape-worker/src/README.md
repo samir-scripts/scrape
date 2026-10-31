@@ -51,6 +51,7 @@ The `crates/scrape-worker/src` directory contains the source code for the scrape
   - Rotates the persisted starting source index across actual runs while leaving preview runs unrotated.
   - Performs workflow-wide canonical deduplication and enforces the authoritative total job cap.
   - Resumes The Muse/Arbeitnow search sessions one page/candidate per turn alongside direct boards, with shared acceptance caps and truthful page/time/unknown-evidence partial outcomes.
+  - Validates geographic evidence before emitting candidate diagnostics or jobs. Malformed or oversized evidence is reported as an invalid candidate, without truncating it or terminating other source work.
 
 ### [`filter.rs`](filter.rs)
 - **Role**: Worker-side stream filtering.
@@ -68,5 +69,14 @@ The `crates/scrape-worker/src` directory contains the source code for the scrape
 Static sources now use `adapters/selector_session.rs` for resumable CSS/XPath or
 hydration discovery, bounded next pages and lazy detail enrichment. Coordinator
 turns retain one eligible unique acceptance and yield during bounded discovery.
+
+Independent discovery retains literal publication values, their actual page/locator
+and observation time. Compatible structured/visible evidence keeps the narrower
+real interval; conflicting or timezone-dependent unresolved evidence does not
+establish eligibility. Listing dates can reach only the fetched exact detail URL
+with matching real requisition IDs, or matching titles when both IDs are absent;
+employer/geography fields are always extracted from the detail. Posting-block
+closure text and timezone-resolved date-only expiry remain rejection evidence.
+
 Protocol v14 adds final candidate evaluations for persisted runs while preserving ordered commit feedback; proxy configuration and bounded static crawling remain supported. Per-host pacing and robots checks remain authoritative.
 `--protocol-version` reports the Rust-owned contract version for external harnesses.

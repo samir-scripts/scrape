@@ -122,6 +122,16 @@ pub async fn scrape_source_with_evidence(
                 tokio::time::Instant::now()
                     + std::time::Duration::from_secs(limits.max_source_duration_s),
                 &transport,
+                filters
+                    .matching
+                    .as_ref()
+                    .and_then(|rules| rules.posting_date.as_ref())
+                    .map(|date| date.timezone.as_str()),
+                filters
+                    .matching
+                    .as_ref()
+                    .map(|rules| rules.target_roles.as_slice())
+                    .unwrap_or_default(),
                 started,
             )?;
             loop {

@@ -50,9 +50,9 @@ test retains its unfiltered feed and adds three explicitly category-scoped sampl
 these are bounded provider samples, not exhaustive job search.
 
 The disabled [48-hour test workflow](test-workflows/software-engineering-it-us-48h.yaml)
-uses independent public-web discovery: a company directory and a small, dated
-Common Crawl-derived seed sample, not a board or API dependency. The directory
-and imported manifests are starting points, not a complete index of the web.
+uses independent public-web discovery from company and nonprofit member
+directories, not a board or API dependency. These directories and optional
+imported manifests are starting points, not a complete index of the web.
 Discovery follows bounded public links and sitemaps, checks robots and public
 network destinations, and reports attempted origins and pages. It does not use
 the configured proxy or render JavaScript-only sites. Missing, ambiguous, or

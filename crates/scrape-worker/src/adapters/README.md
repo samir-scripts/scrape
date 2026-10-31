@@ -96,3 +96,19 @@ source, including requested country codes and original location text. The existi
 eligibility_incomplete warning flag distinguishes these partial-coverage diagnostics
 from optional enrichment warnings in worker summaries and host run accounting.
 All unresolved candidates remain counted even after the example bound is reached.
+
+## Independent public-web discovery
+
+`web_discovery.rs` uses bounded, prioritized directory, official-site, career
+and posting leads rather than a provider API. The shipped profile starts with a
+Wikipedia category and the North Carolina nonprofit member directory; official
+member-site links are separate from the directory's own job board. Robots and
+public-address checks apply at each origin. Page, origin, depth, sitemap and
+pending-frontier caps report partial coverage; they do not enumerate the web.
+Sitemaps' `lastmod` values are not publication evidence. Unknown and non-English
+navigation, JavaScript-only pages and cross-origin robots redirects may leave
+employers undiscovered.
+On career indexes, short link titles that match explicitly configured role
+substrings are admitted as detail leads even when their URLs omit `job` or
+`career`. This only schedules a bounded fetch; Rust eligibility still requires
+the original date, geography and all other configured evidence.

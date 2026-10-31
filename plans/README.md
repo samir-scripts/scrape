@@ -1,6 +1,6 @@
 Independent public-web discovery now uses WorkflowSpec 11 and worker protocol 15;
-the 48-hour test profile combines a public directory with a bounded Common Crawl
-seed sample. The [evidence ledger](independent-web-discovery-evidence.md)
+the 48-hour test profile combines public company and nonprofit member directories.
+The [evidence ledger](independent-web-discovery-evidence.md)
 separates isolated fixtures, live runs, incomplete coverage research and the
 version-34 migration incident. The default live profile found no qualifying
 jobs within its bounds; a manually supplied staffing-site seed persisted nine

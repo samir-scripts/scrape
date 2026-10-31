@@ -51,6 +51,55 @@ pub fn relative_interval(
     let end = observed.checked_sub_signed(Duration::try_seconds(age)?)?;
     Some((start, end))
 }
+
+/// Publication evidence can describe an exact instant or a rounded interval.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PublicationInterval {
+    Instant(DateTime<Utc>),
+    Date {
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    },
+    Relative {
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    },
+}
+
+impl PublicationInterval {
+    pub fn contains(self, other: Self) -> bool {
+        fn bounds(value: PublicationInterval) -> (DateTime<Utc>, bool, DateTime<Utc>, bool) {
+            match value {
+                PublicationInterval::Instant(at) => (at, true, at, true),
+                PublicationInterval::Date { start, end } => (start, true, end, false),
+                PublicationInterval::Relative { start, end } => (start, false, end, true),
+            }
+        }
+        let (a, a_inclusive, b, b_inclusive) = bounds(self);
+        let (c, c_inclusive, d, d_inclusive) = bounds(other);
+        (a < c || (a == c && (a_inclusive || !c_inclusive)))
+            && (b > d || (b == d && (b_inclusive || !d_inclusive)))
+    }
+}
+
+pub fn publication_interval(
+    value: &str,
+    timezone: &str,
+    observed: DateTime<Utc>,
+) -> Option<PublicationInterval> {
+    if let Ok(dt) = DateTime::parse_from_rfc3339(value) {
+        return Some(PublicationInterval::Instant(dt.with_timezone(&Utc)));
+    }
+    if let Ok(day) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
+        let tz = timezone.parse().ok()?;
+        return Some(PublicationInterval::Date {
+            start: first_local_instant(tz, day.and_hms_opt(0, 0, 0)?)?,
+            end: first_local_instant(tz, day.succ_opt()?.and_hms_opt(0, 0, 0)?)?,
+        });
+    }
+    let (start, end) = relative_interval(value, observed)?;
+    Some(PublicationInterval::Relative { start, end })
+}
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
@@ -193,20 +242,9 @@ impl PostingDateFilter {
             return self.include_unknown;
         };
         if self.preset.as_deref() == Some("past_48h") {
-            if let Ok(day) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
-                let Some(timezone) = self.timezone.parse::<Tz>().ok() else {
-                    return false;
-                };
-                let Some(start) = day
-                    .and_hms_opt(0, 0, 0)
-                    .and_then(|local| first_local_instant(timezone, local))
-                else {
-                    return false;
-                };
-                let Some(end) = day
-                    .succ_opt()
-                    .and_then(|next| next.and_hms_opt(0, 0, 0))
-                    .and_then(|local| first_local_instant(timezone, local))
+            if NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok() {
+                let Some(PublicationInterval::Date { start, end }) =
+                    publication_interval(value, &self.timezone, started)
                 else {
                     return false;
                 };
@@ -228,6 +266,70 @@ mod tests {
         DateTime::parse_from_rfc3339(value)
             .unwrap()
             .with_timezone(&Utc)
+    }
+
+    #[test]
+    fn publication_interval_preserves_precision_and_boundary_semantics() {
+        let now = instant("2026-11-02T12:00:00Z");
+        let day = publication_interval("2026-11-01", "America/New_York", now).unwrap();
+        let inside = publication_interval("2026-11-02T04:59:59Z", "UTC", now).unwrap();
+        let boundary = publication_interval("2026-11-02T05:00:00Z", "UTC", now).unwrap();
+        assert!(day.contains(inside));
+        assert!(!day.contains(boundary));
+        let earlier = publication_interval("2026-10-31", "America/New_York", now).unwrap();
+        assert!(!day.contains(earlier));
+        let hour = publication_interval("1 hour ago", "UTC", now).unwrap();
+        assert!(hour.contains(PublicationInterval::Instant(instant(
+            "2026-11-02T11:00:00Z"
+        ))));
+        assert!(!hour.contains(PublicationInterval::Instant(instant(
+            "2026-11-02T10:00:00Z"
+        ))));
+    }
+
+    #[test]
+    fn publication_intervals_compare_equivalent_offsets_without_a_timezone() {
+        let observed = instant("2026-10-31T12:00:00Z");
+        let utc = publication_interval("2026-10-30T09:00:00Z", "", observed).unwrap();
+        let offset = publication_interval("2026-10-30T05:00:00-04:00", "", observed).unwrap();
+        assert_eq!(utc, offset);
+        assert!(utc.contains(offset));
+        assert!(publication_interval("2026-10-30", "", observed).is_none());
+        assert!(publication_interval("10/30/2026", "UTC", observed).is_none());
+    }
+
+    #[test]
+    fn publication_intervals_do_not_treat_partial_overlap_as_containment() {
+        let observed = instant("2026-10-31T12:00:00Z");
+        let day = publication_interval("2026-10-30", "UTC", observed).unwrap();
+        let overlapping = publication_interval("1 day ago", "UTC", observed).unwrap();
+        assert!(!day.contains(overlapping));
+        assert!(!overlapping.contains(day));
+        let disjoint = publication_interval("2026-10-28", "UTC", observed).unwrap();
+        assert!(!day.contains(disjoint));
+        assert!(!disjoint.contains(day));
+        let same_bounds = PublicationInterval::Relative {
+            start: instant("2026-10-30T00:00:00Z"),
+            end: instant("2026-10-31T00:00:00Z"),
+        };
+        assert!(!day.contains(same_bounds));
+        assert!(!same_bounds.contains(day));
+    }
+
+    #[test]
+    fn publication_day_intervals_preserve_dst_lengths() {
+        let observed = instant("2026-11-02T12:00:00Z");
+        for (value, hours) in [("2026-03-08", 23), ("2026-11-01", 25)] {
+            let PublicationInterval::Date { start, end } =
+                publication_interval(value, "America/New_York", observed).unwrap()
+            else {
+                panic!("date evidence must stay a date interval")
+            };
+            assert_eq!(end - start, Duration::hours(hours));
+            let day = PublicationInterval::Date { start, end };
+            assert!(day.contains(PublicationInterval::Instant(start)));
+            assert!(!day.contains(PublicationInterval::Instant(end)));
+        }
     }
 
     #[test]

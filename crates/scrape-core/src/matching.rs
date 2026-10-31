@@ -615,6 +615,11 @@ impl PostingRules {
                     .any(|window| window.eq_ignore_ascii_case(needle))
         })
     }
+    /// Whether a link title names one of the explicitly requested roles.
+    /// Empty role lists do not make arbitrary navigation a posting lead.
+    pub fn matches_role_lead(title: &str, choices: &[String]) -> bool {
+        !choices.is_empty() && Self::contains_choice(title, choices)
+    }
     fn geography_matches(&self, locations: &[ParsedLocation]) -> bool {
         if self.countries.is_empty() && self.regions.is_empty() && self.cities.is_empty() {
             return true;
