@@ -56,6 +56,11 @@ new-graduate aliases agree, explicit workplace data controls remote matching, an
 country/region restrictions must match the same parsed location. Page ties sort
 by ID. A 2,105-record regression verifies search/counts beyond the old client cap.
 
+Web-discovery observations retain the original relative publication label and
+its observation time without a schema change. For the strict 48-hour filter,
+repository queries use the latest current observation and require its entire
+rounded interval to fit; the Job read model exposes this evidence for display.
+
 Migration 26 adds isolated `browser_sessions` metadata and per-source script
 trust/hash columns. Full reset clears browser-session metadata and parent
 workflows; jobs-only cleanup preserves them. Session credentials and browser

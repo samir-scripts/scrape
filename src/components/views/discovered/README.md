@@ -15,3 +15,7 @@ The `src/components/views/discovered` directory contains the interface for brows
 | **DiscoveredTable** | [`DiscoveredTable.tsx`](DiscoveredTable.tsx) | High-density tabular view displaying discovered jobs in rows with 24px `CompanyLogo`, unread marker, title, workplace type, native compensation, and action buttons. |
 | **JobDetail** | [`JobDetail.tsx`](JobDetail.tsx) | Thin wrapper delegating to the shared `JobInspectorPanel` (`src/components/jobs/JobInspector.tsx`) so discovered and tracked jobs share one consistent detail hierarchy (32px `CompanyLogo`, Open posting, stage selector/Mark applied, favorite/remove/close SVGs, structured `JobDescriptionView`, Notes, and collapsible More details / Source evidence / Activity history). |
 | **JobMetaPanel** | [`JobMetaPanel.tsx`](JobMetaPanel.tsx) | Legacy metadata panel component retained for compatibility tests; production views use the shared `JobInspector`. |
+
+When only a rounded relative posting age is available, cards and the shared
+inspector display its original label and observation time instead of an invented
+calendar date.

@@ -717,4 +717,134 @@ mod rule_parity_tests {
         assert_eq!(ids, ["inside-day", "inside-time"]);
         assert_eq!(page.total, 2);
     }
+    #[tokio::test]
+    async fn relative_publication_evidence_matches_worker_and_persisted_queries() {
+        let pool = init_memory_db().await.unwrap();
+        let clock = DateTime::parse_from_rfc3339("2026-10-31T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        sqlx::query("INSERT INTO sources(id,kind,name,identifier,created_at) VALUES ('relative-source','web_discovery','Directory','https://directory.test/','2026-10-31')").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO scrape_runs(id,trigger,status,started_at) VALUES ('relative-run','manual','success','2026-10-31')").execute(&pool).await.unwrap();
+        let rules = PostingRules {
+            posting_date: Some(
+                scrape_core::posting_date::PostingDateFilter::from_preset("past_48h", "UTC", clock)
+                    .unwrap(),
+            ),
+            ..Default::default()
+        };
+        for (id, raw, age, unit, observed, expected) in [
+            (
+                "inside",
+                "1 day ago",
+                86400,
+                86400,
+                "2026-10-31T12:00:00Z",
+                true,
+            ),
+            (
+                "boundary",
+                "47 hours ago",
+                169200,
+                3600,
+                "2026-10-31T12:00:00Z",
+                true,
+            ),
+            (
+                "overlap",
+                "48 hours ago",
+                172800,
+                3600,
+                "2026-10-31T12:00:00Z",
+                false,
+            ),
+            (
+                "future",
+                "0 hours ago",
+                0,
+                3600,
+                "2026-10-31T12:00:01Z",
+                false,
+            ),
+            (
+                "subsecond-overlap",
+                "47 hours ago",
+                169200,
+                3600,
+                "2026-10-31T11:59:59.999999999Z",
+                false,
+            ),
+            (
+                "subsecond-future",
+                "0 hours ago",
+                0,
+                3600,
+                "2026-10-31T12:00:00.000000001Z",
+                false,
+            ),
+        ] {
+            let evidence = serde_json::json!({
+                "seed_url":"https://directory.test/", "final_url":format!("https://employer.test/{id}"),
+                "date_evidence":{"kind":"visible_publication","raw_value":raw,
+                    "page_url":format!("https://employer.test/{id}"),"locator":"posted label",
+                    "observed_at":observed,"precision":format!("relative:{age}:{unit}")}
+            });
+            let event: WorkerEvent = serde_json::from_value(serde_json::json!({
+                "type":"job","source_id":"relative-source","external_id":id,"title":"Engineer",
+                "company":"Fixture","url":format!("https://employer.test/{id}"),"location":"",
+                "role_type":"unknown","discovery_provenance":evidence
+            }))
+            .unwrap();
+            assert_eq!(rules.matches_event_at(&event, clock), expected, "{id}");
+            let job = crate::services::ingestion::scraped_job_from_event(event).unwrap();
+            let saved = JobsRepo::upsert_scraped_for_run(&pool, &[job], Some("relative-run"))
+                .await
+                .unwrap();
+            assert_eq!(saved.inserted, 1);
+        }
+        let page = JobsRepo::list_at(
+            &pool,
+            JobFilter {
+                matching: Some(rules),
+                ..Default::default()
+            },
+            clock,
+        )
+        .await
+        .unwrap();
+        let mut ids: Vec<_> = page
+            .items
+            .iter()
+            .map(|job| job.external_id.as_deref().unwrap())
+            .collect();
+        ids.sort_unstable();
+        assert_eq!(ids, ["boundary", "inside"]);
+        assert_eq!(
+            page.items
+                .iter()
+                .find(|job| job.external_id.as_deref() == Some("inside"))
+                .unwrap()
+                .relative_date_evidence
+                .as_ref()
+                .unwrap()
+                .raw_value,
+            "1 day ago"
+        );
+        // A later non-discovery update must not expose an old relative observation.
+        sqlx::query(
+            "UPDATE jobs SET last_seen_at = '2026-11-01T12:00:00Z' WHERE external_id = 'inside'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let inside_id: String =
+            sqlx::query_scalar("SELECT id FROM jobs WHERE external_id = 'inside'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(JobsRepo::get(&pool, &inside_id)
+            .await
+            .unwrap()
+            .relative_date_evidence
+            .is_none());
+    }
 }

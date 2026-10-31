@@ -486,17 +486,21 @@ impl WebDiscoverySession {
             .iter()
             .any(|event| matches!(event, WorkerEvent::Job { .. }));
         if has_structured {
-            let visible = if structured.len() == 1 {
-                visible_date(&document)
+            let visible_values = if structured.len() == 1 {
+                visible_dates_in(document.root_element()).unwrap_or_default()
             } else {
-                None
+                HashSet::new()
             };
+            let visible = (visible_values.len() == 1)
+                .then(|| visible_values.iter().next().cloned())
+                .flatten();
             for mut event in structured {
                 if let WorkerEvent::Job { date_posted, .. } = &mut event {
-                    if date_posted
-                        .as_ref()
-                        .zip(visible.as_ref())
-                        .is_some_and(|(posted, date)| posted != date)
+                    if visible_values.len() > 1
+                        || date_posted
+                            .as_ref()
+                            .zip(visible.as_ref())
+                            .is_some_and(|(posted, date)| posted != date)
                     {
                         self.pending.push_back((WorkerEvent::Warning {
                             source_id: self.source.id.clone(),
@@ -505,6 +509,12 @@ impl WebDiscoverySession {
                             termination: None,
                         }, None));
                         *date_posted = None;
+                    } else if date_posted.is_none()
+                        && visible.as_deref().is_some_and(|v| {
+                            scrape_core::posting_date::relative_age_seconds(v).is_some()
+                        })
+                    {
+                        *date_posted = visible.clone();
                     }
                 }
                 if !expired_structured(&document, &event, self.started) {
@@ -841,14 +851,40 @@ impl WebDiscoverySession {
             if !self.jobs_seen.insert(key) {
                 return;
             }
-            let evidence = date_posted.as_ref().map(|raw| DiscoveryDateEvidence {
-                kind: kind.into(),
-                raw_value: raw.clone(),
-                page_url: actual.to_string(),
-                locator: locator.into(),
-                observed_at: self.started.to_rfc3339(),
-                precision: if raw.len() == 10 { "date" } else { "timestamp" }.into(),
+            let observed = Utc::now();
+            let evidence = date_posted.as_ref().map(|raw| {
+                let precision = scrape_core::posting_date::relative_age_seconds(raw)
+                    .map(|(age, unit)| format!("relative:{age}:{unit}"))
+                    .unwrap_or_else(|| {
+                        if raw.len() == 10 {
+                            "date".into()
+                        } else {
+                            "timestamp".into()
+                        }
+                    });
+                DiscoveryDateEvidence {
+                    kind: if precision.starts_with("relative:") {
+                        "visible_publication".into()
+                    } else {
+                        kind.into()
+                    },
+                    raw_value: raw.clone(),
+                    page_url: actual.to_string(),
+                    locator: if precision.starts_with("relative:") {
+                        "explicit publication label".into()
+                    } else {
+                        locator.into()
+                    },
+                    observed_at: observed.to_rfc3339(),
+                    precision,
+                }
             });
+            if evidence
+                .as_ref()
+                .is_some_and(|e| e.precision.starts_with("relative:"))
+            {
+                *date_posted = None;
+            }
             let primary = Url::parse(&self.source.identifier)
                 .ok()
                 .map(canonical)
@@ -956,11 +992,23 @@ fn visible_date(document: &Html) -> Option<String> {
     visible_date_in(document.root_element())
 }
 fn visible_date_in(root: scraper::ElementRef<'_>) -> Option<String> {
+    let found = visible_dates_in(root)?;
+    if found.len() == 1 {
+        found.into_iter().next()
+    } else {
+        None
+    }
+}
+fn visible_dates_in(root: scraper::ElementRef<'_>) -> Option<HashSet<String>> {
     let selector =
         Selector::parse("time[datetime], p, dd, li, span, meta[property='article:published_time']")
             .ok()?;
     let iso = regex::Regex::new(
         r"\b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))?\b",
+    )
+    .ok()?;
+    let relative = regex::Regex::new(
+        r"(?i)^(?:posted|published)\s*:?\s*(\d+\s+(?:minutes?|hours?|days?)\s+ago)\s*[.!]?$",
     )
     .ok()?;
     let mut found = HashSet::new();
@@ -985,6 +1033,12 @@ fn visible_date_in(root: scraper::ElementRef<'_>) -> Option<String> {
                 .attr("datetime")
                 .map(str::to_owned)
                 .or_else(|| iso.find(&text).map(|m| m.as_str().to_owned()))
+                .or_else(|| {
+                    relative
+                        .captures(context.trim())
+                        .and_then(|caps| caps.get(1))
+                        .map(|m| m.as_str().to_owned())
+                })
                 .unwrap_or_default();
             (context.to_ascii_lowercase(), raw)
         };
@@ -995,13 +1049,42 @@ fn visible_date_in(root: scraper::ElementRef<'_>) -> Option<String> {
         {
             continue;
         }
-        if scrape_core::posting_date::posting_instant(&raw, "UTC").is_some() {
+        if scrape_core::posting_date::posting_instant(&raw, "UTC").is_some()
+            || scrape_core::posting_date::relative_age_seconds(&raw).is_some()
+        {
             found.insert(raw);
         }
     }
-    if found.len() == 1 {
-        found.into_iter().next()
-    } else {
-        None
+    Some(found)
+}
+
+#[cfg(test)]
+mod relative_date_tests {
+    use super::*;
+
+    #[test]
+    fn relative_publication_requires_an_unambiguous_visible_posted_label() {
+        assert_eq!(
+            visible_date(&Html::parse_document("<p>Posted: 2 hours ago</p>")).as_deref(),
+            Some("2 hours ago")
+        );
+        assert_eq!(
+            visible_date(&Html::parse_document("<p>Updated: 2 hours ago</p>")),
+            None
+        );
+        assert_eq!(
+            visible_date(&Html::parse_document("<p>Posted: about 2 hours ago</p>")),
+            None
+        );
+        assert_eq!(
+            visible_date(&Html::parse_document("<p>Posted: 30+ days ago</p>")),
+            None
+        );
+        assert_eq!(
+            visible_date(&Html::parse_document(
+                "<p>Posted: 1 day ago</p><p>Published: 3 days ago</p>"
+            )),
+            None
+        );
     }
 }

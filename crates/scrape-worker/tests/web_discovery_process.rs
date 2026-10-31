@@ -101,6 +101,7 @@ fn response(path: &str) -> (&'static str, &'static str, &'static str, String) {
         "/employer.example/jobs/updated" => r#"<html><head><meta property="og:site_name" content="Fiction Employer"></head><body><main><h1>Updated Software Engineer</h1><p class="location">California, United States</p><p>Updated: <time datetime="2026-10-15T00:00:00Z">October 15, 2026</time></p><div class="job-description">Responsibilities include building resilient distributed software systems. Qualifications include professional software engineering experience and knowledge of software architecture and production services.</div></main></body></html>"#.into(),
         "/employer.example/jobs/foreign" => posting("Foreign Software Engineer", "Fiction Employer", "2026-10-15T00:00:00Z", "GB"),
         "/employer.example/jobs/conflicting" => format!("{}<p>Posted: <time datetime=\"2026-10-10T00:00:00Z\">October 10</time></p>", posting("Conflicting Software Engineer", "Fiction Employer", "2026-10-15T00:00:00Z", "US")),
+        "/employer.example/jobs/relative" => format!("{}<p>Posted: 1 day ago</p>", posting("Relative Software Engineer", "Fiction Employer", "", "US").replace(r#","datePosted":"""#, "")),
         "/employer.example/jobs/private" => return ("302 Found", "text/html", "Location: http://127.0.0.1/private\r\n", String::new()),
         "/second.example/careers" => r#"<a href="/jobs/plain">Software Engineer</a>"#.into(),
         "/employer.example/careers/index" => r#"<html><head><meta property="og:site_name" content="Fiction Employer"></head><body><main><h2>Software Engineer</h2><p class="location">California, United States</p><p>Posted: <time datetime="2026-10-15T00:00:00Z">October 15, 2026</time></p><div class="job-description">Explore our engineering career opportunities and build reliable software systems.</div></main></body></html>"#.into(),
@@ -191,6 +192,59 @@ fn directory_discovers_independent_employer_jobs_with_safe_bounds() {
     assert!(!paths
         .iter()
         .any(|path| path.contains("/jobs/denied") || path == "/127.0.0.1/private"));
+}
+
+#[test]
+fn relative_publication_remains_observed_evidence_not_a_timestamp() {
+    let fixture = Fixture::new();
+    let started = chrono::Utc::now();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+        .args(["--stdin", "--replay-origin", &fixture.origin])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let input = json!({"version":PROTOCOL_VERSION,"sources":[{"id":"direct","name":"Directory","kind":"web_discovery","identifier":"https://employer.example/jobs/relative","config":{"max_domains":2,"max_depth":0,"max_pages":10}}],"filters":{"matching":{"posting_date":{"preset":"past_48h","timezone":"UTC","include_unknown":false}}},"max_jobs_per_run":20,"run_started_at":started.to_rfc3339(),"limits":{"per_host_delay_ms":0,"request_timeout_s":5}});
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(&serde_json::to_vec(&input).unwrap())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let events: Vec<WorkerEvent> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let evidence = events
+        .iter()
+        .find_map(|event| match event {
+            WorkerEvent::Job {
+                date_posted,
+                discovery_provenance: Some(provenance),
+                ..
+            } => {
+                assert!(date_posted.is_none());
+                provenance.date_evidence.as_ref()
+            }
+            _ => None,
+        })
+        .expect("relative posting must be emitted");
+    assert_eq!(evidence.raw_value, "1 day ago");
+    assert_eq!(evidence.precision, "relative:86400:86400");
+    assert!(
+        chrono::DateTime::parse_from_rfc3339(&evidence.observed_at)
+            .unwrap()
+            .with_timezone(&chrono::Utc)
+            >= started
+    );
 }
 
 #[test]

@@ -891,6 +891,18 @@ impl DiscoveryProvenance {
             text(&date.observed_at, 64)?;
             chrono::DateTime::parse_from_rfc3339(&date.observed_at)
                 .map_err(|_| "Invalid discovery evidence observation time")?;
+            if date.precision.starts_with("relative:") {
+                let (age, unit) = crate::posting_date::relative_age_seconds(&date.raw_value)
+                    .ok_or("Invalid relative publication evidence")?;
+                let observed = chrono::DateTime::parse_from_rfc3339(&date.observed_at)
+                    .map_err(|_| "Invalid relative observation time")?;
+                if observed.offset().local_minus_utc() != 0 {
+                    return Err("Relative observation time must use UTC".into());
+                }
+                if date.precision != format!("relative:{age}:{unit}") {
+                    return Err("Relative publication precision does not match evidence".into());
+                }
+            }
         }
         Ok(())
     }

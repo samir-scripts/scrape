@@ -96,7 +96,9 @@ export function JobMetaPanel({
         <div className="flex justify-between items-center px-3 py-1.5 border-b border-[var(--color-ink)]">
           <span className="text-[var(--color-ink-mute)]">POSTED</span>
           <span className="text-[var(--color-ink)]">
-            {formatDate(job.date_posted)}
+            {!job.date_posted && job.relative_date_evidence
+              ? `${job.relative_date_evidence.raw_value} (observed ${job.relative_date_evidence.observed_at})`
+              : formatDate(job.date_posted)}
           </span>
         </div>
         <div className="flex justify-between items-center px-3 py-1.5 border-b border-[var(--color-ink)]">

@@ -703,6 +703,7 @@ impl PostingRules {
         let mut reasons = Vec::new();
         let WorkerEvent::Job {
             date_posted,
+            discovery_provenance,
             title,
             company,
             location,
@@ -729,7 +730,26 @@ impl PostingRules {
             role_type: *role_type,
         };
         if let Some(date) = &self.posting_date {
-            if !date.matches(date_posted.as_deref(), started) {
+            let relative = discovery_provenance
+                .as_ref()
+                .and_then(|p| p.date_evidence.as_ref())
+                .filter(|e| e.precision.starts_with("relative:"))
+                .and_then(|e| {
+                    chrono::DateTime::parse_from_rfc3339(&e.observed_at)
+                        .ok()
+                        .map(|observed| {
+                            (e.raw_value.as_str(), observed.with_timezone(&chrono::Utc))
+                        })
+                });
+            let matches = if date_posted.is_none() {
+                relative.map_or_else(
+                    || date.matches(None, started),
+                    |(raw, observed)| date.matches_relative(raw, observed, started),
+                )
+            } else {
+                date.matches(date_posted.as_deref(), started)
+            };
+            if !matches {
                 reasons.push(RejectionReason::PostingDate);
             }
         }
@@ -826,6 +846,7 @@ impl PostingRules {
             description_text,
             role_type,
             date_posted,
+            discovery_provenance,
             salary,
             experience,
             sponsorship,
@@ -976,7 +997,20 @@ impl PostingRules {
                 && (evidence.opportunity_exhausted || !failed.contains(&reason));
             assessment.check(
                 reason,
-                ((evidence.knows(reason)
+                (((evidence.knows(reason)
+                    || (reason == RejectionReason::PostingDate
+                        && self
+                            .posting_date
+                            .as_ref()
+                            .is_some_and(|rule| rule.preset.as_deref() == Some("past_48h"))
+                        && discovery_provenance
+                            .as_ref()
+                            .and_then(|p| p.date_evidence.as_ref())
+                            .is_some_and(|e| {
+                                e.precision.starts_with("relative:")
+                                    && crate::posting_date::relative_age_seconds(&e.raw_value)
+                                        .is_some()
+                            })))
                     && !(reason == RejectionReason::Experience
                         && self.experience_match_mode == ExperienceMatchMode::RequiredMinimum
                         && experience.as_ref().is_none_or(|e| e.min_years.is_none())
@@ -1071,11 +1105,41 @@ impl PostingRules {
                 } else {
                     date_clauses.join(" AND ")
                 };
-                clauses.push(if date.include_unknown {
+                let ordinary = if date.include_unknown {
                     format!("(NOT ({known}) OR ({range}))")
                 } else {
                     format!("({known} AND ({range}))")
-                });
+                };
+                if date.preset.as_deref() == Some("past_48h") {
+                    // Use the most recent observation, not a later query's clock.
+                    let latest = "o.rowid = (SELECT rowid FROM discovery_observations WHERE job_id = jobs.id AND observed_at = jobs.last_seen_at ORDER BY rowid DESC LIMIT 1)";
+                    let precision = "json_extract(o.provenance, '$.date_evidence.precision')";
+                    let observed = "json_extract(o.provenance, '$.date_evidence.observed_at')";
+                    let age = format!("CAST(substr({precision}, 10, instr(substr({precision}, 10), ':') - 1) AS INTEGER)");
+                    let unit = format!("CAST(substr({precision}, 10 + instr(substr({precision}, 10), ':')) AS INTEGER)");
+                    let relative_known = format!("EXISTS (SELECT 1 FROM discovery_observations o WHERE {latest} AND {precision} LIKE 'relative:%')");
+                    // SQLite's date functions round to milliseconds. Compare whole seconds
+                    // and the original fractional nanoseconds separately at the boundaries.
+                    let seconds = format!(
+                        "CAST(strftime('%s', substr({observed}, 1, 19) || 'Z') AS INTEGER)"
+                    );
+                    let nanos = format!("CASE WHEN substr({observed}, 20, 1) = '.' THEN CAST(substr(substr({observed}, 21) || '000000000', 1, 9) AS INTEGER) ELSE 0 END");
+                    let lower = format!("({seconds} - {age} - {unit})");
+                    let upper = format!("({seconds} - {age})");
+                    let relative_range = format!("EXISTS (SELECT 1 FROM discovery_observations o WHERE {latest} AND {precision} LIKE 'relative:%' AND ({lower} > ? OR ({lower} = ? AND ({nanos}) >= ?)) AND ({upper} < ? OR ({upper} = ? AND ({nanos}) <= ?)))");
+                    let cutoff = start.expect("rolling window has start");
+                    bindings.extend([
+                        Bind::Integer(cutoff.timestamp()),
+                        Bind::Integer(cutoff.timestamp()),
+                        Bind::Integer(i64::from(cutoff.timestamp_subsec_nanos())),
+                        Bind::Integer(started.timestamp()),
+                        Bind::Integer(started.timestamp()),
+                        Bind::Integer(i64::from(started.timestamp_subsec_nanos())),
+                    ]);
+                    clauses.push(format!("((jobs.date_posted IS NOT NULL AND {ordinary}) OR (jobs.date_posted IS NULL AND (({relative_range}) OR (NOT ({relative_known}) AND {}))))", if date.include_unknown { "1" } else { "0" }));
+                } else {
+                    clauses.push(ordinary);
+                }
             } else {
                 clauses.push("0".into());
             }

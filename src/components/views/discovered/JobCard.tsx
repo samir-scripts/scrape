@@ -43,7 +43,10 @@ export function JobCard({
     }
   };
 
-  const formattedDate = formatDate(job.date_posted);
+  const relativeDate = !job.date_posted && job.relative_date_evidence;
+  const formattedDate = relativeDate
+    ? `${relativeDate.raw_value} (observed ${relativeDate.observed_at})`
+    : formatDate(job.date_posted);
   const isRemote =
     job.workplace_type === "remote" ||
     (job.workplace_type === "unknown" &&
@@ -119,7 +122,7 @@ export function JobCard({
 
         {formattedDate && (
           <span className="shrink-0 text-xs">
-            {job.date_posted ? "Posted " : "Found "}{formattedDate}
+            Posted {formattedDate}
           </span>
         )}
       </div>

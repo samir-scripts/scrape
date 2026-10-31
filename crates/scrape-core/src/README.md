@@ -87,6 +87,7 @@ the canonical local filters.
 - **Role**: Publication timestamp parsing and date-filter evaluation.
 - **Key Types & Functions**:
   - Normalizes authentic publication timestamps (never substituting provider `updated_at` edit times or scrape discovery times) and evaluates relative-day or calendar-date bounds in the workflow's IANA timezone.
+  - Explicit rounded relative ages from web discovery retain their original text and observation time. The strict 48-hour preset accepts them only when the entire possible publication interval lies within the window; other date filters retain their existing unknown-date behavior.
 
 ### [`branding.rs`](branding.rs)
 - **Role**: Employer identity and logo asset validation.

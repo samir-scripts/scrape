@@ -20,6 +20,37 @@ pub fn posting_instant(value: &str, timezone: &str) -> Option<DateTime<Utc>> {
     let day = NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()?;
     first_local_instant(timezone.parse().ok()?, day.and_hms_opt(0, 0, 0)?)
 }
+/// A rounded age describes an interval, not an exact publication instant.
+/// Only explicit whole-unit ages are supported; ambiguous expressions fail closed.
+pub fn relative_age_seconds(value: &str) -> Option<(i64, i64)> {
+    let text = value.trim().to_ascii_lowercase();
+    let text = text
+        .strip_prefix("posted ")
+        .or_else(|| text.strip_prefix("published "))
+        .unwrap_or(&text);
+    let mut parts = text.split_whitespace();
+    let count: i64 = parts.next()?.parse().ok()?;
+    let unit = match parts.next()? {
+        "minute" | "minutes" => 60,
+        "hour" | "hours" => 3600,
+        "day" | "days" => 86400,
+        _ => return None,
+    };
+    if parts.next()? != "ago" || parts.next().is_some() || count < 0 {
+        return None;
+    }
+    Some((count.checked_mul(unit)?, unit))
+}
+
+pub fn relative_interval(
+    value: &str,
+    observed: DateTime<Utc>,
+) -> Option<(DateTime<Utc>, DateTime<Utc>)> {
+    let (age, unit) = relative_age_seconds(value)?;
+    let start = observed.checked_sub_signed(Duration::try_seconds(age.checked_add(unit)?)?)?;
+    let end = observed.checked_sub_signed(Duration::try_seconds(age)?)?;
+    Some((start, end))
+}
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
@@ -138,6 +169,22 @@ impl PostingDateFilter {
         }
         Ok((from, through))
     }
+    pub fn matches_relative(
+        &self,
+        raw: &str,
+        observed: DateTime<Utc>,
+        started: DateTime<Utc>,
+    ) -> bool {
+        if self.preset.as_deref() != Some("past_48h") {
+            return self.matches(None, started);
+        }
+        let (Ok((from, _)), Some((start, end))) =
+            (self.bounds(started), relative_interval(raw, observed))
+        else {
+            return self.include_unknown;
+        };
+        from.is_none_or(|bound| start >= bound) && end <= started
+    }
     pub fn matches(&self, posted: Option<&str>, started: DateTime<Utc>) -> bool {
         let Ok((from, through)) = self.bounds(started) else {
             return false;
@@ -181,6 +228,22 @@ mod tests {
         DateTime::parse_from_rfc3339(value)
             .unwrap()
             .with_timezone(&Utc)
+    }
+
+    #[test]
+    fn relative_ages_keep_observation_anchored_rounded_intervals() {
+        let started = instant("2026-10-31T12:00:00Z");
+        let filter = PostingDateFilter::from_preset("past_48h", "UTC", started).unwrap();
+        assert!(filter.matches_relative("47 hours ago", started, started));
+        assert!(!filter.matches_relative("48 hours ago", started, started));
+        assert!(!filter.matches_relative("47 hours ago", started - Duration::seconds(1), started));
+        assert!(filter.matches_relative("1 day ago", started, started));
+        assert!(!filter.matches_relative("2 days ago", started, started));
+        assert!(!filter.matches_relative("0 hours ago", started + Duration::seconds(1), started));
+        assert!(relative_interval("30+ days ago", started).is_none());
+        assert!(relative_interval("about 2 hours ago", started).is_none());
+        let older = PostingDateFilter::from_preset("past_week", "UTC", started).unwrap();
+        assert!(!older.matches_relative("1 day ago", started, started));
     }
 
     #[test]

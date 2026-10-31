@@ -26,6 +26,11 @@ Production uses `coordinator.rs` resumable sessions and shared matching/budgetin
 | [`search_cache.rs`](search_cache.rs) | Jobicy response cache | Hourly bounded JSON pages | SHA-256 keyed, credential-free URL cache with atomic replacement, one-hour expiry and at most 64 pages; cached responses are schema-validated again. |
 | [`web_discovery.rs`](web_discovery.rs) | Independent public web | Directory and career-page links, bounded sitemaps, structured and visible HTML | Origin-fair frontier, public-only DNS-pinned requests, robots checks, shared-page requisition identity, and seed/referrer/date provenance. JavaScript rendering is not enabled. |
 
+Independent discovery recognizes explicitly labeled whole-minute, hour and day
+relative posting ages as observation-anchored intervals. It never converts them
+to an exact publication timestamp; unsupported or conflicting evidence remains
+indeterminate.
+
 ---
 
 ## Adapter Data Flow

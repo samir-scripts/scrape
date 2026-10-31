@@ -237,7 +237,9 @@ export function JobInspectorContent({
             Sponsorship: triStateToLabel(job.sponsorship),
             "Work authorization": formatWorkAuth(job),
             Clearance: triStateToLabel(job.clearance),
-            Posted: date(job.date_posted),
+            Posted: !job.date_posted && job.relative_date_evidence
+              ? `${job.relative_date_evidence.raw_value} (observed ${job.relative_date_evidence.observed_at})`
+              : date(job.date_posted),
             "Provider updated": date(job.provider_updated_at),
             Discovered: date(job.date_added),
             "Last seen": date(job.last_seen_at),

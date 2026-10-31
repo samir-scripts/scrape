@@ -30,6 +30,9 @@ pub struct Job {
     pub date_posted: Option<String>,
     #[serde(default)]
     #[ts(optional = nullable)]
+    pub relative_date_evidence: Option<scrape_core::protocol::DiscoveryDateEvidence>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
     pub provider_updated_at: Option<String>,
     pub date_added: String,
     pub last_seen_at: String,
@@ -282,6 +285,7 @@ impl JobsRepo {
                    description_text, description_json, description_source, company_icon_url, enrichment_version, favorited, favorited_at,
                    (SELECT logo_json FROM employer_branding WHERE key=jobs.company_branding_key) AS logo_json,
                    (SELECT last_attempt_json FROM employer_branding WHERE key=jobs.company_branding_key) AS logo_attempt,
+                   (SELECT json_extract(provenance, '$.date_evidence') FROM discovery_observations WHERE job_id = jobs.id AND observed_at = jobs.last_seen_at ORDER BY rowid DESC LIMIT 1) AS relative_date_evidence,
                    work_auth, work_auth_evidence
             FROM jobs
             WHERE id = ?
@@ -452,6 +456,15 @@ impl JobsRepo {
             url: r.get("url"),
             provider_updated_at: r.get("provider_updated_at"),
             date_posted: r.get("date_posted"),
+            relative_date_evidence: r
+                .try_get::<Option<String>, _>("relative_date_evidence")
+                .ok()
+                .flatten()
+                .and_then(|value| {
+                    serde_json::from_str::<scrape_core::protocol::DiscoveryDateEvidence>(&value)
+                        .ok()
+                })
+                .filter(|e| e.precision.starts_with("relative:")),
             date_added: r.get("date_added"),
             last_seen_at: r.get("last_seen_at"),
             status,
@@ -713,7 +726,8 @@ impl JobsRepo {
                    description_text, description_json, description_source, enrichment_version, favorited, favorited_at,
                    company_icon_url, work_auth, work_auth_evidence,
                    (SELECT logo_json FROM employer_branding WHERE key=jobs.company_branding_key) AS logo_json,
-                   (SELECT last_attempt_json FROM employer_branding WHERE key=jobs.company_branding_key) AS logo_attempt
+                   (SELECT last_attempt_json FROM employer_branding WHERE key=jobs.company_branding_key) AS logo_attempt,
+                   (SELECT json_extract(provenance, '$.date_evidence') FROM discovery_observations WHERE job_id = jobs.id AND observed_at = jobs.last_seen_at ORDER BY rowid DESC LIMIT 1) AS relative_date_evidence
             FROM jobs
             {}
             ORDER BY {}, id ASC
