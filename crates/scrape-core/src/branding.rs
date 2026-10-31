@@ -5,7 +5,7 @@ use std::io::Cursor;
 use ts_rs::TS;
 
 pub const MAX_LOGO_BYTES: usize = 512 * 1024;
-pub const MAX_LOGO_DIMENSION: u32 = 2048;
+pub const MAX_LOGO_DIMENSION: u32 = 5120;
 pub const MAX_CACHED_LOGO_DIMENSION: u32 = 128;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, TS, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
@@ -152,7 +152,7 @@ fn decode_raster(bytes: &[u8]) -> Result<image::RgbaImage, String> {
     let mut limits = image::io::Limits::default();
     limits.max_image_width = Some(MAX_LOGO_DIMENSION);
     limits.max_image_height = Some(MAX_LOGO_DIMENSION);
-    limits.max_alloc = Some(32 * 1024 * 1024);
+    limits.max_alloc = Some(64 * 1024 * 1024);
     reader.limits(limits);
     let image = reader
         .decode()
@@ -374,6 +374,19 @@ mod tests {
                 assert!((actual as i16 - expected).abs() <= 1, "{color:?}");
             }
         }
+    }
+
+    #[test]
+    fn lightweight_high_resolution_logo_is_downscaled() {
+        let bytes = png(image::RgbaImage::from_pixel(
+            4167,
+            1413,
+            image::Rgba([255, 80, 0, 255]),
+        ));
+        assert!(bytes.len() < MAX_LOGO_BYTES);
+        let pixels = cached_pixels(&cache_asset(&bytes).unwrap());
+        assert_eq!(pixels.dimensions(), (128, 43));
+        assert_eq!(pixels.get_pixel(64, 21).0[3], 255);
     }
 
     #[test]

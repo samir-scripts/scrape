@@ -54,7 +54,7 @@ scrape-core/
 | [`src/identity.rs`](src/README.md#identityrs) | Canonical `PostingIdentity` derivation across ATS providers, JSON-LD, and custom selectors so deduplication, rescraping, and suppression share one identity rule. |
 | [`src/geography.rs`](src/README.md#geographyrs) | ISO alpha-2 country and qualified subdivision (`US-CA`, `CA-ON`, etc.) catalog, alias resolution, and exported `CountryOption`/`RegionOption` bindings. |
 | [`src/search_source.rs`](src/README.md#search_sourcers) | Canonical public provider identities and fixed endpoint validation for The Muse, Arbeitnow, Adzuna and Jobicy; bounded provider hints never replace local matching. |
-| [`src/branding.rs`](src/README.md#brandingrs) | Employer identity precedence, `LogoEvidence`/`LogoStatus`/`LogoMethod`, bounded image decoding (PNG/JPEG/WebP/SVG), canonical asset caching, and the exact legacy Ashby-platform-favicon filter. |
+| [`src/branding.rs`](src/README.md#brandingrs) | Employer identity precedence, `LogoEvidence`/`LogoStatus`/`LogoMethod`, bounded image decoding (512 KiB input, 5120px dimensions, 64 MiB raster allocation), lossless asset caching at most 128px, and the exact legacy Ashby-platform-favicon filter. |
 | [`src/role.rs`](src/README.md#rolers) | Role classification engine that analyzes job titles and external hints to categorize postings into `RoleType` (`swe`, `data`, `product`, `design`, `seasonal`, `other`). |
 | [`src/enrich/`](src/enrich/README.md) | Heuristic parsing engine for unstructured ATS fields: native compensation ranges, multi-location strings, security clearance, visa sponsorship, work authorization, experience/new-grad detection, workplace arrangement, and structured HTML normalization. |
 
