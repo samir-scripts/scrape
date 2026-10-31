@@ -352,7 +352,7 @@ export function validateWorkflowYaml(
       }
       const date = matching.posting_date;
       if (date?.preset != null) {
-        if (!["past_12h", "today", "past_24h", "past_week", "past_month", "any"].includes(date.preset)) errors.push({ message: "filters.matching.posting_date.preset is unsupported" });
+        if (!["past_12h", "today", "past_24h", "past_48h", "past_week", "past_month", "any"].includes(date.preset)) errors.push({ message: "filters.matching.posting_date.preset is unsupported" });
         if (date.last_hours != null || date.from != null || date.through != null) errors.push({ message: "filters.matching.posting_date.preset cannot be combined with last_hours, from or through" });
       }
       const compensation = matching.compensation;

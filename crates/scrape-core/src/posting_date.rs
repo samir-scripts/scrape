@@ -41,7 +41,7 @@ pub type DateBounds = (Option<DateTime<Utc>>, Option<DateTime<Utc>>);
 impl PostingDateFilter {
     /// Creates a persisted window in an IANA timezone, validating it at `run_started`.
     ///
-    /// Supported presets are `past_12h`, `today`, `past_24h`, `past_week` (168 hours),
+    /// Supported presets are `past_12h`, `today`, `past_24h`, `past_48h`, `past_week` (168 hours),
     /// `past_month` (720 hours), and `any` (unrestricted). Each run resolves relative
     /// windows anew; `today` begins at the first valid local instant of that date.
     /// Use `from` and `through` without a preset for a custom absolute range.
@@ -76,6 +76,7 @@ impl PostingDateFilter {
             let hours = match preset {
                 "past_12h" => 12,
                 "past_24h" => 24,
+                "past_48h" => 48,
                 "past_week" => 168,
                 "past_month" => 720,
                 "today" => {
@@ -163,6 +164,7 @@ mod tests {
         for (preset, hours, inside_hours, outside_hours) in [
             ("past_12h", 12, 6, 13),
             ("past_24h", 24, 23, 25),
+            ("past_48h", 48, 47, 49),
             ("past_week", 168, 5 * 24, 8 * 24),
             ("past_month", 720, 20 * 24, 35 * 24),
         ] {
@@ -312,7 +314,15 @@ mod tests {
         assert_eq!(any.bounds(started).unwrap(), (None, None));
         assert!(any.matches(Some("2000-01-01"), started));
         assert!(any.matches(Some("2030-01-01"), started));
-        for preset in ["any", "today", "past_12h", "past_week", "past_month"] {
+        for preset in [
+            "any",
+            "today",
+            "past_12h",
+            "past_24h",
+            "past_48h",
+            "past_week",
+            "past_month",
+        ] {
             let mut filter = PostingDateFilter::from_preset(preset, "UTC", started).unwrap();
             for posted in [None, Some("not-a-date")] {
                 assert!(!filter.matches(posted, started));

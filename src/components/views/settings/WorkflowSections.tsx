@@ -574,6 +574,7 @@ export function WorkflowSections({
                 { value: "past_12h", label: "Past 12 hours" },
                 { value: "today", label: "Today (since local midnight)" },
                 { value: "past_24h", label: "Past 24 hours" },
+                { value: "past_48h", label: "Past 48 hours (2 days)" },
                 { value: "past_week", label: "Past week (7 days)" },
                 { value: "past_month", label: "Past month (30 days)" },
                 { value: "any", label: "Any time" },

@@ -546,7 +546,7 @@ function matchesDemoWorkflow(job: Job, source: Source): boolean {
   if (rules?.experience_match_mode === "required_minimum" && (rules.experience_min != null || rules.experience_max != null)) throw new Error("Minimum required experience filtering requires the desktop application.");
   const dateFilter = rules?.posting_date;
   if (dateFilter) {
-    if (dateFilter.preset && !["past_12h", "past_24h", "past_week", "past_month", "any"].includes(dateFilter.preset)) {
+    if (dateFilter.preset && !["past_12h", "past_24h", "past_48h", "past_week", "past_month", "any"].includes(dateFilter.preset)) {
       throw new Error("This publication-date rule requires the desktop application.");
     }
     if (!job.date_posted) {
@@ -558,7 +558,7 @@ function matchesDemoWorkflow(job: Job, source: Source): boolean {
       } else {
         const now = Date.now();
         const hours = dateFilter.preset === "any" ? null : dateFilter.last_hours ?? ({
-          past_12h: 12, past_24h: 24, past_week: 168, past_month: 720,
+          past_12h: 12, past_24h: 24, past_48h: 48, past_week: 168, past_month: 720,
         } as Record<string, number>)[dateFilter.preset || ""] ?? null;
         if (hours != null && (posted < now - hours * 3_600_000 || posted > now)) return false;
         if (dateFilter.from && posted < Date.parse(`${dateFilter.from}T00:00:00Z`)) return false;
@@ -902,10 +902,12 @@ const apiImplementation = {
     return invoke<Source>("get_source", { id });
   },
 
-  previewTestWorkflowReplacement: async (): Promise<WorkflowReplacementPreview> => {
-    if (isTauri()) return invoke<WorkflowReplacementPreview>("preview_test_workflow_replacement");
+  previewTestWorkflowReplacement: async (targetMode?: string): Promise<WorkflowReplacementPreview> => {
+    if (isTauri()) return invoke<WorkflowReplacementPreview>("preview_test_workflow_replacement", targetMode ? { target_mode: targetMode } : {});
     return {
-      target_template_ids: SAMPLE_WORKFLOW_TEMPLATES.map(template => template.id),
+      target_template_ids: targetMode === "test_workflow"
+        ? ["software-engineering-it-us-48h"]
+        : SAMPLE_WORKFLOW_TEMPLATES.map(template => template.id),
       candidates: devSources.map(source => {
         const marker = demoWorkflowMarker(source);
         const legacy = LEGACY_DEMO_SAMPLE_IDS.has(source.id);
@@ -925,9 +927,9 @@ const apiImplementation = {
     };
   },
 
-  replaceTestWorkflows: async (selected: WorkflowReplacementSelection[]): Promise<WorkflowReplacementReport> => {
-    if (isTauri()) return invoke<WorkflowReplacementReport>("replace_test_workflows", { selected });
-    const preview = await api.previewTestWorkflowReplacement();
+  replaceTestWorkflows: async (selected: WorkflowReplacementSelection[], targetMode?: string): Promise<WorkflowReplacementReport> => {
+    if (isTauri()) return invoke<WorkflowReplacementReport>("replace_test_workflows", targetMode ? { selected, target_mode: targetMode } : { selected });
+    const preview = await api.previewTestWorkflowReplacement(targetMode);
     const seen = new Set<string>();
     for (const selection of selected) {
       if (seen.has(selection.id)) throw new Error("Duplicate workflow replacement selection.");
