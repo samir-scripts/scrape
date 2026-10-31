@@ -58,9 +58,10 @@ The fixture journey also follows a fictional non-job directory across origins
 to an independent employer detail and verifies persistence and discovery counters.
 For an actual network run, explicitly execute `node scripts/native-independent-live.mjs`.
 Pass `--seed https://example.com/careers` to test a different public starting
-point with the same US, 48-hour and quota rules. The script records its temporary
-profile path and may find no qualifying jobs; it does not establish exhaustive
-coverage.
+point with the same US, 48-hour and quota rules, or `--baseline` to run the
+previous feeds/boards with those same rules in a separate temporary profile.
+The script records run status and its temporary profile path; a cap or partial
+source prevents a complete comparison.
 
 `test-native-startup.mjs` runs the actual configured Tauri development pipeline
 with isolated ports and temporary database fixtures. It verifies native readiness,

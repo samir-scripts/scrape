@@ -6,15 +6,21 @@ import { join } from "node:path";
 import { parse } from "yaml";
 
 const directory = await mkdtemp(join(tmpdir(), "scrape-native-smoke-independent-live-"));
-const spec = parse(await readFile("test-workflows/software-engineering-it-us-48h.yaml", "utf8"));
+let spec = parse(await readFile("test-workflows/software-engineering-it-us-48h.yaml", "utf8"));
 spec.metadata.enabled = true;
-if (process.argv[2] === "--seed" && process.argv[3] && process.argv.length === 4) {
+if (process.argv[2] === "--baseline" && process.argv.length === 3) {
+  const matching = spec.filters.matching;
+  spec = parse(await readFile("workflows/software-engineering-last-12-hours.yaml", "utf8"));
+  spec.metadata.name = "Live baseline comparison — US · Past 48 Hours";
+  spec.filters = { role_types: [], include_keywords: [], exclude_keywords: [], locations: [], matching };
+  spec.max_jobs_per_run = 20;
+} else if (process.argv[2] === "--seed" && process.argv[3] && process.argv.length === 4) {
   const seed = new URL(process.argv[3]);
   if (seed.protocol !== "https:" || seed.username || seed.password) throw new Error("Seed must be a credential-free HTTPS URL");
   spec.sources = [{ id: "manual-live-seed", label: "Manually supplied public seed", enabled: true,
     extractor: { kind: "web_discovery", url: seed.href, source_config: { max_domains: 25, max_depth: 4, max_pages: 100 } } }];
 } else if (process.argv.length !== 2) {
-  throw new Error("Usage: node scripts/native-independent-live.mjs [--seed https://example.com/careers]");
+  throw new Error("Usage: node scripts/native-independent-live.mjs [--seed https://example.com/careers | --baseline]");
 }
 await writeFile(join(directory, "smoke.js"), `
 (async () => {
@@ -29,7 +35,6 @@ await writeFile(join(directory, "smoke.js"), `
     const start = new Date().toISOString();
     const source = await invoke("save_workflow", { spec, id: null });
     const run = await invoke("run_source_now", { id: source.id });
-    if (run.status === "failed" || run.counts.failed > 0) throw new Error("Native crawl failed: " + (run.error || JSON.stringify(run.counts)));
     const jobs = await invoke("list_jobs", { filter: {} });
     await invoke("plugin:event|emit", { event: "native-smoke-result", payload: { ok: true, start, spec, run, jobs } });
   } catch (error) {
@@ -42,3 +47,4 @@ if (code !== 0 || signal) throw new Error(`Live independent smoke failed (${code
 const result = JSON.parse(await readFile(join(directory, "result.json"), "utf8"));
 if (!result.ok) throw new Error(`Live independent smoke failed: ${JSON.stringify(result)}; artifacts: ${directory}`);
 console.log(`Live independent smoke completed; artifacts: ${directory}\n${JSON.stringify(result)}`);
+if (result.run.status === "failed") process.exitCode = 1;
