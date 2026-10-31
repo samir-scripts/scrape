@@ -1,6 +1,6 @@
 # Generated from Rust template catalog v3. Do not edit.
 # Front-line role title AND literal fast-food evidence in title/company/description; Cherry Hill + US-NJ + US in one location tuple; original publication within rolling 720 hours. Unknown dates/geography excluded. Adzuna discovery is disabled until setup. Remaining The Muse coverage is limited, not verified Cherry Hill availability. Adzuna not enabled — setup required: configure credentials in Settings > System > Job providers, then explicitly enable the source. Loading or saving never starts scraping. Sources are bounded, not exhaustive; local matching remains authoritative.
-version: 10
+version: 11
 max_jobs_per_run: 20
 metadata:
   name: Fast Food — Cherry Hill, NJ — Past 30 Days

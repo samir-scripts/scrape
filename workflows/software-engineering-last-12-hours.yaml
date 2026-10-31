@@ -1,6 +1,6 @@
 # Generated from Rust template catalog v3. Do not edit.
 # Literal engineering title roles; original publication in the past 12 hours, including the exact boundary. Unknown dates excluded (direct employer boards such as Cloudflare, Bitwarden, Linear, SEP, and NVIDIA match 0 candidates unless a role was originally published within the past 12 hours); employment, geography, workplace and pay unrestricted. The Muse and Germany-focused Arbeitnow provide bounded listings; Arbeitnow does not establish original publication dates. Jobicy covers seven days with a three-hour delay and hourly response caching. Direct boards: Cloudflare/Bitwarden Greenhouse, Linear Ashby, SEP Lever and NVIDIA Workday. Google/Apple (Needs review) and Netflix/Amazon (Setup required) remain company-picker choices, excluded here without granting script trust or enabling them. Adzuna not enabled — setup required: configure credentials in Settings > System > Job providers, then explicitly enable the source. Loading or saving never starts scraping. Sources are bounded, not exhaustive; local matching remains authoritative.
-version: 10
+version: 11
 max_jobs_per_run: 20
 metadata:
   name: Software Engineering & Related — Past 12 Hours

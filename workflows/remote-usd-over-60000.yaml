@@ -1,6 +1,6 @@
 # Generated from Rust template catalog v3. Do not edit.
 # Remote-only with evidenced advertised annual USD pay over $60,000: a range whose upper endpoint exceeds the threshold qualifies, not a guaranteed minimum. Unknown, hourly/monthly and other currencies excluded; no annualization, currency conversion, date or geography restriction. Adzuna predicted pay and bare native amounts without annual evidence do not qualify. The Muse and Germany-focused Arbeitnow provide bounded listings; Arbeitnow does not establish original publication dates. Jobicy covers seven days with a three-hour delay and hourly response caching. Direct boards: Cloudflare/Bitwarden Greenhouse, Linear Ashby, SEP Lever and NVIDIA Workday. Google/Apple (Needs review) and Netflix/Amazon (Setup required) remain company-picker choices, excluded here without granting script trust or enabling them. Adzuna not enabled — setup required: configure credentials in Settings > System > Job providers, then explicitly enable the source. Loading or saving never starts scraping. Sources are bounded, not exhaustive; local matching remains authoritative.
-version: 10
+version: 11
 max_jobs_per_run: 20
 metadata:
   name: Remote — Advertised Annual USD Pay Over $60,000

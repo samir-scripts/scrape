@@ -204,7 +204,7 @@ async fn independent_web_discovery_persists_recent_us_jobs() {
                     format!("<script type=\"application/ld+json\">{job}</script>"),
                 )
             } else if path == "/second.example/careers" {
-                let body = (0..25)
+                let body = (0..10)
                     .map(|n| format!("<a href=\"/jobs/second-{n:02}\">Software Engineer</a>"))
                     .collect::<String>();
                 ("200 OK", "text/html", body)
@@ -383,7 +383,9 @@ async fn independent_web_discovery_persists_recent_us_jobs() {
             .iter()
             .filter(|&&outcome| outcome == "inserted")
             .count(),
-        20
+        20,
+        "observed={observed:?} outcomes={outcomes:?} summary={summary:#?} paths={:?}",
+        server.paths.lock().unwrap()
     );
     assert_eq!(
         outcomes

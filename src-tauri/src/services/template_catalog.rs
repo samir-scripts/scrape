@@ -365,7 +365,7 @@ mod tests {
         );
         for template in &catalog.templates {
             assert!(template.seed);
-            assert_eq!(template.spec.version, 10);
+            assert_eq!(template.spec.version, 11);
             assert_eq!(template.spec.max_jobs_per_run, Some(20));
             assert_eq!(
                 template.spec.schedule.as_ref().unwrap().cadence,
