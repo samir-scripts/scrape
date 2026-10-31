@@ -32,6 +32,12 @@ The `crates/scrape-worker/src` directory contains the source code for the scrape
   - `with_proxy`: Applies an explicit user-supplied HTTP(S) proxy with Basic credentials; no direct fallback. WebSocket-driven Chromium uses the same proxy with CDP challenge handling.
   - Rate limiting: Manages per-host request spacing; the default is 750 ms.
 
+### [`public_web.rs`](public_web.rs)
+- **Role**: Isolated, public-only independent-discovery transport with DNS pinning, four-request concurrency, per-origin serialization and bounded response bodies.
+- **Origin admission**: Validates destinations before atomically reserving source origins; scheduler reservations and ordinary redirect destinations share the same authoritative origin cap.
+- **Robots policy**: Follows at most five same-origin redirects (six robots requests), resolving relative/query locations and rejecting loops, credentials, private destinations and all origin changes, including HTTP-to-HTTPS. The returned policy is cached for the original origin and enforced before content fetches. Missing or unsuccessful robots responses remain fail-closed; source/global budget exhaustion keeps its original error and is not cached as a denial.
+- **Request accounting**: Every contacted robots hop uses the existing pacing, DNS pinning, timeout and source/global request charges under the same origin lock and scheduler permit. Ordinary content redirects independently check the destination origin's policy.
+
 ### [`detect.rs`](detect.rs)
 - **Role**: Career page ATS auto-detection engine.
 - **Key Functions**:

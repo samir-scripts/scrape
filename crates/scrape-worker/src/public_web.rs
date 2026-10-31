@@ -144,7 +144,9 @@ impl PublicWeb {
             .len()
     }
 
-    fn admit_origin(&self, url: &Url) -> Result<(), PublicWebError> {
+    /// Atomically reserve a validated origin, including scheduler reservations.
+    pub(crate) fn admit_origin(&self, url: &Url) -> Result<(), PublicWebError> {
+        validate_url(url)?;
         let key = url.origin().ascii_serialization();
         let mut origins = self.1.origins.lock().unwrap_or_else(|e| e.into_inner());
         if !origins.contains(&key) {
@@ -154,6 +156,14 @@ impl PublicWeb {
             origins.insert(key);
         }
         Ok(())
+    }
+
+    pub(crate) fn origin_admitted(&self, url: &Url) -> bool {
+        self.1
+            .origins
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(&url.origin().ascii_serialization())
     }
 
     /// Explicit offline fixture transport. Only wire this to the worker's
@@ -257,7 +267,6 @@ impl PublicWeb {
     ) -> Result<(Url, Vec<u8>, Vec<String>), PublicWebError> {
         let mut url = Url::parse(input).map_err(|_| PublicWebError::Destination(input.into()))?;
         for redirects in 0..=MAX_REDIRECTS {
-            validate_url(&url)?;
             self.admit_origin(&url)?;
             url.set_fragment(None);
             let origin = self.origin(&url).await;
@@ -269,42 +278,13 @@ impl PublicWeb {
                 .await
                 .map_err(|_| PublicWebError::Transport("request scheduler closed".into()))?;
             if state.robots.is_none() {
-                let mut robots_url = url.clone();
-                robots_url.set_path("/robots.txt");
-                robots_url.set_query(None);
-                // Fail closed on redirects too: they are not permission to bypass a
-                // destination's own robots policy.
-                let result = match self.request(&robots_url, &mut state).await {
-                    Ok(response) if response.status().is_success() => {
-                        match bounded_body(response, false).await {
-                            Ok(bytes) => Robot::new("Scrape", &bytes)
-                                .map(|robot| RobotsPolicy {
-                                    robot,
-                                    sitemaps: String::from_utf8_lossy(&bytes)
-                                        .lines()
-                                        .filter_map(|line| {
-                                            let (key, value) = line.split_once(':')?;
-                                            (key.trim().eq_ignore_ascii_case("sitemap")
-                                                && !value.trim().is_empty())
-                                            .then(|| value.trim().to_owned())
-                                        })
-                                        .take(1000)
-                                        .collect(),
-                                })
-                                .map_err(|e| format!("{e:?}")),
-                            Err(e) => Err(e.to_string()),
-                        }
-                    }
-                    Ok(response) => Err(format!("HTTP {}", response.status())),
-                    Err(e) => {
-                        if matches!(
-                            e,
-                            PublicWebError::BudgetExhausted | PublicWebError::GlobalBudgetExhausted
-                        ) {
-                            return Err(e);
-                        }
-                        Err(e.to_string())
-                    }
+                let result = match self.fetch_robots(&url, &mut state).await {
+                    Err(
+                        error
+                        @ (PublicWebError::BudgetExhausted
+                        | PublicWebError::GlobalBudgetExhausted),
+                    ) => return Err(error),
+                    result => result.map_err(|error| error.to_string()),
                 };
                 if let Err(reason) = &result {
                     tracing::warn!(origin = %url.origin().ascii_serialization(), %reason, "public robots unavailable; denying origin");
@@ -372,6 +352,60 @@ impl PublicWeb {
             }
             let bytes = bounded_body(response, sitemap).await?;
             return Ok((url, bytes, robots_sitemaps));
+        }
+        unreachable!()
+    }
+
+    // Reuse the caller's origin lock and scheduler permit: robots redirects may
+    // relocate a policy only within the original normalized origin.
+    async fn fetch_robots(
+        &self,
+        origin_url: &Url,
+        state: &mut OriginState,
+    ) -> Result<RobotsPolicy, PublicWebError> {
+        let mut url = origin_url.clone();
+        url.set_path("/robots.txt");
+        url.set_query(None);
+        url.set_fragment(None);
+        let origin = url.origin();
+        let mut visited = HashSet::with_capacity(MAX_REDIRECTS + 1);
+        for redirects in 0..=MAX_REDIRECTS {
+            visited.insert(url.clone());
+            let response = self.request(&url, state).await?;
+            if response.status().is_redirection() {
+                if redirects == MAX_REDIRECTS {
+                    return Err(PublicWebError::Redirect);
+                }
+                let location = response
+                    .headers()
+                    .get(header::LOCATION)
+                    .and_then(|value| value.to_str().ok())
+                    .ok_or(PublicWebError::Redirect)?;
+                let mut next = url.join(location).map_err(|_| PublicWebError::Redirect)?;
+                next.set_fragment(None);
+                validate_url(&next)?;
+                if next.origin() != origin || visited.contains(&next) {
+                    return Err(PublicWebError::Redirect);
+                }
+                url = next;
+                continue;
+            }
+            if !response.status().is_success() {
+                return Err(PublicWebError::Status(response.status()));
+            }
+            let bytes = bounded_body(response, false).await?;
+            let robot = Robot::new("Scrape", &bytes)
+                .map_err(|error| PublicWebError::RobotsUnavailable(format!("{error:?}")))?;
+            let sitemaps = String::from_utf8_lossy(&bytes)
+                .lines()
+                .filter_map(|line| {
+                    let (key, value) = line.split_once(':')?;
+                    (key.trim().eq_ignore_ascii_case("sitemap") && !value.trim().is_empty())
+                        .then(|| value.trim().to_owned())
+                })
+                .take(1000)
+                .collect();
+            return Ok(RobotsPolicy { robot, sitemaps });
         }
         unreachable!()
     }
@@ -551,6 +585,76 @@ mod tests {
     use std::io::Write;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+    fn robots_redirect_response(path: &str) -> Option<(&'static str, &'static str, Vec<u8>)> {
+        let location = match path {
+            "/relative.example/robots.txt" => {
+                "Location: policies/robots?initial=1#ignored\r\n"
+            }
+            "/relative.example/policies/robots?initial=1" => {
+                "Location: ?final=1#ignored\r\n"
+            }
+            "/normalized.example/robots.txt" => {
+                "Location: https://NORMALIZED.example:443/policy#ignored\r\n"
+            }
+            "/deny.example/robots.txt" => "Location: /policy\r\n",
+            "/six.example/robots.txt" | "/seven.example/robots.txt" => {
+                "Location: /policy/1\r\n"
+            }
+            "/six.example/policy/1" | "/seven.example/policy/1" => {
+                "Location: /policy/2\r\n"
+            }
+            "/six.example/policy/2" | "/seven.example/policy/2" => {
+                "Location: /policy/3\r\n"
+            }
+            "/six.example/policy/3" | "/seven.example/policy/3" => {
+                "Location: /policy/4\r\n"
+            }
+            "/six.example/policy/4" | "/seven.example/policy/4" => {
+                "Location: /policy/5\r\n"
+            }
+            "/seven.example/policy/5" => "Location: /policy/6\r\n",
+            "/self-loop.example/robots.txt" => "Location: /robots.txt#ignored\r\n",
+            "/loop.example/robots.txt" => "Location: /policy\r\n",
+            "/loop.example/policy" => "Location: /robots.txt\r\n",
+            "/cross.example/robots.txt" => "Location: https://other.example/policy\r\n",
+            "/upgrade.example/robots.txt" => "Location: https://upgrade.example/policy\r\n",
+            "/downgrade.example/robots.txt" => "Location: http://downgrade.example/policy\r\n",
+            "/port.example/robots.txt" => "Location: https://port.example:8443/policy\r\n",
+            "/private.example/robots.txt" => "Location: http://127.0.0.1/secret\r\n",
+            "/credentials.example/robots.txt" => {
+                "Location: https://user:pass@credentials.example/policy\r\n"
+            }
+            "/scheme.example/robots.txt" => "Location: file:///tmp/robots.txt\r\n",
+            "/malformed.example/robots.txt" => "Location: http://[::1\r\n",
+            "/missing-location.example/robots.txt" => "",
+            "/one.example/denied-redirect" => "Location: https://deny.example/job\r\n",
+            "/relative.example/policies/robots?final=1" | "/normalized.example/policy" => {
+                return Some((
+                    "200 OK",
+                    "Content-Type: text/plain\r\n",
+                    b"User-agent: *\nDisallow: /blocked\nSitemap: https://relative.example/jobs.xml\n"
+                        .to_vec(),
+                ));
+            }
+            "/deny.example/policy" => {
+                return Some((
+                    "200 OK",
+                    "Content-Type: text/plain\r\n",
+                    b"User-agent: *\nDisallow: /job\n".to_vec(),
+                ));
+            }
+            "/six.example/policy/5" => {
+                return Some((
+                    "200 OK",
+                    "Content-Type: text/plain\r\n",
+                    b"User-agent: *\nAllow: /\n".to_vec(),
+                ));
+            }
+            _ => return None,
+        };
+        Some(("302 Found", location, Vec::new()))
+    }
+
     async fn fixture() -> (String, Arc<Mutex<Vec<String>>>, tokio::task::JoinHandle<()>) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = format!("http://{}", listener.local_addr().unwrap());
@@ -566,7 +670,9 @@ mod tests {
                     let text = String::from_utf8_lossy(&request[..n]);
                     let path = text.split_whitespace().nth(1).unwrap_or("").to_owned();
                     recorded.lock().await.push(path.clone());
-                    let (status, headers, body) = if path.ends_with("/robots.txt") {
+                    let (status, headers, body) = if let Some(response) = robots_redirect_response(&path) {
+                        response
+                    } else if path.ends_with("/robots.txt") {
                         if path.starts_with("/missing.example/") {
                             ("404 Not Found", "", Vec::new())
                         } else {
@@ -640,6 +746,306 @@ mod tests {
         PublicWeb::new(budget, Duration::from_secs(2), Duration::ZERO)
             .with_test_replay_origin(origin)
             .unwrap()
+    }
+
+    #[test]
+    fn validates_before_reserving_origins_and_recognizes_reservations() {
+        let root = PublicWeb::new(10, Duration::from_secs(2), Duration::ZERO);
+        let source = root.for_source_with_origin_limit(10, 1);
+        for input in [
+            "http://127.0.0.1/",
+            "https://user:pass@one.example/",
+            "file:///tmp/test",
+        ] {
+            let url = Url::parse(input).unwrap();
+            assert!(!source.origin_admitted(&url));
+            assert!(matches!(
+                source.admit_origin(&url),
+                Err(PublicWebError::Destination(_))
+            ));
+            assert_eq!(source.origins_used(), 0);
+        }
+        let first = Url::parse("https://ONE.example:443/job#section").unwrap();
+        assert!(!source.origin_admitted(&first));
+        source.admit_origin(&first).unwrap();
+        let same_origin = Url::parse("https://one.example/other?query=1").unwrap();
+        assert!(source.origin_admitted(&same_origin));
+        source.admit_origin(&same_origin).unwrap();
+        assert_eq!(source.origins_used(), 1);
+        let second = Url::parse("https://two.example/").unwrap();
+        assert!(matches!(
+            source.admit_origin(&second),
+            Err(PublicWebError::OriginLimit(_))
+        ));
+        assert!(!source.origin_admitted(&second));
+        assert_eq!(source.origins_used(), 1);
+        assert_eq!(source.requests_used(), 0);
+    }
+
+    #[tokio::test]
+    async fn follows_relative_query_robots_redirects_and_enforces_returned_policy() {
+        let (address, requests, server) = fixture().await;
+        let root = replay(&address, 10);
+        let source = root.for_source_with_origin_limit(10, 1);
+        let url = Url::parse("https://relative.example/job?source=1#section").unwrap();
+        source.admit_origin(&url).unwrap();
+        let page = source.fetch(url.as_str()).await.unwrap();
+        assert_eq!(page.url.as_str(), "https://relative.example/job?source=1");
+        assert_eq!(
+            page.robots_sitemaps,
+            vec!["https://relative.example/jobs.xml"]
+        );
+        assert!(matches!(
+            source.fetch("https://relative.example/blocked").await,
+            Err(PublicWebError::RobotsDenied(_))
+        ));
+        assert_eq!(source.requests_used(), 4);
+        assert_eq!(root.global_requests_used(), 4);
+        assert_eq!(source.origins_used(), 1);
+        assert_eq!(
+            *requests.lock().await,
+            vec![
+                "/relative.example/robots.txt",
+                "/relative.example/policies/robots?initial=1",
+                "/relative.example/policies/robots?final=1",
+                "/relative.example/job?source=1",
+            ]
+        );
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn shares_redirected_robots_policy_between_concurrent_sources() {
+        let (address, requests, server) = fixture().await;
+        let root = replay(&address, 10);
+        let first = root.for_source(10);
+        let second = root.for_source(10);
+        let (a, b) = tokio::join!(
+            first.fetch("https://relative.example/first"),
+            second.fetch("https://relative.example/second"),
+        );
+        a.unwrap();
+        b.unwrap();
+        assert_eq!(root.global_requests_used(), 5);
+        assert_eq!(first.requests_used() + second.requests_used(), 5);
+        assert_eq!(first.origins_used(), 1);
+        assert_eq!(second.origins_used(), 1);
+        let mut paths = requests.lock().await.clone();
+        let mut pages = paths.split_off(3);
+        assert_eq!(
+            paths,
+            vec![
+                "/relative.example/robots.txt",
+                "/relative.example/policies/robots?initial=1",
+                "/relative.example/policies/robots?final=1",
+            ]
+        );
+        pages.sort();
+        assert_eq!(
+            pages,
+            vec!["/relative.example/first", "/relative.example/second"]
+        );
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn compares_normalized_robots_redirect_origins() {
+        let (address, requests, server) = fixture().await;
+        let web = replay(&address, 5).for_source_with_origin_limit(5, 1);
+        web.fetch("https://normalized.example/job").await.unwrap();
+        assert_eq!(web.origins_used(), 1);
+        assert_eq!(web.requests_used(), 3);
+        assert_eq!(
+            *requests.lock().await,
+            vec![
+                "/normalized.example/robots.txt",
+                "/normalized.example/policy",
+                "/normalized.example/job",
+            ]
+        );
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn permits_exactly_six_robots_requests_and_caches_redirect_limit_denial() {
+        let (address, requests, server) = fixture().await;
+        let root = replay(&address, 20);
+        let six = root.for_source_with_origin_limit(10, 1);
+        six.fetch("https://six.example/job").await.unwrap();
+        assert_eq!(six.requests_used(), 7);
+        assert_eq!(six.origins_used(), 1);
+        let seven = root.for_source_with_origin_limit(10, 1);
+        for _ in 0..2 {
+            assert!(matches!(
+                seven.fetch("https://seven.example/job").await,
+                Err(PublicWebError::RobotsUnavailable(_))
+            ));
+        }
+        assert_eq!(seven.requests_used(), 6);
+        assert_eq!(seven.origins_used(), 1);
+        assert_eq!(root.global_requests_used(), 13);
+        assert_eq!(
+            *requests.lock().await,
+            vec![
+                "/six.example/robots.txt",
+                "/six.example/policy/1",
+                "/six.example/policy/2",
+                "/six.example/policy/3",
+                "/six.example/policy/4",
+                "/six.example/policy/5",
+                "/six.example/job",
+                "/seven.example/robots.txt",
+                "/seven.example/policy/1",
+                "/seven.example/policy/2",
+                "/seven.example/policy/3",
+                "/seven.example/policy/4",
+                "/seven.example/policy/5",
+            ]
+        );
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn rejects_unsafe_or_invalid_robots_redirects_without_contacting_targets() {
+        let (address, requests, server) = fixture().await;
+        let root = replay(&address, 40);
+        let cases: &[(&str, &[&str])] = &[
+            (
+                "https://self-loop.example/job",
+                &["/self-loop.example/robots.txt"],
+            ),
+            (
+                "https://loop.example/job",
+                &["/loop.example/robots.txt", "/loop.example/policy"],
+            ),
+            ("https://cross.example/job", &["/cross.example/robots.txt"]),
+            ("http://upgrade.example/job", &["/upgrade.example/robots.txt"]),
+            (
+                "https://downgrade.example/job",
+                &["/downgrade.example/robots.txt"],
+            ),
+            ("https://port.example/job", &["/port.example/robots.txt"]),
+            ("https://private.example/job", &["/private.example/robots.txt"]),
+            (
+                "https://credentials.example/job",
+                &["/credentials.example/robots.txt"],
+            ),
+            ("https://scheme.example/job", &["/scheme.example/robots.txt"]),
+            (
+                "https://malformed.example/job",
+                &["/malformed.example/robots.txt"],
+            ),
+            (
+                "https://missing-location.example/job",
+                &["/missing-location.example/robots.txt"],
+            ),
+            ("https://missing.example/job", &["/missing.example/robots.txt"]),
+        ];
+        let mut expected_paths = Vec::new();
+        for &(input, paths) in cases {
+            let source = root.for_source_with_origin_limit(10, 1);
+            for _ in 0..2 {
+                assert!(
+                    matches!(
+                        source.fetch(input).await,
+                        Err(PublicWebError::RobotsUnavailable(_))
+                    ),
+                    "{input}"
+                );
+            }
+            assert_eq!(source.requests_used(), paths.len(), "{input}");
+            assert_eq!(source.origins_used(), 1, "{input}");
+            expected_paths.extend_from_slice(paths);
+        }
+        assert_eq!(root.global_requests_used(), expected_paths.len());
+        assert_eq!(*requests.lock().await, expected_paths);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn content_redirect_checks_destination_redirected_robots_policy() {
+        let (address, requests, server) = fixture().await;
+        let web = replay(&address, 10);
+        assert!(matches!(
+            web.fetch("https://one.example/denied-redirect").await,
+            Err(PublicWebError::RobotsDenied(_))
+        ));
+        assert_eq!(web.origins_used(), 2);
+        assert_eq!(web.requests_used(), 4);
+        assert_eq!(
+            *requests.lock().await,
+            vec![
+                "/one.example/robots.txt",
+                "/one.example/denied-redirect",
+                "/deny.example/robots.txt",
+                "/deny.example/policy",
+            ]
+        );
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn source_budget_exhaustion_during_robots_redirects_is_not_cached() {
+        let (address, requests, server) = fixture().await;
+        let root = replay(&address, 15);
+        let exhausted = root.for_source(3);
+        for _ in 0..2 {
+            assert!(matches!(
+                exhausted.fetch("https://six.example/job").await,
+                Err(PublicWebError::BudgetExhausted)
+            ));
+        }
+        assert_eq!(exhausted.requests_used(), 3);
+        let fresh = root.for_source(10);
+        fresh.fetch("https://six.example/job").await.unwrap();
+        assert_eq!(fresh.requests_used(), 7);
+        assert_eq!(root.global_requests_used(), 10);
+        assert_eq!(
+            *requests.lock().await,
+            vec![
+                "/six.example/robots.txt",
+                "/six.example/policy/1",
+                "/six.example/policy/2",
+                "/six.example/robots.txt",
+                "/six.example/policy/1",
+                "/six.example/policy/2",
+                "/six.example/policy/3",
+                "/six.example/policy/4",
+                "/six.example/policy/5",
+                "/six.example/job",
+            ]
+        );
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn global_budget_exhaustion_during_robots_redirects_keeps_its_error_variant() {
+        let (address, requests, server) = fixture().await;
+        let root = replay(&address, 3);
+        let first = root.for_source(10);
+        for _ in 0..2 {
+            assert!(matches!(
+                first.fetch("https://six.example/job").await,
+                Err(PublicWebError::GlobalBudgetExhausted)
+            ));
+        }
+        let second = root.for_source(10);
+        assert!(matches!(
+            second.fetch("https://six.example/job").await,
+            Err(PublicWebError::GlobalBudgetExhausted)
+        ));
+        assert_eq!(first.requests_used(), 3);
+        assert_eq!(second.requests_used(), 0);
+        assert_eq!(root.global_requests_used(), 3);
+        assert_eq!(
+            *requests.lock().await,
+            vec![
+                "/six.example/robots.txt",
+                "/six.example/policy/1",
+                "/six.example/policy/2",
+            ]
+        );
+        server.abort();
     }
 
     #[test]
