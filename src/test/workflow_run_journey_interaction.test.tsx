@@ -49,12 +49,15 @@ it.each(["success", "no-match", "persistence-failure"] as const)("mocked IPC Loa
   };
   vi.spyOn(api, "getSettings").mockResolvedValue({ ...DEFAULT_SETTINGS, app_auto_update: false });
   vi.spyOn(api, "listSources").mockImplementation(async () => replaced ? [source] : []);
-  vi.spyOn(api, "previewTestWorkflowReplacement").mockResolvedValue({
-    target_template_ids: ["software-engineering-last-12-hours", "cherry-hill-fast-food-last-month", "remote-usd-over-60000"],
+  vi.spyOn(api, "previewTestWorkflowReplacement").mockImplementation(async target => ({
+    target_template_ids: target === "test_workflow"
+      ? ["software-engineering-it-us-48h"]
+      : ["software-engineering-last-12-hours", "cherry-hill-fast-food-last-month", "remote-usd-over-60000"],
     candidates: [],
-  });
-  const replace = vi.spyOn(api, "replaceTestWorkflows").mockImplementation(async selected => {
+  }));
+  const replace = vi.spyOn(api, "replaceTestWorkflows").mockImplementation(async (selected, target) => {
     expect(selected).toEqual([]);
+    expect(target).toBe("starter_workflows");
     replaced = true;
     return { created: [source], removed_ids: [], preserved_ids: [], backup_path: null, setup_required: [] };
   });
@@ -76,7 +79,8 @@ it.each(["success", "no-match", "persistence-failure"] as const)("mocked IPC Loa
   await user.click(screen.getByRole("button", { name: "WORKFLOWS" }));
   await user.click(await screen.findByRole("button", { name: "Replace test workflows" }));
   expect(await screen.findByText(/Saved jobs and tracking are kept/)).toBeTruthy();
-  await user.click(screen.getByRole("button", { name: "Replace selected workflows" }));
+  await user.click(screen.getByRole("button", { name: "Starter workflows" }));
+  await user.click(screen.getByRole("button", { name: "Add missing starter workflows" }));
   await waitFor(() => expect(replace).toHaveBeenCalledTimes(1));
   await user.click(await screen.findByRole("button", { name: "Close" }));
   const row = await screen.findByRole("button", { name: `Edit workflow ${source.name}` });

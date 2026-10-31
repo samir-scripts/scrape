@@ -70,8 +70,10 @@ await writeFile(join(directory, "smoke.js"), `
       const current = document.querySelector('dialog[aria-label="Replace test workflows"]');
       return current?.open && current.textContent.includes("Saved jobs and tracking are kept") ? current : null;
     }, "replacement dialog");
+    await waitFor(() => dialog.querySelector('[data-control-action="workflow.replace.mode.starter"]:not(:disabled)'), "starter target selector").then(button => button.click());
+    await waitFor(() => dialog.querySelector('[data-control-action="workflow.replace.mode.starter"][aria-pressed="true"]') && dialog.textContent.includes("Cherry Hill") && !dialog.querySelector('[data-control-action="workflow.replace.confirm"]').disabled, "successful starter replacement preview");
     assert(dialog.textContent.includes("Saved jobs and tracking are kept") && dialog.textContent.includes("Software Engineering") && dialog.textContent.includes("Cherry Hill") && dialog.textContent.includes("Advertised Annual USD"), "Replacement disclosure/targets missing");
-    await waitFor(() => [...dialog.querySelectorAll("button")].find(button => /Replace selected workflows/i.test(button.textContent)), "replacement confirmation").then(button => button.click());
+    await waitFor(() => dialog.querySelector('[data-control-action="workflow.replace.confirm"]:not(:disabled)'), "starter replacement confirmation").then(button => button.click());
     const replacementOutcome = await waitFor(() => {
       const report = [...document.querySelectorAll("dialog")].find(element => element.open && element.textContent.includes("Created "));
       if (report) return { report };
@@ -79,7 +81,7 @@ await writeFile(join(directory, "smoke.js"), `
       return error ? { error: error.textContent } : null;
     }, "replacement outcome");
     assert(replacementOutcome.report, "Replacement failed: " + replacementOutcome.error);
-    await progress("Drove actual Replace test workflows dialog and confirmation");
+    await progress("Selected starter_workflows explicitly through the actual replacement dialog and confirmation");
     const replacementReport = replacementOutcome.report;
     const closeReport = [...replacementReport.querySelectorAll("button")].find(button => /Close/i.test(button.textContent));
     closeReport?.click();
@@ -162,6 +164,47 @@ await writeFile(join(directory, "smoke.js"), `
     assert(expectedJob?.url === "https://fixture.invalid/fast-food/90002" && expectedJob.title === "Crew Member" && expectedJob.company === "Native Fixture Fast Food", "Exact expected saved-job identity/fields differ: " + JSON.stringify(expectedJob));
     assert(expectedJob.source_id, "Persisted fixture job has no source provenance");
     await progress("Ran one explicit workflow, verified one persisted run and fictional provider results in list_jobs/SQLite");
+
+    // Separate canonical test-profile journey: custom and all starter workflows survive.
+    const customSpec = structuredClone(groups.get("software-engineering-last-12-hours")[0].config.__workflow_spec);
+    customSpec.metadata.name = "Native custom workflow — preserve me";
+    customSpec.metadata.enabled = false;
+    customSpec.sources.forEach(source => { source.id = crypto.randomUUID(); });
+    const custom = await invoke("save_workflow", { spec: customSpec, id: null });
+    const beforeTestProfiles = await invoke("list_sources");
+    const beforeTestRuns = await invoke("list_scrape_runs", { limit: 100 });
+    const beforeTestJobs = await invoke("list_jobs", { filter: {} });
+    await waitFor(() => document.querySelector('[data-control-action="workflow.replace.request"]:not(:disabled)'), "test-profile replacement action").then(button => button.click());
+    const testDialog = await waitFor(() => {
+      const current = document.querySelector('dialog[aria-label="Replace test workflows"]');
+      return current?.open && current.querySelector('[data-control-action="workflow.replace.mode.test"][aria-pressed="true"]') && current.textContent.includes("test-workflows/software-engineering-it-us-48h.yaml") ? current : null;
+    }, "canonical test-profile preview");
+    assert(testDialog.textContent.includes("loaded disabled") && testDialog.textContent.includes("choose Run explicitly"), "Test profile disabled/explicit Run disclosure is missing");
+    assert(![...testDialog.querySelectorAll('input[type="checkbox"]')].some(input => input.checked), "Existing starter/custom workflows unexpectedly selected for removal");
+    await waitFor(() => testDialog.querySelector('[data-control-action="workflow.replace.confirm"]:not(:disabled)'), "test-profile confirmation").then(button => button.click());
+    const testOutcome = await waitFor(() => {
+      const report = document.querySelector('dialog[aria-label="Workflow replacement complete"][open]');
+      const error = testDialog.querySelector('[role="alert"]');
+      return report ? { report } : error ? { error: error.textContent } : null;
+    }, "test-profile replacement outcome");
+    assert(testOutcome.report, "Test-profile replacement failed: " + testOutcome.error);
+    testOutcome.report.querySelector('[data-control-action="workflow.replace.report.close"]').click();
+    const afterTestProfiles = await invoke("list_sources");
+    const testProfile = afterTestProfiles.find(source => source.config?.__builtin_workflow?.template_id === "software-engineering-it-us-48h");
+    assert(testProfile && !testProfile.enabled && testProfile.config.__workflow_spec.metadata.enabled === false, "Canonical test profile was not saved disabled");
+    assert(testProfile.config.__workflow_spec.max_jobs_per_run === 20, "Canonical test quota differs");
+    assert(testProfile.config.__workflow_spec.filters.matching.posting_date.preset === "past_48h", "Canonical test date filter differs");
+    assert(testProfile.config.__workflow_spec.sources.find(source => source.extractor.kind === "search" && source.extractor.url === "adzuna")?.enabled === false, "Adzuna was enabled without explicit opt-in");
+    assert(afterTestProfiles.length === beforeTestProfiles.length + 1, "Test-profile replacement removed or duplicated workflows");
+    for (const original of beforeTestProfiles) {
+      assert(JSON.stringify(afterTestProfiles.find(source => source.id === original.id)) === JSON.stringify(original), "Previously saved workflow changed: " + original.id);
+    }
+    assert(afterTestProfiles.some(source => source.id === custom.id && source.name === customSpec.metadata.name), "Custom workflow did not survive test replacement");
+    assert((await invoke("list_scrape_runs", { limit: 100 })).length === beforeTestRuns.length, "Test-profile replacement started a run");
+    assert((await invoke("list_jobs", { filter: {} })).total === beforeTestJobs.total, "Test-profile replacement altered saved jobs");
+    const testRow = await waitFor(() => [...document.querySelectorAll('[data-control-action="workflow.edit"]')].find(button => button.getAttribute("aria-label") === "Edit workflow " + testProfile.name)?.closest("tr"), "disabled test profile row");
+    assert(testRow.querySelector('[data-control-action="workflow.run"]').disabled, "Disabled test profile offers an enabled Run action");
+    await progress("Loaded canonical test_workflow separately; verified persisted 48-hour/20 quota, disabled Run, no automatic crawl, and unchanged starters/custom workflow/jobs");
     await invoke("plugin:event|emit", { event: "native-smoke-result", payload: { ok: true, steps, artifacts: { directory: "${directory}", database: "${directory}/scrape_data.db", replayOrigin: "${directory}/replay-origin" } } });
   } catch (error) {
     await invoke("plugin:event|emit", { event: "native-smoke-result", payload: { ok: false, steps, error: error?.message || String(error), artifacts: { directory: "${directory}" } } });

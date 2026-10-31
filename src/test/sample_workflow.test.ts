@@ -62,15 +62,47 @@ describe("targeted workflow catalog", () => {
     const before = await api.listSources();
     const job = generateScrapedJobsForSource(before[0])[0];
     __seedDevJobs([job]);
-    const preview = await api.previewTestWorkflowReplacement();
+    const preview = await api.previewTestWorkflowReplacement("starter_workflows");
     expect(preview.candidates).toHaveLength(3);
     expect(preview.candidates.every(candidate => candidate.selected_by_default)).toBe(false);
 
-    const report = await api.replaceTestWorkflows([]);
+    const report = await api.replaceTestWorkflows([], "starter_workflows");
     const after = await api.listSources();
     expect(report.created).toEqual([]);
     expect(report.removed_ids).toEqual([]);
     expect(after.map(source => source.id)).toEqual(before.map(source => source.id));
     expect((await api.listJobs()).items.map(saved => saved.id)).toEqual([job.id]);
+  });
+
+  it("loads the canonical test profile disabled without replacing custom or starter workflows", async () => {
+    const before = await api.listSources();
+    const custom = await api.createSource({ kind: "jsonld", name: "Keep my custom workflow", identifier: "https://example.com/careers", enabled: false });
+    const canonical = validateWorkflowYaml(readFileSync(resolve(__dirname, "../../test-workflows/software-engineering-it-us-48h.yaml"), "utf8")).parsedSpec!;
+    const preview = await api.previewTestWorkflowReplacement("test_workflow");
+    expect(preview.target_template_ids).toEqual(["software-engineering-it-us-48h"]);
+    expect(preview.candidates.every(candidate => !candidate.selected_by_default)).toBe(true);
+    const report = await api.replaceTestWorkflows([], "test_workflow");
+    expect(report.created).toHaveLength(1);
+    expect(report.removed_ids).toEqual([]);
+    expect(report.preserved_ids).toEqual([...before.map(source => source.id), custom.id].sort());
+    const source = report.created[0];
+    expect(source.enabled).toBe(false);
+    expect(canonical.sources.find(child => child.extractor.kind === "search" && child.extractor.url === "adzuna")?.enabled).toBe(false);
+    expect((source.config as Record<string, unknown>).__workflow_spec).toEqual(canonical);
+    expect((await api.listSources()).find(saved => saved.id === custom.id)).toEqual(custom);
+    expect((await api.listJobs()).total).toBe(0n);
+    expect((await api.replaceTestWorkflows([], "test_workflow")).created).toEqual([]);
+  });
+
+  it("preserves an edited built-in test workflow rather than silently reinstalling it", async () => {
+    const installed = (await api.replaceTestWorkflows([], "test_workflow")).created[0];
+    await api.updateSource({ id: installed.id, name: "My edited test profile" });
+    const preview = await api.previewTestWorkflowReplacement("test_workflow");
+    expect(preview.candidates.find(candidate => candidate.id === installed.id)?.selected_by_default).toBe(false);
+    const edited = await api.getSource(installed.id);
+    const report = await api.replaceTestWorkflows([], "test_workflow");
+    expect(report.created).toEqual([]);
+    expect(report.setup_required).toContainEqual(expect.stringContaining('Existing workflow "My edited test profile" differs'));
+    expect(await api.getSource(installed.id)).toEqual(edited);
   });
 });

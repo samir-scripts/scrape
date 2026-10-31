@@ -320,6 +320,8 @@
   "workflow.remove_source": "Workflow: Remove source",
   "workflow.replace.cancel": "Cancel workflow replacement",
   "workflow.replace.confirm": "Confirm workflow replacement",
+  "workflow.replace.mode.starter": "Choose starter workflow replacement",
+  "workflow.replace.mode.test": "Choose canonical test workflow replacement",
   "workflow.replace.other.expand": "Show other replacement candidates",
   "workflow.replace.report.close": "Close workflow replacement report",
   "workflow.replace.request": "Review workflow replacement",

@@ -62,12 +62,13 @@ pub async fn delete_source(app: AppHandle, state: State<'_, AppState>, id: Strin
 #[tauri::command]
 pub async fn preview_test_workflow_replacement(
     state: State<'_, AppState>,
+    target_mode: crate::services::sample_workflows::WorkflowReplacementTarget,
 ) -> Result<crate::services::sample_workflows::WorkflowReplacementPreview> {
     let timezone =
         crate::db::settings::SettingsRepo::get_value::<String>(&state.db, "system.timezone")
             .await?
             .unwrap_or_else(|| "UTC".into());
-    crate::services::sample_workflows::replacement_preview(&state.db, &timezone).await
+    crate::services::sample_workflows::replacement_preview(&state.db, &timezone, target_mode).await
 }
 
 #[tauri::command]
@@ -75,6 +76,7 @@ pub async fn replace_test_workflows(
     app: AppHandle,
     state: State<'_, AppState>,
     selected: Vec<crate::services::sample_workflows::WorkflowReplacementSelection>,
+    target_mode: crate::services::sample_workflows::WorkflowReplacementTarget,
 ) -> Result<crate::services::sample_workflows::WorkflowReplacementReport> {
     let _permit = state.runner.write_permit()?;
     let timezone =
@@ -93,8 +95,14 @@ pub async fn replace_test_workflows(
         database.file_name().unwrap_or_default().to_string_lossy(),
         uuid::Uuid::new_v4()
     ));
-    let result =
-        crate::services::sample_workflows::replace(&state.db, &selected, &backup, &timezone).await;
+    let result = crate::services::sample_workflows::replace(
+        &state.db,
+        &selected,
+        &backup,
+        &timezone,
+        target_mode,
+    )
+    .await;
     if result.is_ok() {
         let _ = app.emit("sources://changed", ());
     }

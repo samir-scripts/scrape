@@ -7,12 +7,14 @@ import type { WorkflowFilters } from "../bindings/WorkflowFilters";
 import type { WorkflowReplacementPreview } from "../bindings/WorkflowReplacementPreview";
 import type { WorkflowReplacementSelection } from "../bindings/WorkflowReplacementSelection";
 import type { WorkflowReplacementReport } from "../bindings/WorkflowReplacementReport";
+import type { WorkflowReplacementTarget } from "../bindings/WorkflowReplacementTarget";
 import { INGESTION_LIMITS } from "../bindings/ingestionLimits";
 import { errorMessage } from "./errors";
 import type { WorkflowSpec } from "../bindings/WorkflowSpec";
 import type { WorkflowPreview } from "../bindings/WorkflowPreview";
 import type { CompanyLogo } from "../bindings/CompanyLogo";
 import { workflowSpecToCreateInput, workflowSpecToYaml, validateWorkflowYaml, SAMPLE_WORKFLOW_TEMPLATES } from "./yamlWorkflow";
+import testWorkflowYaml from "../../test-workflows/software-engineering-it-us-48h.yaml?raw";
 import { matchesJob } from "./filter";
 import type { RemovedPosting } from "../bindings/RemovedPosting";
 import type { RemovalResult } from "../bindings/RemovalResult";
@@ -119,8 +121,23 @@ let devNotifications: AppNotification[] = [
   },
 ];
 
+const TEST_WORKFLOW_TEMPLATE_ID = "software-engineering-it-us-48h";
+
+function demoReplacementTemplates(target: WorkflowReplacementTarget): Array<{ id: string; name: string; spec: WorkflowSpec }> {
+  if (target === "starter_workflows") return SAMPLE_WORKFLOW_TEMPLATES;
+  if (target !== "test_workflow") throw new Error(`Unknown workflow replacement target: ${String(target)}`);
+  const validation = validateWorkflowYaml(testWorkflowYaml);
+  if (!validation.isValid || !validation.parsedSpec) {
+    throw new Error(`Invalid bundled test workflow: ${validation.errors.map(error => error.message).join("; ")}`);
+  }
+  const spec = validation.parsedSpec;
+  return [{ id: TEST_WORKFLOW_TEMPLATE_ID, name: spec.metadata.name, spec }];
+}
+
 function demoSourceFromTemplate(templateId: string, id: string): Source {
-  const template = SAMPLE_WORKFLOW_TEMPLATES.find(candidate => candidate.id === templateId);
+  const template = (templateId === TEST_WORKFLOW_TEMPLATE_ID
+    ? demoReplacementTemplates("test_workflow")
+    : SAMPLE_WORKFLOW_TEMPLATES).find(candidate => candidate.id === templateId);
   if (!template) throw new Error(`Missing demonstration workflow ${templateId}`);
   const input = workflowSpecToCreateInput(template.spec);
   const config: Record<string, JsonValue> = input.config && typeof input.config === "object" && !Array.isArray(input.config)
@@ -133,13 +150,13 @@ function demoSourceFromTemplate(templateId: string, id: string): Source {
     name: template.name,
     identifier: input.identifier,
     config,
-    enabled: true,
+    enabled: input.enabled ?? true,
     last_run_at: null,
     last_status: null,
     last_error: null,
     created_at: new Date().toISOString(),
-    cadence: "manual",
-    cadence_cron: null,
+    cadence: input.cadence ?? "manual",
+    cadence_cron: input.cadence_cron ?? null,
     next_run_at: null,
     last_run_duration_ms: null,
     retention_days: BigInt(input.retention_days ?? 30),
@@ -172,7 +189,6 @@ function saveDevSources() {
   } catch {}
 }
 
-const LEGACY_DEMO_SAMPLE_IDS = new Set(["sample-swe-internships-1"]);
 function demoWorkflowMarker(source: Source): { template_id?: string } {
   const config = source.config && typeof source.config === "object" && !Array.isArray(source.config)
     ? source.config as Record<string, unknown>
@@ -184,11 +200,14 @@ function demoReplacementFingerprint(source: Source): string {
   return JSON.stringify(source, (_, value) => typeof value === "bigint" ? Number(value) : value);
 }
 function exactDemoBuiltin(source: Source, templateId: string): boolean {
-  const template = SAMPLE_WORKFLOW_TEMPLATES.find(candidate => candidate.id === templateId);
+  const template = (templateId === TEST_WORKFLOW_TEMPLATE_ID
+    ? demoReplacementTemplates("test_workflow")
+    : SAMPLE_WORKFLOW_TEMPLATES).find(candidate => candidate.id === templateId);
   const config = source.config && typeof source.config === "object" && !Array.isArray(source.config)
     ? source.config as Record<string, unknown>
     : {};
   return !!template && demoWorkflowMarker(source).template_id === templateId &&
+    source.name === template.name && source.enabled === (template.spec.metadata.enabled ?? true) &&
     JSON.stringify(config.__workflow_spec) === JSON.stringify(template.spec);
 }
 
@@ -902,33 +921,31 @@ const apiImplementation = {
     return invoke<Source>("get_source", { id });
   },
 
-  previewTestWorkflowReplacement: async (targetMode?: string): Promise<WorkflowReplacementPreview> => {
-    if (isTauri()) return invoke<WorkflowReplacementPreview>("preview_test_workflow_replacement", targetMode ? { target_mode: targetMode } : {});
+  previewTestWorkflowReplacement: async (targetMode: WorkflowReplacementTarget): Promise<WorkflowReplacementPreview> => {
+    if (isTauri()) return invoke<WorkflowReplacementPreview>("preview_test_workflow_replacement", { targetMode });
+    const templates = demoReplacementTemplates(targetMode);
     return {
-      target_template_ids: targetMode === "test_workflow"
-        ? ["software-engineering-it-us-48h"]
-        : SAMPLE_WORKFLOW_TEMPLATES.map(template => template.id),
+      target_template_ids: templates.map(template => template.id),
       candidates: devSources.map(source => {
         const marker = demoWorkflowMarker(source);
-        const legacy = LEGACY_DEMO_SAMPLE_IDS.has(source.id);
         const current = !!marker.template_id && exactDemoBuiltin(source, marker.template_id);
         return {
           id: source.id,
           name: source.name,
           fingerprint: demoReplacementFingerprint(source),
-          selected_by_default: legacy,
-          reason: legacy
-            ? "Exact labeled legacy demonstration workflow"
-            : current
-              ? "Current built-in workflow — retained"
+          selected_by_default: false,
+          reason: current
+            ? "Current built-in workflow — retained"
+            : marker.template_id
+              ? "Modified built-in workflow — preserved unless explicitly selected"
               : "Other workflow — preserved unless explicitly selected",
         };
       }),
     };
   },
 
-  replaceTestWorkflows: async (selected: WorkflowReplacementSelection[], targetMode?: string): Promise<WorkflowReplacementReport> => {
-    if (isTauri()) return invoke<WorkflowReplacementReport>("replace_test_workflows", targetMode ? { selected, target_mode: targetMode } : { selected });
+  replaceTestWorkflows: async (selected: WorkflowReplacementSelection[], targetMode: WorkflowReplacementTarget): Promise<WorkflowReplacementReport> => {
+    if (isTauri()) return invoke<WorkflowReplacementReport>("replace_test_workflows", { selected, targetMode });
     const preview = await api.previewTestWorkflowReplacement(targetMode);
     const seen = new Set<string>();
     for (const selection of selected) {
@@ -943,8 +960,15 @@ const apiImplementation = {
     const preserved_ids = devSources.filter(source => !seen.has(source.id)).map(source => source.id).sort();
     const nextSources = devSources.filter(source => !seen.has(source.id));
     const created: Source[] = [];
-    for (const template of SAMPLE_WORKFLOW_TEMPLATES) {
-      if (nextSources.some(source => demoWorkflowMarker(source).template_id === template.id)) continue;
+    const setup_required = ["Adzuna requires credentials in Settings and explicit source enablement."];
+    for (const template of demoReplacementTemplates(targetMode)) {
+      const existing = nextSources.find(source => demoWorkflowMarker(source).template_id === template.id);
+      if (existing) {
+        if (!exactDemoBuiltin(existing, template.id)) {
+          setup_required.push(`Existing workflow "${existing.name}" differs from the bundled profile and was preserved. Explicitly select it for removal to replace your changes.`);
+        }
+        continue;
+      }
       const source = demoSourceFromTemplate(template.id, `demo-${template.id}-${crypto.randomUUID()}`);
       nextSources.push(source);
       created.push(source);
@@ -956,7 +980,7 @@ const apiImplementation = {
       removed_ids,
       preserved_ids,
       backup_path: null,
-      setup_required: ["Adzuna requires credentials in Settings and explicit source enablement."],
+      setup_required,
     };
   },
 

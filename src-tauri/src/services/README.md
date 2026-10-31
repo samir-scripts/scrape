@@ -64,9 +64,11 @@ Calendar scheduling (`calendar.rs`) computes next runs from local time, ISO week
 
 `sample_workflows.rs` seeds the three origin-marked catalog profiles only when the
 database is genuinely empty. Older examples are never removed automatically.
-`preview_test_workflow_replacement` and `replace_test_workflows` expose a reviewed,
-fingerprinted replacement with a consistent recovery backup and one transaction;
-unselected workflows and all job/tracking history remain intact.
+`preview_test_workflow_replacement` and `replace_test_workflows` accept an explicit
+test-workflow or starter-workflows target. The canonical test YAML is bundled and
+validated before the fingerprint-checked replacement transaction and recovery
+backup. Unselected workflows and all job/tracking history remain intact; the test
+workflow is installed disabled and replacement never starts a run.
 
 `execution_diagnostics.rs` shares workflow-to-worker preparation between manual,
 scheduled and Run all execution. Before trust/runtime validation, each attempted

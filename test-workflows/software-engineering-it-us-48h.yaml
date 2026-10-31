@@ -1,0 +1,190 @@
+# Test workflow: US Software Engineering, IT, and related jobs from the past 48 hours.
+# Configured to query public search feeds and career boards; coverage is not exhaustive.
+# Shared quota of 20 jobs across all workflow sources.
+version: 10
+max_jobs_per_run: 20
+metadata:
+  name: Software Engineering & IT — US · Past 48 Hours · Test Workflow
+  enabled: false
+sources:
+  - id: themuse-swe
+    label: The Muse — Software Engineering (Cross-Company Web Feed)
+    enabled: true
+    extractor:
+      kind: search
+      url: themuse
+      source_config:
+        endpoint: https://www.themuse.com/api/public/jobs?page=0&category=Software%20Engineering
+        follow_detail: true
+        max_pages: 50
+  - id: themuse-it
+    label: The Muse — Computer & IT (Cross-Company Web Feed)
+    enabled: true
+    extractor:
+      kind: search
+      url: themuse
+      source_config:
+        endpoint: https://www.themuse.com/api/public/jobs?page=0&category=Computer%20and%20IT
+        follow_detail: true
+        max_pages: 50
+  - id: themuse-general
+    label: The Muse — General Web Feed
+    enabled: true
+    extractor:
+      kind: search
+      url: themuse
+      source_config:
+        follow_detail: true
+        max_pages: 50
+  - id: themuse-data
+    label: The Muse — Data & Analytics (Cross-Company Web Feed)
+    enabled: true
+    extractor:
+      kind: search
+      url: themuse
+      source_config:
+        endpoint: https://www.themuse.com/api/public/jobs?page=0&category=Data%20and%20Analytics
+        follow_detail: true
+        max_pages: 50
+  - id: themuse-data-science
+    label: The Muse — Data Science (Cross-Company Web Feed)
+    enabled: true
+    extractor:
+      kind: search
+      url: themuse
+      source_config:
+        endpoint: https://www.themuse.com/api/public/jobs?page=0&category=Data%20Science
+        follow_detail: true
+        max_pages: 50
+  - id: jobicy-remote
+    label: Jobicy — Remote Tech Jobs
+    enabled: true
+    extractor:
+      kind: search
+      url: jobicy
+  - id: arbeitnow-feed
+    label: Arbeitnow — Tech Jobs Feed
+    enabled: true
+    extractor:
+      kind: search
+      url: arbeitnow
+  - id: adzuna-us
+    label: Adzuna — US Software & IT Search
+    enabled: false
+    extractor:
+      kind: search
+      url: adzuna
+  - id: website-crawl-reddit
+    label: Website Crawl — Reddit Careers (Public HTML)
+    enabled: true
+    employer_hint: Reddit
+    extractor:
+      kind: selector
+      mode: static
+      url: https://job-boards.greenhouse.io/reddit
+      source_config:
+        crawl:
+          max_pages: 50
+          max_depth: 2
+          extraction: public_html
+        per_host_delay_ms: 500
+        jitter_ms: 100
+        ignore_robots: true
+  - id: website-crawl-palantir
+    label: Website Crawl — Palantir Careers (Public HTML)
+    enabled: true
+    employer_hint: Palantir Technologies
+    extractor:
+      kind: selector
+      mode: static
+      url: https://jobs.lever.co/palantir
+      source_config:
+        crawl:
+          max_pages: 50
+          max_depth: 2
+          extraction: public_html
+        per_host_delay_ms: 500
+        jitter_ms: 100
+        ignore_robots: true
+  - id: website-crawl-discord
+    label: Website Crawl — Discord Careers (Public HTML)
+    enabled: true
+    employer_hint: Discord
+    extractor:
+      kind: selector
+      mode: static
+      url: https://job-boards.greenhouse.io/discord
+      source_config:
+        crawl:
+          max_pages: 50
+          max_depth: 2
+          extraction: public_html
+        per_host_delay_ms: 500
+        jitter_ms: 100
+        ignore_robots: true
+schedule:
+  cadence: manual
+  time: "09:00"
+  timezone: America/New_York
+  run_on_startup: false
+filters:
+  role_types: []
+  include_keywords: []
+  exclude_keywords: []
+  locations: []
+  matching:
+    target_roles:
+      - Software Engineer
+      - Software Developer
+      - Software Development Engineer
+      - Backend Engineer
+      - Backend Developer
+      - Back-end Engineer
+      - Back-end Developer
+      - Frontend Engineer
+      - Frontend Developer
+      - Front-end Engineer
+      - Front-end Developer
+      - Full Stack
+      - Full-Stack
+      - Platform Engineer
+      - Infrastructure Engineer
+      - DevOps Engineer
+      - DevOps
+      - Site Reliability Engineer
+      - SRE
+      - Data Engineer
+      - Machine Learning Engineer
+      - ML Engineer
+      - AI Engineer
+      - QA Engineer
+      - Quality Assurance Engineer
+      - Test Automation Engineer
+      - Embedded Software
+      - Firmware Engineer
+      - Mobile Engineer
+      - iOS Engineer
+      - Android Engineer
+      - Web Developer
+      - Systems Administrator
+      - System Administrator
+      - Network Engineer
+      - IT Support
+      - IT Specialist
+      - IT Administrator
+      - IT Manager
+      - Information Technology
+      - Cloud Engineer
+      - Security Engineer
+      - Database Administrator
+    companies: []
+    posting_date:
+      preset: past_48h
+      timezone: America/New_York
+      include_unknown: false
+    countries:
+      - US
+    location_include_unknown: false
+retention:
+  days: 30
+  policy: untracked_only

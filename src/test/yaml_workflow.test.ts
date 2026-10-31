@@ -69,6 +69,32 @@ filters:
     expect(result.parsedSpec?.filters?.matching?.compensation?.match_mode).toBe("advertised_amount");
   });
 
+  it("accepts past_48h posting date preset in YAML workflow", () => {
+    const result = validateWorkflowYaml(`
+version: 10
+metadata:
+  name: SWE 48 Hours
+sources:
+  - id: themuse
+    label: The Muse
+    enabled: true
+    extractor:
+      kind: search
+      url: themuse
+schedule:
+  cadence: manual
+filters:
+  matching:
+    posting_date:
+      preset: past_48h
+      timezone: America/New_York
+      include_unknown: false
+`);
+    expect(result.isValid).toBe(true);
+    expect(result.parsedSpec?.filters?.matching?.posting_date?.preset).toBe("past_48h");
+  });
+
+
   it("rejects credentials and host-only runtime fields in imported provider configuration", () => {
     for (const source_config of [
       { app_id: "fixture", app_key: "fixture-secret" },

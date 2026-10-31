@@ -12,6 +12,24 @@ const TARGET_IDS: [&str; 3] = [
     "cherry-hill-fast-food-last-month",
     "remote-usd-over-60000",
 ];
+pub const TEST_WORKFLOW_ID: &str = "software-engineering-it-us-48h";
+
+pub fn test_workflow_spec_value() -> Result<Value> {
+    serde_yaml::from_str(include_str!(
+        "../../../test-workflows/software-engineering-it-us-48h.yaml"
+    ))
+    .map_err(|error| {
+        AppError::Validation(format!("Bundled test workflow YAML is invalid: {error}"))
+    })
+}
+
+#[derive(Serialize, Deserialize, ts_rs::TS, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum WorkflowReplacementTarget {
+    TestWorkflow,
+    StarterWorkflows,
+}
 
 #[derive(Serialize, Deserialize, ts_rs::TS, Clone, Debug)]
 #[ts(export)]
@@ -170,9 +188,48 @@ async fn mark_origin_tx(
     }
     Ok(())
 }
+fn replacement_specs(
+    target: WorkflowReplacementTarget,
+    timezone: &str,
+) -> Result<Vec<(&'static str, crate::services::workflow::WorkflowSpec)>> {
+    let values = match target {
+        WorkflowReplacementTarget::TestWorkflow => {
+            vec![(TEST_WORKFLOW_ID, test_workflow_spec_value()?)]
+        }
+        WorkflowReplacementTarget::StarterWorkflows => {
+            let inputs = super::template_catalog::seed_inputs()?;
+            if inputs.len() != TARGET_IDS.len() {
+                return Err(AppError::Validation(
+                    "Built-in workflow catalog must contain exactly three profiles".into(),
+                ));
+            }
+            TARGET_IDS
+                .into_iter()
+                .zip(inputs)
+                .map(|(id, input)| {
+                    let value = input
+                        .config
+                        .and_then(|mut config| config.get_mut("__workflow_spec").map(Value::take))
+                        .ok_or_else(|| {
+                            AppError::Validation(
+                                "Built-in workflow specification is missing".into(),
+                            )
+                        })?;
+                    Ok((id, value))
+                })
+                .collect::<Result<Vec<_>>>()?
+        }
+    };
+    values
+        .into_iter()
+        .map(|(id, value)| Ok((id, crate::services::workflow::validate(value, timezone)?)))
+        .collect()
+}
+
 pub async fn replacement_preview(
     pool: &SqlitePool,
     timezone: &str,
+    target: WorkflowReplacementTarget,
 ) -> Result<WorkflowReplacementPreview> {
     let recognized = super::legacy_sample_workflows::recognition_specs()?;
     let mut candidates = Vec::new();
@@ -206,9 +263,15 @@ pub async fn replacement_preview(
             },
         });
     }
+    let target_template_ids = match target {
+        WorkflowReplacementTarget::TestWorkflow => vec![TEST_WORKFLOW_ID.to_string()],
+        WorkflowReplacementTarget::StarterWorkflows => {
+            TARGET_IDS.iter().map(|s| (*s).to_string()).collect()
+        }
+    };
     Ok(WorkflowReplacementPreview {
         candidates,
-        target_template_ids: TARGET_IDS.iter().map(|s| (*s).to_string()).collect(),
+        target_template_ids,
     })
 }
 
@@ -217,8 +280,11 @@ pub async fn replace(
     selected: &[WorkflowReplacementSelection],
     backup_path: &Path,
     timezone: &str,
+    target: WorkflowReplacementTarget,
 ) -> Result<WorkflowReplacementReport> {
-    let preview = replacement_preview(pool, timezone).await?;
+    // Resolve and validate every bundled target before taking a backup or mutating storage.
+    let targets = replacement_specs(target, timezone)?;
+    let preview = replacement_preview(pool, timezone, target).await?;
     let mut ids = std::collections::BTreeSet::new();
     for selection in selected {
         if !ids.insert(selection.id.as_str()) {
@@ -251,8 +317,9 @@ pub async fn replace(
         .map(|s| s.id.clone())
         .collect();
     preserved_ids.sort();
-    let targets = super::template_catalog::seed_inputs()?;
+    let target_ids = targets.iter().map(|(id, _)| *id).collect::<Vec<_>>();
     let mut existing_targets = std::collections::HashSet::new();
+    let mut preserved_conflicts = Vec::new();
     for source in &before {
         if ids.contains(source.id.as_str()) {
             continue;
@@ -262,12 +329,29 @@ pub async fn replace(
             .pointer("/__builtin_workflow/template_id")
             .and_then(Value::as_str)
         {
-            if TARGET_IDS.contains(&template_id) {
+            if target_ids.contains(&template_id) {
                 existing_targets.insert(template_id.to_string());
+                let expected = &targets.iter().find(|(id, _)| *id == template_id).unwrap().1;
+                let matches_spec = source
+                    .config
+                    .get("__workflow_spec")
+                    .cloned()
+                    .and_then(|value| crate::services::workflow::validate(value, timezone).ok())
+                    .and_then(|spec| normalized_spec(&spec).ok())
+                    == Some(normalized_spec(expected)?);
+                if !matches_spec
+                    || source.name != expected.metadata.name
+                    || source.enabled != expected.metadata.enabled.unwrap_or(true)
+                {
+                    preserved_conflicts.push(format!(
+                        "Existing workflow '{}' differs from the bundled profile and was preserved. Explicitly select it in replacement preview only if you intend to remove your changes.",
+                        source.name
+                    ));
+                }
             }
         }
     }
-    let missing = TARGET_IDS.iter().any(|id| !existing_targets.contains(*id));
+    let missing = target_ids.iter().any(|id| !existing_targets.contains(*id));
     if (!ids.is_empty() || missing) && !before.is_empty() {
         crate::db::backup_to(pool, backup_path)
             .await
@@ -298,20 +382,10 @@ pub async fn replace(
             .await?;
     }
     let mut created = Vec::new();
-    for (index, input) in targets.into_iter().enumerate() {
-        let template_id = TARGET_IDS[index];
+    for (template_id, spec) in targets {
         if existing_targets.contains(template_id) {
             continue;
         }
-        let spec_value = input
-            .config
-            .as_ref()
-            .and_then(|c| c.get("__workflow_spec"))
-            .cloned()
-            .ok_or_else(|| {
-                AppError::Validation("Built-in workflow specification is missing".into())
-            })?;
-        let spec = crate::services::workflow::validate(spec_value, timezone)?;
         let origin = origin_marker(&spec, template_id)?;
         let id = crate::services::workflow_store::save_in_transaction(
             &mut tx, spec, None, true, timezone, false,
@@ -345,6 +419,11 @@ pub async fn replace(
             "Adzuna is not enabled — setup required for broader local-search coverage.".to_string()
         })
         .collect();
+    let mut setup_required: Vec<String> = setup_required;
+    setup_required.extend(preserved_conflicts);
+    if target == WorkflowReplacementTarget::TestWorkflow {
+        setup_required.push("Adzuna is not enabled — configure credentials and explicitly enable the source to use it.".into());
+    }
     Ok(WorkflowReplacementReport {
         created,
         removed_ids,
@@ -511,7 +590,10 @@ mod tests {
         let custom = crate::services::workflow::persist(&pool, custom_spec, None, false, "UTC")
             .await
             .unwrap();
-        let preview = replacement_preview(&pool, "UTC").await.unwrap();
+        let preview =
+            replacement_preview(&pool, "UTC", WorkflowReplacementTarget::StarterWorkflows)
+                .await
+                .unwrap();
         let exact = preview
             .candidates
             .iter()
@@ -536,6 +618,7 @@ mod tests {
             }],
             &backup,
             "UTC",
+            WorkflowReplacementTarget::StarterWorkflows,
         )
         .await
         .unwrap();
@@ -570,9 +653,15 @@ mod tests {
             .unwrap(),
             1
         );
-        let again = replace(&pool, &[], &directory.path().join("unused.db"), "UTC")
-            .await
-            .unwrap();
+        let again = replace(
+            &pool,
+            &[],
+            &directory.path().join("unused.db"),
+            "UTC",
+            WorkflowReplacementTarget::StarterWorkflows,
+        )
+        .await
+        .unwrap();
         assert!(again.created.is_empty());
         assert!(again.backup_path.is_none());
         pool.close().await;
@@ -583,7 +672,10 @@ mod tests {
     ) {
         let (directory, pool) = temporary_pool().await;
         let legacy = saved_legacy_example(&pool).await;
-        let preview = replacement_preview(&pool, "UTC").await.unwrap();
+        let preview =
+            replacement_preview(&pool, "UTC", WorkflowReplacementTarget::StarterWorkflows)
+                .await
+                .unwrap();
         let exact = preview
             .candidates
             .iter()
@@ -603,6 +695,7 @@ mod tests {
             }],
             &directory.path().join("stale.db"),
             "UTC",
+            WorkflowReplacementTarget::StarterWorkflows,
         )
         .await
         .unwrap_err();
@@ -618,13 +711,14 @@ mod tests {
             "Concurrent edit"
         );
 
-        let current = replacement_preview(&pool, "UTC")
-            .await
-            .unwrap()
-            .candidates
-            .into_iter()
-            .find(|c| c.id == legacy.id)
-            .unwrap();
+        let current =
+            replacement_preview(&pool, "UTC", WorkflowReplacementTarget::StarterWorkflows)
+                .await
+                .unwrap()
+                .candidates
+                .into_iter()
+                .find(|c| c.id == legacy.id)
+                .unwrap();
         let failed_backup = directory.path().join("not-a-backup.db");
         std::fs::write(&failed_backup, b"preserve").unwrap();
         assert!(replace(
@@ -634,7 +728,8 @@ mod tests {
                 fingerprint: current.fingerprint.clone()
             }],
             &failed_backup,
-            "UTC"
+            "UTC",
+            WorkflowReplacementTarget::StarterWorkflows,
         )
         .await
         .is_err());
@@ -650,7 +745,8 @@ mod tests {
                 fingerprint: current.fingerprint
             }],
             &directory.path().join("rollback.db"),
-            "UTC"
+            "UTC",
+            WorkflowReplacementTarget::StarterWorkflows,
         )
         .await
         .is_err());
@@ -665,6 +761,205 @@ mod tests {
                     .pointer("/__builtin_workflow/template_id")
                     .is_some())
                 .count(),
+            0
+        );
+        pool.close().await;
+    }
+
+    #[tokio::test]
+    async fn test_workflow_replacement_creates_48h_workflow_and_preserves_custom() {
+        let (directory, pool) = temporary_pool().await;
+        let legacy = saved_legacy_example(&pool).await;
+        let custom_spec = crate::services::workflow::validate(
+            super::super::template_catalog::seed_inputs().unwrap()[0]
+                .config
+                .as_ref()
+                .unwrap()["__workflow_spec"]
+                .clone(),
+            "America/New_York",
+        )
+        .unwrap();
+        let custom =
+            crate::services::workflow::persist(&pool, custom_spec, None, false, "America/New_York")
+                .await
+                .unwrap();
+
+        let preview = replacement_preview(
+            &pool,
+            "America/New_York",
+            WorkflowReplacementTarget::TestWorkflow,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            preview.target_template_ids,
+            vec![TEST_WORKFLOW_ID.to_string()]
+        );
+        let exact = preview
+            .candidates
+            .iter()
+            .find(|c| c.id == legacy.id)
+            .unwrap();
+        assert!(exact.selected_by_default);
+
+        let backup = directory.path().join("test-workflow-backup.db");
+        let report = replace(
+            &pool,
+            &[WorkflowReplacementSelection {
+                id: exact.id.clone(),
+                fingerprint: exact.fingerprint.clone(),
+            }],
+            &backup,
+            "America/New_York",
+            WorkflowReplacementTarget::TestWorkflow,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(report.removed_ids, vec![legacy.id]);
+        assert_eq!(report.preserved_ids, vec![custom.id.clone()]);
+        assert_eq!(report.created.len(), 1);
+        assert!(backup.exists());
+
+        let created_source = &report.created[0];
+        assert!(!created_source.enabled);
+        assert_eq!(
+            created_source
+                .config
+                .pointer("/__workflow_spec/metadata/enabled"),
+            Some(&json!(false))
+        );
+        let installed = created_source
+            .config
+            .pointer("/__workflow_spec/sources")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        assert!(installed
+            .iter()
+            .filter(|source| source["extractor"]["url"] == "adzuna")
+            .all(|source| source["enabled"] == false));
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM scrape_runs")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            created_source
+                .config
+                .pointer("/__builtin_workflow/template_id")
+                .and_then(Value::as_str),
+            Some(TEST_WORKFLOW_ID)
+        );
+        assert_eq!(
+            created_source
+                .config
+                .pointer("/__workflow_spec/max_jobs_per_run")
+                .and_then(Value::as_u64),
+            Some(20)
+        );
+        assert_eq!(
+            created_source
+                .config
+                .pointer("/__workflow_spec/filters/matching/posting_date/preset")
+                .and_then(Value::as_str),
+            Some("past_48h")
+        );
+
+        // Ensure custom workflow is still present
+        assert!(SourcesRepo::get(&pool, &custom.id).await.is_ok());
+        pool.close().await;
+    }
+
+    #[test]
+    fn canonical_test_profile_is_parsed_and_validated_without_a_json_copy() {
+        let value = test_workflow_spec_value().unwrap();
+        assert_eq!(
+            value,
+            serde_yaml::from_str::<Value>(include_str!(
+                "../../../test-workflows/software-engineering-it-us-48h.yaml"
+            ))
+            .unwrap()
+        );
+        let spec = crate::services::workflow::validate(value, "UTC").unwrap();
+        assert_eq!(spec.metadata.enabled, Some(false));
+        assert_eq!(spec.max_jobs_per_run, Some(20));
+        let targets = replacement_specs(WorkflowReplacementTarget::TestWorkflow, "UTC").unwrap();
+        assert_eq!(targets.len(), 1);
+        assert!(targets[0]
+            .1
+            .sources
+            .iter()
+            .filter(|source| source.extractor.url == "adzuna")
+            .all(|source| !source.enabled));
+    }
+
+    #[test]
+    fn replacement_target_rejects_unknown_wire_values() {
+        assert_eq!(
+            serde_json::from_value::<WorkflowReplacementTarget>(json!("test_workflow")).unwrap(),
+            WorkflowReplacementTarget::TestWorkflow
+        );
+        assert_eq!(
+            serde_json::to_value(WorkflowReplacementTarget::StarterWorkflows).unwrap(),
+            json!("starter_workflows")
+        );
+        let error =
+            serde_json::from_value::<WorkflowReplacementTarget>(json!("unknown")).unwrap_err();
+        assert!(error.to_string().contains("unknown variant"));
+        assert!(serde_json::from_value::<WorkflowReplacementTarget>(Value::Null).is_err());
+    }
+
+    #[tokio::test]
+    async fn test_profile_reinstallation_preserves_edited_profile_without_backup_or_run() {
+        let (directory, pool) = temporary_pool().await;
+        let installed = replace(
+            &pool,
+            &[],
+            &directory.path().join("first.db"),
+            "UTC",
+            WorkflowReplacementTarget::TestWorkflow,
+        )
+        .await
+        .unwrap();
+        let id = &installed.created[0].id;
+        let mut edited = crate::services::workflow::validate(
+            installed.created[0].config["__workflow_spec"].clone(),
+            "UTC",
+        )
+        .unwrap();
+        edited.metadata.name = "My edited test profile".into();
+        crate::services::workflow::persist(&pool, edited, Some(id.clone()), false, "UTC")
+            .await
+            .unwrap();
+        let backup = directory.path().join("unused.db");
+        let again = replace(
+            &pool,
+            &[],
+            &backup,
+            "UTC",
+            WorkflowReplacementTarget::TestWorkflow,
+        )
+        .await
+        .unwrap();
+        assert!(again.created.is_empty());
+        assert_eq!(again.preserved_ids, vec![id.clone()]);
+        assert!(again.setup_required.iter().any(|message| message
+            .contains("differs from the bundled profile")
+            && message.contains("was preserved")));
+        assert!(again.backup_path.is_none());
+        assert!(!backup.exists());
+        assert_eq!(
+            SourcesRepo::get(&pool, id).await.unwrap().name,
+            "My edited test profile"
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM scrape_runs")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
             0
         );
         pool.close().await;

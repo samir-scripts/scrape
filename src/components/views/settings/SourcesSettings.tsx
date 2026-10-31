@@ -10,6 +10,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import type { WorkflowReplacementPreview } from "../../../bindings/WorkflowReplacementPreview";
 import type { WorkflowReplacementSelection } from "../../../bindings/WorkflowReplacementSelection";
 import type { WorkflowReplacementReport } from "../../../bindings/WorkflowReplacementReport";
+import type { WorkflowReplacementTarget } from "../../../bindings/WorkflowReplacementTarget";
 import { Modal } from "../../ui/Modal";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Source } from "../../../bindings/Source";
@@ -73,12 +74,15 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
   const workflowControlsRef = useRef<HTMLDivElement>(null);
   const [importedSpec, setImportedSpec] = useState<WorkflowSpec | null>(null);
   const [runningAll, setRunningAll] = useState(false);
-  const [replacementPreview, setReplacementPreview] = useState<WorkflowReplacementPreview | null>(null);
+  const [replacementReview, setReplacementReview] = useState<{ target: WorkflowReplacementTarget; preview: WorkflowReplacementPreview } | null>(null);
+  const replacementPreview = replacementReview?.preview ?? null;
+  const replacementTarget = replacementReview?.target ?? "test_workflow";
   const [replacementSelection, setReplacementSelection] = useState<Set<string>>(new Set());
   const [replacementBusy, setReplacementBusy] = useState(false);
   const [replacementError, setReplacementError] = useState("");
   const [replacementReport, setReplacementReport] = useState<WorkflowReplacementReport | null>(null);
   const [replacementReportOpen, setReplacementReportOpen] = useState(false);
+  const [replacementLoadingTarget, setReplacementLoadingTarget] = useState<WorkflowReplacementTarget | null>(null);
   // Per-job execution state
   const [runningSourceId, setRunningSourceId] = useState<string | null>(null);
   const [testingSourceId, setTestingSourceId] = useState<string | null>(null);
@@ -277,38 +281,42 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
     }
   };
 
-  const openReplacementPreview = async () => {
+  const openReplacementPreview = async (target: WorkflowReplacementTarget = "test_workflow") => {
     if (isRecordedMode() || replacementBusy) return;
     setReplacementBusy(true);
+    setReplacementLoadingTarget(target);
     setReplacementError("");
     try {
-      const preview = await api.previewTestWorkflowReplacement();
-      setReplacementPreview(preview);
+      const preview = await api.previewTestWorkflowReplacement(target);
+      setReplacementReview({ target, preview });
       setReplacementSelection(new Set(preview.candidates.filter(candidate => candidate.selected_by_default).map(candidate => candidate.id)));
     } catch (error) {
-      notifyError(`Could not prepare workflow replacement: ${String(error)}`);
+      const message = `Could not prepare workflow replacement: ${String(error)}. The last successfully reviewed target and selection are unchanged.`;
+      setReplacementError(message);
+      notifyError(message);
     } finally {
+      setReplacementLoadingTarget(null);
       setReplacementBusy(false);
     }
   };
 
   const closeReplacement = () => {
     if (replacementBusy) return;
-    setReplacementPreview(null);
+    setReplacementReview(null);
     setReplacementError("");
   };
 
   const confirmReplacement = async () => {
-    if (!replacementPreview || replacementBusy) return;
+    if (!replacementReview || replacementBusy) return;
     setReplacementBusy(true);
     setReplacementError("");
     try {
-      const selected: WorkflowReplacementSelection[] = replacementPreview.candidates
+      const selected: WorkflowReplacementSelection[] = replacementReview.preview.candidates
         .filter(candidate => replacementSelection.has(candidate.id))
         .map(({ id, fingerprint }) => ({ id, fingerprint }));
-      const report = await api.replaceTestWorkflows(selected);
+      const report = await api.replaceTestWorkflows(selected, replacementReview.target);
       fetchSources();
-      setReplacementPreview(null);
+      setReplacementReview(null);
       setReplacementReport(report);
       setReplacementReportOpen(true);
     } catch (error) {
@@ -384,6 +392,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
     return { all: scopedLogs.length, successes, errors };
   }, [scopedLogs]);
   const replacementNames: Record<string, string> = {
+    "software-engineering-it-us-48h": "Software Engineering & IT — US · Past 48 Hours · Test Workflow (test-workflows/software-engineering-it-us-48h.yaml)",
     "software-engineering-last-12-hours": "Software Engineering & Related — Past 12 Hours",
     "cherry-hill-fast-food-last-month": "Fast Food — Cherry Hill, NJ — Past 30 Days",
     "remote-usd-over-60000": "Remote — Advertised Annual USD Pay Over $60,000",
@@ -418,7 +427,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
             data-control-action="workflow.replace.request"
             variant="default"
             disabled={isRecordedMode() || replacementBusy}
-            onClick={() => void openReplacementPreview()}
+            onClick={() => void openReplacementPreview("test_workflow")}
             aria-label="Replace test workflows"
           >
             Replace test workflows
@@ -430,6 +439,8 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           <WorkflowImportButton disabled={isRecordedMode() || isAddModalOpen} onImport={spec => { setEditingSource(null); setImportedSpec(spec); setIsAddModalOpen(true); }} />
         </div>
       </div>
+      {!replacementPreview && replacementError && <p role="alert" className="text-[var(--color-danger)]">{replacementError}</p>}
+      {!replacementPreview && replacementLoadingTarget && <p role="status">Loading workflow replacement preview…</p>}
 
       {isRecordedMode() && <p className="text-sm text-[var(--color-ink-mute)]">Recorded examples cannot run, test or import workflows. Open the desktop application to use live sources.</p>}
       {/* Sub-Filter Segmented Row + Search */}
@@ -503,10 +514,10 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
               NO WORKFLOWS IN REGISTRY
             </span>
             <span className="text-xs text-[var(--color-ink-mute)]">
-              Add a careers URL or import workflow YAML to begin, or replace the test workflows with the three targeted searches.
+              Add a careers URL or import workflow YAML to begin, or review the disabled test workflow and optional starter workflows.
             </span>
           </div>
-          <Button data-control-action="workflow.replace.request" variant="inverted" disabled={isRecordedMode() || replacementBusy} onClick={() => void openReplacementPreview()}>
+          <Button data-control-action="workflow.replace.request" variant="inverted" disabled={isRecordedMode() || replacementBusy} onClick={() => void openReplacementPreview("test_workflow")}>
             REPLACE TEST WORKFLOWS
           </Button>
         </div>
@@ -909,21 +920,48 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
         isOpen={replacementPreview !== null}
         onClose={closeReplacement}
         title="Replace test workflows"
+        dismissDisabled={replacementBusy}
         width="max-w-2xl"
         footer={
           <div className="flex justify-end gap-2">
             <Button data-control-action="workflow.replace.cancel" variant="ghost" disabled={replacementBusy} onClick={closeReplacement}>Cancel</Button>
-            <Button data-control-action="workflow.replace.confirm" variant="danger" disabled={replacementBusy} onClick={() => void confirmReplacement()}>
-              <Icon name="trash" /> Replace selected workflows
+            <Button data-control-action="workflow.replace.confirm" variant="danger" disabled={replacementBusy} aria-busy={replacementBusy} onClick={() => void confirmReplacement()}>
+              <Icon name="trash" /> {replacementSelection.size > 0 ? "Replace selected workflows" : replacementTarget === "test_workflow" ? "Add missing test workflow" : "Add missing starter workflows"}
             </Button>
           </div>
         }
       >
-        {replacementPreview && <div className="space-y-4 text-sm">
-          <p>Selected workflows will be removed and replaced by these three searches:</p>
+        {replacementPreview && <div className="space-y-4 text-sm" aria-busy={replacementBusy}>
+          <div className="flex gap-2 border-b border-[var(--color-border)] pb-2 text-xs">
+            <Button
+              data-control-action="workflow.replace.mode.test"
+              size="sm"
+              variant={replacementTarget === "test_workflow" ? "inverted" : "default"}
+              aria-pressed={replacementTarget === "test_workflow"}
+              disabled={replacementBusy}
+              onClick={() => void openReplacementPreview("test_workflow")}
+            >
+              Test workflow (test-workflows/)
+            </Button>
+            <Button
+              data-control-action="workflow.replace.mode.starter"
+              size="sm"
+              variant={replacementTarget === "starter_workflows" ? "inverted" : "default"}
+              aria-pressed={replacementTarget === "starter_workflows"}
+              disabled={replacementBusy}
+              onClick={() => void openReplacementPreview("starter_workflows")}
+            >
+              Starter workflows
+            </Button>
+          </div>
+          {replacementTarget === "test_workflow" ? (
+            <p>Remove only the selected workflows, preserve all others, and add the canonical test workflow from <code>test-workflows/</code> if missing. It is loaded disabled; enable it and choose Run explicitly when ready:</p>
+          ) : (
+            <p>Remove only the selected workflows, preserve all others, and add any missing starter workflows from these three searches:</p>
+          )}
           <ul className="list-disc pl-5">{replacementPreview.target_template_ids.map(id => <li key={id}>{replacementNames[id] ?? id}</li>)}</ul>
           <p><strong>{replacementSelection.size}</strong> workflow(s) selected for removal; <strong>{replacementPreview.candidates.length - replacementSelection.size}</strong> preserved. Saved jobs and tracking are kept.</p>
-          <p className="text-[var(--color-ink-mute)]">Disabled sources, missing Adzuna credentials and provider limits may reduce coverage. Replacement does not scrape, enable sources, or grant script trust.</p>
+          <p className="text-[var(--color-ink-mute)]">Existing target workflows, including custom edits, are retained unless explicitly selected. Replacement never starts a crawl or grants script trust. Starter sources retain their shipped enabled settings; Adzuna stays disabled without credentials and requires explicit enablement.</p>
           {replacementError && <p role="alert" className="text-[var(--color-danger)]">{replacementError}</p>}
           <ul className="space-y-2">{replacementPreview.candidates.filter(candidate => candidate.selected_by_default).map(candidate =>
             <li key={candidate.id}><label className="flex gap-2"><input data-control-action="workflow.replace.selection" type="checkbox" checked={replacementSelection.has(candidate.id)} disabled={replacementBusy} onChange={event => setReplacementSelection(current => { const next = new Set(current); event.target.checked ? next.add(candidate.id) : next.delete(candidate.id); return next; })} /><span><strong>{candidate.name}</strong> — {candidate.reason} <span className="text-xs">(recognized)</span></span></label></li>
@@ -934,7 +972,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
               <li key={candidate.id}><label className="flex gap-2"><input data-control-action="workflow.replace.selection" type="checkbox" checked={replacementSelection.has(candidate.id)} disabled={replacementBusy} onChange={event => setReplacementSelection(current => { const next = new Set(current); event.target.checked ? next.add(candidate.id) : next.delete(candidate.id); return next; })} /><span><strong>{candidate.name}</strong> — {candidate.reason}</span></label></li>
             )}</ul>
           </details>
-          {replacementBusy && <p role="status">Replacing workflows…</p>}
+          {replacementBusy && <p role="status">{replacementLoadingTarget ? "Loading workflow replacement preview…" : "Replacing workflows…"}</p>}
         </div>}
       </Modal>
       <Modal isOpen={replacementReportOpen} onClose={() => setReplacementReportOpen(false)} title="Workflow replacement complete">
@@ -943,7 +981,7 @@ export function SourcesSettings({ settings }: SourcesSettingsProps = {}) {
           {replacementReport.backup_path && <p>Recovery backup: <code>{replacementReport.backup_path}</code></p>}
           {replacementReport.backup_path && <p className="text-xs text-[var(--color-ink-mute)]">For recovery, close all Scrape processes first. Preserve the database and any WAL/SHM sidecars together; verify this snapshot separately before replacing the active database. Never restore a full snapshot over newer user data. See the database recovery instructions.</p>}
           {replacementReport.setup_required.length > 0 && <p>Setup required: {replacementReport.setup_required.join(", ")}</p>}
-          <p>Saved jobs and tracking were kept.</p>
+          <p>Saved jobs and tracking were kept. No crawl was started. Any newly added test workflow is disabled; enable it and choose Run explicitly when ready.</p>
           <Button data-control-action="workflow.replace.report.close" onClick={() => setReplacementReportOpen(false)}>Close</Button>
         </div>}
       </Modal>
