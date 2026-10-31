@@ -194,7 +194,7 @@ await writeFile(join(directory, "smoke.js"), `
     assert(testProfile && !testProfile.enabled && testProfile.config.__workflow_spec.metadata.enabled === false, "Canonical test profile was not saved disabled");
     assert(testProfile.config.__workflow_spec.max_jobs_per_run === 20, "Canonical test quota differs");
     assert(testProfile.config.__workflow_spec.filters.matching.posting_date.preset === "past_48h", "Canonical test date filter differs");
-    assert(testProfile.config.__workflow_spec.sources.find(source => source.extractor.kind === "search" && source.extractor.url === "adzuna")?.enabled === false, "Adzuna was enabled without explicit opt-in");
+    assert(testProfile.config.__workflow_spec.sources.length === 2 && testProfile.config.__workflow_spec.sources.every(source => source.extractor.kind === "web_discovery"), "Test profile must use independent web discovery, not board feeds");
     assert(afterTestProfiles.length === beforeTestProfiles.length + 1, "Test-profile replacement removed or duplicated workflows");
     for (const original of beforeTestProfiles) {
       assert(JSON.stringify(afterTestProfiles.find(source => source.id === original.id)) === JSON.stringify(original), "Previously saved workflow changed: " + original.id);

@@ -14,6 +14,7 @@ The `scripts/` directory contains Node.js automation scripts used during develop
 | [`prepare-role-title-seed.py`](prepare-role-title-seed.py) | Python 3 standard library | Normalizes official O*NET 31.0 Occupation Data, Sample of Reported Titles, and Job Titles CSVs into the one bundled TSV; `--check` validates deterministic output. Tests: `python3 -m unittest scripts.test_role_title_seed`. |
 | [`test-app-startup.mjs`](test-app-startup.mjs) | Node.js (ESM) | Automated smoke test for CI and local verification. Boots the Vite development server, performs an HTTP GET request against `http://localhost:1420/index.html`, verifies module bundling and HTML transformation without runtime panics, and cleanly terminates the process. |
 | [`native-web-scraping.mjs`](native-web-scraping.mjs) | Node.js + Tauri | Uses an isolated real host/sidecar, temporary SQLite, public-HTML fixture and authenticated HTTP proxy to prove bounded crawling, robots checks and persistence. |
+| [`native-independent-live.mjs`](native-independent-live.mjs) | Node.js + Tauri | Opt-in actual public-web crawl with the 48-hour test workflow, real packaged sidecar and isolated temporary SQLite; reports artifacts and does not use the user's database. |
 
 ---
 
@@ -53,6 +54,13 @@ out-of-origin requests; no live provider or user database is involved.
 It also imports the standalone crawler and Muse discovery YAMLs through native
 Preview → Save → Run, verifies unfiltered and category-scoped fixture requests,
 and checks a separate one-source 1,000-candidate accounting fixture.
+The fixture journey also follows a fictional non-job directory across origins
+to an independent employer detail and verifies persistence and discovery counters.
+For an actual network run, explicitly execute `node scripts/native-independent-live.mjs`.
+Pass `--seed https://example.com/careers` to test a different public starting
+point with the same US, 48-hour and quota rules. The script records its temporary
+profile path and may find no qualifying jobs; it does not establish exhaustive
+coverage.
 
 `test-native-startup.mjs` runs the actual configured Tauri development pipeline
 with isolated ports and temporary database fixtures. It verifies native readiness,

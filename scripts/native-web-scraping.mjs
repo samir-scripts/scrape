@@ -40,6 +40,41 @@ const site = createServer((request, response) => {
     response.end("User-agent: *\nAllow: /\n");
     return;
   }
+  if (path === "/directory.example/companies") {
+    response.writeHead(200, { "content-type": "text/html" });
+    response.end('<a href="/companies/independent">Independent company profile</a>');
+    return;
+  }
+  if (path === "/directory.example/companies/independent") {
+    response.writeHead(200, { "content-type": "text/html" });
+    response.end('<a href="https://independent.example/">Official website</a>');
+    return;
+  }
+  if (path === "/independent.example/") {
+    response.writeHead(200, { "content-type": "text/html" });
+    response.end('<a href="/careers">Careers</a>');
+    return;
+  }
+  if (path === "/independent.example/careers") {
+    response.writeHead(200, { "content-type": "text/html" });
+    response.end('<a href="/jobs/native-independent">Software Engineer</a>');
+    return;
+  }
+  if (path === "/independent.example/jobs/native-independent") {
+    response.writeHead(200, { "content-type": "text/html" });
+    response.end(`<script type="application/ld+json">${JSON.stringify({
+      "@context": "https://schema.org", "@type": "JobPosting", identifier: "native-independent",
+      title: "Software Engineer", hiringOrganization: { name: "Independent Fixture Employer" },
+      datePosted: recentDate, jobLocation: { address: { addressCountry: "US", addressRegion: "CA" } },
+      description: "Build distributed software systems for this fictional employer."
+    })}</script>`);
+    return;
+  }
+  if (path.endsWith("/sitemap.xml")) {
+    response.writeHead(200, { "content-type": "application/xml" });
+    response.end('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
+    return;
+  }
   if (path === "/crawler.yaml") {
     response.writeHead(200, { "content-type": "text/yaml; charset=utf-8" });
     response.end(rawCrawlerYaml);
@@ -227,6 +262,18 @@ const spec = {
   filters: { role_types: [], include_keywords: [], exclude_keywords: [], locations: [] },
 };
 
+const independentSpec = {
+  version: 11, max_jobs_per_run: 20,
+  metadata: { name: "Independent directory fixture", enabled: true },
+  sources: [{ id: "independent-directory", label: "Independent directory", enabled: true,
+    extractor: { kind: "web_discovery", url: "https://directory.example/companies",
+      source_config: { max_domains: 4, max_depth: 5, max_pages: 30 } } }],
+  schedule: { cadence: "manual", time: "09:00", timezone: "UTC", run_on_startup: false },
+  filters: { role_types: [], include_keywords: [], exclude_keywords: [], locations: [],
+    matching: { target_roles: ["Software Engineer"], countries: ["US"], location_include_unknown: false,
+      posting_date: { preset: "past_48h", timezone: "UTC", include_unknown: false } } },
+};
+
 await writeFile(join(directory, "smoke.js"), `
 (async () => {
   const invoke = window.__TAURI_INTERNALS__.invoke;
@@ -296,7 +343,7 @@ await writeFile(join(directory, "smoke.js"), `
     (await wait(() => button("Apply YAML to form"), "Apply YAML to form button")).click();
     await pause(100);
     for (const s of ["Criteria", "Sources", "Schedule", "Review"]) {
-      (await wait(() => [...document.querySelectorAll("button")].find(b => b.textContent.includes("Continue to " + s)), "Continue to " + s)).click();
+      (await wait(() => [...document.querySelectorAll("button")].find(b => b.textContent.includes("Continue to " + s) && !b.disabled), "enabled Continue to " + s)).click();
       await pause(50);
     }
     (await wait(() => button("Preview matches"), "Preview matches button")).click();
@@ -333,7 +380,7 @@ await writeFile(join(directory, "smoke.js"), `
     (await wait(() => button("Apply YAML to form"), "Apply YAML to form button 2")).click();
     await pause(100);
     for (const s of ["Criteria", "Sources", "Schedule", "Review"]) {
-      (await wait(() => [...document.querySelectorAll("button")].find(b => b.textContent.includes("Continue to " + s)), "Continue to " + s + " 2")).click();
+      (await wait(() => [...document.querySelectorAll("button")].find(b => b.textContent.includes("Continue to " + s) && !b.disabled), "enabled Continue to " + s + " 2")).click();
       await pause(50);
     }
     (await wait(() => button("Preview matches"), "Preview matches button 2")).click();
@@ -355,6 +402,14 @@ await writeFile(join(directory, "smoke.js"), `
     consoleButton.click();
     await pause(1000);
     await mark("Clicked the native Terminal console button");
+    const independent = await invoke("save_workflow", { spec: ${JSON.stringify(independentSpec)}, id: null });
+    const beforeIndependent = await invoke("list_jobs", { filter: {} });
+    const independentRun = await invoke("run_source_now", { id: independent.id });
+    const afterIndependent = await invoke("list_jobs", { filter: {} });
+    assert(independentRun.counts.inserted === 1, "Independent crawl did not persist one matching fixture: " + JSON.stringify(independentRun));
+    assert(afterIndependent.total === beforeIndependent.total + 1 && afterIndependent.items.some(j => j.company === "Independent Fixture Employer" && j.url === "https://independent.example/jobs/native-independent"), "Independent employer detail missing from SQLite: " + JSON.stringify(afterIndependent));
+    assert(independentRun.counts.sources.some(s => s.discovery_pages > 0 && s.discovery_origins >= 2), "Independent discovery diagnostics missing: " + JSON.stringify(independentRun));
+    await mark("Discovered an independent employer through a directory and persisted its dated US role through native IPC");
     await fetch(${JSON.stringify(origin)} + "/enable-bulk");
     const bulk = await invoke("save_workflow", { spec: ${JSON.stringify(bulkSpec)}, id: null });
     const bulkRun = await invoke("run_source_now", { id: bulk.id });
@@ -384,6 +439,9 @@ try {
     if (!pages.some(page => page.path === "/www.themuse.com/api/public/jobs" && new URLSearchParams(page.query).get("category") === category)) {
       throw new Error(`Missing Muse category request for ${category}; artifacts: ${directory}`);
     }
+  }
+  for (const path of ["/directory.example/companies", "/directory.example/companies/independent", "/independent.example/", "/independent.example/careers", "/independent.example/jobs/native-independent"]) {
+    if (!pages.some(page => page.path === path)) throw new Error(`Missing independent discovery route ${path}; artifacts: ${directory}`);
   }
   if (!pages.some(page => page.path === "/www.themuse.com/api/public/jobs" && !new URLSearchParams(page.query).has("category"))) throw new Error(`Missing unfiltered Muse request; artifacts: ${directory}`);
   console.log(`Native web scraping smoke passed: ${JSON.stringify({ result, artifacts: directory })}`);
