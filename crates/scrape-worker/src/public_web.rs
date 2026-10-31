@@ -452,8 +452,8 @@ async fn bounded_body(
 ) -> Result<Vec<u8>, PublicWebError> {
     let encoded_gzip = if let Some(encoding) = response.headers().get(header::CONTENT_ENCODING) {
         let encoding = encoding.to_str().map_err(|_| PublicWebError::ContentType)?;
-        if !encoding.eq_ignore_ascii_case("identity")
-            && !(allow_gzip && encoding.eq_ignore_ascii_case("gzip"))
+        if !(encoding.eq_ignore_ascii_case("identity")
+            || allow_gzip && encoding.eq_ignore_ascii_case("gzip"))
         {
             return Err(PublicWebError::ContentType);
         }
