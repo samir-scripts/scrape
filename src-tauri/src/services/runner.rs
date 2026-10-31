@@ -16,6 +16,89 @@ use tokio::time::{timeout_at, Instant};
 
 use scrape_core::protocol::{CandidateDisposition, CandidateEvaluation, SourceScanStats};
 
+/// Explicitly isolated debug smoke only; never a production stderr forwarding path.
+#[cfg(debug_assertions)]
+struct NativeDiscoveryMirror {
+    remaining: usize,
+    truncated: bool,
+}
+
+#[cfg(debug_assertions)]
+impl NativeDiscoveryMirror {
+    fn for_run() -> Option<Self> {
+        (std::env::var("SCRAPE_NATIVE_DISCOVERY_TRACE").as_deref() == Ok("1")
+            && super::native_smoke::directory().is_some())
+        .then_some(Self {
+            remaining: 256 * 1024,
+            truncated: false,
+        })
+    }
+
+    fn forward(&mut self, run_id: &str, text: &str) {
+        use std::io::Write;
+        static URLS: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+            regex::Regex::new(r#"(?i)[a-z][a-z0-9+.-]*://[^\s<>"\x00-\x1f\x7f-\x9f]+"#)
+                .expect("constant native trace URL pattern")
+        });
+        if self.truncated {
+            return;
+        }
+        let redacted = URLS.replace_all(text, |capture: &regex::Captures<'_>| {
+            let Ok(mut url) = url::Url::parse(&capture[0]) else {
+                return "[invalid URL]".to_owned();
+            };
+            let _ = url.set_username("");
+            let _ = url.set_password(None);
+            let pairs: Vec<(String, String)> = url
+                .query_pairs()
+                .map(|(key, value)| {
+                    let lower = key.to_ascii_lowercase();
+                    let secret = [
+                        "token",
+                        "secret",
+                        "password",
+                        "credential",
+                        "auth",
+                        "key",
+                        "signature",
+                        "session",
+                        "sig",
+                        "code",
+                    ]
+                    .iter()
+                    .any(|part| lower.contains(part));
+                    (
+                        key.into_owned(),
+                        if secret {
+                            "[REDACTED]".to_owned()
+                        } else {
+                            value.into_owned()
+                        },
+                    )
+                })
+                .collect();
+            if url.query().is_some() {
+                url.query_pairs_mut().clear().extend_pairs(pairs);
+            }
+            url.set_fragment(None);
+            url.to_string()
+        });
+        let marker = format!("[native-discovery run={run_id}] TRACE_TRUNCATED\n");
+        let mut stderr = std::io::stderr().lock();
+        for line in redacted.lines() {
+            let rendered = format!("[native-discovery run={run_id}] {line}\n");
+            if rendered.len().saturating_add(marker.len()) > self.remaining {
+                let _ = stderr.write_all(marker.as_bytes());
+                self.truncated = true;
+                self.remaining = 0;
+                break;
+            }
+            let _ = stderr.write_all(rendered.as_bytes());
+            self.remaining -= rendered.len();
+        }
+    }
+}
+
 #[derive(Default)]
 struct CandidateLedger {
     counts: HashMap<String, [u64; 6]>,
@@ -920,6 +1003,8 @@ impl ScrapeRunner {
 
         let mut termination_code: Option<i32> = None;
         let mut sidecar_err: Option<String> = None;
+        #[cfg(debug_assertions)]
+        let mut native_discovery_mirror = NativeDiscoveryMirror::for_run();
 
         let mut saw_done = false;
         let base_seconds = if config.sources.len() == 1 {
@@ -1410,6 +1495,10 @@ impl ScrapeRunner {
                 }
                 CommandEvent::Stderr(bytes) => {
                     let text = String::from_utf8_lossy(&bytes);
+                    #[cfg(debug_assertions)]
+                    if let Some(mirror) = native_discovery_mirror.as_mut() {
+                        mirror.forward(run_id, &text);
+                    }
                     let line = text.trim();
                     if !line.is_empty() {
                         tracing::info!("[sidecar] {}", line);

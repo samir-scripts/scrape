@@ -54,14 +54,50 @@ out-of-origin requests; no live provider or user database is involved.
 It also imports the standalone crawler and Muse discovery YAMLs through native
 Preview → Save → Run, verifies unfiltered and category-scoped fixture requests,
 and checks a separate one-source 1,000-candidate accounting fixture.
-The fixture journey also follows a fictional non-job directory across origins
-to an independent employer detail and verifies persistence and discovery counters.
-For an actual network run, explicitly execute `node scripts/native-independent-live.mjs`.
-Pass `--seed https://example.com/careers` to test a different public starting
-point with the same US, 48-hour and quota rules, or `--baseline` to run the
-previous feeds/boards with those same rules in a separate temporary profile.
-The script records run status and its temporary profile path; a cap or partial
-source prevents a complete comparison.
+The fixture journey follows scoped North Carolina directory/profile markup across
+origins to a dated US direct-email employer detail. Before native completion it
+opens the persisted job's Discovered inspector, records its exact ID, visible
+title/company/date and source URL, then correlates that ID and run with readonly
+temporary SQLite observations. Captured run-specific worker stderr must include
+the complete fixture chain without truncation; `independent-native-evidence.json`
+retains these checks.
+
+For an actual network diagnostic, execute `node scripts/native-independent-live.mjs`.
+Pass `--seed https://example.com/careers` to test another starting point, or
+`--baseline` for the previous feeds/boards with the same US/48-hour/quota rules.
+These diagnostic modes do not assert non-ATS acceptance.
+
+`node scripts/native-independent-live.mjs --verify-non-ats` is mutually exclusive
+with those modes and loads only the canonical default profile. It uses real
+network/sidecar/native UI and a fresh temporary database. Before the host exits it
+inspects persisted candidates in Discovered; afterward it checks exact job/run
+observation coverage, source ownership, the shared 20-insert bound, integrity and
+foreign keys using `sqlite3 -readonly` (or a retained Python standard-library
+`mode=ro` verifier if the binary is absent). It never falls back to a user database.
+The canonical YAML/hash, executed spec, native result, SQLite, observations,
+startup log, run-scoped `discovery-trace.log` and `candidate-report.json` remain in
+the printed artifact directory. Trace environment settings are restored after
+the launcher returns. The debug-only smoke stderr mirror caps each run at 256 KiB
+with one `TRACE_TRUNCATED` marker and strips URL credentials/secret query values.
+
+Exit 1 means execution/assertion failure; exit 2 means acceptance remains unproven
+(including zero inspectable candidates, known ATS-only results, missing dates or
+missing/truncated trace); exit 0 means only candidate collection, **not verified
+acceptance**. A bounded partial run is reported separately, never as global recall.
+Known ATS exclusion is a rejection aid, not evidence of employer ownership.
+Independently reread the final posting and necessary ordered chain pages, inspect
+the public application route without submitting, and retain captured evidence.
+Write a separate `acceptance-review.json` in the artifact directory containing
+run ID, canonical spec hash, reviewed job ID, ordered chain URLs/evidence paths,
+application route, literal role/geography/publication evidence, publication
+interval/cutoff, and `verified` or `unproven` verdict with reasons. Verify a new
+saved row reached through a generic default directory, employer-controlled non-ATS
+detail and direct email/employer form without observed ATS handoff, explicit US
+SWE/IT duties, no closure/expiry, and original publication wholly inside 48 hours.
+Date-only live proof needs publisher timezone evidence or containment of every
+possible date interval across UTC−12 through UTC+14; configured workflow timezone
+is not publisher evidence. A seed, replay, ATS handoff or successful empty run
+cannot establish this proof.
 
 `test-native-startup.mjs` runs the actual configured Tauri development pipeline
 with isolated ports and temporary database fixtures. It verifies native readiness,

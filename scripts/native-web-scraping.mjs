@@ -1,4 +1,5 @@
 import { runNativeDev } from "./tauri-dev-test.mjs";
+import { inspectCandidates, verifyTemporaryDatabase } from "./native-independent-live.mjs";
 import { createServer } from "node:http";
 import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
@@ -40,14 +41,14 @@ const site = createServer((request, response) => {
     response.end("User-agent: *\nAllow: /\n");
     return;
   }
-  if (path === "/directory.example/companies") {
+  if (path === "/ncnonprofits.org/members/member-directory") {
     response.writeHead(200, { "content-type": "text/html" });
-    response.end('<a href="/companies/independent">Independent company profile</a>');
+    response.end('<a href="/jobs">Operator job board</a><a href="/member-benefits">Member benefits</a><div class="member__title--list"><a href="/members/independent">Independent company profile</a></div>');
     return;
   }
-  if (path === "/directory.example/companies/independent") {
+  if (path === "/ncnonprofits.org/members/independent") {
     response.writeHead(200, { "content-type": "text/html" });
-    response.end('<a href="https://independent.example/">Official website</a>');
+    response.end('<div class="member__member-website"><a href="https://independent.example/">https://independent.example/</a></div><a href="/donate">Donate</a>');
     return;
   }
   if (path === "/independent.example/") {
@@ -66,8 +67,8 @@ const site = createServer((request, response) => {
       "@context": "https://schema.org", "@type": "JobPosting", identifier: "native-independent",
       title: "Software Engineer", hiringOrganization: { name: "Independent Fixture Employer" },
       datePosted: recentDate, jobLocation: { address: { addressCountry: "US", addressRegion: "CA" } },
-      description: "Build distributed software systems for this fictional employer."
-    })}</script>`);
+      description: "Build distributed software systems in California, United States for this fictional employer. Apply directly by email to careers@independent.example."
+    })}</script><main><h1>Software Engineer</h1><p>California, United States. Build distributed software systems.</p><p>Posted: ${recentDate}</p><a href="mailto:careers@independent.example">Apply by email</a></main>`);
     return;
   }
   if (path.endsWith("/sitemap.xml")) {
@@ -266,7 +267,7 @@ const independentSpec = {
   version: 11, max_jobs_per_run: 20,
   metadata: { name: "Independent directory fixture", enabled: true },
   sources: [{ id: "independent-directory", label: "Independent directory", enabled: true,
-    extractor: { kind: "web_discovery", url: "https://directory.example/companies",
+    extractor: { kind: "web_discovery", url: "https://ncnonprofits.org/members/member-directory",
       source_config: { max_domains: 4, max_depth: 5, max_pages: 30 } } }],
   schedule: { cadence: "manual", time: "09:00", timezone: "UTC", run_on_startup: false },
   filters: { role_types: [], include_keywords: [], exclude_keywords: [], locations: [],
@@ -278,6 +279,7 @@ await writeFile(join(directory, "smoke.js"), `
 (async () => {
   const invoke = window.__TAURI_INTERNALS__.invoke;
   const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  ${inspectCandidates}
   const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
   const steps = [];
   const mark = async message => {
@@ -409,6 +411,10 @@ await writeFile(join(directory, "smoke.js"), `
     assert(independentRun.counts.inserted === 1, "Independent crawl did not persist one matching fixture: " + JSON.stringify(independentRun));
     assert(afterIndependent.total === beforeIndependent.total + 1 && afterIndependent.items.some(j => j.company === "Independent Fixture Employer" && j.url === "https://independent.example/jobs/native-independent"), "Independent employer detail missing from SQLite: " + JSON.stringify(afterIndependent));
     assert(independentRun.counts.sources.some(s => s.discovery_pages > 0 && s.discovery_origins >= 2), "Independent discovery diagnostics missing: " + JSON.stringify(independentRun));
+    const independentJobs = afterIndependent.items.filter(job => job.url === "https://independent.example/jobs/native-independent");
+    assert(independentJobs.length === 1, "Expected one exact independent fixture identity");
+    const inspected = await inspectCandidates(independentJobs);
+    assert(inspected.length === 1 && inspected[0].id === independentJobs[0].id && inspected[0].posted, "Independent inspector identity/date not recorded");
     await mark("Discovered an independent employer through a directory and persisted its dated US role through native IPC");
     await fetch(${JSON.stringify(origin)} + "/enable-bulk");
     const bulk = await invoke("save_workflow", { spec: ${JSON.stringify(bulkSpec)}, id: null });
@@ -420,7 +426,7 @@ await writeFile(join(directory, "smoke.js"), `
     assert(allRuns.length >= 2, "Expected persisted scrape runs for both explicit executions");
 
     await mark("Verified native Preview -> Save -> Run for both company crawler and heuristic discovery workflows in isolated SQLite");
-    await invoke("plugin:event|emit", { event: "native-smoke-result", payload: { ok: true, steps } });
+    await invoke("plugin:event|emit", { event: "native-smoke-result", payload: { ok: true, steps, run: independentRun, source: independent, inspected, runId: independentRun.id, inspectedJobIds: inspected.map(job => job.id) } });
   } catch (error) {
     await invoke("plugin:event|emit", { event: "native-smoke-result", payload: { ok: false, steps, error: error?.message || String(error) } });
   }
@@ -428,20 +434,41 @@ await writeFile(join(directory, "smoke.js"), `
 `);
 
 try {
-  const { code, signal, output } = await runNativeDev(directory);
+  const previous = { RUST_LOG: process.env.RUST_LOG, SCRAPE_NATIVE_DISCOVERY_TRACE: process.env.SCRAPE_NATIVE_DISCOVERY_TRACE };
+  let execution;
+  try {
+    process.env.RUST_LOG = "scrape_worker::adapters::web_discovery=debug";
+    process.env.SCRAPE_NATIVE_DISCOVERY_TRACE = "1";
+    execution = await runNativeDev(directory);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
+  const { code, signal, output } = execution;
   if (code !== 0 || signal) throw new Error(`Native web crawl/proxy smoke failed (${code}/${signal}); isolated artifacts: ${directory}\n${output}`);
   const result = JSON.parse(await readFile(join(directory, "result.json"), "utf8"));
   const log = await readFile(join(directory, "scrape.log"), "utf8");
   const bulkCards = log.split("+-- CANDIDATE ").slice(1).filter(card => card.includes("| Company: Bulk Fixture\n"));
   if (bulkCards.length !== 1000 || bulkCards.filter(card => card.startsWith("1 | INSERTED --")).length !== 1 || !bulkCards.some(card => card.startsWith("1000 | REJECTED --"))) throw new Error(`Bulk fixture did not produce all 1,000 ordered outcome cards: ${bulkCards.length}; artifacts: ${directory}`);
   if (!result.ok) throw new Error(`Native web crawl/proxy smoke failed: ${JSON.stringify(result)}; isolated artifacts: ${directory}`);
+  const sqlite = await verifyTemporaryDatabase(directory, result);
+  const trace = output.split("\n").filter(line => line.includes(`[native-discovery run=${result.run.id}]`));
+  if (!trace.length || trace.some(line => line.includes("TRACE_TRUNCATED"))) throw new Error(`Missing or truncated native discovery chain; artifacts: ${directory}`);
+  for (const url of ["https://ncnonprofits.org/members/member-directory", "https://ncnonprofits.org/members/independent", "https://independent.example/", "https://independent.example/careers", "https://independent.example/jobs/native-independent"]) {
+    if (!trace.some(line => line.includes(url))) throw new Error(`Missing captured chain URL ${url}; artifacts: ${directory}`);
+  }
+  const observation = sqlite.rows.find(row => row.id === result.inspectedJobIds[0]);
+  if (!observation || !JSON.stringify(observation.provenance).includes(recentDate)) throw new Error("Independent publication provenance did not survive ingestion");
+  await writeFile(join(directory, "independent-native-evidence.json"), JSON.stringify({ runId: result.run.id, inspected: result.inspected, sqlite, trace }, null, 2));
   for (const category of ["Computer and IT", "Data and Analytics", "Data Science"]) {
     if (!pages.some(page => page.path === "/www.themuse.com/api/public/jobs" && new URLSearchParams(page.query).get("category") === category)) {
       throw new Error(`Missing Muse category request for ${category}; artifacts: ${directory}`);
     }
   }
-  for (const path of ["/directory.example/companies", "/directory.example/companies/independent", "/independent.example/", "/independent.example/careers", "/independent.example/jobs/native-independent"]) {
+  for (const path of ["/ncnonprofits.org/members/member-directory", "/ncnonprofits.org/members/independent", "/independent.example/", "/independent.example/careers", "/independent.example/jobs/native-independent"]) {
     if (!pages.some(page => page.path === path)) throw new Error(`Missing independent discovery route ${path}; artifacts: ${directory}`);
+  }
+  for (const path of ["/ncnonprofits.org/jobs", "/ncnonprofits.org/member-benefits", "/ncnonprofits.org/donate"]) {
+    if (pages.some(page => page.path === path)) throw new Error(`Directory leaked operator navigation ${path}; artifacts: ${directory}`);
   }
   if (!pages.some(page => page.path === "/www.themuse.com/api/public/jobs" && !new URLSearchParams(page.query).has("category"))) throw new Error(`Missing unfiltered Muse request; artifacts: ${directory}`);
   console.log(`Native web scraping smoke passed: ${JSON.stringify({ result, artifacts: directory })}`);
