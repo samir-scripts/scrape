@@ -280,8 +280,7 @@ impl PublicWeb {
             if state.robots.is_none() {
                 let result = match self.fetch_robots(&url, &mut state).await {
                     Err(
-                        error
-                        @ (PublicWebError::BudgetExhausted
+                        error @ (PublicWebError::BudgetExhausted
                         | PublicWebError::GlobalBudgetExhausted),
                     ) => return Err(error),
                     result => result.map_err(|error| error.to_string()),
@@ -587,31 +586,17 @@ mod tests {
 
     fn robots_redirect_response(path: &str) -> Option<(&'static str, &'static str, Vec<u8>)> {
         let location = match path {
-            "/relative.example/robots.txt" => {
-                "Location: policies/robots?initial=1#ignored\r\n"
-            }
-            "/relative.example/policies/robots?initial=1" => {
-                "Location: ?final=1#ignored\r\n"
-            }
+            "/relative.example/robots.txt" => "Location: policies/robots?initial=1#ignored\r\n",
+            "/relative.example/policies/robots?initial=1" => "Location: ?final=1#ignored\r\n",
             "/normalized.example/robots.txt" => {
                 "Location: https://NORMALIZED.example:443/policy#ignored\r\n"
             }
             "/deny.example/robots.txt" => "Location: /policy\r\n",
-            "/six.example/robots.txt" | "/seven.example/robots.txt" => {
-                "Location: /policy/1\r\n"
-            }
-            "/six.example/policy/1" | "/seven.example/policy/1" => {
-                "Location: /policy/2\r\n"
-            }
-            "/six.example/policy/2" | "/seven.example/policy/2" => {
-                "Location: /policy/3\r\n"
-            }
-            "/six.example/policy/3" | "/seven.example/policy/3" => {
-                "Location: /policy/4\r\n"
-            }
-            "/six.example/policy/4" | "/seven.example/policy/4" => {
-                "Location: /policy/5\r\n"
-            }
+            "/six.example/robots.txt" | "/seven.example/robots.txt" => "Location: /policy/1\r\n",
+            "/six.example/policy/1" | "/seven.example/policy/1" => "Location: /policy/2\r\n",
+            "/six.example/policy/2" | "/seven.example/policy/2" => "Location: /policy/3\r\n",
+            "/six.example/policy/3" | "/seven.example/policy/3" => "Location: /policy/4\r\n",
+            "/six.example/policy/4" | "/seven.example/policy/4" => "Location: /policy/5\r\n",
             "/seven.example/policy/5" => "Location: /policy/6\r\n",
             "/self-loop.example/robots.txt" => "Location: /robots.txt#ignored\r\n",
             "/loop.example/robots.txt" => "Location: /policy\r\n",
@@ -670,7 +655,9 @@ mod tests {
                     let text = String::from_utf8_lossy(&request[..n]);
                     let path = text.split_whitespace().nth(1).unwrap_or("").to_owned();
                     recorded.lock().await.push(path.clone());
-                    let (status, headers, body) = if let Some(response) = robots_redirect_response(&path) {
+                    let (status, headers, body) = if let Some(response) =
+                        robots_redirect_response(&path)
+                    {
                         response
                     } else if path.ends_with("/robots.txt") {
                         if path.starts_with("/missing.example/") {
@@ -919,18 +906,27 @@ mod tests {
                 &["/loop.example/robots.txt", "/loop.example/policy"],
             ),
             ("https://cross.example/job", &["/cross.example/robots.txt"]),
-            ("http://upgrade.example/job", &["/upgrade.example/robots.txt"]),
+            (
+                "http://upgrade.example/job",
+                &["/upgrade.example/robots.txt"],
+            ),
             (
                 "https://downgrade.example/job",
                 &["/downgrade.example/robots.txt"],
             ),
             ("https://port.example/job", &["/port.example/robots.txt"]),
-            ("https://private.example/job", &["/private.example/robots.txt"]),
+            (
+                "https://private.example/job",
+                &["/private.example/robots.txt"],
+            ),
             (
                 "https://credentials.example/job",
                 &["/credentials.example/robots.txt"],
             ),
-            ("https://scheme.example/job", &["/scheme.example/robots.txt"]),
+            (
+                "https://scheme.example/job",
+                &["/scheme.example/robots.txt"],
+            ),
             (
                 "https://malformed.example/job",
                 &["/malformed.example/robots.txt"],
@@ -939,7 +935,10 @@ mod tests {
                 "https://missing-location.example/job",
                 &["/missing-location.example/robots.txt"],
             ),
-            ("https://missing.example/job", &["/missing.example/robots.txt"]),
+            (
+                "https://missing.example/job",
+                &["/missing.example/robots.txt"],
+            ),
         ];
         let mut expected_paths = Vec::new();
         for &(input, paths) in cases {
