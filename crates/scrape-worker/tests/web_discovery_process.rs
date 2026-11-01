@@ -252,6 +252,22 @@ fn response(path: &str) -> (&'static str, &'static str, &'static str, String) {
     if let Some(html) = publication_response(path) {
         return ("200 OK", "text/html", "", html);
     }
+    if path == "/careers.gap-employer.example/robots.txt" {
+        return (
+            "200 OK",
+            "text/plain",
+            "",
+            "User-agent: *\nSitemap: https://careers.gap-employer.example/sitemap.xml\nSitemap: https://careers.gap-employer.example/blog-sitemap.xml\n".into(),
+        );
+    }
+    if path == "/careers.gap-employer.example/sitemap.xml" {
+        return (
+            "200 OK",
+            "application/xml",
+            "",
+            "<urlset><url><loc>https://careers.gap-employer.example/job/123/Software-Engineer</loc></url><url><loc>https://careers.gap-employer.example/job/456/Closed-Role</loc></url></urlset>".into(),
+        );
+    }
     if path.ends_with("/robots.txt") {
         return (
             "200 OK",
@@ -272,6 +288,23 @@ fn response(path: &str) -> (&'static str, &'static str, &'static str, String) {
         );
     }
     let html = match path {
+        "/en.wikipedia.org/wiki/Category:Companies" => r#"<div id="mw-pages"><div class="mw-category-group"><a href="/wiki/Gap_Inc">Gap Inc</a></div></div>"#.into(),
+        "/en.wikipedia.org/wiki/Gap_Inc" => r#"<table class="infobox"><tr><th class="url">Website</th><td><a class="official-website" href="http://gap-employer.example/">gap-employer.example</a></td></tr></table>"#.into(),
+        "/gap-employer.example/" => r#"<a href="https://careers.gap-employer.example/">Careers</a><a href="/about">About</a>"#.into(),
+        "/careers.gap-employer.example/" => r#"<a href="/search?_gl=1&utm_source=careers">Search 1</a><a href="/search?hsLang=en">Search 2</a><a href="/job/123/Software-Engineer">Software Engineer</a><a href="/job/456/Closed-Role">Closed Role</a>"#.into(),
+        "/careers.gap-employer.example/search" => r#"<a href="/job/123/Software-Engineer">Software Engineer</a>"#.into(),
+        "/careers.gap-employer.example/job/123/Software-Engineer" => {
+            format!(
+                r#"{}<div class="expire-job-view" data-ph-at-id="job-expire-block">We're sorry, this job is no longer accepting applications.</div>"#,
+                posting("Software Engineer", "Gap Employer", "2026-10-31T08:00:00Z", "US")
+            )
+        }
+        "/careers.gap-employer.example/job/456/Closed-Role" => {
+            format!(
+                r#"{}<main><h1>Closed Role</h1><p>This position is closed</p></main>"#,
+                posting("Closed Role", "Gap Employer", "2026-10-31T08:00:00Z", "US")
+            )
+        }
         "/oversized.example/careers" => r#"<a href="/jobs/invalid">Software Engineer invalid</a><a href="/jobs/valid">Software Engineer valid</a>"#.into(),
         "/oversized.example/jobs/invalid" => {
             let locations: Vec<_> = (0..65).map(|i| json!({"address":{"addressLocality":format!("City {i}"),"addressRegion":"CA","addressCountry":"US"}})).collect();
@@ -930,5 +963,83 @@ fn primary_seed_precedes_same_origin_alternates_with_one_page_budget() {
     assert!(
         !paths.iter().any(|path| path == "/seed.example/z"),
         "{paths:?}"
+    );
+}
+
+#[test]
+fn default_crawl_discovers_qualifying_posting_across_real_world_gaps() {
+    let fixture = Fixture::new();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_scrape-worker"))
+        .args(["--stdin", "--replay-origin", &fixture.origin])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let input = json!({
+        "version": PROTOCOL_VERSION,
+        "sources": [{
+            "id": "wiki-dir",
+            "name": "Wikipedia Companies",
+            "kind": "web_discovery",
+            "identifier": "https://en.wikipedia.org/wiki/Category:Companies",
+            "config": {
+                "max_domains": 10,
+                "max_depth": 5,
+                "max_pages": 20
+            }
+        }],
+        "run_started_at": "2026-10-31T12:00:00Z",
+        "filters": {
+            "matching": {
+                "target_roles": ["Software Engineer"]
+            }
+        },
+        "limits": {
+            "per_host_delay_ms": 0,
+            "request_timeout_s": 5
+        }
+    });
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(&serde_json::to_vec(&input).unwrap())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let events: Vec<WorkerEvent> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).expect("valid event JSON"))
+        .collect();
+    assert!(
+        events.iter().any(
+            |event| matches!(event, WorkerEvent::Job { title, .. } if title == "Software Engineer")
+        ),
+        "expected Software Engineer to be discovered and accepted: {events:#?}"
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, WorkerEvent::Job { title, .. } if title == "Closed Role")),
+        "expected Closed Role to be rejected due to closure text: {events:#?}"
+    );
+    let paths = fixture.paths.lock().unwrap();
+    assert!(
+        !paths.iter().any(|path| path.contains("blog-sitemap.xml")),
+        "blog-sitemap.xml must be excluded: {paths:?}"
+    );
+    let search_fetches = paths
+        .iter()
+        .filter(|path| path.starts_with("/careers.gap-employer.example/search"))
+        .count();
+    assert!(
+        search_fetches <= 1,
+        "career search faceted permutations must be fetched at most once: {search_fetches}"
     );
 }

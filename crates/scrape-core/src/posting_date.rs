@@ -241,16 +241,16 @@ impl PostingDateFilter {
         let Some(value) = posted else {
             return self.include_unknown;
         };
-        if self.preset.as_deref() == Some("past_48h") {
-            if NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok() {
-                let Some(PublicationInterval::Date { start, end }) =
-                    publication_interval(value, &self.timezone, started)
-                else {
-                    return false;
-                };
-                return from.is_none_or(|bound| start >= bound)
-                    && through.is_none_or(|bound| end <= bound);
-            }
+        if self.preset.as_deref() == Some("past_48h")
+            && NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok()
+        {
+            let Some(PublicationInterval::Date { start, end }) =
+                publication_interval(value, &self.timezone, started)
+            else {
+                return false;
+            };
+            return from.is_none_or(|bound| start >= bound)
+                && through.is_none_or(|bound| end <= bound);
         }
         let Some(posted) = posting_instant(value, &self.timezone) else {
             return self.include_unknown;

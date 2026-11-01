@@ -68,6 +68,7 @@ struct PublicationEvidence {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 enum EntryKind {
     Seed,
+    MatchedJobDetail,
     JobDetail,
     CareerIndex,
     OfficialSite,
@@ -75,13 +76,18 @@ enum EntryKind {
     DirectoryPage,
     Sitemap,
 }
+type EntryRank = (EntryKind, u32, [u8; 32]);
 
 fn entry_kind(entry: &Entry) -> EntryKind {
     if entry.depth == 0 && !entry.sitemap {
         return EntryKind::Seed;
     }
     if entry.sitemap {
-        return EntryKind::Sitemap;
+        return if entry.title_lead {
+            EntryKind::CareerIndex
+        } else {
+            EntryKind::Sitemap
+        };
     }
     let path = entry.url.path().to_ascii_lowercase();
     if entry.url.host_str() == Some("ncnonprofits.org") {
@@ -94,13 +100,22 @@ fn entry_kind(entry: &Entry) -> EntryKind {
         return EntryKind::DirectoryProfile;
     }
     let segments: Vec<_> = path.split('/').filter(|s| !s.is_empty()).collect();
-    if entry.title_lead
-        || entry.listing.is_some()
+    if entry.title_lead {
+        return EntryKind::MatchedJobDetail;
+    }
+    if entry.listing.is_some()
         || segments
             .windows(2)
             .any(|pair| matches!(pair[0], "job" | "jobs") && !pair[1].is_empty())
     {
         return EntryKind::JobDetail;
+    }
+    if entry
+        .url
+        .host_str()
+        .is_some_and(|host| host.starts_with("careers.") || host.starts_with("jobs."))
+    {
+        return EntryKind::CareerIndex;
     }
     if entry
         .referrer
@@ -132,9 +147,11 @@ pub(crate) struct WebDiscoverySession {
     round_robin: VecDeque<String>,
     in_flight: HashSet<String>,
     seen: HashSet<String>,
-    ranks: HashMap<String, (EntryKind, u32, [u8; 32])>,
+    ranks: HashMap<String, EntryRank>,
     dispatches: usize,
     directory_pages: u32,
+    career_index_paths: HashSet<String>,
+    origin_pages: HashMap<String, u32>,
     jobs_seen: HashSet<String>,
     pending: VecDeque<(WorkerEvent, Option<MatchingEvidence>)>,
     tasks: JoinSet<FetchResult>,
@@ -153,7 +170,61 @@ fn valid(url: &Url) -> bool {
 }
 fn canonical(mut url: Url) -> Url {
     url.set_fragment(None);
+    let query: Vec<_> = url
+        .query_pairs()
+        .filter(|(key, _)| {
+            let key = key.to_ascii_lowercase();
+            !key.starts_with("utm_")
+                && !matches!(key.as_str(), "_gl" | "_ga" | "_gcl_au" | "hslang" | "lnk")
+        })
+        .map(|(key, value)| (key.into_owned(), value.into_owned()))
+        .collect();
+    if url.query().is_some() {
+        url.set_query(None);
+        if !query.is_empty() {
+            url.query_pairs_mut().extend_pairs(query);
+        }
+    }
     url
+}
+fn upgrade_directory_outbound(mut url: Url) -> Url {
+    if url.scheme() == "http" {
+        let is_loopback = matches!(
+            url.host_str(),
+            Some("127.0.0.1" | "localhost" | "[::1]" | "::1")
+        );
+        if !is_loopback {
+            let _ = url.set_scheme("https");
+        }
+    }
+    url
+}
+fn excluded_sitemap(path: &str) -> bool {
+    let path = path.to_ascii_lowercase();
+    const EXCLUDED: &[&str] = &[
+        "post-sitemap",
+        "posts.xml",
+        "blog",
+        "product-sitemap",
+        "products.xml",
+        "category-sitemap",
+        "author-sitemap",
+        "tag-sitemap",
+        "news-sitemap",
+        "video-sitemap",
+        "attachment-sitemap",
+        "member-profile",
+        "buyers-guide",
+        "ebook",
+        "staticpages",
+        "specializedutilities",
+        "docs/sitemap",
+        "marketplace",
+        "globalform",
+        "internalmobility",
+        "hiringmanager",
+    ];
+    EXCLUDED.iter().any(|needle| path.contains(needle))
 }
 fn trace_url(url: &Url) -> String {
     let mut safe = url.clone();
@@ -220,6 +291,8 @@ impl WebDiscoverySession {
             ranks: HashMap::new(),
             dispatches: 0,
             directory_pages: 0,
+            career_index_paths: HashSet::new(),
+            origin_pages: HashMap::new(),
             sitemap_counts: HashMap::new(),
             sitemap_entries: HashMap::new(),
             queues: HashMap::new(),
@@ -294,7 +367,7 @@ impl WebDiscoverySession {
             .is_some_and(|queue| queue.len() >= 32);
         let global_full = total >= self.page_limit as usize * 4;
         if origin_full || global_full {
-            let mut victim: Option<(String, String, (EntryKind, u32, [u8; 32]))> = None;
+            let mut victim: Option<(String, String, EntryRank)> = None;
             for (candidate_host, queue) in &self.queues {
                 if (origin_full && candidate_host != &host) || (!origin_full && queue.len() <= 1) {
                     continue;
@@ -375,7 +448,7 @@ impl WebDiscoverySession {
                             .then(|| host.clone())
                     })
                 });
-            let sitemap_host = if (self.dispatches + 1) % 8 == 0 {
+            let sitemap_host = if (self.dispatches + 1).is_multiple_of(8) {
                 available.iter().find_map(|(host, _)| {
                     self.queues
                         .get(host)?
@@ -390,6 +463,21 @@ impl WebDiscoverySession {
             let selected_sitemap = seed_host.is_none() && sitemap_host.is_some();
             let host = seed_host
                 .or(sitemap_host.clone())
+                .or_else(|| {
+                    available
+                        .iter()
+                        .filter_map(|(host, _)| {
+                            let rank = self
+                                .queues
+                                .get(host)?
+                                .iter()
+                                .filter_map(|entry| self.ranks.get(entry.url.as_str()))
+                                .min()?;
+                            (rank.0 <= EntryKind::CareerIndex).then_some((host, rank.0))
+                        })
+                        .min_by_key(|(_, kind)| *kind)
+                        .map(|(host, _)| host.clone())
+                })
                 .or_else(|| {
                     available
                         .iter()
@@ -416,6 +504,34 @@ impl WebDiscoverySession {
                 })
                 .unwrap();
             let entry = queue.remove(index).unwrap();
+            let kind = entry_kind(&entry);
+            let directory = matches!(
+                entry.url.host_str(),
+                Some("en.wikipedia.org" | "ncnonprofits.org")
+            );
+            if !directory
+                && self.origin_pages.get(&host).copied().unwrap_or(0) >= 8
+                && kind > EntryKind::JobDetail
+            {
+                self.ranks.remove(entry.url.as_str());
+                if queue.is_empty() {
+                    self.round_robin.retain(|candidate| candidate != &host);
+                }
+                self.bounded = true;
+                continue;
+            }
+            let index_key = format!("{}{}", origin(&entry.url), entry.url.path());
+            if !entry.sitemap
+                && kind == EntryKind::CareerIndex
+                && self.career_index_paths.contains(&index_key)
+            {
+                self.ranks.remove(entry.url.as_str());
+                if queue.is_empty() {
+                    self.round_robin.retain(|candidate| candidate != &host);
+                }
+                self.bounded = true;
+                continue;
+            }
             if entry.url.host_str() == Some("ncnonprofits.org")
                 && entry.url.path() == "/members/member-directory"
             {
@@ -439,6 +555,10 @@ impl WebDiscoverySession {
                 self.round_robin.retain(|candidate| candidate != &host);
                 continue;
             }
+            if !entry.sitemap && kind == EntryKind::CareerIndex {
+                self.career_index_paths.insert(index_key);
+            }
+            *self.origin_pages.entry(host.clone()).or_default() += 1;
             self.ranks.remove(entry.url.as_str());
             self.seen.insert(entry.url.to_string());
             self.round_robin.retain(|candidate| candidate != &host);
@@ -601,16 +721,26 @@ impl WebDiscoverySession {
         if maps.is_empty() {
             maps.push("/sitemap.xml".into());
         }
+        let career_host = actual
+            .host_str()
+            .is_some_and(|host| host.starts_with("careers.") || host.starts_with("jobs."));
         for raw in maps.into_iter().take(5) {
             if let Ok(url) = actual.join(&raw) {
-                if origin(&url) == host {
+                if origin(&url) == host && !excluded_sitemap(url.path()) {
+                    let title_lead =
+                        career_host || entry_kind(entry) == EntryKind::CareerIndex || {
+                            let lower = raw.to_ascii_lowercase();
+                            lower.contains("job")
+                                || lower.contains("career")
+                                || lower.contains("vacanc")
+                        };
                     self.enqueue(Entry {
                         url,
                         seed: entry.seed.clone(),
                         referrer: Some(actual.to_string()),
                         depth: entry.depth,
                         sitemap: true,
-                        title_lead: false,
+                        title_lead,
                         listing: None,
                     });
                 }
@@ -655,7 +785,7 @@ impl WebDiscoverySession {
                     Ok(quick_xml::events::Event::End(_)) => in_loc = false,
                     Ok(quick_xml::events::Event::Text(value)) if in_loc => match value.unescape() {
                         Ok(raw) => {
-                            if urls.len() < 1001 {
+                            if urls.len() < 5000 {
                                 urls.push(raw.into_owned());
                             } else {
                                 self.bounded = true;
@@ -692,7 +822,7 @@ impl WebDiscoverySession {
             }
         } else {
             for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
-                if urls.len() >= 1001 {
+                if urls.len() >= 5000 {
                     self.bounded = true;
                     break;
                 }
@@ -712,14 +842,20 @@ impl WebDiscoverySession {
                 continue;
             }
             if index {
-                if self.sitemap_counts.get(&host).copied().unwrap_or(0) < 5 {
+                if !excluded_sitemap(url.path())
+                    && self.sitemap_counts.get(&host).copied().unwrap_or(0) < 5
+                {
+                    let lower = url.path().to_ascii_lowercase();
+                    let title_lead = lower.contains("job")
+                        || lower.contains("career")
+                        || lower.contains("vacanc");
                     self.enqueue(Entry {
                         url,
                         seed: entry.seed.clone(),
                         referrer: Some(actual.to_string()),
                         depth: entry.depth,
                         sitemap: true,
-                        title_lead: false,
+                        title_lead,
                         listing: None,
                     });
                 }
@@ -727,13 +863,22 @@ impl WebDiscoverySession {
                 && !excluded_path(url.path())
                 && relevant(url.path())
             {
+                let slug = url
+                    .path()
+                    .chars()
+                    .map(|c| if matches!(c, '-' | '_' | '/') { ' ' } else { c })
+                    .collect::<String>();
+                let title_lead = scrape_core::matching::PostingRules::matches_role_lead(
+                    &slug,
+                    &self.target_roles,
+                );
                 self.enqueue(Entry {
                     url,
                     seed: entry.seed.clone(),
                     referrer: Some(actual.to_string()),
                     depth: entry.depth.saturating_add(1),
                     sitemap: false,
-                    title_lead: false,
+                    title_lead,
                     listing: None,
                 });
             }
@@ -1112,6 +1257,11 @@ impl WebDiscoverySession {
                     continue;
                 };
                 let Ok(url) = actual.join(raw) else { continue };
+                let url = if origin(&url) != origin(actual) {
+                    upgrade_directory_outbound(url)
+                } else {
+                    url
+                };
                 self.enqueue(Entry {
                     url,
                     seed: entry.seed.clone(),
@@ -1152,6 +1302,11 @@ impl WebDiscoverySession {
                 if (directory && (profile || page))
                     || (!directory && origin(&url) != origin(actual))
                 {
+                    let url = if origin(&url) != origin(actual) {
+                        upgrade_directory_outbound(url)
+                    } else {
+                        url
+                    };
                     self.enqueue(Entry {
                         url,
                         seed: entry.seed.clone(),
@@ -1575,8 +1730,13 @@ fn excluded_context(node: scraper::ElementRef<'_>, root: scraper::ElementRef<'_>
         .any(|ancestor| {
             matches!(
                 ancestor.value().name(),
-                "footer" | "nav" | "aside" | "article" | "script" | "style"
-            )
+                "footer" | "nav" | "aside" | "article" | "script" | "style" | "template"
+            ) || ancestor.value().attr("hidden").is_some()
+                || ancestor.value().attr("data-ph-at-id") == Some("job-expire-block")
+                || ancestor
+                    .value()
+                    .classes()
+                    .any(|class| class == "expire-job-view")
         })
 }
 
@@ -1672,7 +1832,15 @@ fn non_job_navigation(path: &str) -> bool {
     path.split('/').any(|segment| {
         matches!(
             segment.to_ascii_lowercase().as_str(),
-            "event-calendar" | "news-events" | "post" | "posts" | "documents"
+            "event-calendar"
+                | "news-events"
+                | "post"
+                | "posts"
+                | "documents"
+                | "cookiesettings"
+                | "jointalentcommunity"
+                | "emailpersonalinfo"
+                | "job-scams"
         )
     })
 }
