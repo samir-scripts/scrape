@@ -425,3 +425,48 @@ collection; `97463b6` implements bounded independent discovery, publication
 evidence and the associated persistence regressions. `cargo fmt --all --check`,
 `node scripts/check-style.mjs`, and `git diff --check` also passed. No live user
 database was opened or modified for this work.
+
+## Live default-crawl traversal gaps, closure widget handling, and candidate adjudication — 2026-11-01
+
+Audit of the live discovery trace and candidate diagnostics from the default crawl profile identified five concrete traversal and extraction gaps:
+1. **Outbound `http://` directory official-site links**: Outbound official website links on `en.wikipedia.org` and `ncnonprofits.org` using `http://` were either failing robots checks or consuming redundant origin slots. They are now automatically upgraded to `https://` for non-loopback hosts.
+2. **Cross-origin `CareerIndex` and `MatchedJobDetail` prioritization**: `EntryKind::MatchedJobDetail` is prioritized across origins immediately after `EntryKind::Seed` when title or slug matches `PostingRules::matches_role_lead`. Subdomain career entries (`careers.*` or `jobs.*`) are classified as `CareerIndex` rather than generic `OfficialSite`. The inter-origin scheduler prioritizes idle origins with queued `MatchedJobDetail`, `JobDetail`, or `CareerIndex` entries over unadmitted corporate homepages.
+3. **Career-specific sitemap prioritization and non-job sitemap exclusion**: `excluded_sitemap` rejects non-job sitemaps (`post-sitemap`, `blog`, `product-sitemap`, `attachment-sitemap`, etc.). Career sitemaps from robots.txt or career hosts receive `CareerIndex` dispatch priority rather than waiting for every eighth dispatch. Sitemap location scanning is bounded to 5,000 `<loc>` tags, retaining up to 1,000 relevant URLs and tagging role-lead slugs as `MatchedJobDetail`.
+4. **Career search query deduplication and per-origin page cap**: Tracking query parameters (`_gl`, `_ga`, `_gcl_au`, `utm_*`, `hsLang`, `lnk`) are stripped in `canonical`. Faceted `CareerIndex` search pages are tracked in `career_index_paths` and fetched at most once per `(origin, path)`. Non-directory origins are bounded to 8 pages for index exploration, reserving remaining origin capacity strictly for `JobDetail` entries. `non_job_navigation` additionally filters `cookiesettings`, `jointalentcommunity`, `emailpersonalinfo`, and `job-scams`.
+5. **Closure template and hidden widget exclusion**: `excluded_context` excludes `template`, `[hidden]`, `data-ph-at-id="job-expire-block"`, and `class="expire-job-view"` so unrendered expired-job widgets in Phenom People DOMs do not suppress active structured `JobPosting` records, while visible closure notices in `<main>` or job descriptions remain rejected.
+
+A deterministic process-level test `default_crawl_discovers_qualifying_posting_across_real_world_gaps` in `crates/scrape-worker/tests/web_discovery_process.rs` exercises all five behaviors end to end against loopback fixtures.
+
+### Native Live Execution and Independent Adjudication
+An isolated native crawl was executed via `node scripts/native-independent-live.mjs --verify-non-ats` with artifacts in `/var/folders/kr/lz4p6cgs18s4583cskq0xjs80000gn/T/scrape-native-smoke-independent-live-257kFy`.
+- **Run ID**: `01a19828-bea6-726d-b8d4-09702df73bc4`
+- **Canonical Spec SHA-256**: `b862934300b6b26873c1aa9fb2096153297b532643b5e4dae410c9bd7cd1d1e7`
+- **Cutoff**: `2026-10-30T17:29:29.510Z`
+- **Status**: `partial` (hit 100-page limit per source; 40 total origins visited: 15 on Wikipedia, 25 on NC Nonprofits; 43 examined, 42 rejected, 1 inserted).
+- **Persisted Candidate**: Blackbaud `R0013872` (`Manager, Software Engineering - AI and Data Platform`), url `https://careers.blackbaud.com/us/en/job/R0013872/Manager-Software-Engineering-AI-and-Data-Platform`.
+  - **Role**: Software Engineering management with enterprise Data & AI platform duties.
+  - **Geography**: "Remote, United States of America" (JSON-LD `addressCountry: "US"`, `jobLocationType: "TELECOMMUTE"`).
+  - **Date Posted**: `2026-10-31`, strictly within the 48-hour window from run start `2026-11-01T17:29:29.510Z`.
+  - **Candidate Collection**: Native Discovered inspector rendered the persisted row and SQLite integrity verified `ok`. `candidate-report.json` emitted `acceptance: "candidate"`.
+- **Independent Adjudication**:
+  - Inspection of the live posting's public application route revealed an embedded `applyUrl` pointing to Workday: `https://blackbaud.wd1.myworkdayjobs.com/ExternalCareers/job/Remote---Anywhere---USA/Manager--Software-Engineering---AI-and-Data-Platform_R0013872/apply`.
+  - Under the strict non-ATS acceptance contract, an ATS destination (Workday, Greenhouse, Lever, etc.) cannot pass as non-ATS proof.
+  - Verdict recorded in `acceptance-review.json`: `"unproven"` due to observed Workday ATS application handoff.
+  - No other non-ATS SWE/IT candidate was available within 48 hours on the open web reachable from the default seeds under unchanged filter rules.
+
+### Verification Totals
+- `cargo fmt --all --check`, `node scripts/check-style.mjs`, `git diff --check`: passed.
+- `cargo clippy --workspace --all-targets -- -D warnings`: passed (0 warnings, 0 errors).
+- `npm run gen:types && git diff --exit-code src/bindings`: passed (0 drift).
+- `npx tsc --noEmit`: passed (0 errors).
+- `cargo test -p scrape-worker --test web_discovery_process`: 14 passed.
+- `cargo test -p scrape-worker public_web`: 14 passed.
+- `cargo test -p scrape-core posting_date`: 14 passed.
+- `cargo test -p scrape --test worker_repository`: 33 passed.
+- `cargo test --workspace`: 766 passed, 1 ignored.
+- `npm run build:sidecar`: passed.
+- `npm run test:native-web-scraping`: passed.
+- `node scripts/test-app-startup.mjs`: passed.
+- `npm run build`: passed.
+- `npm run test:providers`: passed recorded matrix.
+- `node scripts/native-independent-live.mjs --verify-non-ats`: completed candidate collection in 50.05s; candidate independently adjudicated as unproven due to Workday application handoff.
