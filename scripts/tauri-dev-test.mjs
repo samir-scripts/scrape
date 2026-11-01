@@ -4,7 +4,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 // One launcher owns the server, process group, isolated profile, and completion log.
-export async function runNativeDev(directory, { width = 1280, height = 800, scrollbarMode = 'Automatic' } = {}) {
+export async function runNativeDev(directory, { width = 1280, height = 800, scrollbarMode = 'Automatic', timeout = 120000 } = {}) {
   if (!['Automatic', 'Always', 'WhenScrolling'].includes(scrollbarMode)) throw new Error('Invalid test scrollbar mode');
   const reservation = createServer();
   await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
@@ -21,7 +21,7 @@ export async function runNativeDev(directory, { width = 1280, height = 800, scro
   child.stdout.on('data', bytes => output += bytes);
   child.stderr.on('data', bytes => output += bytes);
   const stop = signal => { try { process.kill(-child.pid, signal); } catch {} };
-  const timer = setTimeout(() => stop('SIGKILL'), 120000);
+  const timer = setTimeout(() => stop('SIGKILL'), timeout);
   let code, signal;
   try {
     [code, signal] = await new Promise((resolve, reject) => { child.once('exit', (code, signal) => resolve([code, signal])); child.once('error', reject); });

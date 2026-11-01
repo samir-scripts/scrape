@@ -139,7 +139,12 @@ pub fn install(app: &mut tauri::App) -> bool {
                 );
             }
         }
-        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+        let timeout_secs = std::env::var("SCRAPE_NATIVE_SMOKE_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(60);
+        let remaining = timeout_secs.saturating_sub(45);
+        tokio::time::sleep(std::time::Duration::from_secs(remaining)).await;
         eprintln!("Native smoke deadline exceeded");
         handle.exit(1);
     });

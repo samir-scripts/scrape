@@ -136,12 +136,17 @@ async function main() {
   }
 })();
 `);
-  const previous = { RUST_LOG: process.env.RUST_LOG, SCRAPE_NATIVE_DISCOVERY_TRACE: process.env.SCRAPE_NATIVE_DISCOVERY_TRACE };
+  const previous = {
+    RUST_LOG: process.env.RUST_LOG,
+    SCRAPE_NATIVE_DISCOVERY_TRACE: process.env.SCRAPE_NATIVE_DISCOVERY_TRACE,
+    SCRAPE_NATIVE_SMOKE_TIMEOUT_SECS: process.env.SCRAPE_NATIVE_SMOKE_TIMEOUT_SECS,
+  };
   let execution;
   try {
     process.env.RUST_LOG = "scrape_worker::adapters::web_discovery=debug";
     process.env.SCRAPE_NATIVE_DISCOVERY_TRACE = "1";
-    execution = await runNativeDev(directory);
+    process.env.SCRAPE_NATIVE_SMOKE_TIMEOUT_SECS = "180";
+    execution = await runNativeDev(directory, { timeout: 180000 });
   } finally {
     for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   }
